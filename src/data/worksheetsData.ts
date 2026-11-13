@@ -1,6 +1,10 @@
 import { ClassLevel, SubjectName } from '../types';
 import { getSubjectsForClass, getSubjectMeta, ALL_10_CLASSES_META } from './classCurriculumConfig';
 import { getCurriculumQuestionsForLevel } from '../services/curriculumQuestionBank';
+import {
+  getClassDemoWorksheets,
+  getClassSpecificWorksheetQuestions
+} from './classDemoWorksheetsData';
 
 export type WorksheetItemFormat =
   | 'mcq'
@@ -195,7 +199,22 @@ export function getWorksheetsForClassAndSubject(
     const wsId = `WS-C${cNum}-${subject.replace(/[^A-Za-z0-9]/g, '').toUpperCase()}-${wsNum}`;
     const formatsSet = new Set<WorksheetItemFormat>();
 
+    const classSpecificQ =
+      wsNum === 1 ? getClassSpecificWorksheetQuestions(classLevel, subject) : null;
+
     const questions: WorksheetQuestionItem[] = pool.map((q, idx) => {
+      const override = classSpecificQ && idx < classSpecificQ.length ? classSpecificQ[idx] : null;
+      if (override) {
+        formatsSet.add(override.format);
+        const formatLabel = WORKSHEET_FORMAT_LABELS[override.format].label;
+        return {
+          ...override,
+          id: `${wsId}-Q${idx + 1}`,
+          number: idx + 1,
+          prompt: `[${formatLabel}] ${override.prompt}`
+        };
+      }
+
       const format = selectFormatForSubjectAndIndex(subject, idx);
       formatsSet.add(format);
       const formatLabel = WORKSHEET_FORMAT_LABELS[format].label;
@@ -257,4 +276,15 @@ export function getFreeDemoWorksheets(classLevel: ClassLevel = 'Class 1'): Onlin
   const mathDemo = getWorksheetsForClassAndSubject(classLevel, mathSubject)[0];
   return [englishDemo, mathDemo].filter(Boolean);
 }
+
+/**
+ * Returns the 4 unique, class-specific Demo Worksheets (Mathematics, English, Science, General Knowledge)
+ * for the Visitor Demo Playground across Class 1 to Class 10.
+ */
+export function getVisitorDemoWorksheetsForClass(
+  classLevel: ClassLevel = 'Class 1'
+): OnlineWorksheet[] {
+  return getClassDemoWorksheets(classLevel);
+}
+
 

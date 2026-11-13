@@ -12,7 +12,7 @@ import {
   getSubjectsForClass,
   getSubjectMeta
 } from '../data/classCurriculumConfig';
-import { getFreeDemoWorksheets, OnlineWorksheet } from '../data/worksheetsData';
+import { getVisitorDemoWorksheetsForClass, OnlineWorksheet } from '../data/worksheetsData';
 import { getDemoQuestionsForClass } from '../data/demoQuestionsData';
 import { formatStandardOrdinal } from '../utils/subscriptionAccess';
 
@@ -155,7 +155,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
     [selectedDemoClass]
   );
   const demoWorksheets = useMemo(
-    () => getFreeDemoWorksheets(selectedDemoClass),
+    () => getVisitorDemoWorksheetsForClass(selectedDemoClass),
     [selectedDemoClass]
   );
 
@@ -181,7 +181,18 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
 
   const handleSelectDemoClass = (cls: ClassLevel) => {
     setSelectedDemoClass(cls);
-    setActiveDemoWorksheet(null);
+    if (activeDemoWorksheet) {
+      const nextWorksheets = getVisitorDemoWorksheetsForClass(cls);
+      const matchingSubjectWs = nextWorksheets.find(
+        ws =>
+          ws.subject === activeDemoWorksheet.subject ||
+          (ws.subject.startsWith('Mathematics') &&
+            activeDemoWorksheet.subject.startsWith('Mathematics'))
+      );
+      setActiveDemoWorksheet(matchingSubjectWs || nextWorksheets[0] || null);
+    } else {
+      setActiveDemoWorksheet(null);
+    }
     setWsAnswers({});
     setWsSubmitted(false);
     setQuizAnswers({});
@@ -525,7 +536,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                 Standard {formatStandardOrdinal(selectedDemoClass)} — Subjects &amp; Sample Worksheets
               </h2>
               <p className="text-xs text-slate-600 mt-1">
-                Try the live interactive sample English &amp; Mathematics worksheets for {selectedDemoClass}, or switch to any Standard (1st to 10th) above.
+                Try the live class-specific sample Mathematics, English, Science &amp; General Knowledge worksheets for {selectedDemoClass}, or switch to any Standard (1st to 10th).
               </p>
             </div>
             {!isAuthenticated && onRegisterClick && (
@@ -539,10 +550,36 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
             )}
           </div>
 
-          {/* 2 Interactive Sample Worksheets for Selected Class */}
+          {/* Class Selector Inside Worksheets Tab */}
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+              Select Class to View Its Unique Demo Worksheets:
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_10_CLASSES_META.map((clsMeta) => {
+                const isSelected = selectedDemoClass === clsMeta.classLevel;
+                return (
+                  <button
+                    key={clsMeta.classLevel}
+                    type="button"
+                    onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {clsMeta.shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4 Interactive Class-Specific Sample Worksheets for Selected Class */}
           <div className="space-y-3">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-700">
-              Try Interactive Sample Worksheets ({selectedDemoClass})
+              Try Interactive Sample Worksheets ({selectedDemoClass} • {demoWorksheets.length} Subjects)
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {demoWorksheets.map((ws) => {
@@ -557,7 +594,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-1.5">
                         <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                          Sample Worksheet • Free Preview
+                          {ws.classLevel} • Free Preview
                         </span>
                         <span className="text-xs font-bold text-slate-500">
                           {ws.questions.length} Questions • {ws.totalMarks} Marks
@@ -589,7 +626,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700">
-                    Interactive Sample Worksheet • Not Saved to Student Records
+                    {activeDemoWorksheet.classLevel} Interactive Demo Worksheet • Not Saved to Student Records
                   </span>
                   <h3 className="text-lg font-black text-slate-900">
                     {activeDemoWorksheet.title}
@@ -609,13 +646,14 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
               </div>
 
               <div className="space-y-4">
-                {activeDemoWorksheet.questions.slice(0, 5).map((q, idx) => {
+                {activeDemoWorksheet.questions.map((q, idx) => {
                   const chosen = wsAnswers[q.id];
                   const isCorrect = chosen === q.correctIndex;
+                  const optionLabels = ['A', 'B', 'C', 'D'] as const;
                   return (
                     <div key={q.id} className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5">
                       <p className="text-xs font-bold text-slate-500">
-                        Question {idx + 1} • {q.chapterTitle}
+                        Question {idx + 1} of {activeDemoWorksheet.questions.length} • {q.chapterTitle}
                       </p>
                       <p className="text-sm font-black text-slate-900">{q.prompt}</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -637,7 +675,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                               onClick={() => setWsAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
                               className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${cls}`}
                             >
-                              {opt}
+                              {optionLabels[optIdx]}. {opt}
                             </button>
                           );
                         })}
@@ -648,7 +686,9 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                             : 'bg-amber-50 border-amber-200 text-amber-950'
                         }`}>
-                          {isCorrect ? '✓ Correct! ' : 'Explanation: '}
+                          {isCorrect
+                            ? '✓ Correct! '
+                            : `✗ Correct Answer: ${optionLabels[q.correctIndex]}. ${q.options[q.correctIndex]} — `}
                           {q.explanation}
                         </p>
                       )}
@@ -659,7 +699,9 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <p className="text-xs text-slate-500 font-semibold">
-                  Showing first 5 preview questions. Full {activeDemoWorksheet.questions.length}-question worksheets and all subjects unlock on account registration.
+                  {wsSubmitted
+                    ? `Score for ${activeDemoWorksheet.title}: ${activeDemoWorksheet.questions.filter(q => wsAnswers[q.id] === q.correctIndex).length} / ${activeDemoWorksheet.questions.length} correct.`
+                    : `Showing ${activeDemoWorksheet.questions.length} syllabus-aligned questions for ${activeDemoWorksheet.classLevel} (${activeDemoWorksheet.subject}).`}
                 </p>
                 {!wsSubmitted ? (
                   <button
@@ -1441,8 +1483,8 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                     </span>
                   </div>
                   <div className="p-2 rounded-xl bg-white border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block">Free Worksheets</span>
-                    <span className="text-xs font-black text-amber-700">2 Samples</span>
+                    <span className="text-[10px] font-bold text-slate-400 block">Sample Worksheets</span>
+                    <span className="text-xs font-black text-amber-700">{demoWorksheets.length} Subjects</span>
                   </div>
                 </div>
               </div>
