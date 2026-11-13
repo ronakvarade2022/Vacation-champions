@@ -28,29 +28,17 @@ import {
 import { canAccessSubject } from '../utils/subscriptionAccess';
 import { PlanUpgradePromptModal } from './PlanUpgradePromptModal';
 import { ReportQuestionModal } from './ReportQuestionModal';
+import {
+  ALL_10_CLASSES,
+  getSubjectsForClass,
+  getSubjectMeta
+} from '../data/classCurriculumConfig';
 
 interface SubjectQuizViewProps {
   initialSubject?: SubjectName;
   initialLevel?: QuizLevel;
   onOpenMembership?: (plan?: 'basic' | 'premium') => void;
 }
-
-const ALL_14_SUBJECTS: { name: SubjectName; icon: string; bgGradient: string }[] = [
-  { name: 'Mathematics', icon: '📐', bgGradient: 'from-blue-500 to-indigo-600' },
-  { name: 'English', icon: '📖', bgGradient: 'from-amber-500 to-orange-600' },
-  { name: 'Hindi', icon: '🇮🇳', bgGradient: 'from-red-500 to-rose-600' },
-  { name: 'Marathi', icon: '🚩', bgGradient: 'from-orange-500 to-amber-600' },
-  { name: 'Science', icon: '🔬', bgGradient: 'from-emerald-500 to-teal-600' },
-  { name: 'General Knowledge', icon: '🌍', bgGradient: 'from-sky-500 to-blue-600' },
-  { name: 'Social Studies', icon: '🏛️', bgGradient: 'from-purple-500 to-indigo-600' },
-  { name: 'History', icon: '⚔️', bgGradient: 'from-amber-700 to-stone-800' },
-  { name: 'Geography', icon: '🗺️', bgGradient: 'from-teal-500 to-emerald-700' },
-  { name: 'Computer Knowledge', icon: '💻', bgGradient: 'from-cyan-500 to-blue-700' },
-  { name: 'Logical Reasoning', icon: '💡', bgGradient: 'from-violet-500 to-purple-700' },
-  { name: 'Environmental Studies', icon: '🌱', bgGradient: 'from-green-500 to-emerald-700' },
-  { name: 'Moral Education', icon: '🕊️', bgGradient: 'from-rose-500 to-pink-600' },
-  { name: 'Vocabulary and Grammar', icon: '✍️', bgGradient: 'from-fuchsia-500 to-purple-600' }
-];
 
 const QUESTION_FORMAT_LABELS: Record<string, { label: string; badgeColor: string }> = {
   mcq: { label: 'Multiple Choice', badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
@@ -83,35 +71,35 @@ interface LevelCardMeta {
 const LEVEL_CARDS_META: LevelCardMeta[] = [
   {
     level: 1,
-    title: 'Level 1 – Easy',
+    title: 'Level 1 – Basic',
     difficulty: 'Basic Foundation',
     diffBadge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
     cardGradient: 'from-emerald-500 to-teal-600',
-    description: 'Basic Foundation: 10 unique foundational questions covering core concepts, vocabulary, and visual recognition.'
+    description: 'Level 1 – Basic: 10 unique foundational questions covering core concepts, vocabulary, and visual recognition.'
   },
   {
     level: 2,
-    title: 'Level 2 – Moderate',
+    title: 'Level 2 – Intermediate',
     difficulty: 'Concept Application',
     diffBadge: 'bg-blue-100 text-blue-800 border-blue-300',
     cardGradient: 'from-blue-500 to-indigo-600',
-    description: 'Concept Application: 10 completely different questions with multi-step application, fill-in-blanks, and relation matching.'
+    description: 'Level 2 – Intermediate: 10 completely different questions with multi-step application, fill-in-blanks, and relation matching.'
   },
   {
     level: 3,
-    title: 'Level 3 – Difficult',
+    title: 'Level 3 – Advanced',
     difficulty: 'Analytical Thinking',
     diffBadge: 'bg-amber-100 text-amber-800 border-amber-300',
     cardGradient: 'from-amber-500 to-orange-600',
-    description: 'Analytical Thinking: 10 completely different analytical questions, word problems, error spotting, and deductions.'
+    description: 'Level 3 – Advanced: 10 completely different analytical questions, word problems, error spotting, and deductions.'
   },
   {
     level: 4,
-    title: 'Level 4 – Advanced',
+    title: 'Level 4 – Expert Challenge',
     difficulty: 'Higher-Order Mastery',
     diffBadge: 'bg-purple-100 text-purple-800 border-purple-300',
     cardGradient: 'from-purple-600 to-rose-600',
-    description: 'Advanced Mastery: 10 completely different higher-order & tricky questions with dynamic option shuffling (A, B, C, D).'
+    description: 'Level 4 – Expert Challenge: 10 completely different higher-order challenge questions with randomized option positions (A, B, C, D).'
   }
 ];
 
@@ -125,11 +113,22 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     platformSettings, 
     fetchClassSubjectLevelQuestionsAsync,
     getSubjectLevelProgress,
-    submitQuizAttempt 
+    submitQuizAttempt,
+    promoteOrUpdateStudentClass
   } = useApp();
 
+  const availableSubjectsForClass = React.useMemo(() => {
+    const cls = currentStudent?.classLevel || 'Class 4';
+    const subjs = getSubjectsForClass(cls);
+    return subjs.map(s => {
+      const m = getSubjectMeta(s);
+      return { name: s, icon: m.icon, bgGradient: m.gradient };
+    });
+  }, [currentStudent?.classLevel]);
+
+  const defaultSubjectForClass: SubjectName = availableSubjectsForClass[0]?.name || 'Mathematics';
   const safeInitialSubject: SubjectName =
-    canAccessSubject(currentStudent, initialSubject).allowed ? initialSubject : 'Mathematics';
+    canAccessSubject(currentStudent, initialSubject).allowed ? initialSubject : defaultSubjectForClass;
 
   const [selectedSubject, setSelectedSubject] = useState<SubjectName>(safeInitialSubject);
   const [selectedLevel, setSelectedLevel] = useState<QuizLevel>(initialLevel);
@@ -256,7 +255,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
 
     try {
       const qList = await fetchClassSubjectLevelQuestionsAsync(currentStudent.classLevel, subj, lvl);
-      const randomizedQs = randomizeQuizQuestions(qList, lvl === 4);
+      const randomizedQs = randomizeQuizQuestions(qList, true);
       
       if (requestId === activeRequestIdRef.current) {
         setQuestions(randomizedQs);
@@ -392,38 +391,76 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     ? (QUESTION_FORMAT_LABELS[currentQ.questionType] || { label: 'Multiple Choice', badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200' })
     : { label: 'Multiple Choice', badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
 
-  const currentSubjectObj = ALL_14_SUBJECTS.find(s => s.name === selectedSubject);
+  const currentSubjectObj =
+    availableSubjectsForClass.find(s => s.name === selectedSubject) || {
+      name: selectedSubject,
+      icon: getSubjectMeta(selectedSubject).icon,
+      bgGradient: getSubjectMeta(selectedSubject).gradient
+    };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-16">
-      {/* 14 Subject Selector Header */}
-      <div className="bg-white rounded-3xl p-6 border border-amber-200/80 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+      {/* Class 1 to 10 & Subject Selector Header */}
+      <div className="bg-white rounded-3xl p-6 border border-amber-200/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xl">🎯</span>
               <h1 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900">
-                Subject Quiz Arena
+                Subject Quiz Arena (Classes 1st to 10th)
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                <Lock className="w-3 h-3 text-amber-700" />
-                {currentStudent.classLevel}
+                {currentStudent.classLevel} ({availableSubjectsForClass.length} Subjects)
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-              4 Distinct Levels • Strictly 10 Questions per Level • Zero Repetition Guarantee
+              4 Levels per Subject (Basic, Intermediate, Advanced, Expert Challenge) • 40 Unique Questions per Subject • Zero Repetition
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200 text-xs font-bold text-amber-900">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Class-Isolated & Level-Separated</span>
+            <span>40 Unique Qs / Subject</span>
           </div>
         </div>
 
-        {/* 14 Subject Selector Pills */}
+        {/* Classes 1 to 10 Quick Selector Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
+            Class:
+          </span>
+          {ALL_10_CLASSES.map(cls => {
+            const isCurrClass = currentStudent.classLevel === cls;
+            return (
+              <button
+                key={cls}
+                type="button"
+                onClick={() => {
+                  if (cls !== currentStudent.classLevel) {
+                    promoteOrUpdateStudentClass(cls, `Switched active curriculum class to ${cls}`);
+                    const newSubjs = getSubjectsForClass(cls);
+                    if (!newSubjs.includes(selectedSubject)) {
+                      executeSubjectSwitch(newSubjs[0]);
+                    } else {
+                      setQuizState('idle');
+                    }
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+                  isCurrClass
+                    ? 'bg-slate-900 text-amber-300 border-slate-900 shadow-xs'
+                    : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
+                }`}
+              >
+                {cls}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Class-Specific Subject Selector Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {ALL_14_SUBJECTS.map((sub) => {
+          {availableSubjectsForClass.map((sub) => {
             const isSelected = selectedSubject === sub.name;
             const subProgress = getSubjectLevelProgress(sub.name);
             const subjectAccess = canAccessSubject(currentStudent, sub.name);
@@ -450,7 +487,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                     isSelected ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-600'
                   }`}>
-                    L{subProgress.maxUnlockedLevel}
+                    L1–L{subProgress.maxUnlockedLevel}
                   </span>
                 )}
               </button>

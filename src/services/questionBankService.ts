@@ -93,13 +93,16 @@ export function checkQuestionDuplicate(
 
 // Master Partitioned Store by Class
 const CLASS_PARTITIONS: Record<ClassLevel, QuizQuestion[]> = {
+  'Class 1': [],
   'Class 2': [...CLASS_2_QUESTIONS],
   'Class 3': [...CLASS_3_QUESTIONS],
   'Class 4': [...CLASS_4_QUESTIONS],
   'Class 5': [...CLASS_5_QUESTIONS],
   'Class 6': [...CLASS_6_QUESTIONS],
   'Class 7': [...CLASS_7_QUESTIONS],
-  'Class 8': [...CLASS_8_QUESTIONS]
+  'Class 8': [...CLASS_8_QUESTIONS],
+  'Class 9': [],
+  'Class 10': []
 };
 
 // Returns initial unified question list across all classes with 4 levels x 10 unique questions for all 14 subjects (560 unique questions per class)
@@ -463,8 +466,10 @@ export interface QuestionBankAnalytics {
 
 export function computeQuestionBankAnalytics(questions: QuizQuestion[]): QuestionBankAnalytics {
   const classCounts: Record<ClassLevel, number> = {
+    'Class 1': 0,
     'Class 2': 0, 'Class 3': 0, 'Class 4': 0, 'Class 5': 0,
-    'Class 6': 0, 'Class 7': 0, 'Class 8': 0
+    'Class 6': 0, 'Class 7': 0, 'Class 8': 0,
+    'Class 9': 0, 'Class 10': 0
   };
 
   const subjectCounts: Record<SubjectName, number> = {
@@ -472,7 +477,12 @@ export function computeQuestionBankAnalytics(questions: QuizQuestion[]): Questio
     'Science': 0, 'General Knowledge': 0, 'Social Studies': 0,
     'History': 0, 'Geography': 0, 'Computer Knowledge': 0,
     'Logical Reasoning': 0, 'Environmental Studies': 0,
-    'Moral Education': 0, 'Vocabulary and Grammar': 0
+    'Moral Education': 0, 'Vocabulary and Grammar': 0,
+    'Drawing and Creative Activities': 0,
+    'Physics': 0, 'Chemistry': 0, 'Biology': 0,
+    'Political Science': 0, 'Information Technology': 0,
+    'Environmental Education': 0, 'Physical Education': 0,
+    'Mathematics – Algebra': 0, 'Mathematics – Geometry': 0
   };
 
   const typeCounts: Record<string, number> = {};

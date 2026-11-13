@@ -1,6 +1,6 @@
 {
   "name": "VACATION CHAMPIONS",
-  "description": "Read • Play • Learn • Become a Champion! Educational gaming platform for Class 2 to Class 8 students with quizzes, 45 audio stories, creative drawing, brain puzzles, and rewards.",
+  "description": "MyStudyZone – An Interactive Learning Platform for Students. Learn, Practice, Explore and Achieve Excellence. Interactive learning platform for Class 2 to Class 8 students with 14 subjects, 4 quiz levels, scholarship preparation, 45 audio stories, drawing, and cricket quizzes.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

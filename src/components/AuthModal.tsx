@@ -21,6 +21,7 @@ interface AuthModalProps {
 }
 
 const CLASS_LEVELS: ClassLevel[] = [
+  'Class 1',
   'Class 2',
   'Class 3',
   'Class 4',
@@ -28,6 +29,8 @@ const CLASS_LEVELS: ClassLevel[] = [
   'Class 6',
   'Class 7',
   'Class 8',
+  'Class 9',
+  'Class 10',
 ];
 
 const AVATARS = ['🦁', '🐯', '🐼', '🦊', '🚀', '🌟', '🦋', '🐬'];
@@ -462,18 +465,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <X className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-1">
-            <Sparkles className="w-4 h-4" /> Champion Learning • Lifetime Free Plan Included
+            <Sparkles className="w-4 h-4" /> MyStudyZone – An Interactive Learning Platform for Students
           </div>
           <h2 className="text-2xl font-black">
-            {tab === 'login' && 'Welcome Back, Champion!'}
+            {tab === 'login' && 'Welcome Back to MyStudyZone!'}
             {tab === 'register' && 'Create Student Account'}
             {tab === 'forgot' && 'Forgot / Reset Password'}
             {tab === 'parent' && 'Parent Monitoring Portal'}
             {tab === 'admin' && 'Platform Admin Console'}
           </h2>
+          <p className="text-amber-200 font-bold text-xs mt-0.5">
+            Learn, Practice, Explore and Achieve Excellence.
+          </p>
           <p className="text-indigo-100 text-xs sm:text-sm mt-1">
             {tab === 'login' && 'Sign in with your Email & Password or Registered 10-Digit Mobile Number'}
-            {tab === 'register' && 'Get instant Lifetime Free access to Brain Puzzles, Sudoku, English & Maths!'}
+            {tab === 'register' && 'Register on our interactive learning platform for Classes 2 to 8 with Lifetime Free Plan access!'}
             {tab === 'forgot' && 'Enter your registered email address to receive a secure Firebase password reset link'}
             {tab === 'parent' && 'Monitor your linked child’s daily progress, scores, and reports'}
             {tab === 'admin' && 'Manage questions, stories, memberships & platform settings'}

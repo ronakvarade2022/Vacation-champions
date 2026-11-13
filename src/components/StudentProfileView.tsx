@@ -39,6 +39,7 @@ import {
   buildStudentReferralLink,
   buildStudentReferralDisplayLink
 } from '../utils/referralCoding';
+import { ALL_10_CLASSES, ALL_10_CLASSES_META, getSubjectsForClass } from '../data/classCurriculumConfig';
 
 interface StudentProfileViewProps {
   onOpenMembership: (plan?: 'basic' | 'premium') => void;
@@ -57,10 +58,12 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     openAuthModal, 
     logout,
     allAttempts,
-    savedDrawings
+    savedDrawings,
+    promoteOrUpdateStudentClass
   } = useApp();
   const [copiedRefLink, setCopiedRefLink] = useState(false);
   const [copiedRefCode, setCopiedRefCode] = useState(false);
+  const [promotionBannerMsg, setPromotionBannerMsg] = useState<string | null>(null);
 
   if (!currentStudent) return null;
 
@@ -128,9 +131,12 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               <span className="text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
                 (विद्यार्थी प्रोफाइल)
               </span>
+              <span className="text-[11px] font-extrabold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                MyStudyZone – An Interactive Learning Platform for Students
+              </span>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Account UID: <span className="font-mono font-bold text-slate-700">{currentStudent.id}</span> • Registered Class: <strong className="text-slate-800">{currentStudent.classLevel}</strong>
+              Learn, Practice, Explore and Achieve Excellence. • Account UID: <span className="font-mono font-bold text-slate-700">{currentStudent.id}</span> • Registered Class: <strong className="text-slate-800">{currentStudent.classLevel}</strong>
             </p>
           </div>
         </div>
@@ -195,6 +201,63 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 : 'Upgrade to Premium (₹99)'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* CLASS PROMOTION & GRADE UPDATE SECTION (Classes 1st to 10th) */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🎓</span>
+              <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
+                Class Promotion &amp; Active Grade Selection (Classes 1st to 10th)
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Promoted to a new standard? Update your class below to load your new class subjects, 4 quiz levels, and online worksheets while keeping all your points, badges, and referral wallet intact!
+            </p>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-extrabold self-start sm:self-center shrink-0">
+            Active: {currentStudent.classLevel} ({getSubjectsForClass(currentStudent.classLevel).length} Subjects)
+          </span>
+        </div>
+
+        {promotionBannerMsg && (
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{promotionBannerMsg}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+          {ALL_10_CLASSES.map((cls) => {
+            const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
+            const isCurrent = currentStudent.classLevel === cls;
+            return (
+              <button
+                key={cls}
+                type="button"
+                onClick={() => {
+                  if (!isCurrent) {
+                    const res = promoteOrUpdateStudentClass(cls, `Student updated class on promotion to ${cls}`);
+                    setPromotionBannerMsg(res.message);
+                    setTimeout(() => setPromotionBannerMsg(null), 4000);
+                  }
+                }}
+                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                  isCurrent
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]'
+                    : 'bg-slate-50 hover:bg-indigo-50 text-slate-800 border-slate-200'
+                }`}
+              >
+                <div className="text-xs font-black">{cls}</div>
+                <div className={`text-[10px] font-semibold ${isCurrent ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  {meta?.marathiLabel}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

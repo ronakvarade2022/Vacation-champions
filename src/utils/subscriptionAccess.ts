@@ -2,7 +2,12 @@ import { StudentProfile, SubjectName } from '../types';
 
 export type SubscriptionPlanId = 'free' | 'basic' | 'premium';
 
-export const FREE_ALLOWED_SUBJECTS: SubjectName[] = ['English', 'Mathematics'];
+export const FREE_ALLOWED_SUBJECTS: SubjectName[] = [
+  'English',
+  'Mathematics',
+  'Mathematics – Algebra',
+  'Mathematics – Geometry'
+];
 
 export type DashboardFeatureKey =
   | 'dashboard'
@@ -11,6 +16,7 @@ export type DashboardFeatureKey =
   | 'puzzles'
   | 'sudoku'
   | 'quizzes'
+  | 'worksheets'
   | 'stories'
   | 'shivaji'
   | 'drawing'
@@ -31,7 +37,7 @@ export const SUBSCRIPTION_PLANS_CATALOG = [
     priceText: '₹0',
     validityText: 'Lifetime',
     validitySubtext: 'Never Expires',
-    summary: 'Brain Puzzles, Sudoku (4×4, 6×6, 9×9), English & Mathematics Quizzes',
+    summary: 'Brain Puzzles, Sudoku (4×4, 6×6, 9×9), Online Worksheets, English & Mathematics Quizzes (Classes 1 to 10)',
   },
   {
     id: 'premium' as const,
@@ -41,7 +47,7 @@ export const SUBSCRIPTION_PLANS_CATALOG = [
     priceText: '₹99',
     validityText: '90 Days',
     validitySubtext: '3 Months Validity',
-    summary: 'Full Dashboard Unlock: All 14 Subjects, Stories, Drawing, Cricket, Scholarship (4th & 7th), AI Academy, Certificates & Referrals',
+    summary: 'Full Dashboard Unlock: Classes 1 to 10, All Subjects, 4 Quiz Levels, Online Worksheets, Stories, Drawing, Cricket, Scholarship (4th & 7th), AI Academy, Certificates & Referrals',
   },
 ];
 
@@ -231,7 +237,7 @@ export function canAccessFeature(
 } {
   const { effectivePlan } = getStudentPlanInfo(student);
 
-  // Always accessible tabs (including Referral & Wallet Hub so students can view their referral code, ₹5 cashback, and withdraw money)
+  // Always accessible tabs (including Worksheets and Referral & Wallet Hub)
   if (
     featureTab === 'dashboard' ||
     featureTab === 'profile' ||
@@ -239,6 +245,7 @@ export function canAccessFeature(
     featureTab === 'puzzles' ||
     featureTab === 'sudoku' ||
     featureTab === 'quizzes' ||
+    featureTab === 'worksheets' ||
     featureTab === 'referrals'
   ) {
     return {

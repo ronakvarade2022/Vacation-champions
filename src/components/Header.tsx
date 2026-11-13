@@ -85,8 +85,13 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Banner with Tagline, DEMO Section Button & Role Switcher */}
       <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-orange-500 text-white px-4 py-1.5 text-xs font-medium">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-bold tracking-wider uppercase text-[11px] bg-white/20 px-2 py-0.5 rounded-sm">Official Platform</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold tracking-wider uppercase text-[11px] bg-white/20 px-2 py-0.5 rounded-sm">
+              MyStudyZone • Interactive Learning Platform
+            </span>
+            <span className="hidden lg:inline text-[11px] font-semibold text-amber-100">
+              Learn, Practice, Explore and Achieve Excellence.
+            </span>
             {currentUser && (
               <span className="hidden md:inline bg-black/25 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-amber-100 border border-white/20">
                 {currentUser.role === 'admin' && '🛡️ Master Admin Portal'}
@@ -150,13 +155,16 @@ export const Header: React.FC<HeaderProps> = ({
             <Trophy className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-display font-extrabold text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-amber-800 via-orange-800 to-amber-900 bg-clip-text text-transparent">
-                VACATION CHAMPIONS
+                MyStudyZone
+              </span>
+              <span className="hidden md:inline-block text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                Interactive Learning Platform
               </span>
             </div>
-            <p className="text-[11px] text-amber-800/80 font-medium hidden sm:block">
-              Classes 2 to 8 Educational Gaming Arena
+            <p className="text-[11px] text-amber-800/90 font-semibold hidden sm:block">
+              MyStudyZone – An Interactive Learning Platform for Students • Learn, Practice, Explore and Achieve Excellence.
             </p>
           </div>
         </div>
@@ -199,7 +207,19 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
                   <FileText className="w-3.5 h-3.5" />
                 </span>
-                <span>Quizzes (14)</span>
+                <span>Quizzes</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('worksheets')}
+                className={`px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  currentTab === 'worksheets' ? 'bg-white text-indigo-950 shadow-xs ring-1 ring-indigo-300' : 'text-slate-700 hover:text-indigo-900'
+                }`}
+              >
+                <span className="w-5 h-5 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-3.5 h-3.5" />
+                </span>
+                <span>Worksheets</span>
               </button>
 
               <button
@@ -966,7 +986,19 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                   <FileText className="w-3.5 h-3.5" />
                 </span>
-                <span>Quizzes (14)</span>
+                <span>Quizzes (1st–10th)</span>
+              </button>
+
+              <button
+                onClick={() => { setCurrentTab('worksheets'); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-xl text-left font-bold flex items-center gap-2 border transition-all ${
+                  currentTab === 'worksheets' ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-white text-slate-700 border-indigo-100 hover:bg-indigo-50'
+                }`}
+              >
+                <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center shrink-0">
+                  <FileText className="w-3.5 h-3.5" />
+                </span>
+                <span>Worksheets (1st–10th)</span>
               </button>
 
               <button

@@ -1,13 +1,17 @@
 export type ClassLevel = 
+  | 'Class 1'
   | 'Class 2' 
   | 'Class 3' 
   | 'Class 4' 
   | 'Class 5' 
   | 'Class 6' 
   | 'Class 7' 
-  | 'Class 8';
+  | 'Class 8'
+  | 'Class 9'
+  | 'Class 10';
 
 export type SubjectName =
+  // 14 Existing Core Subjects (Preserved Exactly)
   | 'Mathematics'
   | 'English'
   | 'Hindi'
@@ -21,7 +25,20 @@ export type SubjectName =
   | 'Logical Reasoning'
   | 'Environmental Studies'
   | 'Moral Education'
-  | 'Vocabulary and Grammar';
+  | 'Vocabulary and Grammar'
+  // Class 1 Subject Addition
+  | 'Drawing and Creative Activities'
+  // Class 9 & Class 10 Separate Science & Board Subjects
+  | 'Physics'
+  | 'Chemistry'
+  | 'Biology'
+  | 'Political Science'
+  | 'Information Technology'
+  | 'Environmental Education'
+  | 'Physical Education'
+  // Class 10 Maharashtra SSC Separate Mathematics Subjects
+  | 'Mathematics – Algebra'
+  | 'Mathematics – Geometry';
 
 export type QuizLevel = 1 | 2 | 3 | 4;
 
@@ -29,6 +46,21 @@ export interface SubjectLevelProgress {
   maxUnlockedLevel: QuizLevel;
   completedLevels: QuizLevel[];
   bestScores: Record<number, number>; // level -> score out of 10
+}
+
+export interface WorksheetAttemptRecord {
+  id: string;
+  worksheetId: string;
+  worksheetTitle: string;
+  title?: string;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  chapter?: string;
+  obtainedMarks: number;
+  score?: number;
+  totalMarks: number;
+  percentage: number;
+  completedAt: string;
 }
 
 export interface StudentProfile {
@@ -56,7 +88,9 @@ export interface StudentProfile {
   attemptedScholarshipQuestionIds?: string[]; // Tracks attempted scholarship question IDs to ensure 0 duplicates
   attemptedPuzzleIds: string[];
   completedStoryIds: string[];
-  subjectProgress?: Record<string, SubjectLevelProgress>; // SubjectName -> Level progress
+  completedWorksheetIds?: string[];
+  worksheetAttempts?: WorksheetAttemptRecord[];
+  subjectProgress?: Record<string, SubjectLevelProgress>; // SubjectName or Class__SubjectName -> Level progress
   classChangeLogs?: {
     oldClass: ClassLevel;
     newClass: ClassLevel;

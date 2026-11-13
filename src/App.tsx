@@ -27,6 +27,7 @@ import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
 import { AboutUsView } from './components/AboutUsView';
 import { ContactUsView } from './components/ContactUsView';
 import { FaqsView } from './components/FaqsView';
+import { WorksheetsView } from './components/WorksheetsView';
 import { SubjectName, QuizLevel } from './types';
 import { canAccessFeature, canAccessSubject } from './utils/subscriptionAccess';
 import { Trophy } from 'lucide-react';
@@ -128,7 +129,7 @@ const AppContent: React.FC = () => {
 
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
     const alwaysOpenTabs = new Set([
-      'demo', 'dashboard', 'profile', 'account', 'subscription',
+      'demo', 'dashboard', 'profile', 'account', 'subscription', 'worksheets',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin', 'parent'
     ]);
@@ -239,13 +240,16 @@ const AppContent: React.FC = () => {
 
                 <div className="space-y-2">
                   <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
-                    Authentication Required
+                    MyStudyZone – An Interactive Learning Platform for Students
                   </span>
                   <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 mt-2">
-                    Welcome to Vacation Champions!
+                    Welcome to MyStudyZone!
                   </h2>
+                  <p className="text-xs sm:text-sm font-bold text-amber-800">
+                    Learn, Practice, Explore and Achieve Excellence.
+                  </p>
                   <p className="text-sm text-slate-600 max-w-md mx-auto font-medium leading-relaxed">
-                    Sign in with your registered student account or create a new account to get our Lifetime Free Plan automatically!
+                    Sign in with your registered student account or create a new account to access our interactive learning platform for Classes 1st to 10th!
                   </p>
                 </div>
 
@@ -307,6 +311,13 @@ const AppContent: React.FC = () => {
                     initialSubject={quizInitialSubject}
                     initialLevel={quizInitialLevel}
                     onOpenMembership={() => openMembershipWithPlan('premium')}
+                  />
+                )}
+
+                {currentTab === 'worksheets' && (
+                  <WorksheetsView
+                    initialSubject={quizInitialSubject}
+                    onUnlockClick={() => openMembershipWithPlan('premium')}
                   />
                 )}
 
@@ -413,10 +424,13 @@ const AppContent: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 space-y-3">
           <div className="flex items-center justify-center gap-2 font-display font-bold text-amber-900 text-sm">
             <Trophy className="w-4 h-4 text-amber-600" />
-            <span>VACATION CHAMPIONS</span>
+            <span>MyStudyZone – An Interactive Learning Platform for Students</span>
           </div>
+          <p className="text-amber-800 font-bold text-xs">
+            Learn, Practice, Explore and Achieve Excellence.
+          </p>
           <p className="text-slate-600 text-xs">
-            Read • Play • Learn • Become a Champion! Educational gaming platform for Class 2 to Class 8.
+            Interactive learning platform for Classes 1st to 10th • All Subjects • 4 Quiz Levels • Online Worksheets • Scholarship Prep • 45 Audio Stories • Drawing &amp; Cricket Quizzes.
           </p>
 
           {/* Quick Informational & Compliance Links */}

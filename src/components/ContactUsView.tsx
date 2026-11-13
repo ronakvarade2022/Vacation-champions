@@ -83,7 +83,7 @@ export const ContactUsView: React.FC<ContactUsViewProps> = ({ onNavigateTab }) =
             Headquarters
           </h3>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Vacation Champions Digital Learning Arena (mystudyzone.in)
+            MyStudyZone – An Interactive Learning Platform for Students (mystudyzone.in)
           </p>
           <div className="pt-1 text-xs text-slate-700 leading-relaxed font-medium">
             <p>Maharashtra, India</p>

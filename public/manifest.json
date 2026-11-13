@@ -1,0 +1,22 @@
+{
+  "name": "MyStudyZone – An Interactive Learning Platform for Students",
+  "short_name": "MyStudyZone",
+  "description": "MyStudyZone – An Interactive Learning Platform for Students. Learn, Practice, Explore and Achieve Excellence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffbeb",
+  "theme_color": "#d97706",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/file_00000000b7dc8211912b865fa7acee86.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/file_00000000b7dc8211912b865fa7acee86.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

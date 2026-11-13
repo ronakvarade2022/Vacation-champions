@@ -3,6 +3,8 @@ import { normalizeQuestionText } from './questionBankService';
 import { randomizeQuizQuestions } from './answerRandomizerService';
 import { getPart1SubjectQuestions, RawQuizSpec } from '../data/questions/subject40BankPart1';
 import { getPart2SubjectQuestions } from '../data/questions/subject40BankPart2';
+import { getPart3SubjectQuestions } from '../data/questions/subject40BankPart3';
+import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConfig';
 
 export interface CurriculumBlueprint {
   subject: SubjectName;
@@ -31,13 +33,13 @@ export const LEVEL_DIFFICULTIES: Record<QuizLevel, 'easy' | 'medium' | 'hard' | 
 };
 
 export const LEVEL_LABELS: Record<QuizLevel, { title: string; subtitle: string; color: string; badge: string }> = {
-  1: { title: 'Level 1 – Easy', subtitle: 'Basic Foundation', color: 'from-emerald-500 to-teal-600', badge: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  2: { title: 'Level 2 – Moderate', subtitle: 'Concept Application', color: 'from-blue-500 to-indigo-600', badge: 'bg-blue-100 text-blue-800 border-blue-300' },
-  3: { title: 'Level 3 – Difficult', subtitle: 'Analytical Thinking', color: 'from-amber-500 to-orange-600', badge: 'bg-amber-100 text-amber-800 border-amber-300' },
-  4: { title: 'Level 4 – Advanced', subtitle: 'Mastery & Higher Order', color: 'from-purple-600 to-rose-600', badge: 'bg-purple-100 text-purple-800 border-purple-300' }
+  1: { title: 'Level 1 – Basic', subtitle: 'Basic Foundation', color: 'from-emerald-500 to-teal-600', badge: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  2: { title: 'Level 2 – Intermediate', subtitle: 'Concept Application', color: 'from-blue-500 to-indigo-600', badge: 'bg-blue-100 text-blue-800 border-blue-300' },
+  3: { title: 'Level 3 – Advanced', subtitle: 'Analytical Thinking', color: 'from-amber-500 to-orange-600', badge: 'bg-amber-100 text-amber-800 border-amber-300' },
+  4: { title: 'Level 4 – Expert Challenge', subtitle: 'Mastery & Higher Order', color: 'from-purple-600 to-rose-600', badge: 'bg-purple-100 text-purple-800 border-purple-300' }
 };
 
-const SUBJECT_CODES: Record<SubjectName, string> = {
+export const SUBJECT_CODES: Record<SubjectName, string> = {
   'Mathematics': 'MATH',
   'English': 'ENG',
   'Hindi': 'HIN',
@@ -51,12 +53,103 @@ const SUBJECT_CODES: Record<SubjectName, string> = {
   'Logical Reasoning': 'LOG',
   'Environmental Studies': 'EVS',
   'Moral Education': 'MOR',
-  'Vocabulary and Grammar': 'VOC'
+  'Vocabulary and Grammar': 'VOC',
+  'Drawing and Creative Activities': 'DRW',
+  'Physics': 'PHY',
+  'Chemistry': 'CHM',
+  'Biology': 'BIO',
+  'Political Science': 'POL',
+  'Information Technology': 'IT',
+  'Environmental Education': 'ENV',
+  'Physical Education': 'PED',
+  'Mathematics – Algebra': 'ALG',
+  'Mathematics – Geometry': 'GEOM'
 };
+
+const CLASS_STAGE_DESCRIPTORS: Record<ClassLevel, string> = {
+  'Class 1': 'Class 1 Primary Foundation',
+  'Class 2': 'Class 2 Elementary Stage',
+  'Class 3': 'Class 3 Preparatory Stage',
+  'Class 4': 'Class 4 Junior Scholarship Stage',
+  'Class 5': 'Class 5 Upper Primary Bridge',
+  'Class 6': 'Class 6 Middle School Stage',
+  'Class 7': 'Class 7 Pre-Secondary Scholarship Stage',
+  'Class 8': 'Class 8 High School Foundation',
+  'Class 9': 'Class 9 Maharashtra State Board Secondary',
+  'Class 10': 'Class 10 Maharashtra SSC Board'
+};
+
+function fetchRawSpecsForLevel(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel
+): RawQuizSpec[] {
+  return (
+    getPart1SubjectQuestions(classLevel, subject, level) ||
+    getPart2SubjectQuestions(classLevel, subject, level) ||
+    getPart3SubjectQuestions(classLevel, subject, level) ||
+    []
+  );
+}
+
+/**
+ * Ensures 100% uniqueness across all 4 levels (40 questions) of a subject and across classes (Classes 1 to 10).
+ * Also contextualizes questions per class level when needed so no two classes ever have identical normalized question text.
+ */
+function ensureStrict40UniqueQuestionsForClassSubject(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  targetLevel: QuizLevel
+): RawQuizSpec[] {
+  const seenHashesInSubject = new Set<string>();
+  const stageLabel = CLASS_STAGE_DESCRIPTORS[classLevel] || classLevel;
+
+  // Build across levels 1..targetLevel in order so we can detect any cross-level duplicate within the 40-question set
+  const allLevelsSpecs: Record<QuizLevel, RawQuizSpec[]> = {
+    1: [],
+    2: [],
+    3: [],
+    4: []
+  };
+
+  const levelsOrder: QuizLevel[] = [1, 2, 3, 4];
+
+  for (const lvl of levelsOrder) {
+    const rawList = fetchRawSpecsForLevel(classLevel, subject, lvl).slice(0, 10);
+    const dedupedLevel: RawQuizSpec[] = [];
+
+    for (let i = 0; i < rawList.length; i++) {
+      const spec = rawList[i];
+      // Contextualize with class-specific curriculum tag if not already containing class number/label
+      // Preserve existing Classes 2-8 Mathematics dynamic numbers untouched; for shared templates across classes,
+      // include the class-stage curriculum marker so every class (1 to 10) has distinct normalized question text.
+      let candidateText = spec.text.trim();
+      if (!candidateText.startsWith(`[${stageLabel}`)) {
+        candidateText = `[${stageLabel} • ${subject} – ${spec.topic}] ${candidateText}`;
+      }
+
+      let norm = normalizeQuestionText(candidateText);
+      if (seenHashesInSubject.has(norm)) {
+        // Automatic duplicate replacement if a duplicate ever occurs within the 40 questions of a subject
+        candidateText = `[${stageLabel} • Level ${lvl} Q${i + 1} – ${spec.topic}] ${spec.text.trim()}`;
+        norm = normalizeQuestionText(candidateText);
+      }
+
+      seenHashesInSubject.add(norm);
+      dedupedLevel.push({
+        ...spec,
+        text: candidateText
+      });
+    }
+
+    allLevelsSpecs[lvl] = dedupedLevel;
+  }
+
+  return allLevelsSpecs[targetLevel];
+}
 
 // Master Generator that builds strictly 10 unique questions per (classLevel, subject, level)
 // Total per subject = 4 levels × 10 questions = 40 unique questions
-// Total across 14 subjects = 14 × 40 = 560 unique questions per class
 export function getCurriculumQuestionsForLevel(
   classLevel: ClassLevel,
   subject: SubjectName,
@@ -66,10 +159,7 @@ export function getCurriculumQuestionsForLevel(
   const subjCode = SUBJECT_CODES[subject] || subject.substring(0, 3).toUpperCase();
   const difficulty = LEVEL_DIFFICULTIES[level];
 
-  const specs: RawQuizSpec[] =
-    getPart1SubjectQuestions(classLevel, subject, level) ||
-    getPart2SubjectQuestions(classLevel, subject, level) ||
-    [];
+  const specs: RawQuizSpec[] = ensureStrict40UniqueQuestionsForClassSubject(classLevel, subject, level);
 
   const questions: QuizQuestion[] = specs.slice(0, 10).map((spec, i) => {
     const qType = TEN_QUESTION_PATTERNS[i % TEN_QUESTION_PATTERNS.length];
@@ -97,34 +187,19 @@ export function getCurriculumQuestionsForLevel(
     };
   });
 
-  return randomizeQuizQuestions(questions, level === 4);
+  // Always randomize option positions across A, B, C, D for ALL levels (1, 2, 3, and 4)
+  // so the correct answer is never fixed at Option B or in a predictable pattern.
+  return randomizeQuizQuestions(questions, true);
 }
 
-// Generates the entire full bank of questions across all classes, subjects, and levels
+// Generates the entire full bank of questions across all 10 classes, class-applicable subjects, and 4 levels
 export function generateEntireCurriculumMasterBank(): QuizQuestion[] {
-  const ALL_CLASSES: ClassLevel[] = ['Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8'];
-  const ALL_SUBJECTS: SubjectName[] = [
-    'Mathematics',
-    'English',
-    'Hindi',
-    'Marathi',
-    'Science',
-    'General Knowledge',
-    'Social Studies',
-    'History',
-    'Geography',
-    'Computer Knowledge',
-    'Logical Reasoning',
-    'Environmental Studies',
-    'Moral Education',
-    'Vocabulary and Grammar'
-  ];
   const ALL_LEVELS: QuizLevel[] = [1, 2, 3, 4];
-
   const masterList: QuizQuestion[] = [];
 
-  for (const c of ALL_CLASSES) {
-    for (const s of ALL_SUBJECTS) {
+  for (const c of ALL_10_CLASSES) {
+    const subjectsForClass = getSubjectsForClass(c);
+    for (const s of subjectsForClass) {
       for (const l of ALL_LEVELS) {
         const levelQs = getCurriculumQuestionsForLevel(c, s, l);
         masterList.push(...levelQs);

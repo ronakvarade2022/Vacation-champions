@@ -45,28 +45,19 @@ import {
   buildStudentReferralLink,
   buildStudentReferralDisplayLink
 } from '../utils/referralCoding';
+import {
+  ALL_10_CLASSES,
+  ALL_10_CLASSES_META,
+  getSubjectsForClass,
+  getSubjectMeta
+} from '../data/classCurriculumConfig';
+import { getAllWorksheetsForClass } from '../data/worksheetsData';
+import { FileText, GraduationCap } from 'lucide-react';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
   onOpenMembership: (plan?: 'basic' | 'premium') => void;
 }
-
-const ALL_14_SUBJECTS: { name: SubjectName; icon: string; bgGradient: string }[] = [
-  { name: 'Mathematics', icon: '📐', bgGradient: 'from-blue-500 to-indigo-600' },
-  { name: 'English', icon: '📖', bgGradient: 'from-amber-500 to-orange-600' },
-  { name: 'Hindi', icon: '🇮🇳', bgGradient: 'from-red-500 to-rose-600' },
-  { name: 'Marathi', icon: '🚩', bgGradient: 'from-orange-500 to-amber-600' },
-  { name: 'Science', icon: '🔬', bgGradient: 'from-emerald-500 to-teal-600' },
-  { name: 'General Knowledge', icon: '🌍', bgGradient: 'from-sky-500 to-blue-600' },
-  { name: 'Social Studies', icon: '🏛️', bgGradient: 'from-purple-500 to-indigo-600' },
-  { name: 'History', icon: '⚔️', bgGradient: 'from-amber-700 to-stone-800' },
-  { name: 'Geography', icon: '🗺️', bgGradient: 'from-teal-500 to-emerald-700' },
-  { name: 'Computer Knowledge', icon: '💻', bgGradient: 'from-cyan-500 to-blue-700' },
-  { name: 'Logical Reasoning', icon: '💡', bgGradient: 'from-violet-500 to-purple-700' },
-  { name: 'Environmental Studies', icon: '🌱', bgGradient: 'from-green-500 to-emerald-700' },
-  { name: 'Moral Education', icon: '🕊️', bgGradient: 'from-rose-500 to-pink-600' },
-  { name: 'Vocabulary and Grammar', icon: '✍️', bgGradient: 'from-fuchsia-500 to-purple-600' }
-];
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onNavigateTab,
@@ -77,12 +68,30 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     allAttempts, 
     allStories, 
     savedDrawings, 
-    getSubjectLevelProgress 
+    getSubjectLevelProgress,
+    promoteOrUpdateStudentClass
   } = useApp();
   const [selectedSubjectForLevels, setSelectedSubjectForLevels] = useState<SubjectName | null>(null);
   const [copiedDashRefLink, setCopiedDashRefLink] = useState(false);
 
   if (!currentStudent) return null;
+
+  const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel).map(name => {
+    const meta = getSubjectMeta(name);
+    return {
+      name,
+      icon: meta.icon,
+      bgGradient: meta.gradient,
+      marathiTitle: meta.marathiTitle,
+      chaptersSummary: meta.chaptersSummary
+    };
+  });
+
+  const classWorksheets = getAllWorksheetsForClass(currentStudent.classLevel);
+  const completedWorksheetsCount = classWorksheets.filter(w =>
+    (currentStudent.completedWorksheetIds || []).includes(w.id)
+  ).length;
+  const pendingWorksheetsCount = Math.max(0, classWorksheets.length - completedWorksheetsCount);
 
   const studentReferralCode = currentStudent.referralCode || generateUniqueStudentReferralCode(currentStudent.id, currentStudent.name);
   const studentReferralLink = currentStudent.referralLink || buildStudentReferralLink(studentReferralCode);
@@ -144,6 +153,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-3xl">{currentStudent.avatar}</span>
+              <span className="bg-white/25 backdrop-blur-md px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider text-white border border-white/30">
+                MyStudyZone – An Interactive Learning Platform for Students
+              </span>
               <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-amber-100 flex items-center gap-1.5 border border-white/20">
                 <Lock className="w-3.5 h-3.5 text-amber-200" />
                 <span>{currentStudent.classLevel} (Permanent)</span>
@@ -158,8 +170,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <h1 className="text-2xl sm:text-4xl font-display font-extrabold tracking-tight">
               Welcome back, {currentStudent.name}!
             </h1>
+            <p className="text-white font-extrabold text-xs sm:text-sm tracking-wide">
+              Learn, Practice, Explore and Achieve Excellence.
+            </p>
             <p className="text-amber-100 text-sm sm:text-base max-w-xl font-medium">
-              Ready to conquer today's learning adventures? Practice quizzes with zero repeated questions, dive into 45 stories, and unlock champion badges!
+              Classes 1st to 10th • Master all {activeClassSubjects.length} subjects for {currentStudent.classLevel} across 4 quiz levels (40 unique questions per subject), solve interactive Online Worksheets, prepare for 4th &amp; 7th scholarship exams, explore 45 audio stories, practice drawing, and track your progress!
             </p>
           </div>
 
@@ -171,6 +186,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             >
               <Play className="w-4 h-4 fill-amber-900 text-amber-900 group-hover:scale-110 transition-transform" />
               <span>Start 10-Q Quiz</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('worksheets')}
+              className="px-5 py-3 rounded-2xl bg-indigo-900/60 hover:bg-indigo-900/80 backdrop-blur-md text-white font-extrabold text-sm border border-white/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Online Worksheets</span>
             </button>
             <button
               onClick={() => onNavigateTab('stories')}
@@ -631,7 +653,78 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       </div>
 
       {/* ========================================================
-          CATEGORY A: ACADEMIC LEARNING ZONE (14 Subjects × 4 Levels = 560 Unique Questions)
+          ALL 10 CLASSES SELECTOR & CLASS PROMOTION HUB (Classes 1st to 10th)
+          ======================================================== */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200/90 shadow-md space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+              <GraduationCap className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-display font-black text-slate-900">
+                  Classes 1st to 10th Curriculum &amp; Class Promotion
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-xs font-extrabold border border-indigo-200">
+                  All 10 Classes Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Select any class from <strong>Class 1 to Class 10</strong> to view its subjects, 4 quiz levels (40 unique questions/subject), and online worksheets, or update your class when promoted!
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-extrabold text-indigo-900 bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 self-start md:self-center shrink-0">
+            <span>Active Class: {currentStudent.classLevel}</span>
+            <span>•</span>
+            <span>{activeClassSubjects.length} Subjects</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
+          {ALL_10_CLASSES.map((cls) => {
+            const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
+            const isSelected = currentStudent.classLevel === cls;
+            const subjCount = getSubjectsForClass(cls).length;
+            return (
+              <button
+                key={cls}
+                type="button"
+                onClick={() => {
+                  if (cls !== currentStudent.classLevel) {
+                    promoteOrUpdateStudentClass(cls, `Switched / promoted class to ${cls} from Student Dashboard`);
+                  }
+                }}
+                className={`p-3 rounded-2xl border text-center transition-all cursor-pointer relative ${
+                  isSelected
+                    ? 'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md scale-[1.02]'
+                    : 'bg-slate-50 hover:bg-indigo-50/70 text-slate-800 border-slate-200 hover:border-indigo-300'
+                }`}
+              >
+                {isSelected && (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+                    Active
+                  </span>
+                )}
+                <div className="text-xs sm:text-sm font-black">{cls}</div>
+                <div className={`text-[10px] font-bold mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  {meta?.marathiLabel}
+                </div>
+                <div className={`text-[9px] font-extrabold mt-1 px-1.5 py-0.5 rounded-md inline-block ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'
+                }`}>
+                  {subjCount} Subjects
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================
+          CATEGORY A: ACADEMIC LEARNING ZONE (Class-Specific Subjects × 4 Levels = 40 Unique Questions/Subject)
           ======================================================== */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -641,26 +734,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </span>
             <div>
               <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900">
-                ACADEMIC LEARNING ZONE (14 Subjects)
+                ACADEMIC LEARNING ZONE • {currentStudent.classLevel} ({activeClassSubjects.length} Subjects)
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                40 Unique Questions Per Subject (10 per Level × 4 Levels) • Zero Question Repetition Guarantee
+                4 Levels per Subject (Level 1 – Basic, Level 2 – Intermediate, Level 3 – Advanced, Level 4 – Expert Challenge) • 40 Unique Questions Per Subject
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => onNavigateTab('quizzes')}
-            className="text-xs font-extrabold text-amber-700 hover:text-amber-900 bg-amber-100/80 px-3.5 py-2 rounded-xl border border-amber-200 flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-          >
-            <span>Open Full Quiz Arena</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => onNavigateTab('worksheets')}
+              className="text-xs font-extrabold text-indigo-700 hover:text-indigo-900 bg-indigo-100/80 px-3.5 py-2 rounded-xl border border-indigo-200 flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Online Worksheets ({completedWorksheetsCount}/{classWorksheets.length})</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('quizzes')}
+              className="text-xs font-extrabold text-amber-700 hover:text-amber-900 bg-amber-100/80 px-3.5 py-2 rounded-xl border border-amber-200 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Open Full Quiz Arena</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* 14 Subjects Grid with Visible 4-Level Indicators & Plan Lock Badges */}
+        {/* Class-Specific Subjects Grid with Visible 4-Level Indicators & Plan Lock Badges */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-          {ALL_14_SUBJECTS.map((sub) => {
+          {activeClassSubjects.map((sub) => {
             const subjectProgress = getSubjectLevelProgress(sub.name);
             const subjectAttempts = studentAttempts.filter(a => a.subject === sub.name);
             const bestScore = subjectAttempts.length > 0 
@@ -698,13 +800,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        Unlocked
+                        40 Qs
                       </span>
                     )}
                   </div>
-                  <h3 className="font-bold text-xs text-slate-800 leading-tight mb-1.5 truncate">
+                  <h3 className="font-bold text-xs text-slate-800 leading-tight mb-0.5 truncate" title={sub.name}>
                     {sub.name}
                   </h3>
+                  <p className="text-[10px] text-slate-400 font-semibold truncate mb-1.5">
+                    {sub.marathiTitle}
+                  </p>
                   
                   {/* Level 1-4 Mini Progress Indicators */}
                   <div className="flex items-center gap-1 mb-2">
@@ -746,6 +851,37 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
             );
           })}
+        </div>
+
+        {/* PROMINENT ONLINE WORKSHEETS BANNER CARD (Classes 1 to 10) */}
+        <div
+          onClick={() => onNavigateTab('worksheets')}
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 text-white p-6 sm:p-7 shadow-lg hover:shadow-xl transition-all cursor-pointer border-2 border-indigo-400/30"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[11px] uppercase tracking-wider">
+                  📄 ONLINE WORKSHEETS • CLASSES 1 TO 10
+                </span>
+                <span className="px-3 py-1 rounded-full bg-white/15 text-indigo-100 font-bold text-xs border border-white/20">
+                  {completedWorksheetsCount} Completed • {pendingWorksheetsCount} Pending in {currentStudent.classLevel}
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight">
+                Interactive Class-Wise &amp; Subject-Wise Worksheets (Solve Online or Download PDF)
+              </h3>
+              <p className="text-indigo-100 text-xs sm:text-sm leading-relaxed font-medium">
+                Practice MCQs, Fill in the Blanks, Match the Following, True/False, Short &amp; Long Answers, Mathematics Exercises, Grammar Practice, Science Activities, and Logical Reasoning with instant evaluation and printable Answer Key PDFs!
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider bg-white text-indigo-950 px-5 py-3 rounded-2xl shadow-md group-hover:scale-105 transition-all self-start lg:self-auto shrink-0">
+              <FileText className="w-4 h-4 text-indigo-600" />
+              <span>Open {currentStudent.classLevel} Worksheets</span>
+              <ArrowRight className="w-4 h-4 text-indigo-600" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1262,42 +1398,46 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
       {/* 4-LEVEL ROADMAP MODAL WHEN A SUBJECT IS CLICKED */}
       {selectedSubjectForLevels && (() => {
-        const activeSubjData = ALL_14_SUBJECTS.find(s => s.name === selectedSubjectForLevels);
+        const activeSubjData = activeClassSubjects.find(s => s.name === selectedSubjectForLevels) || {
+          name: selectedSubjectForLevels,
+          icon: getSubjectMeta(selectedSubjectForLevels).icon,
+          bgGradient: getSubjectMeta(selectedSubjectForLevels).gradient
+        };
         const subjProgress = getSubjectLevelProgress(selectedSubjectForLevels);
         const maxUnlocked = subjProgress.maxUnlockedLevel;
 
         const LEVEL_META: { level: QuizLevel; title: string; subtitle: string; difficulty: string; diffBadge: string; description: string }[] = [
           { 
             level: 1, 
-            title: 'Level 1 – Easy', 
+            title: 'Level 1 – Basic', 
             subtitle: 'Basic Foundation',
-            difficulty: 'Easy', 
+            difficulty: 'Basic', 
             diffBadge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
             description: '10 unique foundational questions covering core concepts, vocabulary, and direct recall.'
           },
           { 
             level: 2, 
-            title: 'Level 2 – Moderate', 
+            title: 'Level 2 – Intermediate', 
             subtitle: 'Concept Application',
-            difficulty: 'Moderate', 
+            difficulty: 'Intermediate', 
             diffBadge: 'bg-blue-100 text-blue-800 border-blue-300',
             description: '10 completely different questions applying concepts to multi-step problems and matching.'
           },
           { 
             level: 3, 
-            title: 'Level 3 – Difficult', 
+            title: 'Level 3 – Advanced', 
             subtitle: 'Analytical Thinking',
-            difficulty: 'Difficult', 
+            difficulty: 'Advanced', 
             diffBadge: 'bg-amber-100 text-amber-800 border-amber-300',
             description: '10 completely different analytical questions, word problems, and spotting incorrect statements.'
           },
           { 
             level: 4, 
-            title: 'Level 4 – Advanced', 
+            title: 'Level 4 – Expert Challenge', 
             subtitle: 'Higher-Order Mastery',
-            difficulty: 'Advanced', 
+            difficulty: 'Expert Challenge', 
             diffBadge: 'bg-purple-100 text-purple-800 border-purple-300',
-            description: '10 completely different higher-order & tricky mastery questions with option shuffling.'
+            description: '10 completely different higher-order & tricky mastery questions with randomized option positions.'
           }
         ];
 

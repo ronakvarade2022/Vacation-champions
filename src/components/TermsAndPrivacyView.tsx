@@ -250,7 +250,7 @@ export const TermsAndPrivacyView: React.FC<TermsAndPrivacyViewProps> = ({
                 Notice to Parents, Teachers and Students:
               </h3>
               <p>
-                1. <strong>Supplementary Nature:</strong> Vacation Champions is designed as a fun, gamified practice platform to supplement classroom instruction and textbook reading for students in Classes 2 to 8. It is not an accredited school or degree-granting entity.
+                1. <strong>Supplementary Nature:</strong> MyStudyZone – An Interactive Learning Platform for Students (mystudyzone.in) is designed as an interactive learning platform to supplement classroom instruction and textbook reading for students in Classes 2 to 8. It is not an accredited school or degree-granting entity.
               </p>
               <p>
                 2. <strong>Error Reporting Protocol:</strong> We maintain a rigorous question-curation process aligned with Maharashtra State Board syllabus. However, should you discover any ambiguity or discrepancy in any quiz or explanation, please use our inline <strong>"Report Issue"</strong> button or submit a grievance. Our teachers will verify and correct valid issues immediately.

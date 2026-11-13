@@ -937,6 +937,46 @@ export const SUBJECT_TOPIC_MAP: Record<SubjectName, { topics: string[]; sampleKe
   'Vocabulary and Grammar': {
     topics: ['Synonyms & Antonyms', 'Prefixes & Suffixes', 'Idiomatic Expressions', 'Spelling Rules', 'Parts of Speech'],
     sampleKeywords: ['prefix', 'suffix', 'definition', 'spelling', 'phrase']
+  },
+  'Drawing and Creative Activities': {
+    topics: ['Primary & Secondary Colours', 'Shapes & Patterns', 'Warli Folk Art', 'Shading & Perspective', 'Eco-Craft'],
+    sampleKeywords: ['colour', 'shape', 'pattern', 'drawing', 'craft']
+  },
+  'Physics': {
+    topics: ['Laws of Motion', 'Gravitation', 'Work & Energy', 'Refraction of Light & Lenses', 'Effects of Electric Current'],
+    sampleKeywords: ['force', 'velocity', 'acceleration', 'joule', 'lens']
+  },
+  'Chemistry': {
+    topics: ['Periodic Classification', 'Chemical Reactions', 'Acids, Bases & Salts', 'Carbon Compounds', 'Metallurgy'],
+    sampleKeywords: ['element', 'reaction', 'valence', 'acid', 'bond']
+  },
+  'Biology': {
+    topics: ['Life Processes', 'Heredity & Evolution', 'Cell Biology & Biotechnology', 'Classification of Plants & Animals', 'Ecosystems'],
+    sampleKeywords: ['cell', 'photosynthesis', 'genetics', 'tissue', 'enzyme']
+  },
+  'Political Science': {
+    topics: ['Indian Constitution', 'Electoral Process', 'Parliamentary System', 'Judiciary & Fundamental Rights', 'United Nations'],
+    sampleKeywords: ['constitution', 'parliament', 'democracy', 'election', 'rights']
+  },
+  'Information Technology': {
+    topics: ['HTML5 & Web Design', 'Cyber Security & Ethics', 'Database Management (SQL)', 'Networking & Cloud Computing', 'Programming Logic'],
+    sampleKeywords: ['network', 'protocol', 'html', 'database', 'algorithm']
+  },
+  'Environmental Education': {
+    topics: ['Ecosystem & Biodiversity', 'Water Conservation & Jal Shakti', 'Solid Waste Management', 'Climate Action & Renewables', 'EIA'],
+    sampleKeywords: ['biodiversity', 'sustainable', 'conservation', 'watershed', 'recycling']
+  },
+  'Physical Education': {
+    topics: ['Physical Fitness & BMI', 'Yoga & Pranayama', 'First Aid & Sports Science', 'Indian & Olympic Sports', 'Balanced Nutrition'],
+    sampleKeywords: ['fitness', 'endurance', 'asana', 'tournament', 'stamina']
+  },
+  'Mathematics – Algebra': {
+    topics: ['Linear Equations in Two Variables', 'Quadratic Equations', 'Arithmetic Progression', 'Probability & Statistics', 'Financial Planning (GST)'],
+    sampleKeywords: ['equation', 'quadratic', 'progression', 'probability', 'polynomial']
+  },
+  'Mathematics – Geometry': {
+    topics: ['Similarity of Triangles', 'Pythagoras Theorem', 'Circle & Tangents', 'Coordinate Geometry & Trigonometry', 'Mensuration'],
+    sampleKeywords: ['triangle', 'tangent', 'hypotenuse', 'trigonometry', 'coordinate']
   }
 };
 

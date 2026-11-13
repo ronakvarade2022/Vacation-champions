@@ -21,7 +21,8 @@ import {
   AssignmentItem,
   FeeRecord,
   AnnouncementItem,
-  AuthenticatedUser
+  AuthenticatedUser,
+  WorksheetAttemptRecord
 } from '../types';
 import { 
   getInitialSeedQuestions, 
@@ -151,12 +152,16 @@ interface AppContextType {
   // Automated 3-Role Security Verification Test Runner
   runSecurityAuditTest: () => Promise<SecurityAuditReport>;
 
-  // Admin-Only Class Promotion & Correction
+  // Class Promotion & Student Class Update (Classes 1 to 10)
   adminPromoteOrCorrectClass: (studentId: string, newClass: ClassLevel, reason: string, adminName?: string) => { success: boolean; message: string };
-  updateStudentClass: (newClass: ClassLevel) => void; // Locked for students, preserved for admin fallback
+  promoteOrUpdateStudentClass: (newClass: ClassLevel, reason?: string) => { success: boolean; message: string };
+  updateStudentClass: (newClass: ClassLevel) => void;
+
+  // Online Worksheets (Classes 1 to 10)
+  submitWorksheetAttempt: (attemptData: Omit<WorksheetAttemptRecord, 'id' | 'completedAt'>) => WorksheetAttemptRecord;
 
   // Quiz & Zero Repetition 4-Level Engine
-  getSubjectLevelProgress: (subject: SubjectName) => SubjectLevelProgress;
+  getSubjectLevelProgress: (subject: SubjectName, classLevelOverride?: ClassLevel) => SubjectLevelProgress;
   getUnattemptedQuizQuestions: (classLevel: ClassLevel, subject: SubjectName) => QuizQuestion[];
   fetchClassSubjectQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName) => Promise<QuizQuestion[]>;
   fetchClassSubjectLevelQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, level: QuizLevel) => Promise<QuizQuestion[]>;
@@ -696,8 +701,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : [
       {
         id: 'notif-1',
-        title: 'Welcome to Vacation Champions!',
-        message: 'Explore 14 subjects, 45 audio stories, Drawing Champions and Brain Puzzles!',
+        title: 'Welcome to MyStudyZone – An Interactive Learning Platform for Students!',
+        message: 'Learn, Practice, Explore and Achieve Excellence. Explore 14 subjects, 4 quiz levels, scholarship prep, 45 audio stories, drawing, and cricket quizzes!',
         type: 'challenge',
         timestamp: 'Just now',
         read: false
@@ -1580,22 +1585,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentStudent(updatedStudent);
     }
 
+    saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+
     addNotification(
-      'Class Level Updated by Administrator',
-      `Your academic grade has been officially changed from ${target.classLevel} to ${newClass} by ${adminName}. Reason: ${reason}.`,
+      'Class Level Updated',
+      `Academic grade updated from ${target.classLevel} to ${newClass}. Reason: ${reason}.`,
       'achievement'
     );
 
     return {
       success: true,
-      message: `Successfully updated ${target.name}'s grade to ${newClass}. Audit entry recorded.`
+      message: `Successfully updated ${target.name}'s grade to ${newClass}.`
     };
   };
 
-  // Fallback for internal admin calls
+  const promoteOrUpdateStudentClass = (newClass: ClassLevel, reason: string = 'Student Class Promotion / Curriculum Selection'): { success: boolean; message: string } => {
+    if (!currentStudent) {
+      return { success: false, message: 'Please sign in to update your class.' };
+    }
+    return adminPromoteOrCorrectClass(currentStudent.id, newClass, reason, currentStudent.name);
+  };
+
+  // Direct helper for class promotion / class switcher
   const updateStudentClass = (newClass: ClassLevel) => {
     if (!currentStudent) return;
-    adminPromoteOrCorrectClass(currentStudent.id, newClass, 'Direct Admin Update', 'Administrator');
+    adminPromoteOrCorrectClass(currentStudent.id, newClass, 'Class Promotion / Grade Update', currentStudent.name);
+  };
+
+  const submitWorksheetAttempt = (attemptData: Omit<WorksheetAttemptRecord, 'id' | 'completedAt'>): WorksheetAttemptRecord => {
+    const record: WorksheetAttemptRecord = {
+      ...attemptData,
+      id: `ws_att_${Date.now()}`,
+      completedAt: new Date().toISOString()
+    };
+
+    if (currentStudent) {
+      const completedSet = new Set(currentStudent.completedWorksheetIds || []);
+      completedSet.add(attemptData.worksheetId);
+      const existingAttempts = currentStudent.worksheetAttempts || [];
+      const bonusPoints = Math.max(15, attemptData.obtainedMarks * 2);
+
+      const updatedStudent: StudentProfile = {
+        ...currentStudent,
+        points: currentStudent.points + bonusPoints,
+        coins: currentStudent.coins + Math.floor(bonusPoints / 2),
+        completedWorksheetIds: Array.from(completedSet),
+        worksheetAttempts: [record, ...existingAttempts],
+        lastActiveDate: new Date().toISOString()
+      };
+
+      setCurrentStudent(updatedStudent);
+      setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+      saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+
+      addNotification(
+        `Worksheet Completed: ${attemptData.subject}`,
+        `You scored ${attemptData.obtainedMarks}/${attemptData.totalMarks} (${attemptData.percentage}%) on "${attemptData.worksheetTitle}" and earned +${bonusPoints} Champion Points!`,
+        'achievement'
+      );
+    }
+
+    return record;
   };
 
   // ZERO QUESTION REPETITION ENGINE - STRICT REQUIREMENT
@@ -1643,15 +1693,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return candidatePool.slice(0, 10);
   };
 
-  const getSubjectLevelProgress = (subject: SubjectName): SubjectLevelProgress => {
-    if (!currentStudent || !currentStudent.subjectProgress || !currentStudent.subjectProgress[subject]) {
+  const getSubjectLevelProgress = (subject: SubjectName, classLevelOverride?: ClassLevel): SubjectLevelProgress => {
+    if (!currentStudent || !currentStudent.subjectProgress) {
       return {
-        maxUnlockedLevel: 1,
+        maxUnlockedLevel: 4,
         completedLevels: [],
         bestScores: {}
       };
     }
-    return currentStudent.subjectProgress[subject];
+    const targetClass = classLevelOverride || currentStudent.classLevel;
+    const classScopedKey = `${targetClass}__${subject}` as SubjectName;
+    const found = currentStudent.subjectProgress[classScopedKey] || currentStudent.subjectProgress[subject];
+    if (!found) {
+      return {
+        maxUnlockedLevel: 4,
+        completedLevels: [],
+        bestScores: {}
+      };
+    }
+    return {
+      ...found,
+      // Requirement 4: All four levels must be visible and accessible in every applicable subject
+      maxUnlockedLevel: 4
+    };
   };
 
   const fetchClassSubjectQuestionsAsync = async (classLevel: ClassLevel, subject: SubjectName): Promise<QuizQuestion[]> => {
@@ -1722,16 +1786,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       else if (updatedPoints >= 500) newLevel = 3;
       else if (updatedPoints >= 200) newLevel = 2;
 
-      // Update 4-Level Subject Progression
-      const existingSubjProgress = currentStudent.subjectProgress?.[newAttempt.subject] || {
-        maxUnlockedLevel: 1 as QuizLevel,
-        completedLevels: [] as QuizLevel[],
-        bestScores: {}
-      };
+      // Update 4-Level Subject Progression (both class-scoped and subject-scoped)
+      const classScopedKey = `${newAttempt.classLevel}__${newAttempt.subject}` as SubjectName;
+      const existingSubjProgress =
+        currentStudent.subjectProgress?.[classScopedKey] ||
+        currentStudent.subjectProgress?.[newAttempt.subject] || {
+          maxUnlockedLevel: 4 as QuizLevel,
+          completedLevels: [] as QuizLevel[],
+          bestScores: {}
+        };
 
-      let newMaxUnlocked = existingSubjProgress.maxUnlockedLevel;
+      let newMaxUnlocked: QuizLevel = 4;
       if (passed && currentLvl < 4) {
-        newMaxUnlocked = Math.max(newMaxUnlocked, (currentLvl + 1) as QuizLevel) as QuizLevel;
+        newMaxUnlocked = 4;
       }
 
       const completedSet = new Set(existingSubjProgress.completedLevels);
@@ -1752,7 +1819,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const updatedSubjectProgressMap = {
         ...(currentStudent.subjectProgress || {}),
-        [newAttempt.subject]: updatedSubjProgress
+        [newAttempt.subject]: updatedSubjProgress,
+        [classScopedKey]: updatedSubjProgress
       };
 
       // Check new badges
@@ -2272,7 +2340,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openAuthModal: () => setIsAuthModalOpen(true),
         closeAuthModal: () => setIsAuthModalOpen(false),
         adminPromoteOrCorrectClass,
+        promoteOrUpdateStudentClass,
         updateStudentClass,
+        submitWorksheetAttempt,
 
         updateStudentAttendance,
         addStudentAssignment,

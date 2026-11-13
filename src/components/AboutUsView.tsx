@@ -28,13 +28,13 @@ export const AboutUsView: React.FC<AboutUsViewProps> = ({
         <div className="max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-amber-100 text-xs font-bold uppercase tracking-wider">
             <Trophy className="w-3.5 h-3.5 text-amber-200" />
-            <span>Empowering Young Minds</span>
+            <span>MyStudyZone – An Interactive Learning Platform for Students</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-display font-extrabold tracking-tight leading-tight">
-            Read • Play • Learn • Become a Champion!
+            Learn, Practice, Explore and Achieve Excellence.
           </h1>
           <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed font-medium">
-            Vacation Champions (mystudyzone.in) is Maharashtra's premier educational gaming and curriculum practice arena, specially crafted for curious learners in Classes 2 through 8.
+            MyStudyZone (mystudyzone.in) is Maharashtra's premier interactive learning and curriculum practice platform, specially crafted for curious students in Classes 2 through 8.
           </p>
         </div>
       </div>
