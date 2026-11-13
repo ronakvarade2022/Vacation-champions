@@ -659,17 +659,22 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     const resolvedExpiresAt = isPaid
       ? student.planExpiresAt || fallbackDates?.expiresAt
       : undefined;
+    const resolvedActivatedClass = isPaid
+      ? student.activatedClassLevel || student.classLevel
+      : undefined;
 
     const planLabel = isPaid
-      ? 'PREMIUM PLAN – ₹99 – 90 Days'
+      ? `PREMIUM PLAN – ₹99 – 90 Days (${resolvedActivatedClass || student.classLevel})`
       : 'FREE PLAN – ₹0 – Lifetime';
 
     // Clean undefined values before Firestore setDoc
     const cleanData = JSON.parse(
       JSON.stringify({
         ...student,
+        accountRole: student.accountRole || 'student',
         plan: activePlan,
         planLabel,
+        activatedClassLevel: isPaid ? resolvedActivatedClass : null,
         isLifetimeFree: activePlan === 'free',
         planPurchasedAt: resolvedPurchasedAt,
         planExpiresAt: isPaid ? resolvedExpiresAt : null,
@@ -693,7 +698,7 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
             JSON.stringify({
               userId: student.id,
               userName: student.name || 'Student Champion',
-              userRole: 'student',
+              userRole: student.accountRole === 'teacher' ? 'teacher' : 'student',
               className: student.classLevel || 'Class 5',
               schoolName: student.schoolName || '',
               city: 'Maharashtra',
@@ -853,7 +858,7 @@ export async function findReferrerByCodeInFirestore(
     return { valid: false, message: 'Please enter a valid referral code.' };
   }
 
-  // Check reserved sample students first
+  // Check reserved sample students & teachers first
   const builtInMap: Record<string, { ids: string[]; primaryId: string; name: string; classLevel: string }> = {
     STUDY123: {
       ids: ['uid_aarav_c4_987654', 'student1'],
@@ -872,6 +877,18 @@ export async function findReferrerByCodeInFirestore(
       primaryId: 'uid_rohan_c7_983301',
       name: 'Rohan Kulkarni',
       classLevel: 'Class 7',
+    },
+    TEACH701: {
+      ids: ['uid_teacher_meera_c7_984401', 'teacher1'],
+      primaryId: 'uid_teacher_meera_c7_984401',
+      name: 'Prof. Meera Joshi',
+      classLevel: 'Class 7',
+    },
+    TEACH902: {
+      ids: ['uid_teacher_vikram_c9_985502', 'teacher2'],
+      primaryId: 'uid_teacher_vikram_c9_985502',
+      name: 'Prof. Vikram Deshpande',
+      classLevel: 'Class 9',
     },
   };
 
@@ -953,11 +970,12 @@ export async function findReferrerByCodeInFirestore(
   };
 }
 
-// 10. Persist Subscription Upgrade to Firestore (sets 3-month / 90-day expiration for ₹99 Premium Plan)
+// 10. Persist Subscription Upgrade to Firestore (sets 3-month / 90-day expiration & class-wise activation for ₹99 Premium Plan)
 export async function saveSubscriptionToFirestore(
   studentId: string,
   subscriptionData: {
     plan: 'free' | 'basic' | 'premium';
+    selectedClass?: string;
     planPurchasedAt?: string;
     planExpiresAt?: string;
     currentExpiresAt?: string;
@@ -969,13 +987,13 @@ export async function saveSubscriptionToFirestore(
   success: boolean;
   alreadyActivated?: boolean;
   plan: 'free' | 'basic' | 'premium';
+  activatedClassLevel?: string | null;
   planPurchasedAt: string;
   planExpiresAt: string | null;
   validityDays: number | 'Lifetime';
   error?: unknown;
 }> {
   const isPaid = subscriptionData.plan === 'basic' || subscriptionData.plan === 'premium';
-  const normalizedPlan = isPaid ? 'premium' : 'free';
   const computedDates = computePaidPlanExpiryIsoDate(subscriptionData.currentExpiresAt);
 
   const planPurchasedAt =
@@ -983,9 +1001,10 @@ export async function saveSubscriptionToFirestore(
   const planExpiresAt = isPaid
     ? subscriptionData.planExpiresAt || computedDates.expiresAt
     : null;
+  const activatedClassLevel = isPaid ? subscriptionData.selectedClass || null : null;
   const validityDays: number | 'Lifetime' = isPaid ? PAID_PLAN_VALIDITY_DAYS : 'Lifetime';
   const planLabel = isPaid
-    ? 'PREMIUM PLAN – ₹99 – 90 Days'
+    ? `PREMIUM PLAN – ₹99 – 90 Days${activatedClassLevel ? ` (${activatedClassLevel})` : ''}`
     : 'FREE PLAN – ₹0 – Lifetime';
   const amountInr =
     subscriptionData.amountInr ??
@@ -1005,6 +1024,7 @@ export async function saveSubscriptionToFirestore(
               success: true,
               alreadyActivated: true,
               plan: subscriptionData.plan,
+              activatedClassLevel: existingData?.activatedClassLevel || activatedClassLevel,
               planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
               planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
               validityDays,
@@ -1021,6 +1041,7 @@ export async function saveSubscriptionToFirestore(
         id: studentId,
         plan: subscriptionData.plan,
         planLabel,
+        activatedClassLevel,
         isLifetimeFree: subscriptionData.plan === 'free',
         planPurchasedAt,
         planExpiresAt,
@@ -1036,6 +1057,7 @@ export async function saveSubscriptionToFirestore(
     return {
       success: true,
       plan: subscriptionData.plan,
+      activatedClassLevel,
       planPurchasedAt,
       planExpiresAt,
       validityDays,
@@ -1045,6 +1067,7 @@ export async function saveSubscriptionToFirestore(
     return {
       success: false,
       plan: subscriptionData.plan,
+      activatedClassLevel,
       planPurchasedAt,
       planExpiresAt,
       validityDays,
@@ -1061,6 +1084,7 @@ export async function saveTransactionToFirestore(transaction: {
   studentName: string;
   parentEmail?: string;
   parentMobile?: string;
+  selectedClass?: string;
   planId: 'basic' | 'premium';
   planTitle: string;
   amount: number;
@@ -1089,7 +1113,8 @@ export async function saveTransactionToFirestore(transaction: {
         studentName: String(transaction.studentName || 'Student').slice(0, 100),
         parentEmail: String(transaction.parentEmail || '').slice(0, 150),
         parentMobile: String(transaction.parentMobile || '').slice(0, 20),
-        amount: Number(transaction.amount) || (transaction.planId === 'premium' ? 99 : 49),
+        selectedClass: transaction.selectedClass || undefined,
+        amount: Number(transaction.amount) || 99,
         currency: 'INR',
         status: transaction.status || 'SUCCESS',
         savedToFirestoreAt: new Date().toISOString(),
@@ -1107,6 +1132,7 @@ export async function saveTransactionToFirestore(transaction: {
 export async function fetchStudentSubscriptionFromFirestore(studentId: string): Promise<{
   found: boolean;
   plan?: 'free' | 'basic' | 'premium';
+  activatedClassLevel?: string | null;
   planPurchasedAt?: string;
   planExpiresAt?: string | null;
 }> {
@@ -1123,6 +1149,7 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
     return {
       found: true,
       plan,
+      activatedClassLevel: data?.activatedClassLevel || data?.classLevel || null,
       planPurchasedAt: data?.planPurchasedAt || undefined,
       planExpiresAt: data?.planExpiresAt || null,
     };

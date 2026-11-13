@@ -653,7 +653,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       </div>
 
       {/* ========================================================
-          ALL 10 CLASSES SELECTOR & CLASS PROMOTION HUB (Classes 1st to 10th)
+          ALL 10 CLASSES OVERVIEW & PERMANENT REGISTERED CLASS LOCK (One Account = One Class)
           ======================================================== */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200/90 shadow-md space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -664,20 +664,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-display font-black text-slate-900">
-                  Classes 1st to 10th Curriculum &amp; Class Promotion
+                  Your Registered Class Curriculum ({currentStudent.classLevel})
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-xs font-extrabold border border-indigo-200">
-                  All 10 Classes Active
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-extrabold border border-emerald-300 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-emerald-700" />
+                  <span>One Account = One Active Class</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Select any class from <strong>Class 1 to Class 10</strong> to view its subjects, 4 quiz levels (40 unique questions/subject), and online worksheets, or update your class when promoted!
+              <p className="text-xs text-slate-600 font-medium mt-0.5">
+                Your account is permanently registered for <strong>Standard {currentStudent.classLevel.replace('Class ', '')} ({currentStudent.classLevel})</strong>. All subjects, 4 quiz levels, and online worksheets are unlocked strictly for your registered class.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs font-extrabold text-indigo-900 bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 self-start md:self-center shrink-0">
-            <span>Active Class: {currentStudent.classLevel}</span>
+            <Lock className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Registered: {currentStudent.classLevel}</span>
             <span>•</span>
             <span>{activeClassSubjects.length} Subjects</span>
           </div>
@@ -694,26 +696,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 type="button"
                 onClick={() => {
                   if (cls !== currentStudent.classLevel) {
-                    promoteOrUpdateStudentClass(cls, `Switched / promoted class to ${cls} from Student Dashboard`);
+                    promoteOrUpdateStudentClass(cls, `Attempted to switch class to ${cls}`);
                   }
                 }}
-                className={`p-3 rounded-2xl border text-center transition-all cursor-pointer relative ${
+                className={`p-3 rounded-2xl border text-center transition-all relative ${
                   isSelected
-                    ? 'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md scale-[1.02]'
-                    : 'bg-slate-50 hover:bg-indigo-50/70 text-slate-800 border-slate-200 hover:border-indigo-300'
+                    ? 'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md scale-[1.02] cursor-default'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-75 cursor-not-allowed'
                 }`}
+                title={
+                  isSelected
+                    ? `Active Registered Class: ${cls}`
+                    : `Locked: Your account is permanently registered for ${currentStudent.classLevel} only.`
+                }
               >
-                {isSelected && (
-                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+                {isSelected ? (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black uppercase">
                     Active
+                  </span>
+                ) : (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold uppercase flex items-center gap-0.5">
+                    <Lock className="w-2.5 h-2.5" /> Locked
                   </span>
                 )}
                 <div className="text-xs sm:text-sm font-black">{cls}</div>
-                <div className={`text-[10px] font-bold mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>
+                <div className={`text-[10px] font-bold mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
                   {meta?.marathiLabel}
                 </div>
                 <div className={`text-[9px] font-extrabold mt-1 px-1.5 py-0.5 rounded-md inline-block ${
-                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'
+                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-500'
                 }`}>
                   {subjCount} Subjects
                 </div>
@@ -862,17 +873,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <div className="space-y-2 max-w-2xl">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[11px] uppercase tracking-wider">
-                  📄 ONLINE WORKSHEETS • CLASSES 1 TO 10
+                  📄 ONLINE WORKSHEETS • STANDARDS 1ST TO 10TH
                 </span>
                 <span className="px-3 py-1 rounded-full bg-white/15 text-indigo-100 font-bold text-xs border border-white/20">
                   {completedWorksheetsCount} Completed • {pendingWorksheetsCount} Pending in {currentStudent.classLevel}
                 </span>
               </div>
               <h3 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight">
-                Interactive Class-Wise &amp; Subject-Wise Worksheets (Solve Online or Download PDF)
+                Interactive Class-Wise &amp; Subject-Wise Online Worksheets
               </h3>
               <p className="text-indigo-100 text-xs sm:text-sm leading-relaxed font-medium">
-                Practice MCQs, Fill in the Blanks, Match the Following, True/False, Short &amp; Long Answers, Mathematics Exercises, Grammar Practice, Science Activities, and Logical Reasoning with instant evaluation and printable Answer Key PDFs!
+                Complete interactive worksheets directly online across MCQs, Fill in the Blanks, Match the Following, True/False, Short &amp; Long Answers, Mathematics Exercises, Grammar Practice, Science Activities, and Logical Reasoning with instant evaluation! (Includes 2 Free Demo Worksheets: 1 English &amp; 1 Mathematics • Unlock All Standards 1st to 10th for ₹99)
               </p>
             </div>
 

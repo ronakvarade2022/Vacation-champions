@@ -9,7 +9,11 @@ import {
   checkRazorpayQrStatus,
   CreateQrResponse
 } from '../services/paymentService';
-import { getStudentPlanInfo } from '../utils/subscriptionAccess';
+import {
+  getStudentPlanInfo,
+  getPremiumActivatedBannerMessage,
+  formatStandardOrdinal
+} from '../utils/subscriptionAccess';
 import {
   X, CheckCircle2, ShieldCheck, Crown, Lock, CreditCard, Smartphone,
   AlertCircle, Sparkles, RefreshCw, Copy, Check, Loader2,
@@ -425,7 +429,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <span className="text-2xl">{currentStudent.avatar || '🌟'}</span>
                   <div>
                     <p className="text-xs font-bold text-slate-500">
-                      Student: <strong className="text-slate-900">{currentStudent.name}</strong> ({currentStudent.classLevel})
+                      {currentStudent.accountRole === 'teacher' ? 'Teacher' : 'Student'}:{' '}
+                      <strong className="text-slate-900">{currentStudent.name}</strong> (Standard {formatStandardOrdinal(currentStudent.classLevel)} • {currentStudent.classLevel})
                     </p>
                     <p className="text-sm font-black text-indigo-950">
                       Current Active Plan:{' '}
@@ -450,11 +455,18 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 </span>
               </div>
 
+              {planInfo.effectivePlan === 'premium' && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-black flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{getPremiumActivatedBannerMessage(currentStudent.classLevel)}</span>
+                </div>
+              )}
+
               {planInfo.isPaidPlanExpired && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-bold text-rose-900">
                     ⚠️ Your previous <strong>{planInfo.expiredPlanName}</strong> ({planInfo.expiryDisplay}). You are currently on{' '}
-                    <strong>FREE PLAN – ₹0 – Lifetime</strong>. Renew your ₹99 Premium Plan below for 90 Days!
+                    <strong>FREE PLAN – ₹0 – Lifetime</strong>. Renew your ₹99 Premium Plan below for Standard {formatStandardOrdinal(currentStudent.classLevel)}!
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -488,7 +500,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center gap-3 text-indigo-950 animate-in fade-in duration-150">
                   <Loader2 className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
                   <span className="text-xs sm:text-sm font-black">
-                    Generating Razorpay {gatewayMode} payment request for PREMIUM PLAN – ₹99 (90 Days)...
+                    Generating Razorpay {gatewayMode} payment request for Standard {formatStandardOrdinal(currentStudent?.classLevel)} PREMIUM PLAN – ₹99 (90 Days)...
                   </span>
                 </div>
               )}
@@ -505,9 +517,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                        FREE FOREVER
+                        FREE DEMO ACCESS
                       </span>
-                      <span className="text-xs font-bold text-emerald-700">Lifetime Validity</span>
+                      <span className="text-xs font-bold text-emerald-700">
+                        Standard {formatStandardOrdinal(currentStudent?.classLevel)}
+                      </span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900">
                       FREE PLAN – ₹0 – Lifetime
@@ -518,40 +532,40 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     </div>
 
                     <p className="text-xs font-bold text-slate-600 mb-3">
-                      Automatically active for every registered student forever:
+                      Free demo access for your registered class (Standard {formatStandardOrdinal(currentStudent?.classLevel)}):
                     </p>
 
                     <ul className="space-y-2.5 text-xs text-slate-700 font-bold mb-6">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>Brain Puzzles (Logic, Riddles & Brain Games)</span>
+                        <span>2 Free Demo Worksheets: 1 English &amp; 1 Mathematics (Standard {formatStandardOrdinal(currentStudent?.classLevel)})</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>Sudoku (4×4, 6×6 & 9×9 Grids)</span>
+                        <span>Brain Puzzles (Logic, Riddles &amp; Brain Games) &amp; Sudoku</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>English Subject Quizzes (All 4 Levels)</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>Mathematics Subject Quizzes (All 4 Levels)</span>
+                        <span>English &amp; Mathematics Subject Quizzes (All 4 Levels)</span>
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>Other 12 Subjects, Stories & Drawing Locked</span>
+                        <span>All Other Worksheets for Standard {formatStandardOrdinal(currentStudent?.classLevel)} Locked</span>
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>Cricket, Scholarship & AI Academy Locked</span>
+                        <span>Other Subjects, Stories, Drawing, Cricket &amp; Scholarship Locked</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-slate-400">
+                        <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>Worksheets for Other Classes Strictly Locked</span>
                       </li>
                     </ul>
                   </div>
 
                   <div className="w-full py-3 rounded-2xl bg-emerald-100 text-emerald-900 font-black text-xs text-center border border-emerald-300">
                     {planInfo.effectivePlan === 'free'
-                      ? '✓ Currently Active (FREE PLAN – ₹0 – Lifetime)'
+                      ? '✓ Currently Active (FREE PLAN – 2 Demo Worksheets)'
                       : '✓ Included Forever as Base Plan'}
                   </div>
                 </div>
@@ -559,52 +573,52 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 {/* PLAN 2: PREMIUM PLAN – ₹99 – 90 Days */}
                 <div className="p-6 rounded-3xl border-2 border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/60 shadow-xl flex flex-col justify-between relative transition-all">
                   <div className="absolute -top-3 right-4 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> FULL DASHBOARD UNLOCK
+                    <Sparkles className="w-3 h-3" /> STANDARD {formatStandardOrdinal(currentStudent?.classLevel).toUpperCase()} UNLOCK
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900">
-                        PREMIUM PAID PLAN
+                        CLASS-WISE PREMIUM PLAN
                       </span>
                       <span className="text-xs font-bold text-amber-800">90 Days Validity</span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900">
-                      PREMIUM PLAN – ₹99 – 90 Days
+                      PREMIUM PLAN – ₹99 (Standard {formatStandardOrdinal(currentStudent?.classLevel)})
                     </h3>
                     <div className="mt-2 mb-4 flex items-baseline gap-1">
                       <span className="text-4xl font-black text-amber-600">₹99</span>
-                      <span className="text-xs text-slate-500 font-bold">/ 90 Days (3 Months)</span>
+                      <span className="text-xs text-slate-500 font-bold">/ 90 Days • Standard {formatStandardOrdinal(currentStudent?.classLevel)}</span>
                     </div>
 
                     <p className="text-xs font-bold text-amber-900 mb-3">
-                      Full access to everything on the entire application:
+                      Unlock all worksheets &amp; subjects for your registered class (Standard {formatStandardOrdinal(currentStudent?.classLevel)}):
                     </p>
 
                     <ul className="space-y-2 text-xs text-slate-800 font-bold mb-5">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Brain Puzzles, Sudoku & All 14 School Subjects</span>
+                        <span>Unlock All Worksheets for Standard {formatStandardOrdinal(currentStudent?.classLevel)} (All Subjects)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>All Quizzes, Shivaji Stories (50), Other Stories (45) & Drawing</span>
+                        <span>Unlock All Subjects Available for Standard {formatStandardOrdinal(currentStudent?.classLevel)} (4 Levels)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Cricket Champions Hub (500+ Cricket Quiz Bank)</span>
+                        <span>All Quizzes, Shivaji Stories (50), Other Stories (45) &amp; Drawing</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Maharashtra Scholarship (4th & 7th Std 300+ Unique Questions)</span>
+                        <span>Cricket Champions Hub, Scholarship &amp; AI Learning Academy</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>AI Learning Academy, Coding & Future Skills</span>
+                        <span>Official Certificates, Leaderboard &amp; ₹5 Referral Cashback</span>
                       </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Official Certificates, Leaderboard & ₹5 Referral Cashback</span>
+                      <li className="flex items-start gap-2 text-indigo-800">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                        <span>Class-Wise Security: Linked Strictly to Standard {formatStandardOrdinal(currentStudent?.classLevel)}</span>
                       </li>
                     </ul>
 
@@ -895,12 +909,12 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <span className="text-xs font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
                   PAYMENT VERIFIED & SAVED TO FIREBASE
                 </span>
-                <h3 className="text-2xl font-display font-extrabold text-slate-900 mt-2">
+                <h3 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 mt-2">
                   Welcome to PREMIUM PLAN – ₹99! 👑
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Your dashboard has been automatically refreshed and all 14 subjects & features are now unlocked for 90 Days!
-                </p>
+                <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 font-black text-xs sm:text-sm max-w-lg mx-auto">
+                  {getPremiumActivatedBannerMessage(currentStudent?.classLevel)}
+                </div>
                 {referralCreditedNotice && (
                   <p className="mt-2 inline-block px-3 py-1 rounded-xl bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300">
                     🎁 {referralCreditedNotice}
@@ -922,8 +936,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <span className="font-mono text-slate-700">{lastTransaction.paymentId}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Student Name:</span>
+                  <span className="text-slate-400">Account Holder:</span>
                   <span className="font-bold text-slate-800">{lastTransaction.studentName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Activated Class:</span>
+                  <span className="font-extrabold text-emerald-700">
+                    Standard {formatStandardOrdinal(currentStudent?.classLevel)} ({currentStudent?.classLevel})
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Activated Plan:</span>

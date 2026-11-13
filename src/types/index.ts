@@ -103,7 +103,10 @@ export interface StudentProfile {
   isEmailVerified?: boolean;
   firebaseUid?: string;
   passwordHash?: string;
-  // 3-Role Access Portal & School Governance extensions
+  // Student & Teacher Portal role & Class-Wise Premium Subscription activation
+  accountRole?: 'student' | 'teacher';
+  activatedClassLevel?: ClassLevel;
+  // Referral & School Governance extensions
   referralCode?: string;
   referralLink?: string;
   referredByCode?: string;
@@ -169,7 +172,7 @@ export interface AnnouncementItem {
   id: string;
   title: string;
   content: string;
-  targetAudience: 'ALL' | 'STUDENTS' | 'PARENTS';
+  targetAudience: 'ALL' | 'STUDENTS' | 'TEACHERS' | 'PARENTS';
   publishedAt: string;
   author: string;
 }
@@ -177,10 +180,11 @@ export interface AnnouncementItem {
 export interface AuthenticatedUser {
   uid: string;
   email: string;
-  role: 'student' | 'parent' | 'admin';
+  role: 'student' | 'teacher' | 'admin';
   displayName: string;
-  studentId?: string; // If student
-  linkedStudentIds?: string[]; // If parent
+  studentId?: string; // If student or teacher
+  classLevel?: ClassLevel;
+  linkedStudentIds?: string[];
   isVerified: boolean;
 }
 
@@ -374,9 +378,10 @@ export interface PaymentTransaction {
   studentName: string;
   parentEmail: string;
   parentMobile: string;
+  selectedClass?: ClassLevel;
   planId: 'basic' | 'premium';
   planTitle: string;
-  amount: number; // 49 or 99
+  amount: number; // 99
   currency: 'INR';
   orderId: string;
   paymentId: string;

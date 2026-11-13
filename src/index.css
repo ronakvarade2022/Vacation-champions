@@ -48,13 +48,25 @@
 
 /* Print Specific Styling */
 @media print {
-  header, nav, button, footer, .no-print {
+  header, nav, button, footer, .no-print, .worksheet-no-print-zone {
     display: none !important;
+    visibility: hidden !important;
   }
   
   body {
     background: #ffffff !important;
     color: #000000 !important;
+  }
+
+  .worksheet-print-blocked-notice {
+    display: block !important;
+    padding: 3rem 2rem !important;
+    text-align: center !important;
+    border: 3px solid #1e293b !important;
+    border-radius: 1rem !important;
+    margin: 2rem auto !important;
+    max-width: 640px !important;
+    font-family: sans-serif !important;
   }
 
   #printable-certificate, #printable-report, #printable-receipt {
@@ -68,3 +80,4 @@
     border-width: 2px !important;
   }
 }
+

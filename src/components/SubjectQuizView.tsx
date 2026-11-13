@@ -424,10 +424,10 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
           </div>
         </div>
 
-        {/* Classes 1 to 10 Quick Selector Bar */}
+        {/* Classes 1 to 10 Quick Selector Bar (Locked to User's Registered Class) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
-            Class:
+            Registered Class:
           </span>
           {ALL_10_CLASSES.map(cls => {
             const isCurrClass = currentStudent.classLevel === cls;
@@ -437,22 +437,22 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
                 type="button"
                 onClick={() => {
                   if (cls !== currentStudent.classLevel) {
-                    promoteOrUpdateStudentClass(cls, `Switched active curriculum class to ${cls}`);
-                    const newSubjs = getSubjectsForClass(cls);
-                    if (!newSubjs.includes(selectedSubject)) {
-                      executeSubjectSwitch(newSubjs[0]);
-                    } else {
-                      setQuizState('idle');
-                    }
+                    promoteOrUpdateStudentClass(cls, `Attempted to switch quiz class to ${cls}`);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border inline-flex items-center gap-1 ${
                   isCurrClass
-                    ? 'bg-slate-900 text-amber-300 border-slate-900 shadow-xs'
-                    : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
+                    ? 'bg-slate-900 text-amber-300 border-slate-900 shadow-xs cursor-default'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-70 cursor-not-allowed'
                 }`}
+                title={
+                  isCurrClass
+                    ? `Active Registered Class: ${cls}`
+                    : `Locked: Your account is registered for ${currentStudent.classLevel} only.`
+                }
               >
-                {cls}
+                {!isCurrClass && <Lock className="w-3 h-3" />}
+                <span>{cls}</span>
               </button>
             );
           })}

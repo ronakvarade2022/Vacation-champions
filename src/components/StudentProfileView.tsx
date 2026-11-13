@@ -163,7 +163,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 </span>
               </div>
               <p className="text-amber-100 text-xs sm:text-sm font-medium">
-                Enrolled Student Account • UID: <span className="font-mono">{currentStudent.id}</span> • Validity: <strong>{planInfo.daysRemainingDisplay}</strong>
+                {currentStudent.accountRole === 'teacher' ? 'Registered Teacher Account' : 'Registered Student Account'} • UID: <span className="font-mono">{currentStudent.id}</span> • Validity: <strong>{planInfo.daysRemainingDisplay}</strong>
               </p>
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 shadow-2xs ${
@@ -204,28 +204,28 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         </div>
       </div>
 
-      {/* CLASS PROMOTION & GRADE UPDATE SECTION (Classes 1st to 10th) */}
+      {/* PERMANENT REGISTERED CLASS SECTION (One Account – One Class Policy) */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg">🎓</span>
+              <span className="text-lg">🔒</span>
               <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
-                Class Promotion &amp; Active Grade Selection (Classes 1st to 10th)
+                Permanently Registered Class ({currentStudent.classLevel}) • One Account = One Class
               </h2>
             </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Promoted to a new standard? Update your class below to load your new class subjects, 4 quiz levels, and online worksheets while keeping all your points, badges, and referral wallet intact!
+            <p className="text-xs text-slate-600 font-medium mt-0.5">
+              Your {currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'} account is permanently linked to <strong>{currentStudent.classLevel}</strong>. Users cannot switch or access multiple classes by modifying their profile.
             </p>
           </div>
-          <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-extrabold self-start sm:self-center shrink-0">
-            Active: {currentStudent.classLevel} ({getSubjectsForClass(currentStudent.classLevel).length} Subjects)
+          <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-extrabold self-start sm:self-center shrink-0">
+            Locked Class: {currentStudent.classLevel} ({getSubjectsForClass(currentStudent.classLevel).length} Subjects)
           </span>
         </div>
 
         {promotionBannerMsg && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-2">
+            <Lock className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{promotionBannerMsg}</span>
           </div>
         )}
@@ -240,20 +240,23 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 type="button"
                 onClick={() => {
                   if (!isCurrent) {
-                    const res = promoteOrUpdateStudentClass(cls, `Student updated class on promotion to ${cls}`);
+                    const res = promoteOrUpdateStudentClass(cls, `Attempted to change class to ${cls}`);
                     setPromotionBannerMsg(res.message);
-                    setTimeout(() => setPromotionBannerMsg(null), 4000);
+                    setTimeout(() => setPromotionBannerMsg(null), 5000);
                   }
                 }}
-                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                className={`p-2.5 rounded-xl border text-center transition-all ${
                   isCurrent
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]'
-                    : 'bg-slate-50 hover:bg-indigo-50 text-slate-800 border-slate-200'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02] cursor-default'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-70 cursor-not-allowed'
                 }`}
               >
-                <div className="text-xs font-black">{cls}</div>
-                <div className={`text-[10px] font-semibold ${isCurrent ? 'text-indigo-100' : 'text-slate-500'}`}>
-                  {meta?.marathiLabel}
+                <div className="text-xs font-black flex items-center justify-center gap-1">
+                  {!isCurrent && <Lock className="w-2.5 h-2.5" />}
+                  <span>{cls}</span>
+                </div>
+                <div className={`text-[10px] font-semibold ${isCurrent ? 'text-indigo-100' : 'text-slate-400'}`}>
+                  {isCurrent ? 'Registered' : meta?.marathiLabel}
                 </div>
               </button>
             );

@@ -70,14 +70,15 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const isLearningRole = activeRole === 'student' || activeRole === 'teacher';
+
   const handleRoleChange = (role: UserRole) => {
     const res = switchRole(role);
     if (!res.allowed) {
       return;
     }
     if (role === 'admin') setCurrentTab('admin');
-    else if (role === 'parent') setCurrentTab('parent');
-    else if (currentTab === 'admin' || currentTab === 'parent') setCurrentTab('dashboard');
+    else if (currentTab === 'admin') setCurrentTab('dashboard');
   };
 
   return (
@@ -95,8 +96,8 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser && (
               <span className="hidden md:inline bg-black/25 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-amber-100 border border-white/20">
                 {currentUser.role === 'admin' && '🛡️ Master Admin Portal'}
-                {currentUser.role === 'parent' && '👨‍👧 Parent Portal: ' + currentUser.displayName + (currentStudent ? ` (Linked: ${currentStudent.name})` : '')}
-                {currentUser.role === 'student' && '🎓 Student: ' + currentUser.displayName + (currentStudent ? ` (${currentStudent.classLevel})` : '')}
+                {currentUser.role === 'teacher' && '👩‍🏫 Teacher Portal: ' + currentUser.displayName + (currentStudent ? ` (${currentStudent.classLevel})` : '')}
+                {currentUser.role === 'student' && '🎓 Student Portal: ' + currentUser.displayName + (currentStudent ? ` (${currentStudent.classLevel})` : '')}
               </span>
             )}
           </div>
@@ -116,25 +117,25 @@ export const Header: React.FC<HeaderProps> = ({
               <span>🎯 DEMO</span>
             </button>
 
-            {/* Multi-Role Switcher Tabs */}
+            {/* Portal Switcher Tabs: Student Portal & Teacher Portal (+ Admin) */}
             <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-md text-[11px]">
               <button
                 onClick={() => handleRoleChange('student')}
-                className={`px-2.5 py-0.5 rounded transition-all flex items-center gap-1 ${activeRole === 'student' ? 'bg-white text-amber-900 font-bold shadow-xs' : 'text-amber-100 hover:text-white'}`}
+                className={`px-2.5 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${activeRole === 'student' ? 'bg-white text-amber-900 font-bold shadow-xs' : 'text-amber-100 hover:text-white'}`}
               >
                 <User className="w-3 h-3" />
                 Student Portal
               </button>
               <button
-                onClick={() => handleRoleChange('parent')}
-                className={`px-2.5 py-0.5 rounded transition-all flex items-center gap-1 ${activeRole === 'parent' ? 'bg-white text-amber-900 font-bold shadow-xs' : 'text-amber-100 hover:text-white'}`}
+                onClick={() => handleRoleChange('teacher')}
+                className={`px-2.5 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${activeRole === 'teacher' ? 'bg-white text-emerald-900 font-bold shadow-xs' : 'text-amber-100 hover:text-white'}`}
               >
-                <HeartHandshake className="w-3 h-3" />
-                Parent Portal
+                <GraduationCap className="w-3 h-3" />
+                Teacher Portal
               </button>
               <button
                 onClick={() => handleRoleChange('admin')}
-                className={`px-2.5 py-0.5 rounded transition-all flex items-center gap-1 ${activeRole === 'admin' ? 'bg-white text-amber-900 font-bold shadow-xs' : 'text-amber-100 hover:text-white'}`}
+                className={`px-2.5 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${activeRole === 'admin' ? 'bg-white text-amber-900 font-bold shadow-xs' : 'text-amber-100 hover:text-white'}`}
               >
                 <ShieldCheck className="w-3 h-3" />
                 Admin Portal
@@ -148,7 +149,10 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         {/* Brand Logo & Name */}
         <div 
-          onClick={() => { setCurrentTab('dashboard'); handleRoleChange('student'); }}
+          onClick={() => {
+            setCurrentTab('dashboard');
+            if (activeRole === 'admin') handleRoleChange('student');
+          }}
           className="flex items-center gap-3 cursor-pointer group"
         >
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
@@ -160,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
                 MyStudyZone
               </span>
               <span className="hidden md:inline-block text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                Interactive Learning Platform
+                {activeRole === 'teacher' ? 'Teacher Portal' : 'Interactive Learning Platform'}
               </span>
             </div>
             <p className="text-[11px] text-amber-800/90 font-semibold hidden sm:block">
@@ -169,8 +173,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Center Navigation Links (Desktop) */}
-        {activeRole === 'student' && (
+        {/* Center Navigation Links (Desktop — Shared across Student Portal & Teacher Portal) */}
+        {isLearningRole && (
           <nav className="hidden xl:flex items-center gap-1.5 bg-amber-50/70 p-1 rounded-2xl border border-amber-200/60 overflow-x-auto max-w-[680px]">
             {/* Learning Zone */}
             <div className="flex items-center gap-1">
@@ -369,7 +373,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}>
                   <Gift className="w-3.5 h-3.5" />
                 </span>
-                <span>Refer & Earn</span>
+                <span>Refer &amp; Earn</span>
                 {!canAccessFeature(currentStudent, 'referrals').allowed && (
                   <Lock className="w-3 h-3 text-amber-700" />
                 )}
@@ -378,13 +382,13 @@ export const Header: React.FC<HeaderProps> = ({
           </nav>
         )}
 
-        {/* Right Section: Class Selector, Student Badge & Actions */}
+        {/* Right Section: Class Selector, Student/Teacher Badge & Actions */}
         <div className="flex items-center gap-3">
-          {/* Permanent Class Grade Badge (Rule 1: Locked to Student Account) */}
-          {activeRole === 'student' && currentStudent && (
+          {/* Permanent Class Grade Badge (Rule: One Account = One Class Locked) */}
+          {isLearningRole && currentStudent && (
             <div 
               className="flex items-center gap-1.5 bg-amber-100/80 border border-amber-300/90 px-2.5 py-1 rounded-xl shadow-2xs"
-              title={`Permanently enrolled in ${currentStudent.classLevel}. Grade changes are restricted to school administrators.`}
+              title={`Permanently registered in ${currentStudent.classLevel}. Each account can access only one class.`}
             >
               <Lock className="w-3 h-3 text-amber-700" />
               <span className="text-xs font-extrabold text-amber-950">
@@ -396,8 +400,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Student Stats Pill (Points & Streak) */}
-          {activeRole === 'student' && currentStudent && (
+          {/* Student/Teacher Stats Pill (Points & Streak) */}
+          {isLearningRole && currentStudent && (
             <div className="hidden md:flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1 font-bold text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-300/60" title="Champion Points">
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />

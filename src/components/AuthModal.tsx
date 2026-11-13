@@ -11,11 +11,12 @@ import {
 } from '../services/firebase';
 import { referralService } from '../services/referralService';
 import { sanitizeReferralCode } from '../utils/referralCoding';
+import { formatStandardOrdinal } from '../utils/subscriptionAccess';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'login' | 'register' | 'parent' | 'admin' | 'forgot';
+  defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot';
   initialEmail?: string;
   onSuccess?: () => void;
 }
@@ -33,7 +34,7 @@ const CLASS_LEVELS: ClassLevel[] = [
   'Class 10',
 ];
 
-const AVATARS = ['🦁', '🐯', '🐼', '🦊', '🚀', '🌟', '🦋', '🐬'];
+const AVATARS = ['🦁', '🐯', '🐼', '🦊', '🚀', '🌟', '🦋', '🐬', '👩‍🏫', '👨‍🏫'];
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -47,13 +48,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     registerStudent,
     loginWithEmail,
     loginWithVerifiedPhone,
-    loginAsParent,
+    loginAsTeacher,
     loginAsAdmin,
     loginAsSampleAccount,
     recoverAccount,
   } = useApp();
 
-  const [tab, setTab] = useState<'login' | 'register' | 'parent' | 'admin' | 'forgot'>(defaultTab);
+  const [tab, setTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>(defaultTab);
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
 
   // Student Login State
@@ -62,11 +63,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginPhoneInput, setLoginPhoneInput] = useState('');
 
+  // Teacher Login State
+  const [teacherEmail, setTeacherEmail] = useState('meera.joshi@mystudyzone.in');
+  const [teacherPassword, setTeacherPassword] = useState('Teacher@123');
+  const [showTeacherPassword, setShowTeacherPassword] = useState(false);
+
   // Forgot Password State (Registered Email Address)
   const [resetEmail, setResetEmail] = useState(initialEmail);
   const [resetEmailSentCount, setResetEmailSentCount] = useState(0);
 
-  // Register State (Email Auth + Compulsory Unique 10-Digit Mobile, NO OTP, NO CAPTCHA)
+  // Register State (Student & Teacher Class-Wise Registration — School Name OPTIONAL)
+  const [regRoleType, setRegRoleType] = useState<'student' | 'teacher'>('student');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regMobile, setRegMobile] = useState('');
@@ -76,7 +83,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regClass, setRegClass] = useState<ClassLevel>('Class 5');
   const [regAvatar, setRegAvatar] = useState('🌟');
   const [regSchool, setRegSchool] = useState('');
-  const [regParentName, setRegParentName] = useState('');
   const [regCity, setRegCity] = useState('Pune');
   const [regReferralCode, setRegReferralCode] = useState(() => {
     try {
@@ -93,11 +99,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     referrerUserId?: string;
     message?: string;
   }>({ checked: false, valid: false });
-  const [regRoleType, setRegRoleType] = useState<'student' | 'teacher'>('student');
 
-  // Parent & Admin Login State
-  const [parentEmail, setParentEmail] = useState('rajesh.sharma@parent.com');
-  const [parentPassword, setParentPassword] = useState('');
+  // Admin Login State
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
@@ -163,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const isValidMobile = (mobile: string) => /^[6-9]\d{9}$/.test(mobile.trim());
 
-  // --- 1. Student Login via Email & Password ---
+  // --- 1. Student/Teacher Login via Email & Password ---
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -191,7 +194,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClose();
   };
 
-  // --- 2. Student Login via Registered 10-Digit Mobile Number (No OTP, No CAPTCHA) ---
+  // --- 2. Student/Teacher Login via Registered 10-Digit Mobile Number (No OTP, No CAPTCHA) ---
   const handleMobileLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -213,14 +216,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClose();
   };
 
-  // --- 3. Student Registration (Email Auth + Compulsory Unique 10-Digit Mobile, NO OTP, NO CAPTCHA) ---
+  // --- 3. Student & Teacher Class-Wise Registration (School Name is OPTIONAL) ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
 
+    const roleLabel = regRoleType === 'teacher' ? 'Teacher' : 'Student';
+
     if (!regName.trim() || regName.trim().length < 2) {
-      setError('Please enter the student full name.');
+      setError(`Please enter the ${roleLabel.toLowerCase()} full name.`);
       return;
     }
 
@@ -253,7 +258,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     );
     if (duplicateEmail) {
       setError(
-        `Email address "${cleanEmail}" is already registered with "${duplicateEmail.name}". Please sign in instead.`
+        `One email address = One account. Email "${cleanEmail}" is already registered with "${duplicateEmail.name}". Please sign in instead.`
       );
       return;
     }
@@ -268,10 +273,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (!regSchool.trim()) {
-      setError('Please enter your school name.');
-      return;
-    }
+    // NOTE: School Name is strictly OPTIONAL for both Students and Teachers!
 
     setIsLoading(true);
 
@@ -286,7 +288,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setError(
           refCheck?.message ||
             refCheck?.error ||
-            `Invalid referral code "${normalizedRefCode}". Please enter a valid student referral code (e.g. STUDY123) or leave the field blank.`
+            `Invalid referral code "${normalizedRefCode}". Please enter a valid referral code (e.g. STUDY123) or leave the field blank.`
         );
         return;
       }
@@ -317,16 +319,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // 2. Register Student in AppContext (Automatically grants Lifetime Free Plan ₹0 & generates unique referralCode)
+    // 2. Register Student or Teacher in AppContext (Permanently locks selected classLevel & generates unique referralCode)
     const regResult = registerStudent(
       {
         name: regName.trim(),
         email: cleanEmail,
         mobile: cleanMobile,
         classLevel: regClass,
-        avatar: regAvatar,
-        schoolName: regSchool.trim(),
-        parentName: regParentName.trim() || 'Parent',
+        accountRole: regRoleType,
+        avatar: regAvatar || (regRoleType === 'teacher' ? '👩‍🏫' : '🌟'),
+        schoolName: regSchool.trim(), // Optional — may be empty string
+        parentName: '',
         parentConsent: true,
         referredByCode: normalizedRefCode || undefined,
         referredByStudentId: verifiedReferrerUserId,
@@ -334,7 +337,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       {
         verifiedFirebaseUid: fbReg.user?.uid,
         isEmailVerified: true,
-        isPhoneVerified: false, // No OTP required
+        isPhoneVerified: false,
         password: regPassword,
       }
     );
@@ -345,7 +348,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // 3. Persist Profile & Permanent Unique Referral Code to Firebase Firestore
+    // 3. Persist Profile & Permanent Unique Referral Code + Selected Class to Firebase Firestore
     if (regResult.student) {
       if (normalizedRefCode) {
         regResult.student.referredByCode = normalizedRefCode;
@@ -358,9 +361,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         await referralService.registerAccount({
           userId: regResult.student.id,
           userName: regResult.student.name,
-          userRole: regRoleType === 'teacher' ? 'parent' : 'student',
+          userRole: 'student',
           className: regResult.student.classLevel,
-          schoolName: regResult.student.schoolName || regSchool.trim(),
+          schoolName: regResult.student.schoolName || '',
           city: regCity.trim() || 'Pune',
           email: regResult.student.email,
           mobile: regResult.student.mobile,
@@ -371,7 +374,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             newUserName: regResult.student.name,
             newUserRole: 'student',
             newUserClass: regResult.student.classLevel,
-            schoolName: regResult.student.schoolName || regSchool.trim(),
+            schoolName: regResult.student.schoolName || '',
             city: regCity.trim() || 'Pune',
             email: regResult.student.email,
             mobile: regResult.student.mobile,
@@ -423,12 +426,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     await sendResetLinkToRegisteredEmail();
   };
 
-  // --- 5. Parent Login ---
-  const handleParentSubmit = async (e: React.FormEvent) => {
+  // --- 5. Teacher Portal Login ---
+  const handleTeacherSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    const res = await loginAsParent(parentEmail, parentPassword);
+    const res = await loginAsTeacher(teacherEmail, teacherPassword);
     setIsLoading(false);
     if (!res.success) {
       setError(res.message);
@@ -468,10 +471,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <Sparkles className="w-4 h-4" /> MyStudyZone – An Interactive Learning Platform for Students
           </div>
           <h2 className="text-2xl font-black">
-            {tab === 'login' && 'Welcome Back to MyStudyZone!'}
-            {tab === 'register' && 'Create Student Account'}
+            {tab === 'login' && 'Student Portal Login'}
+            {tab === 'teacher' && 'Teacher Portal Login'}
+            {tab === 'register' && (regRoleType === 'teacher' ? 'Teacher Class-Wise Registration' : 'Student Class-Wise Registration')}
             {tab === 'forgot' && 'Forgot / Reset Password'}
-            {tab === 'parent' && 'Parent Monitoring Portal'}
             {tab === 'admin' && 'Platform Admin Console'}
           </h2>
           <p className="text-amber-200 font-bold text-xs mt-0.5">
@@ -479,52 +482,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </p>
           <p className="text-indigo-100 text-xs sm:text-sm mt-1">
             {tab === 'login' && 'Sign in with your Email & Password or Registered 10-Digit Mobile Number'}
-            {tab === 'register' && 'Register on our interactive learning platform for Classes 2 to 8 with Lifetime Free Plan access!'}
+            {tab === 'teacher' && 'Sign in to the dedicated Teacher Portal for your registered class (Standards 1st to 10th)'}
+            {tab === 'register' && 'Select ONE class from Standard 1st to Standard 10th • School Name is Optional'}
             {tab === 'forgot' && 'Enter your registered email address to receive a secure Firebase password reset link'}
-            {tab === 'parent' && 'Monitor your linked child’s daily progress, scores, and reports'}
             {tab === 'admin' && 'Manage questions, stories, memberships & platform settings'}
           </p>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs (Student Portal, Teacher Portal, New Registration, Admin — NO Parent Portal) */}
         <div className="flex flex-wrap border-b border-slate-200 bg-slate-50 px-4 pt-3 gap-1.5">
           <button
             type="button"
             onClick={() => { setTab('login'); setError(''); setSuccessMsg(''); }}
-            className={`px-3.5 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
+            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
               tab === 'login' || tab === 'forgot'
                 ? 'bg-white text-indigo-600 border-t border-x border-slate-200 -mb-px'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Student Login
+            🎓 Student Login
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTab('teacher'); setError(''); setSuccessMsg(''); }}
+            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
+              tab === 'teacher'
+                ? 'bg-white text-emerald-700 border-t border-x border-slate-200 -mb-px'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            👩‍🏫 Teacher Login
           </button>
           <button
             type="button"
             onClick={() => { setTab('register'); setError(''); setSuccessMsg(''); }}
-            className={`px-3.5 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
+            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
               tab === 'register'
                 ? 'bg-white text-indigo-600 border-t border-x border-slate-200 -mb-px'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            New Registration
-          </button>
-          <button
-            type="button"
-            onClick={() => { setTab('parent'); setError(''); setSuccessMsg(''); }}
-            className={`px-3.5 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
-              tab === 'parent'
-                ? 'bg-white text-emerald-700 border-t border-x border-slate-200 -mb-px'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Parent
+            ✨ Register (Student / Teacher)
           </button>
           <button
             type="button"
             onClick={() => { setTab('admin'); setError(''); setSuccessMsg(''); }}
-            className={`px-3.5 py-2 text-xs font-bold rounded-t-xl transition-colors ml-auto cursor-pointer ${
+            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors ml-auto cursor-pointer ${
               tab === 'admin'
                 ? 'bg-white text-rose-600 border-t border-x border-slate-200 -mb-px'
                 : 'text-slate-500 hover:text-slate-800'
@@ -563,7 +566,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <Mail className="w-3.5 h-3.5" /> Email & Password
+                  <Mail className="w-3.5 h-3.5" /> Email &amp; Password
                 </button>
                 <button
                   type="button"
@@ -619,7 +622,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    {/* Requirement 1: Forgot Password? option directly below the login password field */}
                     <div className="mt-2 flex items-center justify-end">
                       <button
                         type="button"
@@ -642,7 +644,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     disabled={isLoading}
                     className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all cursor-pointer"
                   >
-                    {isLoading ? 'Signing In...' : 'Sign In to My Learning Hub'}
+                    {isLoading ? 'Signing In...' : 'Sign In to Student Portal'}
                   </button>
                 </form>
               ) : (
@@ -677,21 +679,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </form>
               )}
 
-              {/* Quick Sample Account Switcher (3 Distinct Student Accounts) */}
-              <div className="mt-5 pt-4 border-t border-slate-100">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
-                  Quick Test Accounts (3 Unique Referral Links)
+              {/* Quick Sample Account Switcher (Students & Teachers) */}
+              <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                  Quick Test Accounts (Class-Wise Student &amp; Teacher Accounts)
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={async () => {
                       await loginAsSampleAccount('student1');
                       onClose();
                     }}
-                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
+                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer text-left"
                   >
-                    🦁 Aarav (STUDY123)
+                    🦁 Aarav (Class 4 • Free Student)
                   </button>
                   <button
                     type="button"
@@ -699,31 +701,146 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       await loginAsSampleAccount('student2');
                       onClose();
                     }}
-                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
+                    className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-bold text-emerald-900 cursor-pointer text-left"
                   >
-                    🦄 Ananya (STUDY456)
+                    🦄 Ananya (Class 6 • ₹99 Premium)
                   </button>
                   <button
                     type="button"
                     onClick={async () => {
-                      await loginAsSampleAccount('student3');
+                      await loginAsSampleAccount('teacher1');
                       onClose();
                     }}
-                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
+                    className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-[11px] font-bold text-amber-900 cursor-pointer text-left"
                   >
-                    🐯 Rohan (STUDY789)
+                    👩‍🏫 Prof. Meera (Class 7 • Free Teacher)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await loginAsSampleAccount('teacher2');
+                      onClose();
+                    }}
+                    className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-[11px] font-bold text-purple-900 cursor-pointer text-left"
+                  >
+                    👨‍🏫 Prof. Vikram (Class 9 • ₹99 Teacher)
                   </button>
                 </div>
               </div>
 
               <p className="text-center text-xs text-slate-500 mt-4">
-                New to Champion Learning?{' '}
+                New Student or Teacher?{' '}
                 <button
                   type="button"
                   onClick={() => { setTab('register'); setError(''); setSuccessMsg(''); }}
                   className="text-indigo-600 font-bold hover:underline cursor-pointer"
                 >
-                  Create your Free Lifetime Account
+                  Create Class-Wise Account
+                </button>
+              </p>
+            </div>
+          )}
+
+          {/* ==================== TEACHER PORTAL LOGIN TAB ==================== */}
+          {tab === 'teacher' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+                <div className="font-black flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-emerald-700" />
+                  <span>Dedicated Class-Wise Teacher Portal (Standards 1st to 10th)</span>
+                </div>
+                <p className="text-[11px] text-slate-700 leading-relaxed">
+                  Teachers get complete access to their registered class’s subjects, online worksheets, 4-level quizzes, stories with audio, current affairs, scholarship sets, and solutions.
+                </p>
+              </div>
+
+              <form onSubmit={handleTeacherSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Registered Teacher Email or 10-Digit Mobile
+                  </label>
+                  <input
+                    type="text"
+                    value={teacherEmail}
+                    onChange={(e) => setTeacherEmail(e.target.value)}
+                    placeholder="teacher@mystudyzone.in or 9890011223"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-600 focus:outline-none text-sm font-medium"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showTeacherPassword ? 'text' : 'password'}
+                      value={teacherPassword}
+                      onChange={(e) => setTeacherPassword(e.target.value)}
+                      placeholder="Enter teacher password"
+                      className="w-full px-4 pr-10 py-3 rounded-xl border border-slate-200 focus:border-emerald-600 focus:outline-none text-sm font-medium"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowTeacherPassword(!showTeacherPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showTeacherPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg cursor-pointer"
+                >
+                  {isLoading ? 'Signing In...' : 'Sign In to Teacher Portal'}
+                </button>
+              </form>
+
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                  Quick Demo Teacher Accounts
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await loginAsSampleAccount('teacher1');
+                      onClose();
+                    }}
+                    className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-xs font-bold text-amber-950 cursor-pointer text-left"
+                  >
+                    👩‍🏫 Prof. Meera Joshi (Standard 7th • Free)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await loginAsSampleAccount('teacher2');
+                      onClose();
+                    }}
+                    className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold text-emerald-950 cursor-pointer text-left"
+                  >
+                    👨‍🏫 Prof. Vikram Deshpande (Standard 9th • ₹99 Premium)
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-center text-xs text-slate-500">
+                Want to register as a Teacher?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegRoleType('teacher');
+                    setRegAvatar('👩‍🏫');
+                    setTab('register');
+                    setError('');
+                    setSuccessMsg('');
+                  }}
+                  className="text-emerald-700 font-bold hover:underline cursor-pointer"
+                >
+                  Register Teacher Account
                 </button>
               </p>
             </div>
@@ -808,21 +925,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </form>
           )}
 
-          {/* ==================== NEW REGISTRATION TAB ==================== */}
+          {/* ==================== NEW REGISTRATION TAB (STUDENT & TEACHER) ==================== */}
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3.5">
-              {/* Free Lifetime Plan Banner */}
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="text-xs font-bold text-emerald-900">
-                  Includes <strong>FREE PLAN (₹0 – Lifetime)</strong>: Brain Puzzles, Sudoku, English & Maths!
+              {/* Role Selector: Student Registration vs Teacher Registration */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Select Portal Account Type *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegRoleType('student');
+                      if (regAvatar === '👩‍🏫' || regAvatar === '👨‍🏫') setRegAvatar('🌟');
+                    }}
+                    className={`p-3 rounded-2xl border-2 text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      regRoleType === 'student'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-950 shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>🎓 Student Registration</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegRoleType('teacher');
+                      setRegAvatar('👩‍🏫');
+                    }}
+                    className={`p-3 rounded-2xl border-2 text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      regRoleType === 'teacher'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>👩‍🏫 Teacher Registration</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* One Account – One Class – One Phone – One Email Policy Banner */}
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <span className="text-[11px] font-bold text-amber-950 leading-snug">
+                  <strong>One Account = One Class:</strong> Select one class from <strong>Standard 1st to Standard 10th</strong>. Your selected class ({regClass}) will be permanently saved to your account.
                 </span>
               </div>
 
               {/* Avatar Picker */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Choose Champion Avatar
+                  Choose Profile Avatar
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {AVATARS.map(av => (
@@ -830,7 +984,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       key={av}
                       type="button"
                       onClick={() => setRegAvatar(av)}
-                      className={`w-10 h-10 rounded-xl text-xl flex items-center justify-center border-2 transition-all cursor-pointer ${
+                      className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center border-2 transition-all cursor-pointer ${
                         regAvatar === av
                           ? 'border-indigo-600 bg-indigo-50 scale-110'
                           : 'border-slate-200 bg-white hover:border-slate-300'
@@ -842,10 +996,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* 1. Student Full Name */}
+              {/* 1. Student Name / Teacher Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Student Full Name *
+                  {regRoleType === 'teacher' ? 'Teacher Full Name *' : 'Student Full Name *'}
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -853,39 +1007,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type="text"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="e.g. Aarav Patil"
+                    placeholder={regRoleType === 'teacher' ? 'e.g. Prof. Meera Joshi' : 'e.g. Aarav Patil'}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
                     required
                   />
                 </div>
               </div>
 
-              {/* 2. Email Address */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Email Address *
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="student@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* 3. Compulsory Unique 10-Digit Mobile Number (No OTP Required) */}
+              {/* 2. Mobile Number (10 digits, 1 phone = 1 account) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    10-Digit Mobile Number (Compulsory) *
+                    Mobile Number (10 Digits) *
                   </label>
                   <span className="text-[10px] font-bold text-indigo-600">
-                    One Mobile Number = One Account
+                    One Mobile = One Account
                   </span>
                 </div>
                 <div className="relative">
@@ -902,11 +1038,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
+              {/* 3. Email Address (1 email = 1 account) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Email Address *
+                  </label>
+                  <span className="text-[10px] font-bold text-indigo-600">
+                    One Email = One Account
+                  </span>
+                </div>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder={regRoleType === 'teacher' ? 'teacher@example.com' : 'student@example.com'}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
+                    required
+                  />
+                </div>
+              </div>
+
               {/* 4. Password & Confirm Password */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Create Password *
+                    Password *
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -945,28 +1104,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* 5. Class & City */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* 5. Select ONE Class from Standard 1st to Standard 10th */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Select Class (Standard 1st to 10th) *
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-700">
+                    Permanently Saved to Account
+                  </span>
+                </div>
+                <div className="relative">
+                  <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <select
+                    value={regClass}
+                    onChange={(e) => setRegClass(e.target.value as ClassLevel)}
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm font-bold bg-white text-slate-900"
+                  >
+                    {CLASS_LEVELS.map((c) => (
+                      <option key={c} value={c}>
+                        Standard {formatStandardOrdinal(c)} ({c})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 6. School Name (OPTIONAL for both Students and Teachers) & City */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Student Class *
+                    School Name <span className="text-slate-400 font-semibold">(Optional)</span>
                   </label>
                   <div className="relative">
-                    <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <select
-                      value={regClass}
-                      onChange={(e) => setRegClass(e.target.value as ClassLevel)}
-                      className="w-full pl-9 pr-2 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm bg-white"
-                    >
-                      {CLASS_LEVELS.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <School className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={regSchool}
+                      onChange={(e) => setRegSchool(e.target.value)}
+                      placeholder="Optional school name"
+                      className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
+                    />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    City / District *
+                    City / District <span className="text-slate-400 font-semibold">(Optional)</span>
                   </label>
                   <div className="relative">
                     <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -976,74 +1159,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       onChange={(e) => setRegCity(e.target.value)}
                       placeholder="Pune"
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                      required
                     />
                   </div>
                 </div>
               </div>
 
-              {/* 6. School Name & Parent Name */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 7. Optional Referral Code */}
+              <div className="space-y-2 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    School Name *
+                  <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
+                    Referral Code (Optional)
                   </label>
                   <div className="relative">
-                    <School className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Gift className="w-3.5 h-3.5 text-indigo-500 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      value={regSchool}
-                      onChange={(e) => setRegSchool(e.target.value)}
-                      placeholder="e.g. Vidya Bhavan"
-                      className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                      required
+                      value={regReferralCode}
+                      onChange={(e) => setRegReferralCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. STUDY123"
+                      className="w-full pl-8 pr-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-mono font-bold uppercase bg-white"
                     />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Parent / Guardian Name
-                  </label>
-                  <input
-                    type="text"
-                    value={regParentName}
-                    onChange={(e) => setRegParentName(e.target.value)}
-                    placeholder="e.g. Rajesh Patil"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* 7. Role & Optional Referral Code */}
-              <div className="space-y-2.5 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
-                      Ambassador Role
-                    </label>
-                    <select
-                      value={regRoleType}
-                      onChange={(e) => setRegRoleType(e.target.value as 'student' | 'teacher')}
-                      className="w-full px-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-bold bg-white text-slate-800"
-                    >
-                      <option value="student">🎓 Student (Knowledge Ambassador)</option>
-                      <option value="teacher">🏆 Teacher (Educator Ambassador)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
-                      Referral Code (Optional)
-                    </label>
-                    <div className="relative">
-                      <Gift className="w-3.5 h-3.5 text-indigo-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={regReferralCode}
-                        onChange={(e) => setRegReferralCode(e.target.value.toUpperCase())}
-                        placeholder="e.g. STUDY123"
-                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-mono font-bold uppercase bg-white"
-                      />
-                    </div>
                   </div>
                 </div>
                 {regReferralCode.trim() && referralValidationInfo.checked && (
@@ -1078,44 +1213,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 disabled={isLoading}
                 className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all cursor-pointer"
               >
-                {isLoading ? 'Creating Account...' : 'Create Account & Activate Free Lifetime Plan'}
-              </button>
-            </form>
-          )}
-
-          {/* ==================== PARENT TAB ==================== */}
-          {tab === 'parent' && (
-            <form onSubmit={handleParentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Registered Parent Email
-                </label>
-                <input
-                  type="email"
-                  value={parentEmail}
-                  onChange={(e) => setParentEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-600 focus:outline-none text-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Password (Optional for Demo Parent)
-                </label>
-                <input
-                  type="password"
-                  value={parentPassword}
-                  onChange={(e) => setParentPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-emerald-600 focus:outline-none text-sm"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg cursor-pointer"
-              >
-                Sign In to Parent Portal
+                {isLoading
+                  ? 'Creating Account...'
+                  : `Register ${regRoleType === 'teacher' ? 'Teacher' : 'Student'} Account for Standard ${formatStandardOrdinal(regClass)}`}
               </button>
             </form>
           )}

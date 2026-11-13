@@ -52,9 +52,21 @@ export interface OnlineWorksheet {
   chapterName: string;
   durationMinutes: number;
   totalMarks: number;
+  isDemo?: boolean;
   formatsIncluded: WorksheetItemFormat[];
   questions: WorksheetQuestionItem[];
 }
+
+export function getFreeDemoWorksheetIdsForClass(classLevel: ClassLevel = 'Class 1'): readonly [string, string] {
+  const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 1;
+  const mathKey = cNum === 10 ? 'MATHEMATICSALGEBRA' : 'MATHEMATICS';
+  return [`WS-C${cNum}-ENGLISH-1`, `WS-C${cNum}-${mathKey}-1`] as const;
+}
+
+export const FREE_DEMO_WORKSHEET_IDS: readonly string[] = [
+  'WS-C1-ENGLISH-1',
+  'WS-C1-MATHEMATICS-1'
+] as const;
 
 const SUBJECT_CHAPTER_THEMES: Record<SubjectName, [string, string]> = {
   'Mathematics': ['Number Operations, Fractions & Problem Solving', 'Geometry, Measurement & Applied Arithmetic'],
@@ -168,6 +180,7 @@ export function getWorksheetsForClassAndSubject(
   const subjMeta = getSubjectMeta(subject);
   const classMeta = ALL_10_CLASSES_META.find(c => c.classLevel === classLevel);
   const chapters = SUBJECT_CHAPTER_THEMES[subject] || ['Chapter 1: Core Concepts', 'Chapter 2: Advanced Applications'];
+  const classDemoIds = getFreeDemoWorksheetIdsForClass(classLevel);
 
   // Pull canonical questions from Levels 1-4 so worksheets are 100% syllabus-accurate and aligned with the class & subject
   const l1 = getCurriculumQuestionsForLevel(classLevel, subject, 1);
@@ -212,6 +225,7 @@ export function getWorksheetsForClassAndSubject(
       chapterName,
       durationMinutes: 20,
       totalMarks: questions.length * 2,
+      isDemo: classDemoIds.includes(wsId),
       formatsIncluded: Array.from(formatsSet),
       questions
     };
@@ -231,3 +245,16 @@ export function getAllWorksheetsForClass(classLevel: ClassLevel): OnlineWorkshee
   }
   return list;
 }
+
+/**
+ * Returns the strictly TWO designated Free Demo Worksheets for a student's or teacher's registered class:
+ * 1. 1 English worksheet ('WS-C{N}-ENGLISH-1')
+ * 2. 1 Mathematics worksheet ('WS-C{N}-MATHEMATICS-1' or 'WS-C10-MATHEMATICSALGEBRA-1')
+ */
+export function getFreeDemoWorksheets(classLevel: ClassLevel = 'Class 1'): OnlineWorksheet[] {
+  const englishDemo = getWorksheetsForClassAndSubject(classLevel, 'English')[0];
+  const mathSubject: SubjectName = classLevel === 'Class 10' ? 'Mathematics – Algebra' : 'Mathematics';
+  const mathDemo = getWorksheetsForClassAndSubject(classLevel, mathSubject)[0];
+  return [englishDemo, mathDemo].filter(Boolean);
+}
+

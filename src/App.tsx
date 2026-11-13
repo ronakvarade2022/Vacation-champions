@@ -6,7 +6,6 @@ import { SubjectQuizView } from './components/SubjectQuizView';
 import { StoryWorldView } from './components/StoryWorldView';
 import { DrawingChampionsView } from './components/DrawingChampionsView';
 import { PuzzleChampionsView } from './components/PuzzleChampionsView';
-import { ParentDashboard } from './components/ParentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { CertificatesView } from './components/CertificatesView';
 import { CricketChampionsView } from './components/CricketChampionsView';
@@ -29,8 +28,14 @@ import { ContactUsView } from './components/ContactUsView';
 import { FaqsView } from './components/FaqsView';
 import { WorksheetsView } from './components/WorksheetsView';
 import { SubjectName, QuizLevel } from './types';
-import { canAccessFeature, canAccessSubject } from './utils/subscriptionAccess';
-import { Trophy } from 'lucide-react';
+import {
+  canAccessFeature,
+  canAccessSubject,
+  formatStandardOrdinal,
+  getStudentPlanInfo,
+  getPremiumActivatedBannerMessage
+} from './utils/subscriptionAccess';
+import { Trophy, GraduationCap, Lock, BookOpen, FileText, Volume2, Activity, Award, Crown } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -60,12 +65,15 @@ const AppContent: React.FC = () => {
   const [quizInitialSubject, setQuizInitialSubject] = useState<SubjectName | undefined>(undefined);
   const [quizInitialLevel, setQuizInitialLevel] = useState<QuizLevel | undefined>(undefined);
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
-  const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'register' | 'parent' | 'admin' | 'forgot'>('login');
+  const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>('login');
   const [authInitialEmail, setAuthInitialEmail] = useState<string>('');
   const [resetOobCode, setResetOobCode] = useState<string>('');
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState<boolean>(false);
   const [membershipInitialPlan, setMembershipInitialPlan] = useState<'basic' | 'premium'>('premium');
+
+  const isLearningPortal = activeRole === 'student' || activeRole === 'teacher';
+  const isTeacherPortal = activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
 
   // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=STUDY123)
   useEffect(() => {
@@ -109,7 +117,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Upgrade prompt modal state when a student clicks a locked feature or subject
+  // Upgrade prompt modal state when a student/teacher clicks a locked feature or subject
   const [upgradePrompt, setUpgradePrompt] = useState<{
     isOpen: boolean;
     featureTitle: string;
@@ -131,11 +139,11 @@ const AppContent: React.FC = () => {
     const alwaysOpenTabs = new Set([
       'demo', 'dashboard', 'profile', 'account', 'subscription', 'worksheets',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
-      'grievance', 'about', 'contact', 'referrals', 'admin', 'parent'
+      'grievance', 'about', 'contact', 'referrals', 'admin'
     ]);
 
-    // Check feature restrictions for students
-    if (activeRole === 'student' && currentStudent && !alwaysOpenTabs.has(tab)) {
+    // Check feature restrictions for students & teachers
+    if (isLearningPortal && currentStudent && !alwaysOpenTabs.has(tab)) {
       // 1. If navigating to a specific quiz subject, check subject access first
       if (tab === 'quizzes' && subjectParam) {
         const subjAccess = canAccessSubject(currentStudent, subjectParam);
@@ -146,7 +154,7 @@ const AppContent: React.FC = () => {
             requiredPlan: 'premium',
             reasonMessage:
               subjAccess.reason ||
-              `${subjectParam} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan (90 Days) to unlock all 14 school subjects!`,
+              `${subjectParam} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan (90 Days) to unlock all subjects for your class!`,
           });
           return;
         }
@@ -177,6 +185,9 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const planInfo = getStudentPlanInfo(currentStudent);
+  const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
+
   return (
     <div className="min-h-screen bg-amber-50/30 text-slate-900 flex flex-col font-sans">
       {/* Header */}
@@ -195,13 +206,10 @@ const AppContent: React.FC = () => {
         ) : currentTab === 'referrals' ? (
           <ReferralHubView
             currentUserId={currentStudent?.id || 'guest_ambassador'}
-            userName={
-              currentStudent?.name ||
-              (activeRole === 'parent' ? 'Champion Parent' : 'Champion Ambassador')
-            }
+            userName={currentStudent?.name || 'Champion Ambassador'}
             userEmail={currentStudent?.email || ''}
             userMobile={currentStudent?.mobile || ''}
-            initialRole={activeRole === 'parent' ? 'parent' : 'student'}
+            initialRole="student"
             onNavigateUpgrade={() => openMembershipWithPlan('premium')}
           />
         ) : currentTab === 'help-support' ? (
@@ -231,11 +239,11 @@ const AppContent: React.FC = () => {
           />
         ) : (
           <>
-            {/* Signed Out Gate for Student Portal */}
-            {activeRole === 'student' && !currentStudent && (
+            {/* Signed Out Gate for Student & Teacher Portals */}
+            {isLearningPortal && !currentStudent && (
               <div className="max-w-xl mx-auto my-12 bg-white rounded-3xl p-8 border border-amber-300 shadow-xl text-center space-y-6 animate-in zoom-in-95">
                 <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-4xl shadow-lg shadow-orange-500/20">
-                  🏆
+                  {activeRole === 'teacher' ? '👩‍🏫' : '🏆'}
                 </div>
 
                 <div className="space-y-2">
@@ -243,21 +251,21 @@ const AppContent: React.FC = () => {
                     MyStudyZone – An Interactive Learning Platform for Students
                   </span>
                   <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 mt-2">
-                    Welcome to MyStudyZone!
+                    {activeRole === 'teacher' ? 'Welcome to the Teacher Portal!' : 'Welcome to the Student Portal!'}
                   </h2>
                   <p className="text-xs sm:text-sm font-bold text-amber-800">
                     Learn, Practice, Explore and Achieve Excellence.
                   </p>
                   <p className="text-sm text-slate-600 max-w-md mx-auto font-medium leading-relaxed">
-                    Sign in with your registered student account or create a new account to access our interactive learning platform for Classes 1st to 10th!
+                    Sign in or register a class-wise Student or Teacher account (Standard 1st to Standard 10th) to access all subjects, online worksheets, 4-level quizzes, stories with audio, current affairs, and scholarship tests!
                   </p>
                 </div>
 
-                {/* Quick Switch from Available Registered Students */}
+                {/* Quick Switch from Available Registered Accounts */}
                 {studentsList.length > 0 && (
                   <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-2.5 text-left">
                     <span className="text-xs font-extrabold text-amber-900 block">
-                      Select Registered Student on this Device:
+                      Select Registered Student or Teacher Account on this Device:
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {studentsList.map((s) => (
@@ -270,7 +278,7 @@ const AppContent: React.FC = () => {
                           <div className="overflow-hidden">
                             <p className="font-bold text-xs text-slate-900 truncate">{s.name}</p>
                             <p className="text-[10px] text-amber-800 font-extrabold">
-                              {s.classLevel} • {s.points} XP
+                              {s.accountRole === 'teacher' ? '👩‍🏫 Teacher' : '🎓 Student'} • {s.classLevel} • {s.plan === 'premium' ? '₹99 Premium' : 'Free Plan'}
                             </p>
                           </div>
                         </button>
@@ -281,24 +289,140 @@ const AppContent: React.FC = () => {
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => setIsAuthModalOpen(true)}
+                    onClick={() => {
+                      setAuthDefaultTab(activeRole === 'teacher' ? 'teacher' : 'login');
+                      setIsAuthModalOpen(true);
+                    }}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer"
                   >
-                    Sign In to Student Account
+                    Sign In ({activeRole === 'teacher' ? 'Teacher Portal' : 'Student Portal'})
                   </button>
                   <button
-                    onClick={() => setIsAuthModalOpen(true)}
+                    onClick={() => {
+                      setAuthDefaultTab('register');
+                      setIsAuthModalOpen(true);
+                    }}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
                   >
-                    Register New Student
+                    Register New Account
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Authenticated Student Content */}
-            {activeRole === 'student' && currentStudent && (
+            {/* Authenticated Student Portal & Teacher Portal Content */}
+            {isLearningPortal && currentStudent && (
               <>
+                {/* Dedicated Teacher Portal Workspace Header Banner */}
+                {isTeacherPortal && (
+                  <div className="mb-6 rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 sm:p-6 shadow-lg border border-emerald-400/30 space-y-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-xs font-extrabold uppercase tracking-wider">
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>Dedicated Teacher Portal • Standard {formatStandardOrdinal(currentStudent.classLevel)} ({currentStudent.classLevel})</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-amber-200 text-xs font-bold">
+                            <Lock className="w-3 h-3" />
+                            <span>One Account = One Active Class ({currentStudent.classLevel} Only)</span>
+                          </span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-display font-black">
+                          Welcome, {currentStudent.name}! (Standard {formatStandardOrdinal(currentStudent.classLevel)} Educator Hub)
+                        </h2>
+                        <p className="text-xs sm:text-sm text-emerald-100 font-medium">
+                          {isPremiumActive
+                            ? getPremiumActivatedBannerMessage(currentStudent.classLevel)
+                            : `Complete access to Standard ${formatStandardOrdinal(currentStudent.classLevel)} curriculum: Subjects, Class-Wise Worksheets (2 Free Demos / ₹99 All Unlocked), 4-Level Quizzes, Audio Stories, Daily & Cricket Current Affairs, Scholarship Practice, and Model Solutions.`}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {!isPremiumActive ? (
+                          <button
+                            type="button"
+                            onClick={() => openMembershipWithPlan('premium')}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs shadow-md cursor-pointer"
+                          >
+                            <Crown className="w-4 h-4" />
+                            <span>Unlock All {currentStudent.classLevel} Worksheets – ₹99</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-emerald-500 text-white font-black text-xs">
+                            <Crown className="w-4 h-4" />
+                            <span>₹99 Premium Active ({currentStudent.classLevel})</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Teacher Portal Quick Module Bar */}
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-white/15">
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('dashboard')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'dashboard' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        <span>{currentStudent.classLevel} Subjects &amp; Overview</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('worksheets')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'worksheets' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>Class-Wise Worksheets &amp; Solutions</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('quizzes')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'quizzes' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>4-Level Practice Quizzes &amp; Explanations</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('stories')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'stories' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>Stories &amp; Story Audio (45)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('cricket')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'cricket' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>Daily &amp; Cricket Current Affairs</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('scholarship')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'scholarship' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <Award className="w-3.5 h-3.5" />
+                        <span>Scholarship Practice &amp; Assessments</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {currentTab === 'dashboard' && (
                   <StudentDashboard
                     onNavigateTab={handleNavigateTab}
@@ -353,8 +477,6 @@ const AppContent: React.FC = () => {
                 )}
               </>
             )}
-
-            {activeRole === 'parent' && <ParentDashboard />}
 
             {activeRole === 'admin' && <AdminDashboard />}
           </>
