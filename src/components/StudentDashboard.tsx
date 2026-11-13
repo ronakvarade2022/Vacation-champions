@@ -110,11 +110,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const handleShareDashboardRefLink = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareText = `Join Vacation Champions (${currentStudent.classLevel}) using my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
+    const shareText = `Join MyStudyZone (${currentStudent.classLevel}) using my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
-          title: 'Vacation Champions Referral Link',
+          title: 'MyStudyZone Referral Link',
           text: shareText,
           url: studentReferralLink
         });

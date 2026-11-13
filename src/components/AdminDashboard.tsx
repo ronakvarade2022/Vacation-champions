@@ -142,7 +142,7 @@ export const AdminDashboard: React.FC = () => {
   const [c68Timer, setC68Timer] = useState<number>(platformSettings.timers.classes6to8);
   const [timerSaved, setTimerSaved] = useState<boolean>(false);
 
-  // Interactive Duplicate Detector Sandbox
+  // Interactive Duplicate Detector Tool
   const [testQuestionInput, setTestQuestionInput] = useState<string>('');
   const [testAnswerInput, setTestAnswerInput] = useState<string>('');
   const [duplicateScanResult, setDuplicateScanResult] = useState<any | null>(null);
@@ -219,7 +219,7 @@ export const AdminDashboard: React.FC = () => {
     setTimeout(() => setTimerSaved(false), 3000);
   };
 
-  const handleRunDuplicateSandbox = () => {
+  const handleRunDuplicateCheck = () => {
     if (!testQuestionInput) return;
     const dupCheck = checkQuestionDuplicate(testQuestionInput, testAnswerInput, allQuestions);
     if (dupCheck.isDuplicate) {
@@ -370,7 +370,7 @@ export const AdminDashboard: React.FC = () => {
                 </h2>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Completely isolated question banks for Class 2 to 8 across 14 subjects with zero cross-class leakage.
+                Completely isolated question banks for Standards 1st to 10th across all subjects with zero cross-class leakage.
               </p>
             </div>
 
@@ -388,12 +388,12 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-amber-50/70 rounded-2xl p-4 border border-amber-200">
               <p className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">Total Questions in Bank</p>
               <p className="text-2xl font-extrabold text-slate-900 mt-1">{analytics.totalCount}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Across 7 grades & 14 subjects</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Across Standards 1st to 10th</p>
             </div>
 
             <div className="bg-emerald-50/70 rounded-2xl p-4 border border-emerald-200">
               <p className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider">Class-Isolated Pools</p>
-              <p className="text-2xl font-extrabold text-emerald-700 mt-1">7 Classes</p>
+              <p className="text-2xl font-extrabold text-emerald-700 mt-1">{ALL_CLASSES.length} Classes</p>
               <p className="text-[10px] text-emerald-600 mt-0.5">Strict non-overlapping banks</p>
             </div>
 
@@ -425,7 +425,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* CLASS-WISE QUESTION COUNTS (Class 2 to 8) */}
+          {/* CLASS-WISE QUESTION COUNTS */}
           <div className="space-y-2">
             <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-amber-600" />
@@ -692,10 +692,10 @@ export const AdminDashboard: React.FC = () => {
             </p>
           </div>
 
-          {/* Test Scanner Sandbox */}
+          {/* Interactive Duplicate Check Tool */}
           <div className="bg-amber-50/60 p-5 rounded-2xl border border-amber-200 space-y-3">
             <h4 className="font-bold text-xs uppercase text-amber-900">
-              Interactive Semantic Similarity Sandbox
+              Interactive Semantic Similarity Checker
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
@@ -714,7 +714,7 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
             <button
-              onClick={handleRunDuplicateSandbox}
+              onClick={handleRunDuplicateCheck}
               className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs"
             >
               Run Duplicate Check

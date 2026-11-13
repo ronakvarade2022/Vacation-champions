@@ -1,17 +1,30 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-  Sparkles, Users, BookOpen, Brain, Shield, Award, TrendingUp, Gift,
+  Sparkles, BookOpen, Brain, Shield, TrendingUp,
   CheckCircle2, Lock, Crown, Play, Pause, RotateCcw, Volume2, Palette,
-  Trophy, HelpCircle, Check, X, RefreshCw, Eraser, ArrowRight
+  Trophy, HelpCircle, Check, X, RefreshCw, Eraser, ArrowRight,
+  GraduationCap, FileText, BarChart3, UserPlus, LogIn
 } from 'lucide-react';
 import { speechService } from '../services/speechService';
+import { ClassLevel } from '../types';
+import {
+  ALL_10_CLASSES_META,
+  getSubjectsForClass,
+  getSubjectMeta
+} from '../data/classCurriculumConfig';
+import { getFreeDemoWorksheets, OnlineWorksheet } from '../data/worksheetsData';
+import { formatStandardOrdinal } from '../utils/subscriptionAccess';
 
 interface DemoSectionViewProps {
   onUpgradeClick: () => void;
+  onRegisterClick?: () => void;
+  onSignInClick?: () => void;
+  isAuthenticated?: boolean;
 }
 
 type InteractiveDemoTab =
   | 'overview'
+  | 'live-curriculum'
   | 'live-quiz'
   | 'live-puzzles'
   | 'live-stories'
@@ -181,8 +194,35 @@ const DEMO_CHAMPION_QUESTIONS = [
   }
 ];
 
-export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick }) => {
+export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
+  onUpgradeClick,
+  onRegisterClick,
+  onSignInClick,
+  isAuthenticated = false
+}) => {
   const [activeTab, setActiveTab] = useState<InteractiveDemoTab>('overview');
+
+  // --- 0. Visitor Class Preview (Standards 1st to 10th) & Sample Worksheets ---
+  const [selectedDemoClass, setSelectedDemoClass] = useState<ClassLevel>('Class 5');
+  const [activeDemoWorksheet, setActiveDemoWorksheet] = useState<OnlineWorksheet | null>(null);
+  const [wsAnswers, setWsAnswers] = useState<Record<string, number>>({});
+  const [wsSubmitted, setWsSubmitted] = useState(false);
+
+  const demoSubjects = useMemo(
+    () => getSubjectsForClass(selectedDemoClass),
+    [selectedDemoClass]
+  );
+  const demoWorksheets = useMemo(
+    () => getFreeDemoWorksheets(selectedDemoClass),
+    [selectedDemoClass]
+  );
+
+  const handleSelectDemoClass = (cls: ClassLevel) => {
+    setSelectedDemoClass(cls);
+    setActiveDemoWorksheet(null);
+    setWsAnswers({});
+    setWsSubmitted(false);
+  };
 
   // --- 1. Live Quiz State (Isolated Demo State) ---
   const [selectedQuizSubject, setSelectedQuizSubject] = useState<'All' | 'Mathematics' | 'English' | 'Science' | 'Marathi'>('All');
@@ -400,45 +440,96 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Top Demo Banner */}
-      <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 rounded-3xl p-8 text-white mb-8 shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 rounded-3xl p-7 sm:p-8 text-white mb-8 shadow-xl relative overflow-hidden">
         <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-black uppercase tracking-widest mb-3">
-              <Sparkles className="w-4 h-4" /> LIVE INTERACTIVE DEMO PLAYGROUND • NO PAYMENT REQUIRED
+              <Sparkles className="w-4 h-4" /> VISITOR DEMO MODE • READ-ONLY PREVIEW (CLASSES 1ST TO 10TH)
             </div>
             <h1 className="text-3xl sm:text-4xl font-black mb-2">
-              Champion Learning — Live Interactive Demo
+              MyStudyZone — Visitor Demo Playground
             </h1>
             <p className="text-indigo-200 max-w-2xl text-sm sm:text-base">
-              Test our real quizzes, play Sudoku & brain riddles, listen to English & Marathi stories with full voice controls, and paint in the Drawing Studio right here! Demo testing is 100% free and kept separate from permanent student records.
+              Preview any class from Standard 1st to Standard 10th, try sample English &amp; Mathematics worksheets, test 4-level quizzes, play Sudoku &amp; riddles, and listen to English &amp; Marathi stories. Demo exploration does not save records or activate real purchases.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3 shrink-0">
+          <div className="flex flex-wrap gap-2.5 shrink-0">
             <button
-              onClick={() => setActiveTab('live-quiz')}
-              className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              onClick={() => setActiveTab('live-curriculum')}
+              className="px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer text-xs sm:text-sm"
             >
-              <Play className="w-5 h-5 fill-current" /> Start Playing Demo Now
+              <BookOpen className="w-4 h-4" /> Preview Classes &amp; Worksheets
             </button>
-            <button
-              onClick={onUpgradeClick}
-              className="px-5 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <Crown className="w-5 h-5" /> View Plans (₹0 / ₹99)
-            </button>
+            {!isAuthenticated && onRegisterClick && (
+              <button
+                onClick={onRegisterClick}
+                className="px-4 py-3 bg-white hover:bg-amber-50 text-slate-950 font-black rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer text-xs sm:text-sm"
+              >
+                <UserPlus className="w-4 h-4 text-indigo-700" /> Register Free
+              </button>
+            )}
+            {!isAuthenticated && onSignInClick && (
+              <button
+                onClick={onSignInClick}
+                className="px-4 py-3 bg-white/15 hover:bg-white/25 text-white border border-white/25 font-bold rounded-2xl transition-all flex items-center gap-2 cursor-pointer text-xs sm:text-sm"
+              >
+                <LogIn className="w-4 h-4" /> Sign In
+              </button>
+            )}
+            {isAuthenticated && (
+              <button
+                onClick={onUpgradeClick}
+                className="px-5 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer text-xs sm:text-sm"
+              >
+                <Crown className="w-4 h-4" /> View Plans (₹0 / ₹99)
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Standard 1st to 10th Quick Class Switcher inside Demo Mode */}
+        <div className="mt-6 pt-5 border-t border-white/15 space-y-2.5 relative z-10">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+              <GraduationCap className="w-4 h-4" />
+              <span>Preview Any Class (Standard 1st to Standard 10th):</span>
+            </span>
+            <span className="text-indigo-200 font-semibold">
+              Currently Previewing: <strong className="text-white">Standard {formatStandardOrdinal(selectedDemoClass)}</strong> ({demoSubjects.length} Subjects)
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {ALL_10_CLASSES_META.map((clsMeta) => {
+              const isSelected = selectedDemoClass === clsMeta.classLevel;
+              return (
+                <button
+                  key={clsMeta.classLevel}
+                  type="button"
+                  onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                >
+                  {clsMeta.shortLabel}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Interactive Demo Navigation Pills */}
-        <div className="mt-8 pt-6 border-t border-white/15 flex flex-wrap gap-2.5">
+        <div className="mt-5 pt-4 border-t border-white/15 flex flex-wrap gap-2 relative z-10">
           {[
-            { id: 'overview', label: '📋 All 8 Demo Modules', icon: Sparkles },
-            { id: 'live-quiz', label: '📚 Play Live Subject Quiz', icon: BookOpen },
-            { id: 'live-puzzles', label: '🧩 Play Live Sudoku & Riddles', icon: Brain },
-            { id: 'live-stories', label: '🎧 Listen to Live Stories (EN & MR)', icon: Volume2 },
-            { id: 'live-drawing', label: '🎨 Try Live Drawing Studio', icon: Palette },
-            { id: 'live-champions', label: '🏆 Try Cricket & Scholarship', icon: Trophy },
+            { id: 'overview', label: 'Demo Overview & Progress', icon: Sparkles },
+            { id: 'live-curriculum', label: `Classes & Worksheets (${formatStandardOrdinal(selectedDemoClass)})`, icon: FileText },
+            { id: 'live-quiz', label: 'Sample Subject Quiz', icon: BookOpen },
+            { id: 'live-puzzles', label: 'Sudoku & Riddles', icon: Brain },
+            { id: 'live-stories', label: 'Stories Audio (EN & MR)', icon: Volume2 },
+            { id: 'live-drawing', label: 'Drawing Studio', icon: Palette },
+            { id: 'live-champions', label: 'Cricket & Scholarship', icon: Trophy },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -449,19 +540,231 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
                   if (tab.id !== 'live-stories') handleStopDemoStory();
                   setActiveTab(tab.id as InteractiveDemoTab);
                 }}
-                className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-white text-indigo-950 shadow-lg scale-[1.02]'
+                    ? 'bg-white text-indigo-950 shadow-lg'
                     : 'bg-white/10 text-white hover:bg-white/20'
                 }`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-3.5 h-3.5" />
                 {tab.label}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* =====================================================================
+          INTERACTIVE TAB 0: CLASSES 1ST TO 10TH SUBJECTS & SAMPLE WORKSHEETS
+         ===================================================================== */}
+      {activeTab === 'live-curriculum' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-lg mb-10 space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
+                Visitor Preview • Zero Database Writes
+              </span>
+              <h2 className="text-2xl font-black text-slate-900 mt-2">
+                Standard {formatStandardOrdinal(selectedDemoClass)} — Subjects &amp; Sample Worksheets
+              </h2>
+              <p className="text-xs text-slate-600 mt-1">
+                Try the live interactive sample English &amp; Mathematics worksheets for {selectedDemoClass}, or switch to any Standard (1st to 10th) above.
+              </p>
+            </div>
+            {!isAuthenticated && onRegisterClick && (
+              <button
+                type="button"
+                onClick={onRegisterClick}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+              >
+                Register Account for {selectedDemoClass} →
+              </button>
+            )}
+          </div>
+
+          {/* 2 Interactive Sample Worksheets for Selected Class */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-black uppercase tracking-wider text-slate-700">
+              Try Interactive Sample Worksheets ({selectedDemoClass})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {demoWorksheets.map((ws) => {
+                const isOpen = activeDemoWorksheet?.id === ws.id;
+                return (
+                  <div
+                    key={ws.id}
+                    className={`p-5 rounded-2xl border-2 transition-all flex flex-col justify-between gap-3 ${
+                      isOpen ? 'border-indigo-500 bg-indigo-50/40' : 'border-slate-200 bg-slate-50/70'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                          Sample Worksheet • Free Preview
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">
+                          {ws.questions.length} Questions • {ws.totalMarks} Marks
+                        </span>
+                      </div>
+                      <h4 className="font-black text-base text-slate-900">{ws.title}</h4>
+                      <p className="text-xs text-slate-600 mt-0.5">{ws.chapterName}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDemoWorksheet(ws);
+                        setWsAnswers({});
+                        setWsSubmitted(false);
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                    >
+                      {isOpen ? 'Currently Open Below' : `Try Sample ${ws.subject} Worksheet →`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Active Sample Worksheet Player (Client Ephemeral State Only) */}
+          {activeDemoWorksheet && (
+            <div className="p-6 rounded-2xl bg-slate-50 border-2 border-indigo-200 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                    Interactive Sample Worksheet • Not Saved to Student Records
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900">
+                    {activeDemoWorksheet.title}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveDemoWorksheet(null);
+                    setWsAnswers({});
+                    setWsSubmitted(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  Close Preview
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {activeDemoWorksheet.questions.slice(0, 5).map((q, idx) => {
+                  const chosen = wsAnswers[q.id];
+                  const isCorrect = chosen === q.correctIndex;
+                  return (
+                    <div key={q.id} className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5">
+                      <p className="text-xs font-bold text-slate-500">
+                        Question {idx + 1} • {q.chapterTitle}
+                      </p>
+                      <p className="text-sm font-black text-slate-900">{q.prompt}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {q.options.map((opt, optIdx) => {
+                          const picked = chosen === optIdx;
+                          const rightOpt = optIdx === q.correctIndex;
+                          let cls = 'bg-slate-50 border-slate-200 hover:border-indigo-400 text-slate-800';
+                          if (wsSubmitted) {
+                            if (rightOpt) cls = 'bg-emerald-50 border-emerald-500 text-emerald-900';
+                            else if (picked) cls = 'bg-rose-50 border-rose-400 text-rose-900';
+                          } else if (picked) {
+                            cls = 'bg-indigo-50 border-indigo-500 text-indigo-950';
+                          }
+                          return (
+                            <button
+                              key={optIdx}
+                              type="button"
+                              disabled={wsSubmitted}
+                              onClick={() => setWsAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
+                              className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${cls}`}
+                            >
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {wsSubmitted && (
+                        <p className={`text-xs font-bold p-2.5 rounded-lg border ${
+                          isCorrect
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                            : 'bg-amber-50 border-amber-200 text-amber-950'
+                        }`}>
+                          {isCorrect ? '✓ Correct! ' : 'Explanation: '}
+                          {q.explanation}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <p className="text-xs text-slate-500 font-semibold">
+                  Showing first 5 preview questions. Full {activeDemoWorksheet.questions.length}-question worksheets and all subjects unlock on account registration.
+                </p>
+                {!wsSubmitted ? (
+                  <button
+                    type="button"
+                    onClick={() => setWsSubmitted(true)}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer"
+                  >
+                    Check Sample Answers
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWsAnswers({});
+                      setWsSubmitted(false);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                  >
+                    Try Again
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Available Subjects for Selected Class */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-black uppercase tracking-wider text-slate-700">
+              All {demoSubjects.length} Curriculum Subjects in Standard {formatStandardOrdinal(selectedDemoClass)}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {demoSubjects.map((sub) => {
+                const meta = getSubjectMeta(sub);
+                const isFreeSub =
+                  sub === 'English' ||
+                  sub === 'Mathematics' ||
+                  sub === 'Mathematics – Algebra' ||
+                  sub === 'Mathematics – Geometry';
+                return (
+                  <div
+                    key={sub}
+                    className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-xl shrink-0">{meta.icon}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-slate-900 truncate">{sub}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{meta.marathiTitle}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                      isFreeSub ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+                    }`}>
+                      {isFreeSub ? 'Free Sample' : '₹99 Plan'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================================
           INTERACTIVE TAB 1: LIVE SUBJECT QUIZ PLAYER
@@ -1055,52 +1358,56 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
       )}
 
       {/* =====================================================================
-          ALL 8 DEMO MODULES (CLICKABLE CARDS THAT OPEN INTERACTIVE TOOLS)
+          DEMO OVERVIEW MODULES & PERFORMANCE PREVIEW
          ===================================================================== */}
       <div className="space-y-8">
-        {/* 1. Demo Students & 2. Demo Quizzes */}
+        {/* 1. Student Dashboard & Performance Tracking Preview + 2. Demo Quizzes */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center font-black">
-                  <Users className="w-5 h-5" />
+                  <BarChart3 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-slate-900">1. Demo Student Profiles</h2>
-                  <p className="text-xs text-slate-500">2 Sample Records • Click to Test Dashboard Activity</p>
+                  <h2 className="text-lg font-black text-slate-900">1. Student Progress &amp; Class Preview</h2>
+                  <p className="text-xs text-slate-500">Demo Preview • Standard {formatStandardOrdinal(selectedDemoClass)} ({demoSubjects.length} Subjects)</p>
                 </div>
               </div>
               <button
-                onClick={() => setActiveTab('live-quiz')}
+                onClick={() => setActiveTab('live-curriculum')}
                 className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black cursor-pointer"
               >
-                Try Live Quiz →
+                Preview Worksheets →
               </button>
             </div>
             <div className="space-y-3">
-              {[
-                { name: 'Aarav Deshmukh (DEMO DATA)', class: 'Class 6 • Medium: English', points: '1,450 XP', streak: '14 Days 🔥', badge: 'Math Whiz' },
-                { name: 'Ananya Kulkarni (DEMO DATA)', class: 'Class 8 • Medium: Marathi', points: '2,120 XP', streak: '21 Days 🔥', badge: 'Scholarship Star' },
-              ].map((st, i) => (
-                <div
-                  key={i}
-                  onClick={() => setActiveTab('live-quiz')}
-                  className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-indigo-400 flex items-center justify-between cursor-pointer transition-all"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800 text-sm">{st.name}</span>
-                      <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">DEMO DATA</span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{st.class} • Badge: {st.badge}</p>
+              <div
+                onClick={() => setActiveTab('live-curriculum')}
+                className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-indigo-400 cursor-pointer transition-all space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 text-sm">Sample Performance Tracking Preview</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">DEMO PREVIEW</span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Registered students get real-time subject accuracy bars, chapter-wise worksheet scores, daily streak tracking, and achievement badges.
+                </p>
+                <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 block">Selected Class</span>
+                    <span className="text-xs font-black text-indigo-700">{selectedDemoClass}</span>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-black text-indigo-600">{st.points}</div>
-                    <div className="text-xs text-emerald-600 font-bold">{st.streak}</div>
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 block">Demo Score</span>
+                    <span className="text-xs font-black text-emerald-700">{quizScore} / {answeredCount || 0}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 block">Free Worksheets</span>
+                    <span className="text-xs font-black text-amber-700">2 Samples</span>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
 
@@ -1125,8 +1432,8 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
             </div>
             <div className="space-y-3">
               {[
-                { subject: 'Mathematics' as const, title: 'Mathematics — Fractions & Speed (DEMO DATA)', level: 'Intermediate • Interactive', score: 'Play Now' },
-                { subject: 'Science' as const, title: 'General Science — Living World (DEMO DATA)', level: 'Beginner • Interactive', score: 'Play Now' },
+                { subject: 'Mathematics' as const, title: 'Mathematics — Fractions & Speed', level: 'Intermediate • Interactive', score: 'Play Now' },
+                { subject: 'Science' as const, title: 'General Science — Living World', level: 'Beginner • Interactive', score: 'Play Now' },
               ].map((qz, i) => (
                 <div
                   key={i}
@@ -1176,8 +1483,8 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
             </div>
             <div className="space-y-3">
               {[
-                { name: 'Champion Sudoku 4×4 Grid (DEMO DATA)', type: 'Zero Row/Col/Box Repetition • Interactive', reward: 'Solve Live' },
-                { name: 'Number Sequence & Clock Riddle (DEMO DATA)', type: 'Analytical Thinking • Hint Enabled', reward: 'Solve Live' },
+                { name: 'Champion Sudoku 4×4 Grid', type: 'Zero Row/Col/Box Repetition • Interactive', reward: 'Solve Live' },
+                { name: 'Number Sequence & Clock Riddle', type: 'Analytical Thinking • Hint Enabled', reward: 'Solve Live' },
               ].map((bg, i) => (
                 <div
                   key={i}
@@ -1219,8 +1526,8 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
             </div>
             <div className="space-y-3">
               {[
-                { idx: 1, title: 'शिवरायांची युद्धनीती आणि गनिमी कावा (DEMO DATA)', voice: 'Fluent Female Marathi Voice (mr-IN)', moral: 'Listen Now 🔊' },
-                { idx: 0, title: 'The Golden Feather of Honesty (DEMO DATA)', voice: 'Sweet & Polite English Female Voice', moral: 'Listen Now 🔊' },
+                { idx: 1, title: 'शिवरायांची युद्धनीती आणि गनिमी कावा', voice: 'Fluent Female Marathi Voice (mr-IN)', moral: 'Listen Now 🔊' },
+                { idx: 0, title: 'The Golden Feather of Honesty', voice: 'Sweet & Polite English Female Voice', moral: 'Listen Now 🔊' },
               ].map((st, i) => (
                 <div
                   key={i}
@@ -1268,8 +1575,8 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
             </div>
             <div className="space-y-3">
               {[
-                { tpl: 'Fort Raigad Outline' as const, title: 'Fort Raigad Digital Sketch Pad (DEMO DATA)', date: 'Interactive Brush & Colors', id: 'Paint Live 🎨' },
-                { tpl: 'Peacock Feather' as const, title: 'Peacock Feather Art Challenge (DEMO DATA)', date: 'Creative Studio Demo', id: 'Paint Live 🎨' },
+                { tpl: 'Fort Raigad Outline' as const, title: 'Fort Raigad Digital Sketch Pad', date: 'Interactive Brush & Colors', id: 'Paint Live 🎨' },
+                { tpl: 'Peacock Feather' as const, title: 'Peacock Feather Art Challenge', date: 'Creative Studio Demo', id: 'Paint Live 🎨' },
               ].map((cert, i) => (
                 <div
                   key={i}
@@ -1311,8 +1618,8 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
             </div>
             <div className="space-y-3">
               {[
-                { metric: 'Cricket Laws & IPL Mastery (DEMO DATA)', accuracy: 'Interactive Quiz', topSubjects: 'Overs, Fielding & World Cup' },
-                { metric: 'Maharashtra Scholarship Paper 1 & 2 (DEMO DATA)', accuracy: '4th & 7th Std', topSubjects: 'Intelligence Test & Marathi' },
+                { metric: 'Cricket Laws & IPL Mastery', accuracy: 'Interactive Quiz', topSubjects: 'Overs, Fielding & World Cup' },
+                { metric: 'Maharashtra Scholarship Paper 1 & 2', accuracy: '4th & 7th Std', topSubjects: 'Intelligence Test & Marathi' },
               ].map((pr, i) => (
                 <div
                   key={i}

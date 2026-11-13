@@ -184,7 +184,7 @@ export function createRecaptchaVerifier(
   return verifier;
 }
 
-// 1. Genuine Phone OTP SMS Send (with automatic developer fallback when SMS region is not enabled in Firebase Console)
+// 1. Genuine Phone OTP SMS Send (Fail closed if live SMS is unavailable)
 export async function sendFirebasePhoneOtp(
   phoneNumber: string,
   appVerifier: RecaptchaVerifier
@@ -192,8 +192,6 @@ export async function sendFirebasePhoneOtp(
   success: boolean;
   confirmationResult?: ConfirmationResult;
   error?: string;
-  isRegionFallback?: boolean;
-  fallbackOtp?: string;
 }> {
   let clean = phoneNumber.trim();
   if (!clean.startsWith('+')) {
@@ -207,59 +205,19 @@ export async function sendFirebasePhoneOtp(
   } catch (error: any) {
     const code = error?.code || '';
     const msg = String(error?.message || '');
-
-    // If Firebase project has not enabled SMS for this region or Blaze billing in Firebase Console yet,
-    // provide a seamless developer fallback ConfirmationResult so login & registration work without interruption.
-    if (
-      code === 'auth/operation-not-allowed' ||
-      code === 'auth/billing-not-enabled' ||
-      code === 'auth/quota-exceeded' ||
-      code === 'auth/captcha-check-failed' ||
-      code === 'auth/unauthorized-domain' ||
-      code === 'auth/internal-error' ||
-      msg.includes('operation-not-allowed') ||
-      msg.includes('region enabled')
-    ) {
-      console.warn(
-        '[Firebase Phone Auth Notice] Live carrier SMS is not yet enabled for this region in Firebase Console (Authentication -> Settings -> SMS region policy). Activating instant verification fallback (OTP: 123456).'
-      );
-      const fallbackOtp = '123456';
-      const fallbackConfirmation: ConfirmationResult = {
-        verificationId: `fallback_vid_${Date.now()}`,
-        confirm: async (enteredCode: string) => {
-          if (enteredCode.trim() === fallbackOtp) {
-            return {
-              user: {
-                uid: `phone_user_${clean.replace(/\D/g, '')}`,
-                phoneNumber: clean,
-                emailVerified: true,
-                isAnonymous: false,
-                providerData: [{ providerId: 'phone', phoneNumber: clean }]
-              } as unknown as User,
-              providerId: 'phone',
-              operationType: 'signIn'
-            };
-          }
-          const invalidErr: any = new Error('The OTP code you entered is incorrect.');
-          invalidErr.code = 'auth/invalid-verification-code';
-          throw invalidErr;
-        }
-      };
-
-      return {
-        success: true,
-        confirmationResult: fallbackConfirmation,
-        isRegionFallback: true,
-        fallbackOtp
-      };
-    }
-
     console.warn('Firebase sendFirebasePhoneOtp notice:', code || msg);
-    let message = 'Failed to send SMS OTP. Please check the mobile number and network connection.';
+    let message = 'Failed to send SMS OTP. Please verify the mobile number or sign in with Email & Password.';
     if (code === 'auth/invalid-phone-number') {
       message = 'Invalid phone number format. Please enter a valid 10-digit mobile number.';
     } else if (code === 'auth/too-many-requests') {
       message = 'Too many requests. Please wait a few minutes before requesting another OTP.';
+    } else if (
+      code === 'auth/operation-not-allowed' ||
+      code === 'auth/billing-not-enabled' ||
+      code === 'auth/captcha-check-failed' ||
+      code === 'auth/unauthorized-domain'
+    ) {
+      message = 'SMS OTP verification is not currently enabled on this domain. Please sign in or register using Email & Password.';
     } else if (error?.message) {
       message = error.message;
     }
@@ -299,31 +257,24 @@ export async function verifyFirebasePhoneOtp(
 export async function registerFirebaseEmailUser(
   email: string,
   password: string
-): Promise<{ success: boolean; user?: User; error?: string; isFallback?: boolean }> {
+): Promise<{ success: boolean; user?: User; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   try {
     const result = await createUserWithEmailAndPassword(auth, cleanEmail, password);
     // Send genuine verification email link
-    await sendEmailVerification(result.user);
+    await sendEmailVerification(result.user).catch(() => {});
     return { success: true, user: result.user };
   } catch (error: any) {
-    if (error?.code === 'auth/operation-not-allowed') {
-      console.warn('[Firebase Email Auth Notice] Email/Password sign-in provider is not yet enabled in Firebase Console. Using local verified session fallback.');
-      const fallbackUser = {
-        uid: `email_user_${Date.now()}`,
-        email: cleanEmail,
-        emailVerified: true
-      } as unknown as User;
-      return { success: true, user: fallbackUser, isFallback: true };
-    }
     console.warn('Firebase registerFirebaseEmailUser notice:', error?.code || error?.message);
-    let message = 'Failed to create student authentication account.';
+    let message = 'Failed to create authentication account.';
     if (error?.code === 'auth/email-already-in-use') {
-      message = 'This email address is already registered in Firebase. Please sign in or use Account Recovery.';
+      message = 'This email address is already registered. Please sign in or use Forgot Password.';
     } else if (error?.code === 'auth/weak-password') {
       message = 'Password is too weak. Please use at least 6 characters.';
     } else if (error?.code === 'auth/invalid-email') {
       message = 'Invalid email address format.';
+    } else if (error?.code === 'auth/operation-not-allowed') {
+      message = 'Email/Password sign-up is currently disabled in Firebase Authentication configuration.';
     } else if (error?.message) {
       message = error.message;
     }
@@ -339,9 +290,6 @@ export async function resendFirebaseVerificationEmail(
     const target = user || auth.currentUser;
     if (!target) {
       return { success: false, error: 'No active user session to send verification email to. Please sign in again.' };
-    }
-    if (target.uid?.startsWith('email_user_')) {
-      return { success: true };
     }
     await sendEmailVerification(target);
     return { success: true };
@@ -365,9 +313,6 @@ export async function checkFirebaseEmailVerified(
     const target = user || auth.currentUser;
     if (!target) {
       return { isVerified: false };
-    }
-    if (target.uid?.startsWith('email_user_')) {
-      return { isVerified: true, user: target };
     }
     // reload updates currentUser token and properties from Firebase Auth server
     await reload(target);
@@ -402,8 +347,7 @@ export async function loginFirebaseEmailUser(
 
 // 7. Genuine Password Reset Email & Link Verification via Firebase Authentication
 export async function sendFirebasePasswordReset(
-  email: string,
-  options?: { ensureRegisteredInFirebase?: boolean }
+  email: string
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
@@ -435,15 +379,6 @@ export async function sendFirebasePasswordReset(
         innerErr?.code === 'auth/invalid-continue-uri' ||
         innerErr?.code === 'auth/missing-continue-uri'
       ) {
-        await sendPasswordResetEmail(auth, cleanEmail);
-      } else if (
-        innerErr?.code === 'auth/user-not-found' &&
-        options?.ensureRegisteredInFirebase
-      ) {
-        // If a pre-seeded existing platform account was not yet synced to Firebase Auth, sync it once and send the Firebase reset email
-        const tempPass = `VcTemp#${Date.now().toString(36)}!9`;
-        await createUserWithEmailAndPassword(auth, cleanEmail, tempPass);
-        await signOut(auth).catch(() => {});
         await sendPasswordResetEmail(auth, cleanEmail);
       } else {
         throw innerErr;
@@ -665,10 +600,11 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year) (${resolvedActivatedClass || student.classLevel})`
       : 'FREE PLAN – ₹0 – Lifetime';
 
-    // Clean undefined values before Firestore setDoc
+    // Strip any passwordHash field and clean undefined values before Firestore setDoc
+    const { passwordHash: _ignoredPasswordHash, ...safeStudentFields } = student;
     const cleanData = JSON.parse(
       JSON.stringify({
-        ...student,
+        ...safeStudentFields,
         accountRole: student.accountRole || 'student',
         plan: activePlan,
         planLabel,
@@ -854,58 +790,6 @@ export async function findReferrerByCodeInFirestore(
   const cleanCode = sanitizeReferralCode(rawCode);
   if (!cleanCode) {
     return { valid: false, message: 'Please enter a valid referral code.' };
-  }
-
-  // Check reserved sample students & teachers first
-  const builtInMap: Record<string, { ids: string[]; primaryId: string; name: string; classLevel: string }> = {
-    STUDY123: {
-      ids: ['uid_aarav_c4_987654', 'student1'],
-      primaryId: 'uid_aarav_c4_987654',
-      name: 'Aarav Sharma',
-      classLevel: 'Class 4',
-    },
-    STUDY456: {
-      ids: ['uid_ananya_c6_982201', 'student2'],
-      primaryId: 'uid_ananya_c6_982201',
-      name: 'Ananya Deshmukh',
-      classLevel: 'Class 6',
-    },
-    STUDY789: {
-      ids: ['uid_rohan_c7_983301', 'student3'],
-      primaryId: 'uid_rohan_c7_983301',
-      name: 'Rohan Kulkarni',
-      classLevel: 'Class 7',
-    },
-    TEACH701: {
-      ids: ['uid_teacher_meera_c7_984401', 'teacher1'],
-      primaryId: 'uid_teacher_meera_c7_984401',
-      name: 'Prof. Meera Joshi',
-      classLevel: 'Class 7',
-    },
-    TEACH902: {
-      ids: ['uid_teacher_vikram_c9_985502', 'teacher2'],
-      primaryId: 'uid_teacher_vikram_c9_985502',
-      name: 'Prof. Vikram Deshpande',
-      classLevel: 'Class 9',
-    },
-  };
-
-  if (builtInMap[cleanCode]) {
-    const match = builtInMap[cleanCode];
-    if (currentUserId && match.ids.includes(currentUserId)) {
-      return {
-        valid: false,
-        message: 'Self-referral is not allowed. You cannot use your own referral code.',
-      };
-    }
-    return {
-      valid: true,
-      referrerUserId: match.primaryId,
-      referrerName: match.name,
-      referrerClass: match.classLevel,
-      referralCode: cleanCode,
-      message: `Valid code! Referred by ${match.name} (${match.classLevel}).`,
-    };
   }
 
   try {
@@ -1169,10 +1053,61 @@ export async function loginWithFirebaseEmail(email: string, password: string) {
   return loginFirebaseEmailUser(email, password);
 }
 
-export async function getStudentProfileByEmailFromFirestore(
-  _email: string
+export async function fetchStudentProfileFromFirestore(
+  uid: string,
+  email?: string
 ): Promise<StudentProfile | null> {
+  const cleanUid = String(uid || '').trim();
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanUid && !cleanEmail) return null;
+
+  try {
+    if (cleanUid) {
+      const directSnap = await getDoc(doc(db, 'students', cleanUid)).catch(() => null);
+      if (directSnap && directSnap.exists()) {
+        const data = directSnap.data() as StudentProfile;
+        const { passwordHash: _ignored, ...safeProfile } = data;
+        return { ...safeProfile, id: data.id || cleanUid };
+      }
+
+      const byFirebaseUidQuery = query(
+        collection(db, 'students'),
+        where('firebaseUid', '==', cleanUid),
+        limit(1)
+      );
+      const byUidSnap = await getDocs(byFirebaseUidQuery).catch(() => null);
+      if (byUidSnap && !byUidSnap.empty) {
+        const docSnap = byUidSnap.docs[0];
+        const data = docSnap.data() as StudentProfile;
+        const { passwordHash: _ignored, ...safeProfile } = data;
+        return { ...safeProfile, id: data.id || docSnap.id };
+      }
+    }
+
+    if (cleanEmail) {
+      const byEmailQuery = query(
+        collection(db, 'students'),
+        where('email', '==', cleanEmail),
+        limit(1)
+      );
+      const byEmailSnap = await getDocs(byEmailQuery).catch(() => null);
+      if (byEmailSnap && !byEmailSnap.empty) {
+        const docSnap = byEmailSnap.docs[0];
+        const data = docSnap.data() as StudentProfile;
+        const { passwordHash: _ignored, ...safeProfile } = data;
+        return { ...safeProfile, id: data.id || docSnap.id };
+      }
+    }
+  } catch (err) {
+    console.warn('Firestore fetch student profile warning:', err);
+  }
   return null;
+}
+
+export async function getStudentProfileByEmailFromFirestore(
+  email: string
+): Promise<StudentProfile | null> {
+  return fetchStudentProfileFromFirestore('', email);
 }
 
 export { onAuthStateChanged };

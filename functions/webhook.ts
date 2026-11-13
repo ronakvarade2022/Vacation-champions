@@ -112,7 +112,7 @@ export interface CapturedPaymentSubscriptionResult {
 /**
  * Retrieves the user document from Firestore (/students/{studentId}) and updates
  * their subscription status ('premium' or 'standard'/'basic') with a new expiration
- * date set to 90 days from the current date (or +90 days if renewing an active plan).
+ * date set to 365 days from the current date (or +365 days if renewing an active plan).
  */
 export async function processPaymentCapturedEvent(params: {
   paymentEntity: Record<string, any>;
@@ -314,7 +314,7 @@ export async function processPaymentCapturedEvent(params: {
 /**
  * Express / Cloud Function HTTP Handler for Razorpay Webhooks.
  * Verifies 'X-Razorpay-Signature', extracts 'payment.captured', retrieves the
- * user document from Firestore, and updates their subscription with a 90-day expiry date.
+ * user document from Firestore, and updates their subscription with a 365-day expiry date.
  */
 export async function handleRazorpayWebhook(req: Request, res: Response) {
   try {

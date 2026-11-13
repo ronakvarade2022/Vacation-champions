@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // Global Safety Net: Default-deny all undefined paths
     match /{document=**} {
       allow read, write: if false;
@@ -35,70 +35,144 @@ service cloud.firestore {
       );
     }
 
+    // Verifies ownership for both UID-keyed and legacy firebaseUid-linked student documents (single-doc operations only)
+    function isStudentDocOwner(studentId) {
+      return isOwner(studentId) || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/students/$(studentId)) &&
+        get(/databases/$(database)/documents/students/$(studentId)).data.firebaseUid == request.auth.uid
+      );
+    }
+
     // Secure Parent-Child Link Verifier
     function isParentOf(studentId) {
-      return isSignedIn() && 
+      return isSignedIn() &&
              exists(/databases/$(database)/documents/parents/$(request.auth.uid)) &&
              (studentId in get(/databases/$(database)/documents/parents/$(request.auth.uid)).data.linkedStudentIds);
     }
 
-    // StudentProfile & Subscription Schema Validator
+    // StudentProfile & Subscription Schema Validator (forbids passwordHash and privilege escalation fields)
     function isValidStudentProfile(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             (
-               (data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-                data.email is string && data.email.size() <= 150 &&
-                data.classLevel is string && data.classLevel.size() <= 20) ||
-               (data.plan in ['free', 'basic', 'standard', 'premium'])
-             );
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data) &&
+             (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 100)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 20)) &&
+             (!('classLevel' in data) || (data.classLevel is string && data.classLevel.size() <= 20)) &&
+             (!('plan' in data) || (data.plan in ['free', 'basic', 'premium']));
     }
 
     // ParentProfile Schema Validator
     function isValidParentProfile(data) {
-      return data.id is string && data.id.size() <= 128 &&
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             !('isAdmin' in data) &&
+             !('role' in data) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.email is string && data.email.size() <= 150;
     }
 
     // QuizAttempt Schema Validator
     function isValidQuizAttempt(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.studentId is string && data.studentId.size() <= 128 &&
-             data.subject is string && data.subject.size() <= 100 &&
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.studentId is string && data.studentId.size() > 0 && data.studentId.size() <= 128 &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 100 &&
              data.totalQuestions is number && data.totalQuestions > 0 &&
-             data.correctCount is number && data.correctCount >= 0;
+             data.correctCount is number && data.correctCount >= 0 &&
+             data.correctCount <= data.totalQuestions;
+    }
+
+    // Assignment Submission Update Validator
+    function isValidAssignmentUpdate(data) {
+      return data.status is string && data.status.size() > 0 && data.status.size() <= 40 &&
+             (!('submittedAt' in data) || (data.submittedAt is string && data.submittedAt.size() <= 50));
     }
 
     // PaymentTransaction Schema Validator
     function isValidTransaction(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.receiptNumber is string && data.receiptNumber.size() <= 50 &&
-             data.studentId is string && data.studentId.size() <= 128 &&
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.receiptNumber is string && data.receiptNumber.size() > 0 && data.receiptNumber.size() <= 50 &&
+             data.studentId is string && data.studentId.size() > 0 && data.studentId.size() <= 128 &&
              data.amount is number && data.amount > 0 &&
              data.status in ['SUCCESS', 'FAILED', 'PENDING', 'REFUNDED'];
     }
 
     // Announcement Schema Validator
     function isValidAnnouncement(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.title is string && data.title.size() <= 150 &&
-             data.content is string && data.content.size() <= 500;
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 500;
+    }
+
+    // ReferralAccount Schema Validator
+    function isValidReferralAccount(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 32 &&
+             (!('availableWalletBalance' in data) || (data.availableWalletBalance is number && data.availableWalletBalance >= 0)) &&
+             (!('totalEarnings' in data) || (data.totalEarnings is number && data.totalEarnings >= 0));
+    }
+
+    // Support Ticket & Grievance Validator
+    function isValidSupportSubmission(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.studentId is string && data.studentId.size() > 0 && data.studentId.size() <= 128 &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 200 &&
+             data.description is string && data.description.size() > 0 && data.description.size() <= 2000;
     }
 
     // 1. Collection: /students/{studentId}
     match /students/{studentId} {
-      allow get: if isValidId(studentId) || isOwner(studentId) || isParentOf(studentId) || isAdmin();
-      allow list: if isAdmin() || (isSignedIn() && (resource.data.id == request.auth.uid || resource.data.firebaseUid == request.auth.uid || resource.data.linkedParentId == request.auth.uid));
-      allow create: if isAdmin() || (isValidId(studentId) && isValidStudentProfile(incoming()));
-      allow update: if isAdmin() || (isValidId(studentId) && isValidStudentProfile(incoming()));
+      allow get: if isValidId(studentId) && (
+        isOwner(studentId) ||
+        (isSignedIn() && (existing().id == request.auth.uid || existing().firebaseUid == request.auth.uid)) ||
+        isParentOf(studentId) ||
+        isAdmin()
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.id == request.auth.uid ||
+          resource.data.firebaseUid == request.auth.uid ||
+          (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+        )
+      );
+      allow create: if isValidId(studentId) && isValidStudentProfile(incoming()) && (
+        isAdmin() ||
+        (
+          isOwner(studentId) &&
+          incoming().id == studentId &&
+          incoming().name is string &&
+          incoming().email is string &&
+          incoming().classLevel is string &&
+          (!('plan' in incoming()) || incoming().plan == 'free')
+        )
+      );
+      allow update: if isValidId(studentId) && isValidStudentProfile(incoming()) && (
+        isAdmin() ||
+        (
+          (isOwner(studentId) || (isSignedIn() && existing().firebaseUid == request.auth.uid)) &&
+          incoming().id == existing().id &&
+          (!('registeredAt' in existing()) || incoming().registeredAt == existing().registeredAt) &&
+          (
+            incoming().plan == existing().plan ||
+            (
+              incoming().plan in ['basic', 'premium'] &&
+              incoming().lastPaymentId is string &&
+              incoming().lastPaymentId.size() >= 6 &&
+              incoming().lastPaymentId.size() <= 100
+            )
+          )
+        )
+      );
       allow delete: if isAdmin();
 
-      // Subcollection: /students/{studentId}/attempts/{attemptId} (Marks & Quiz Results)
+      // Subcollection: /students/{studentId}/attempts/{attemptId}
       match /attempts/{attemptId} {
-        allow get: if isValidId(studentId) || isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow list: if isValidId(studentId) || isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow create: if (isValidId(studentId) || isOwner(studentId) || isAdmin()) && 
-                         isValidQuizAttempt(incoming()) && 
+        allow get: if isValidId(studentId) && isValidId(attemptId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow list: if isValidId(studentId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow create: if isValidId(studentId) && isValidId(attemptId) &&
+                         (isStudentDocOwner(studentId) || isAdmin()) &&
+                         isValidQuizAttempt(incoming()) &&
                          incoming().studentId == studentId;
         allow update: if false; // Immutable exam records
         allow delete: if isAdmin();
@@ -106,116 +180,149 @@ service cloud.firestore {
 
       // Subcollection: /students/{studentId}/attendance/{attendanceId}
       match /attendance/{attendanceId} {
-        allow get: if isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow list: if isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow write: if isAdmin(); // Attendance can only be recorded and managed by School/Admin
+        allow get: if isValidId(studentId) && isValidId(attendanceId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow list: if isValidId(studentId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow write: if isAdmin();
       }
 
       // Subcollection: /students/{studentId}/assignments/{assignmentId}
       match /assignments/{assignmentId} {
-        allow get: if isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow list: if isOwner(studentId) || isParentOf(studentId) || isAdmin();
+        allow get: if isValidId(studentId) && isValidId(assignmentId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow list: if isValidId(studentId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
         allow create, delete: if isAdmin();
-        allow update: if isAdmin() || (isOwner(studentId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'submissionData', 'submittedAt']));
+        allow update: if isAdmin() || (
+          isValidId(studentId) && isValidId(assignmentId) &&
+          isStudentDocOwner(studentId) &&
+          isValidAssignmentUpdate(incoming()) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'submissionData', 'submittedAt'])
+        );
       }
 
       // Subcollection: /students/{studentId}/fees/{feeId}
       match /fees/{feeId} {
-        allow get: if isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow list: if isOwner(studentId) || isParentOf(studentId) || isAdmin();
-        allow write: if isAdmin(); // Fee invoices and receipts managed by School/Admin
+        allow get: if isValidId(studentId) && isValidId(feeId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow list: if isValidId(studentId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+        allow write: if isAdmin();
       }
     }
 
     // 2. Collection: /parents/{parentId}
-    // Parents can access only their own parent record. Admin can access all.
     match /parents/{parentId} {
-      allow get: if isOwner(parentId) || isAdmin();
+      allow get: if isValidId(parentId) && (isOwner(parentId) || isAdmin());
       allow list: if isAdmin() || (isSignedIn() && resource.data.id == request.auth.uid);
-      allow create: if isAdmin() || (isOwner(parentId) && isValidParentProfile(incoming()));
-      allow update: if (isOwner(parentId) || isAdmin()) && incoming().id == existing().id;
+      allow create: if isValidId(parentId) && isValidParentProfile(incoming()) && (isAdmin() || isOwner(parentId));
+      allow update: if isValidId(parentId) && isValidParentProfile(incoming()) && (isOwner(parentId) || isAdmin()) && incoming().id == existing().id;
       allow delete: if isAdmin();
     }
 
     // 3. Collection: /admins/{adminId}
-    // Only authorized administrators can assign or modify admin privileges
     match /admins/{adminId} {
-      allow read: if isSignedIn();
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
       allow write: if isAdmin();
     }
 
     // 4. Collection: /announcements/{announcementId}
-    // All authenticated users can read; only admin can create/update/delete
     match /announcements/{announcementId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidAnnouncement(incoming());
+      allow write: if isValidId(announcementId) && isAdmin() && isValidAnnouncement(incoming());
     }
 
     // 5. Collection: /transactions/{transactionId}
     match /transactions/{transactionId} {
-      allow get: if isValidId(transactionId) || (isSignedIn() && (resource.data.studentId == request.auth.uid || isParentOf(resource.data.studentId) || isAdmin()));
-      allow list: if isAdmin() || (isSignedIn() && (resource.data.studentId == request.auth.uid || isParentOf(resource.data.studentId)));
-      allow create: if isValidId(transactionId) && isValidTransaction(incoming());
-      allow update: if isAdmin() || (
-        isValidId(transactionId) &&
-        isValidTransaction(incoming()) &&
-        incoming().paymentId == existing().paymentId &&
-        incoming().amount == existing().amount &&
-        incoming().studentId == existing().studentId
+      allow get: if isValidId(transactionId) && isSignedIn() && (
+        existing().studentId == request.auth.uid ||
+        isParentOf(existing().studentId) ||
+        isAdmin()
       );
+      allow list: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.studentId == request.auth.uid ||
+          isParentOf(resource.data.studentId)
+        )
+      );
+      allow create: if isValidId(transactionId) && isValidTransaction(incoming()) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().studentId == request.auth.uid)
+      );
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     // 6. Collection: /referrals/{userId}
     match /referrals/{userId} {
-      allow read: if isValidId(userId) || isOwner(userId) || isAdmin();
-      allow create: if isAdmin() || (
-        isValidId(userId) &&
-        incoming().userId == userId &&
-        incoming().referralCode is string &&
-        incoming().referralCode.size() >= 4 &&
-        incoming().referralCode.size() <= 32
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(userId) && isValidReferralAccount(incoming()) && (
+        isAdmin() || (
+          isOwner(userId) &&
+          incoming().userId == userId &&
+          (!('availableWalletBalance' in incoming()) || incoming().availableWalletBalance == 0) &&
+          (!('totalEarnings' in incoming()) || incoming().totalEarnings == 0)
+        )
       );
-      allow update: if isAdmin() || (
-        (isValidId(userId) || isOwner(userId)) &&
-        incoming().userId == existing().userId &&
-        incoming().referralCode == existing().referralCode
+      allow update: if isValidId(userId) && isValidReferralAccount(incoming()) && (
+        isAdmin() || (
+          isOwner(userId) &&
+          incoming().userId == existing().userId &&
+          incoming().referralCode == existing().referralCode &&
+          (!('availableWalletBalance' in existing()) || incoming().availableWalletBalance == existing().availableWalletBalance) &&
+          (!('totalEarnings' in existing()) || incoming().totalEarnings == existing().totalEarnings)
+        )
       );
       allow delete: if isAdmin();
     }
 
     // 7. Collection: /referral_transactions/{txId}
     match /referral_transactions/{txId} {
-      allow read: if isValidId(txId) || (isSignedIn() && (resource.data.referrerId == request.auth.uid || resource.data.buyerStudentId == request.auth.uid || isAdmin()));
+      allow get: if isValidId(txId) && (
+        isAdmin() ||
+        (isSignedIn() && (existing().referrerId == request.auth.uid || existing().buyerStudentId == request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() && (resource.data.referrerId == request.auth.uid || resource.data.buyerStudentId == request.auth.uid)
+      );
       allow write: if isAdmin();
     }
 
     // 8. Collection: /payout_requests/{payoutId}
     match /payout_requests/{payoutId} {
-      allow read: if isValidId(payoutId) || (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
-      allow create: if isValidId(payoutId) && incoming().userId is string && incoming().amount is number && incoming().amount > 0;
+      allow get: if isValidId(payoutId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(payoutId) && isSignedIn() &&
+        incoming().userId == request.auth.uid &&
+        incoming().amount is number &&
+        incoming().amount >= 50;
       allow update, delete: if isAdmin();
     }
 
     // 9. Collection: /support_tickets/{ticketId}
     match /support_tickets/{ticketId} {
-      allow read: if true; // Support ticket lookup by unique ticket number
-      allow create: if true; // Open to registered and prospective students
-      allow update: if isAdmin() || (isSignedIn() && incoming().studentId == existing().studentId);
-      allow delete: if isAdmin();
+      allow get: if isValidId(ticketId) && (isAdmin() || (isSignedIn() && existing().studentId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if isValidId(ticketId) && isSignedIn() &&
+        incoming().studentId == request.auth.uid &&
+        isValidSupportSubmission(incoming());
+      allow update, delete: if isAdmin();
     }
 
     // 10. Collection: /grievances/{grievanceId}
     match /grievances/{grievanceId} {
-      allow read: if true; // Grievance tracking by unique reference ID
-      allow create: if true;
+      allow get: if isValidId(grievanceId) && (isAdmin() || (isSignedIn() && existing().studentId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if isValidId(grievanceId) && isSignedIn() &&
+        incoming().studentId == request.auth.uid &&
+        isValidSupportSubmission(incoming());
       allow update, delete: if isAdmin();
     }
 
     // 11. Collection: /question_reports/{reportId}
     match /question_reports/{reportId} {
-      allow read: if isAdmin() || isSignedIn();
-      allow create: if true; // Students can report erroneous quiz questions
+      allow get: if isValidId(reportId) && (isAdmin() || (isSignedIn() && existing().studentId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if isValidId(reportId) && isSignedIn() &&
+        incoming().studentId == request.auth.uid &&
+        incoming().questionId is string && incoming().questionId.size() > 0 && incoming().questionId.size() <= 128;
       allow update, delete: if isAdmin();
     }
   }

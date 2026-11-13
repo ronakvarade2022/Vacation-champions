@@ -67,7 +67,7 @@ export const TeacherCertificateModal: React.FC<TeacherCertificateModalProps> = (
           {/* Org Header */}
           <div className="inline-flex items-center space-x-2 px-4 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold tracking-wider uppercase mb-3 border border-amber-300">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Vacation Champions Educational Foundation</span>
+            <span>MyStudyZone Educational Foundation</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-serif font-black tracking-wide text-gray-900 mt-2 mb-1">
@@ -93,7 +93,7 @@ export const TeacherCertificateModal: React.FC<TeacherCertificateModalProps> = (
           <p className="max-w-xl mx-auto text-xs sm:text-sm text-gray-700 leading-relaxed mt-4 mb-6">
             In recognition of outstanding dedication to empowering young minds, fostering self-learning, 
             and actively guiding <strong className="text-gray-900 font-bold">{referralCount}+ verified students</strong> into 
-            holistic academic champion mastery on the Vacation Champions Digital Learning Platform.
+            holistic academic champion mastery on the MyStudyZone Digital Learning Platform.
           </p>
 
           {/* Badge & Signatures */}
@@ -101,7 +101,7 @@ export const TeacherCertificateModal: React.FC<TeacherCertificateModalProps> = (
             <div className="text-center sm:text-left">
               <div className="text-xs font-bold text-gray-800 uppercase tracking-wider">Dr. R. K. Varade</div>
               <div className="text-[11px] text-gray-500">Director of Academic Affairs</div>
-              <div className="text-[10px] text-gray-400 font-mono mt-0.5">Vacation Champions Foundation</div>
+              <div className="text-[10px] text-gray-400 font-mono mt-0.5">MyStudyZone Foundation</div>
             </div>
 
             {/* Gold Seal Emblem */}
@@ -124,7 +124,7 @@ export const TeacherCertificateModal: React.FC<TeacherCertificateModalProps> = (
 
         {/* Footer info */}
         <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-          <span>Official Educator Excellence Certificate • Vacation Champions Platform</span>
+          <span>Official Educator Excellence Certificate • MyStudyZone Platform</span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors cursor-pointer"

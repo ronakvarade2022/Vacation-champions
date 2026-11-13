@@ -25,11 +25,13 @@ interface MembershipModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSelectedPlan?: 'basic' | 'premium';
+  onRequestAuth?: (defaultTab?: 'login' | 'register') => void;
 }
 
 export const MembershipModal: React.FC<MembershipModalProps> = ({
   isOpen,
-  onClose
+  onClose,
+  onRequestAuth,
 }) => {
   const { currentStudent, activateVerifiedMembership } = useApp();
 
@@ -421,6 +423,43 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
         </div>
 
         <div className="p-5 sm:p-8 max-h-[82vh] overflow-y-auto">
+          {!currentStudent && (
+            <div className="mb-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-black uppercase tracking-wider text-indigo-800">
+                  Registration Required Before Purchase
+                </p>
+                <p className="text-xs font-semibold text-slate-700">
+                  You are currently browsing as a visitor. Sign in or create a free class-wise account first so your ₹99 (365-day) Premium Plan links safely to your student profile.
+                </p>
+              </div>
+              {onRequestAuth && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetModal();
+                      onRequestAuth('login');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-white hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-black text-xs cursor-pointer"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetModal();
+                      onRequestAuth('register');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                  >
+                    Register Free
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Active Subscription Banner */}
           {currentStudent && (
             <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
@@ -647,78 +686,105 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="space-y-2 pt-2">
-                    <button
-                      type="button"
-                      disabled={isCreatingOrder}
-                      onClick={() => handleInitiateCheckout()}
-                      className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>Pay Online (₹99)</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isCreatingOrder}
-                      onClick={() => handleInitiateQrPayment()}
-                      className="w-full py-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-xs border border-amber-300 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <QrCode className="w-3.5 h-3.5 text-amber-800" />
-                      <span>Pay via UPI QR Code (₹99)</span>
-                    </button>
-                  </div>
+                  {currentStudent ? (
+                    <div className="space-y-2 pt-2">
+                      <button
+                        type="button"
+                        disabled={isCreatingOrder}
+                        onClick={() => handleInitiateCheckout()}
+                        className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Pay Online (₹99)</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isCreatingOrder}
+                        onClick={() => handleInitiateQrPayment()}
+                        className="w-full py-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-xs border border-amber-300 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-amber-800" />
+                        <span>Pay via UPI QR Code (₹99)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetModal();
+                          onRequestAuth?.('register');
+                        }}
+                        className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all cursor-pointer"
+                      >
+                        Register Free Account to Unlock ₹99 Plan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetModal();
+                          onRequestAuth?.('login');
+                        }}
+                        className="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs transition-all cursor-pointer"
+                      >
+                        Already Registered? Sign In
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Two Payment Options Bar: Online Checkout vs Dynamic UPI QR */}
-              <div className="p-5 rounded-3xl bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white shadow-xl space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                      SELECTED PLAN: PREMIUM PLAN (₹99 – 365 Days / 1 Year)
+              {currentStudent && (
+                <div className="p-5 rounded-3xl bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
+                        SELECTED PLAN: PREMIUM PLAN (₹99 – 365 Days / 1 Year)
+                      </span>
+                      <h4 className="text-base sm:text-lg font-extrabold mt-0.5">
+                        Choose Your Payment Method (₹99)
+                      </h4>
+                    </div>
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      1 Year (365 Days) Validity • Instant Activation
                     </span>
-                    <h4 className="text-base sm:text-lg font-extrabold mt-0.5">
-                      Choose Your Payment Method (₹99)
-                    </h4>
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    1 Year (365 Days) Validity • Instant Activation
-                  </span>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  {/* Option A: Razorpay Online Checkout */}
-                  <button
-                    type="button"
-                    disabled={isCreatingOrder}
-                    onClick={() => handleInitiateCheckout()}
-                    className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-60 text-slate-950 font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5"
-                  >
-                    {isCreatingOrder ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Opening Checkout...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="w-5 h-5" />
-                        <span>Pay Online (Razorpay Checkout) – ₹99</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Option A: Razorpay Online Checkout */}
+                    <button
+                      type="button"
+                      disabled={isCreatingOrder}
+                      onClick={() => handleInitiateCheckout()}
+                      className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-60 text-slate-950 font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5"
+                    >
+                      {isCreatingOrder ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Opening Checkout...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-5 h-5" />
+                          <span>Pay Online (Razorpay Checkout) – ₹99</span>
+                        </>
+                      )}
+                    </button>
 
-                  {/* Option B: Razorpay Live Dynamic UPI QR Code */}
-                  <button
-                    type="button"
-                    disabled={isCreatingOrder}
-                    onClick={() => handleInitiateQrPayment()}
-                    className="p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-slate-950 font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5"
-                  >
-                    <QrCode className="w-5 h-5 text-slate-950" />
-                    <span>Pay with UPI QR Code – ₹99</span>
-                  </button>
+                    {/* Option B: Razorpay Live Dynamic UPI QR Code */}
+                    <button
+                      type="button"
+                      disabled={isCreatingOrder}
+                      onClick={() => handleInitiateQrPayment()}
+                      className="p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-slate-950 font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5"
+                    >
+                      <QrCode className="w-5 h-5 text-slate-950" />
+                      <span>Pay with UPI QR Code – ₹99</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-2.5 text-xs text-slate-600">

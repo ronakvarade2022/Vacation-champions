@@ -30,15 +30,15 @@ export const DEFAULT_FAQS: FaqItem[] = [
   {
     id: 'faq-1',
     category: 'Plans & Pricing',
-    question: 'What are the subscription plans available on Vacation Champions?',
-    answer: 'We offer two straightforward plans:\n1. FREE PLAN – ₹0 – Lifetime: Includes English & Mathematics quizzes, Brain Puzzles, and Sudoku locked to your enrolled grade.\n2. PREMIUM PLAN – ₹99 – 1 Year (365 Days): Complete access to all 14 school curriculum subjects, 45+ audio moral stories, Chhatrapati Shivaji Maharaj 50 chapters, Drawing Studio, Cricket Quiz Arena, 4th & 7th Std Maharashtra Scholarship, Future AI Skills, and ₹5 referral cashback wallet.',
+    question: 'What are the subscription plans available on MyStudyZone?',
+    answer: 'We offer two straightforward plans:\n1. FREE PLAN – ₹0 – Lifetime: Includes 2 Demo Worksheets (English & Mathematics for your registered class), English & Mathematics quizzes, Brain Puzzles, and Sudoku.\n2. PREMIUM PLAN – ₹99 – 1 Year (365 Days): Complete class-wise access to all school curriculum subjects, worksheets, 45+ audio moral stories, Chhatrapati Shivaji Maharaj 50 chapters, Drawing Studio, Cricket Quiz Arena, 4th & 7th Std Maharashtra Scholarship, Future AI Skills, and ₹5 referral cashback wallet.',
     tags: ['pricing', 'subscription', '99', 'plans', '365 days', '1 year']
   },
   {
     id: 'faq-2',
     category: 'Payment & Activation',
     question: 'How do I pay and how quickly is my subscription activated?',
-    answer: 'You can pay instantly using Razorpay LIVE Checkout (UPI, Cards, NetBanking) or scan our dynamic Razorpay UPI QR Code using Google Pay, PhonePe, Paytm, etc. Once payment is captured and verified by our backend server, your 1-year (365-day) subscription activates instantly in your student profile.',
+    answer: 'You can pay instantly using Razorpay Checkout (UPI, Cards, NetBanking) or scan our dynamic Razorpay UPI QR Code using Google Pay, PhonePe, Paytm, or BHIM. Once payment is captured and verified by our backend server, your 1-year (365-day) subscription activates instantly in your profile.',
     tags: ['payment', 'razorpay', 'upi', 'qr code', 'activation']
   },
   {

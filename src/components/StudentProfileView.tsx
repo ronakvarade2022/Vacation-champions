@@ -92,11 +92,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   };
 
   const handleShareProfileRefLink = async () => {
-    const shareText = `Join Vacation Champions (${currentStudent.classLevel}) with my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
+    const shareText = `Join MyStudyZone (${currentStudent.classLevel}) with my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
-          title: 'Vacation Champions Student Referral',
+          title: 'MyStudyZone Student Referral',
           text: shareText,
           url: studentReferralLink
         });
@@ -355,34 +355,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 <span>Share Link</span>
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* 3-Student Verification Switcher to test Student 1, Student 2, Student 3 unique links */}
-        <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-          <span className="text-emerald-200 font-bold text-[11px]">
-            Verify 3 Distinct Student Accounts &amp; Unique Referral Links:
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {studentsList.slice(0, 3).map((stu, idx) => {
-              const code = stu.referralCode || generateUniqueStudentReferralCode(stu.id, stu.name);
-              const isActive = stu.id === currentStudent.id;
-              return (
-                <button
-                  key={stu.id}
-                  type="button"
-                  onClick={() => quickSwitchStudent(stu.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-amber-400 text-slate-950 shadow-xs font-black'
-                      : 'bg-white/10 hover:bg-white/20 text-white border border-white/15'
-                  }`}
-                >
-                  <span>{stu.avatar}</span>
-                  <span>Student {idx + 1}: {stu.name.split(' ')[0]} ({code})</span>
-                </button>
-              );
-            })}
           </div>
         </div>
       </div>
@@ -1135,27 +1107,27 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           )}
         </div>
 
-        {currentUser?.role === 'student' ? (
-          /* Student Role: Single-Student Session Lock - other students cannot be accessed or viewed */
+        {currentUser?.role !== 'admin' ? (
+          /* Single-Account Session Lock - students and teachers cannot view or switch other profiles */
           <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-300 space-y-2">
             <div className="flex items-center gap-2 text-amber-950 font-extrabold text-xs">
               <Lock className="w-4 h-4 text-amber-700" />
-              <span>Single-Student Authenticated Session</span>
+              <span>Single-Account Authenticated Session</span>
             </div>
             <p className="text-slate-600 text-[11px] leading-relaxed">
-              You are securely signed in as <strong>{currentStudent.name}</strong> ({currentStudent.classLevel}). In compliance with Maharashtra State Examination Council (MSCE) rules and data protection policy, students cannot view or switch to other students' profiles or examination records from this session.
+              You are securely signed in as <strong>{currentStudent.name}</strong> ({currentStudent.classLevel}). In compliance with data protection policy, accounts are strictly isolated and cannot view or switch to other users' profiles or records.
             </p>
             <div className="pt-1 flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
                 ✓ Private Student Vault
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[10px]">
-                ✓ Server-Enforced Firestore ABAC
+                ✓ Firebase Authenticated Session
               </span>
             </div>
           </div>
         ) : (
-          /* Admin Role: Can view and switch between students */
+          /* Verified Admin Role Only */
           <div className="flex flex-wrap gap-2.5">
             {studentsList.map(s => {
               const isCurrent = s.id === currentStudent.id;

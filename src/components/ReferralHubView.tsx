@@ -164,15 +164,15 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
     const shareUrl = getShareUrl();
     const isTeacher = account?.userType === 'teacher';
     const text = isTeacher
-      ? `🏆 Special Invitation from Educator ${account?.name || userName}! Join Vacation Champions using my Educator Referral Link: ${shareUrl} (Code: ${uniqueStudentCode})`
-      : `🎓 Join me on Vacation Champions! Register using my personal referral link: ${shareUrl} (Code: ${uniqueStudentCode}) and unlock ₹5 cashback on the ₹99 Premium Plan!`;
+      ? `🏆 Special Invitation from Educator ${account?.name || userName}! Join MyStudyZone using my Educator Referral Link: ${shareUrl} (Code: ${uniqueStudentCode})`
+      : `🎓 Join me on MyStudyZone! Register using my personal referral link: ${shareUrl} (Code: ${uniqueStudentCode}) and unlock ₹5 cashback on the ₹99 Premium Plan!`;
 
     referralService.recordInviteClick(currentUserId).catch(() => {});
 
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
-          title: 'Vacation Champions Referral Invite',
+          title: 'MyStudyZone Referral Invite',
           text,
           url: shareUrl,
         });
@@ -189,8 +189,8 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
     const isTeacher = account?.userType === 'teacher';
     const shareUrl = getShareUrl();
     const text = isTeacher
-      ? `🏆 *Special Invitation from Educator ${account?.name || userName}!*\n\nEmpower your child with *Vacation Champions* - complete with daily quizzes, 45+ audio stories, 50 Shivaji Maharaj chapters, and modern AI Learning Academy.\n\nUse my Educator Referral Code: *${uniqueStudentCode}* on the ₹99 Premium Plan to earn ₹5 referral cashback!\n\n👉 Join here: ${shareUrl}`
-      : `🎓 *Learn • Share • Grow • Earn with Vacation Champions!*\n\nHey! I'm learning on Vacation Champions with fun quizzes, story adventures, and AI Academy.\n\nUse my Referral Code *${uniqueStudentCode}* when subscribing to the ₹99 Premium Plan for ₹5 instant cashback!\n\n👉 Join now: ${shareUrl}`;
+      ? `🏆 *Special Invitation from Educator ${account?.name || userName}!*\n\nEmpower your child with *MyStudyZone* - complete with daily quizzes, 45+ audio stories, 50 Shivaji Maharaj chapters, and modern AI Learning Academy.\n\nUse my Educator Referral Code: *${uniqueStudentCode}* on the ₹99 Premium Plan to earn ₹5 referral cashback!\n\n👉 Join here: ${shareUrl}`
+      : `🎓 *Learn • Share • Grow • Earn with MyStudyZone!*\n\nHey! I'm learning on MyStudyZone with fun quizzes, story adventures, and AI Academy.\n\nUse my Referral Code *${uniqueStudentCode}* when subscribing to the ₹99 Premium Plan for ₹5 instant cashback!\n\n👉 Join now: ${shareUrl}`;
 
     referralService.recordInviteClick(currentUserId).catch(() => {});
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -315,7 +315,7 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
               &quot;Learn More, Share Knowledge, Grow Together and Earn ₹5 Cashback per Referral!&quot;
             </p>
             <p className="text-xs sm:text-sm text-slate-300 mt-2">
-              Invite students &amp; fellow learners to Vacation Champions. Whenever a friend subscribes to the <strong className="text-amber-300">Premium Paid Plan (₹99)</strong> and their payment is verified, you earn <strong className="text-emerald-300">₹5 Referral Cashback</strong> directly into your withdrawable wallet!
+              Invite students &amp; fellow learners to MyStudyZone. Whenever a friend subscribes to the <strong className="text-amber-300">Premium Paid Plan (₹99)</strong> and their payment is verified, you earn <strong className="text-emerald-300">₹5 Referral Cashback</strong> directly into your withdrawable wallet!
             </p>
           </div>
 

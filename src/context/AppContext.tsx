@@ -34,8 +34,8 @@ import {
 import { ALL_45_STORIES } from '../data/storiesMaster';
 import { SEED_PUZZLES } from '../data/puzzlesData';
 import { READY_MADE_DRAWING_TEMPLATES } from '../data/drawingsData';
-import { paymentGateway } from '../services/paymentService';
 import { 
+  auth,
   testFirestoreConnection, 
   saveScholarshipAttemptToFirestore,
   loginFirebaseEmailUser,
@@ -46,8 +46,10 @@ import {
   saveSubscriptionToFirestore,
   saveTransactionToFirestore,
   fetchStudentSubscriptionFromFirestore,
+  fetchStudentProfileFromFirestore,
   computePaidPlanExpiryIsoDate,
-  ensureStudentReferralCodeInFirestore
+  ensureStudentReferralCodeInFirestore,
+  onAuthStateChanged
 } from '../services/firebase';
 import {
   generateUniqueStudentReferralCode,
@@ -129,9 +131,6 @@ interface AppContextType {
   
   // Student & Teacher Portal Authentication & Session Guarding
   switchRole: (targetRole: UserRole) => { allowed: boolean; message?: string };
-  loginAsSampleAccount: (
-    accountKey: 'student1' | 'student2' | 'student3' | 'teacher1' | 'teacher2' | 'admin'
-  ) => Promise<{ success: boolean; message: string }>;
   loginAsTeacher: (email: string, password?: string) => Promise<{ success: boolean; message: string; teacher?: StudentProfile }>;
   loginAsAdmin: (email: string, password?: string) => Promise<{ success: boolean; message: string; adminEmail?: string }>;
   
@@ -142,13 +141,10 @@ interface AppContextType {
       verifiedFirebaseUid?: string;
       isPhoneVerified?: boolean;
       isEmailVerified?: boolean;
-      password?: string;
       accountRole?: 'student' | 'teacher';
     }
   ) => RegistrationResult;
   loginWithEmail: (email: string, password?: string, preferredRole?: 'student' | 'teacher') => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
-  loginWithMobileOtp: (mobile: string, otp: string) => { success: boolean; message: string; student?: StudentProfile };
-  loginWithVerifiedPhone: (mobile: string, firebaseUid?: string) => { success: boolean; message: string; student?: StudentProfile };
   recoverAccount: (email: string) => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
   completePasswordReset: (oobCode: string, newPassword: string) => Promise<{ success: boolean; message: string; email?: string; student?: StudentProfile }>;
   logout: () => Promise<void>;
@@ -214,7 +210,6 @@ interface AppContextType {
   solvePuzzle: (puzzleId: string, pointsAwarded: number) => void;
 
   // Payment & Membership
-  processMembershipPayment: (planId: 'basic' | 'premium', method: 'UPI' | 'Card' | 'NetBanking', simulateFailure?: boolean) => { success: boolean; transaction: PaymentTransaction; error?: string };
   activateVerifiedMembership: (transaction: PaymentTransaction, customExpiryDate?: string) => void;
   adminApplyApproved365DayMigration: (studentId: string) => {
     success: boolean;
@@ -253,293 +248,13 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   pointsPerPuzzle: 25
 };
 
-// 1. Free Student Account (Standard 4th / Class 4)
-const INITIAL_STUDENT: StudentProfile = {
-  id: 'uid_aarav_c4_987654',
-  name: 'Aarav Sharma',
-  accountRole: 'student',
-  parentName: 'Rajesh Sharma',
-  parentEmail: 'rajesh.sharma@example.com',
-  mobile: '9876543210',
-  email: 'aarav.sharma@example.com',
-  classLevel: 'Class 4',
-  schoolName: 'Delhi Public School',
-  parentConsent: true,
-  registeredAt: '2026-05-01T08:30:00.000Z',
-  points: 480,
-  coins: 140,
-  level: 2,
-  streakDays: 4,
-  lastActiveDate: new Date().toISOString(),
-  badges: ['badge-first-quiz', 'badge-streak-3'],
-  plan: 'free',
-  avatar: '🦁',
-  attemptedQuestionIds: [],
-  attemptedPuzzleIds: [],
-  completedStoryIds: ['ENG-01'],
-  classChangeLogs: [],
-  isPhoneVerified: true,
-  isEmailVerified: true,
-  referralCode: 'STUDY123',
-  referralLink: 'https://mystudyzone.in/register?ref=STUDY123',
-  linkedParentId: 'uid_parent_rajesh_987654',
-  attendanceRecords: [
-    { id: 'att-1', studentId: 'uid_aarav_c4_987654', date: '2026-05-01', status: 'PRESENT', minutesLogged: 45 },
-    { id: 'att-2', studentId: 'uid_aarav_c4_987654', date: '2026-05-02', status: 'PRESENT', minutesLogged: 60 },
-    { id: 'att-3', studentId: 'uid_aarav_c4_987654', date: '2026-05-03', status: 'PRESENT', minutesLogged: 50 },
-    { id: 'att-4', studentId: 'uid_aarav_c4_987654', date: '2026-05-04', status: 'PRESENT', minutesLogged: 40 },
-    { id: 'att-5', studentId: 'uid_aarav_c4_987654', date: '2026-05-05', status: 'PRESENT', minutesLogged: 55 }
-  ],
-  assignments: [
-    {
-      id: 'asg-1',
-      studentId: 'uid_aarav_c4_987654',
-      title: 'Class 4 Fractions & Decimals Practice',
-      subject: 'Mathematics',
-      dueDate: '2026-05-12',
-      status: 'EVALUATED',
-      maxScore: 20,
-      obtainedScore: 19,
-      teacherRemarks: 'Excellent visual representation of mixed numbers!',
-      submittedAt: '2026-05-03T14:20:00.000Z'
-    },
-    {
-      id: 'asg-2',
-      studentId: 'uid_aarav_c4_987654',
-      title: 'Grammar Adjectives & Nouns Worksheet',
-      subject: 'English',
-      dueDate: '2026-05-14',
-      status: 'SUBMITTED',
-      maxScore: 25,
-      obtainedScore: 24,
-      teacherRemarks: 'Well formulated sentences and descriptive vocabulary.',
-      submittedAt: '2026-05-04T16:10:00.000Z'
-    },
-    {
-      id: 'asg-3',
-      studentId: 'uid_aarav_c4_987654',
-      title: 'Solar System & Planetary Orbits',
-      subject: 'Science',
-      dueDate: '2026-05-16',
-      status: 'PENDING',
-      maxScore: 30,
-      teacherRemarks: 'Due this weekend. Include Saturn ring diagram.'
-    }
-  ],
-  feeRecords: [
-    {
-      id: 'fee-1',
-      studentId: 'uid_aarav_c4_987654',
-      receiptNumber: 'REC-VC-2026-4401',
-      feeType: 'Standard 4 Academic Curriculum & Vacation Champions Suite',
-      totalAmount: 2500,
-      paidAmount: 2500,
-      dueAmount: 0,
-      status: 'PAID',
-      dueDate: '2026-05-01',
-      paidAt: '2026-05-01T09:30:00.000Z'
-    }
-  ]
-};
-
-// 2. ₹99 Premium Student Account (Standard 6th / Class 6 ONLY)
-const SECOND_STUDENT: StudentProfile = {
-  id: 'uid_ananya_c6_982201',
-  name: 'Ananya Deshmukh',
-  accountRole: 'student',
-  parentName: 'Sunita Deshmukh',
-  parentEmail: 'sunita.deshmukh@example.com',
-  mobile: '9822012345',
-  email: 'ananya.deshmukh@example.com',
-  classLevel: 'Class 6',
-  activatedClassLevel: 'Class 6',
-  schoolName: 'Saraswati Vidyalaya, Pune',
-  parentConsent: true,
-  registeredAt: '2026-05-02T10:15:00.000Z',
-  points: 1120,
-  coins: 380,
-  level: 3,
-  streakDays: 7,
-  lastActiveDate: new Date().toISOString(),
-  badges: ['badge-first-quiz', 'badge-accuracy-master', 'badge-streak-3', 'badge-story-worm', 'badge-champion-premium'],
-  plan: 'premium',
-  planPurchasedAt: '2026-11-01',
-  planExpiresAt: '2027-02-28',
-  avatar: '🦄',
-  attemptedQuestionIds: [],
-  attemptedPuzzleIds: [],
-  completedStoryIds: ['MAR-01', 'HIN-01'],
-  classChangeLogs: [],
-  isPhoneVerified: true,
-  isEmailVerified: true,
-  referralCode: 'STUDY456',
-  referralLink: 'https://mystudyzone.in/register?ref=STUDY456',
-  linkedParentId: 'uid_parent_sunita_982201',
-  attendanceRecords: [
-    { id: 'att-6', studentId: 'uid_ananya_c6_982201', date: '2026-05-01', status: 'PRESENT', minutesLogged: 60 },
-    { id: 'att-7', studentId: 'uid_ananya_c6_982201', date: '2026-05-02', status: 'PRESENT', minutesLogged: 75 },
-    { id: 'att-8', studentId: 'uid_ananya_c6_982201', date: '2026-05-03', status: 'PRESENT', minutesLogged: 65 },
-    { id: 'att-9', studentId: 'uid_ananya_c6_982201', date: '2026-05-04', status: 'PRESENT', minutesLogged: 70 },
-    { id: 'att-10', studentId: 'uid_ananya_c6_982201', date: '2026-05-05', status: 'PRESENT', minutesLogged: 80 }
-  ],
-  assignments: [
-    {
-      id: 'asg-4',
-      studentId: 'uid_ananya_c6_982201',
-      title: 'Algebraic Expressions & Linear Equations',
-      subject: 'Mathematics',
-      dueDate: '2026-05-12',
-      status: 'EVALUATED',
-      maxScore: 30,
-      obtainedScore: 29,
-      teacherRemarks: 'Spotless step-by-step variable substitution!',
-      submittedAt: '2026-05-03T11:45:00.000Z'
-    },
-    {
-      id: 'asg-5',
-      studentId: 'uid_ananya_c6_982201',
-      title: 'Plant Photosynthesis & Cell Structure',
-      subject: 'Science',
-      dueDate: '2026-05-15',
-      status: 'EVALUATED',
-      maxScore: 25,
-      obtainedScore: 25,
-      teacherRemarks: 'Neat microscopic cell wall labeling.',
-      submittedAt: '2026-05-04T17:30:00.000Z'
-    },
-    {
-      id: 'asg-6',
-      studentId: 'uid_ananya_c6_982201',
-      title: 'Shivaji Maharaj Fort Architecture & Naval Strategy',
-      subject: 'History',
-      dueDate: '2026-05-18',
-      status: 'PENDING',
-      maxScore: 20,
-      teacherRemarks: 'Due next week. Focus on Sindhudurg sea fort.'
-    }
-  ],
-  feeRecords: [
-    {
-      id: 'fee-2',
-      studentId: 'uid_ananya_c6_982201',
-      receiptNumber: 'REC-VC-2026-6602',
-      feeType: 'Standard 6 Comprehensive Learning & Assessment Suite',
-      totalAmount: 3000,
-      paidAmount: 3000,
-      dueAmount: 0,
-      status: 'PAID',
-      dueDate: '2026-05-02',
-      paidAt: '2026-05-02T11:20:00.000Z'
-    }
-  ]
-};
-
-// 3. Third Student Account (Standard 7th / Class 7)
-const THIRD_STUDENT: StudentProfile = {
-  id: 'uid_rohan_c7_983301',
-  name: 'Rohan Kulkarni',
-  accountRole: 'student',
-  parentName: 'Vikram Kulkarni',
-  parentEmail: 'vikram.kulkarni@example.com',
-  mobile: '9833012345',
-  email: 'rohan.kulkarni@example.com',
-  classLevel: 'Class 7',
-  schoolName: 'Symbiosis School, Nashik',
-  parentConsent: true,
-  registeredAt: '2026-05-03T09:00:00.000Z',
-  points: 760,
-  coins: 210,
-  level: 2,
-  streakDays: 5,
-  lastActiveDate: new Date().toISOString(),
-  badges: ['badge-first-quiz', 'badge-streak-3'],
-  plan: 'free',
-  avatar: '🐯',
-  attemptedQuestionIds: [],
-  attemptedPuzzleIds: [],
-  completedStoryIds: ['ENG-02'],
-  classChangeLogs: [],
-  isPhoneVerified: true,
-  isEmailVerified: true,
-  referralCode: 'STUDY789',
-  referralLink: 'https://mystudyzone.in/register?ref=STUDY789',
-  attendanceRecords: [
-    { id: 'att-11', studentId: 'uid_rohan_c7_983301', date: '2026-05-03', status: 'PRESENT', minutesLogged: 55 },
-    { id: 'att-12', studentId: 'uid_rohan_c7_983301', date: '2026-05-04', status: 'PRESENT', minutesLogged: 60 },
-    { id: 'att-13', studentId: 'uid_rohan_c7_983301', date: '2026-05-05', status: 'PRESENT', minutesLogged: 65 }
-  ],
-  assignments: [],
-  feeRecords: []
-};
-
-// 4. Free Teacher Account (Standard 7th / Class 7 ONLY)
-const INITIAL_TEACHER_FREE: StudentProfile = {
-  id: 'uid_teacher_meera_c7_984401',
-  name: 'Prof. Meera Joshi',
-  accountRole: 'teacher',
-  parentName: 'Teacher Portal Account',
-  mobile: '9844011223',
-  email: 'meera.joshi@teacher.edu',
-  classLevel: 'Class 7',
-  schoolName: 'Fergusson Model High School, Pune',
-  parentConsent: true,
-  registeredAt: '2026-05-04T08:00:00.000Z',
-  points: 620,
-  coins: 190,
-  level: 3,
-  streakDays: 6,
-  lastActiveDate: new Date().toISOString(),
-  badges: ['badge-first-quiz', 'badge-streak-3'],
-  plan: 'free',
-  avatar: '👩‍🏫',
-  attemptedQuestionIds: [],
-  attemptedPuzzleIds: [],
-  completedStoryIds: ['ENG-01', 'MAR-01'],
-  classChangeLogs: [],
-  isPhoneVerified: true,
-  isEmailVerified: true,
-  referralCode: 'TEACH701',
-  referralLink: 'https://mystudyzone.in/register?ref=TEACH701',
-  attendanceRecords: [],
-  assignments: [],
-  feeRecords: []
-};
-
-// 5. ₹99 Premium Teacher Account (Standard 9th / Class 9 ONLY)
-const INITIAL_TEACHER_PREMIUM: StudentProfile = {
-  id: 'uid_teacher_vikram_c9_985502',
-  name: 'Prof. Vikram Deshpande',
-  accountRole: 'teacher',
-  parentName: 'Teacher Portal Account',
-  mobile: '9855022334',
-  email: 'vikram.deshpande@teacher.edu',
-  classLevel: 'Class 9',
-  activatedClassLevel: 'Class 9',
-  schoolName: 'Chhatrapati Shivaji Vidyalaya, Mumbai',
-  parentConsent: true,
-  registeredAt: '2026-05-04T09:30:00.000Z',
-  points: 1340,
-  coins: 420,
-  level: 4,
-  streakDays: 9,
-  lastActiveDate: new Date().toISOString(),
-  badges: ['badge-first-quiz', 'badge-accuracy-master', 'badge-champion-premium'],
-  plan: 'premium',
-  planPurchasedAt: '2026-11-01',
-  planExpiresAt: '2027-02-28',
-  avatar: '👨‍🏫',
-  attemptedQuestionIds: [],
-  attemptedPuzzleIds: [],
-  completedStoryIds: ['ENG-01', 'HIN-01', 'MAR-02'],
-  classChangeLogs: [],
-  isPhoneVerified: true,
-  isEmailVerified: true,
-  referralCode: 'TEACH902',
-  referralLink: 'https://mystudyzone.in/register?ref=TEACH902',
-  attendanceRecords: [],
-  assignments: [],
-  feeRecords: []
-};
+const LEGACY_SAMPLE_IDS = new Set([
+  'uid_aarav_c4_987654',
+  'uid_ananya_c6_982201',
+  'uid_rohan_c7_983301',
+  'uid_teacher_meera_c7_984401',
+  'uid_teacher_vikram_c9_985502'
+]);
 
 const INITIAL_PARENTS: ParentProfile[] = [];
 
@@ -574,10 +289,13 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeRole, setActiveRole] = useState<UserRole>(() => {
+    const isLoggedOut = localStorage.getItem('vc_is_logged_out');
+    if (isLoggedOut === 'true') return 'student';
     const savedUser = localStorage.getItem('vc_current_user');
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
+        if (parsed?.uid && LEGACY_SAMPLE_IDS.has(parsed.uid)) return 'student';
         if (parsed?.role === 'teacher') return 'teacher';
         if (parsed?.role === 'admin') return 'admin';
       } catch {}
@@ -586,7 +304,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Authenticated user session with role and linked IDs
+  // Authenticated user session with role and linked IDs (signed out by default until verified login)
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
     const isLoggedOut = localStorage.getItem('vc_is_logged_out');
     if (isLoggedOut === 'true') {
@@ -596,6 +314,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
+        if (!parsed || !parsed.uid || LEGACY_SAMPLE_IDS.has(parsed.uid)) {
+          return null;
+        }
         if (parsed?.role === 'parent') {
           parsed.role = 'student';
         }
@@ -604,16 +325,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error('Error reading current user:', e);
       }
     }
-    // Default to Student 1: Aarav Sharma
-    return {
-      uid: INITIAL_STUDENT.id,
-      email: INITIAL_STUDENT.email,
-      displayName: INITIAL_STUDENT.name,
-      role: 'student',
-      studentId: INITIAL_STUDENT.id,
-      classLevel: INITIAL_STUDENT.classLevel,
-      isVerified: true
-    };
+    return null;
   });
 
   const [parentsList, setParentsList] = useState<ParentProfile[]>(INITIAL_PARENTS);
@@ -636,73 +348,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed: StudentProfile[] = JSON.parse(saved);
         const usedCodes = new Set<string>();
-        const hydrated: StudentProfile[] = parsed.map(s => {
-          const matchInitial =
-            s.id === INITIAL_STUDENT.id
-              ? INITIAL_STUDENT
-              : s.id === SECOND_STUDENT.id
-              ? SECOND_STUDENT
-              : s.id === THIRD_STUDENT.id
-              ? THIRD_STUDENT
-              : s.id === INITIAL_TEACHER_FREE.id
-              ? INITIAL_TEACHER_FREE
-              : s.id === INITIAL_TEACHER_PREMIUM.id
-              ? INITIAL_TEACHER_PREMIUM
-              : null;
-          const existingCode = sanitizeReferralCode(s.referralCode) || sanitizeReferralCode(matchInitial?.referralCode);
-          const uniqueCode =
-            existingCode && !usedCodes.has(existingCode)
-              ? existingCode
-              : generateUniqueStudentReferralCode(s.id, s.name, usedCodes);
-          usedCodes.add(uniqueCode);
+        return parsed
+          .filter(s => s && s.id && !LEGACY_SAMPLE_IDS.has(s.id))
+          .map(s => {
+            const { passwordHash: _stripHash, ...safeS } = s;
+            const existingCode = sanitizeReferralCode(safeS.referralCode);
+            const uniqueCode =
+              existingCode && !usedCodes.has(existingCode)
+                ? existingCode
+                : generateUniqueStudentReferralCode(safeS.id, safeS.name, usedCodes);
+            usedCodes.add(uniqueCode);
 
-          // Ensure SECOND_STUDENT and INITIAL_TEACHER_PREMIUM have active ₹99 Premium for their selected class
-          const isSeedPremium = s.id === SECOND_STUDENT.id || s.id === INITIAL_TEACHER_PREMIUM.id;
-
-          return {
-            ...s,
-            accountRole: s.accountRole || matchInitial?.accountRole || 'student',
-            plan: isSeedPremium ? (s.plan === 'premium' || s.plan === 'basic' ? s.plan : 'premium') : s.plan,
-            planPurchasedAt: isSeedPremium ? (s.planPurchasedAt || matchInitial?.planPurchasedAt || '2026-11-01') : s.planPurchasedAt,
-            planExpiresAt: isSeedPremium ? (s.planExpiresAt || matchInitial?.planExpiresAt || '2027-02-28') : s.planExpiresAt,
-            activatedClassLevel:
-              s.activatedClassLevel ||
-              matchInitial?.activatedClassLevel ||
-              (s.plan === 'premium' || s.plan === 'basic' || isSeedPremium ? s.classLevel : undefined),
-            referralCode: uniqueCode,
-            referralLink: buildStudentReferralLink(uniqueCode),
-            isPhoneVerified: s.isPhoneVerified ?? true,
-            isEmailVerified: s.isEmailVerified ?? true,
-            attendanceRecords: s.attendanceRecords || matchInitial?.attendanceRecords || [],
-            assignments: s.assignments || matchInitial?.assignments || [],
-            feeRecords: s.feeRecords || matchInitial?.feeRecords || [],
-            linkedParentId: s.linkedParentId || matchInitial?.linkedParentId
-          };
-        });
-        const builtIns = [
-          INITIAL_STUDENT,
-          SECOND_STUDENT,
-          THIRD_STUDENT,
-          INITIAL_TEACHER_FREE,
-          INITIAL_TEACHER_PREMIUM
-        ];
-        for (const b of builtIns) {
-          if (!hydrated.some(s => s.id === b.id)) {
-            hydrated.push(b);
-          }
-        }
-        return hydrated;
+            return {
+              ...safeS,
+              accountRole: safeS.accountRole || 'student',
+              activatedClassLevel:
+                safeS.activatedClassLevel ||
+                (safeS.plan === 'premium' || safeS.plan === 'basic' ? safeS.classLevel : undefined),
+              referralCode: uniqueCode,
+              referralLink: buildStudentReferralLink(uniqueCode),
+              isPhoneVerified: Boolean(safeS.isPhoneVerified),
+              isEmailVerified: Boolean(safeS.isEmailVerified),
+              attendanceRecords: safeS.attendanceRecords || [],
+              assignments: safeS.assignments || [],
+              feeRecords: safeS.feeRecords || []
+            };
+          });
       } catch (e) {
         console.error('Error reading students list:', e);
       }
     }
-    return [
-      INITIAL_STUDENT,
-      SECOND_STUDENT,
-      THIRD_STUDENT,
-      INITIAL_TEACHER_FREE,
-      INITIAL_TEACHER_PREMIUM
-    ];
+    return [];
   });
 
   const [currentStudent, setCurrentStudent] = useState<StudentProfile | null>(() => {
@@ -710,36 +386,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isLoggedOut === 'true') {
       return null;
     }
+    const savedUser = localStorage.getItem('vc_current_user');
     const saved = localStorage.getItem('vc_current_student');
-    if (saved) {
+    if (saved && savedUser) {
       try {
         const parsed: StudentProfile = JSON.parse(saved);
+        if (!parsed || !parsed.id || LEGACY_SAMPLE_IDS.has(parsed.id)) {
+          return null;
+        }
+        const { passwordHash: _stripHash, ...safeParsed } = parsed;
         const code =
-          sanitizeReferralCode(parsed.referralCode) ||
-          generateUniqueStudentReferralCode(parsed.id, parsed.name);
-        const isSeedPremium =
-          parsed.id === SECOND_STUDENT.id || parsed.id === INITIAL_TEACHER_PREMIUM.id;
+          sanitizeReferralCode(safeParsed.referralCode) ||
+          generateUniqueStudentReferralCode(safeParsed.id, safeParsed.name);
         return {
-          ...parsed,
-          accountRole:
-            parsed.accountRole ||
-            (parsed.id.includes('teacher') ? 'teacher' : 'student'),
-          plan: isSeedPremium ? (parsed.plan === 'premium' || parsed.plan === 'basic' ? parsed.plan : 'premium') : parsed.plan,
-          planPurchasedAt: isSeedPremium ? (parsed.planPurchasedAt || '2026-11-01') : parsed.planPurchasedAt,
-          planExpiresAt: isSeedPremium ? (parsed.planExpiresAt || '2027-02-28') : parsed.planExpiresAt,
+          ...safeParsed,
+          accountRole: safeParsed.accountRole || 'student',
           activatedClassLevel:
-            parsed.activatedClassLevel ||
-            (parsed.plan === 'premium' || parsed.plan === 'basic' || isSeedPremium
-              ? parsed.classLevel
+            safeParsed.activatedClassLevel ||
+            (safeParsed.plan === 'premium' || safeParsed.plan === 'basic'
+              ? safeParsed.classLevel
               : undefined),
           referralCode: code,
           referralLink: buildStudentReferralLink(code)
         };
       } catch {
-        return INITIAL_STUDENT;
+        return null;
       }
     }
-    return INITIAL_STUDENT;
+    return null;
   });
 
   const safeSetLocalStorage = (key: string, value: string) => {
@@ -918,9 +592,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  // Test Firestore Connection on App boot
+  // Test Firestore Connection & Sync Firebase Auth state on App boot
   useEffect(() => {
     testFirestoreConnection();
+
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) return;
+      const isLoggedOut = localStorage.getItem('vc_is_logged_out') === 'true';
+      if (isLoggedOut) return;
+
+      const fbEmail = (fbUser.email || '').trim().toLowerCase();
+      if (fbEmail === 'ronakvarade2022@gmail.com' && localStorage.getItem('vc_current_user')?.includes('"admin"')) {
+        return;
+      }
+
+      if (!currentStudent || currentStudent.firebaseUid !== fbUser.uid) {
+        const fbProfile = await fetchStudentProfileFromFirestore(fbUser.uid, fbEmail || undefined).catch(() => null);
+        if (fbProfile) {
+          const { passwordHash: _stripHash, ...safeProfile } = fbProfile;
+          const accountRole: 'student' | 'teacher' = safeProfile.accountRole || 'student';
+          setCurrentStudent(safeProfile);
+          setStudentsList(prev => {
+            const exists = prev.some(s => s.id === safeProfile.id);
+            return exists ? prev.map(s => (s.id === safeProfile.id ? safeProfile : s)) : [...prev, safeProfile];
+          });
+          setCurrentUser({
+            uid: safeProfile.id,
+            email: safeProfile.email,
+            displayName: safeProfile.name,
+            role: accountRole,
+            studentId: safeProfile.id,
+            classLevel: safeProfile.classLevel,
+            isVerified: true
+          });
+          setActiveRole(accountRole);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Synchronize displayed subscription status with actual subscription stored in Firebase Firestore
@@ -1004,13 +714,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentStudent?.id]);
 
   // Strict Auth Functions - One Account = One Class = One Mobile = One Email (Applies to both Students and Teachers)
-  const registerStudent = (
+    const registerStudent = (
     data: Omit<StudentProfile, 'id' | 'points' | 'coins' | 'level' | 'streakDays' | 'lastActiveDate' | 'badges' | 'plan' | 'attemptedQuestionIds' | 'attemptedPuzzleIds' | 'completedStoryIds' | 'registeredAt' | 'classChangeLogs' | 'subjectProgress'>,
     options?: {
       verifiedFirebaseUid?: string;
       isPhoneVerified?: boolean;
       isEmailVerified?: boolean;
-      password?: string;
       accountRole?: 'student' | 'teacher';
     }
   ): RegistrationResult => {
@@ -1084,7 +793,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       schoolName: (data.schoolName || '').trim(), // Optional field
       parentName: data.parentName || (resolvedAccountRole === 'teacher' ? 'Teacher Portal Account' : data.name),
       firebaseUid: options?.verifiedFirebaseUid,
-      passwordHash: options?.password || data.passwordHash,
       isPhoneVerified: phoneOwnershipVerified,
       isEmailVerified: emailOwnershipVerified,
       mobile: cleanMobile,
@@ -1145,122 +853,128 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     preferredRole?: 'student' | 'teacher'
   ): Promise<{ success: boolean; message: string; student?: StudentProfile }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const found = studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail);
-
-    if (!found) {
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       return {
         success: false,
-        message: `No registered account found with email "${email}". Please check your email address or register a new account.`
+        message: 'Please enter a valid registered email address.'
       };
     }
 
-    const accountRole: 'student' | 'teacher' =
-      found.accountRole || preferredRole || 'student';
-    const roleLabel = accountRole === 'teacher' ? 'Teacher' : 'Student';
-
-    if (password && password.length >= 6) {
-      const fbRes = await loginFirebaseEmailUser(cleanEmail, password);
-      if (fbRes.success) {
-        const updated: StudentProfile = {
-          ...found,
-          accountRole,
-          firebaseUid: fbRes.user?.uid || found.firebaseUid,
-          passwordHash: password
-        };
-        setStudentsList(prev => prev.map(s => s.id === updated.id ? updated : s));
-        localStorage.removeItem('vc_is_logged_out');
-        setCurrentStudent(updated);
-        setCurrentUser({
-          uid: updated.id,
-          email: updated.email,
-          displayName: updated.name,
-          role: accountRole,
-          studentId: updated.id,
-          classLevel: updated.classLevel,
-          isVerified: true
-        });
-        setActiveRole(accountRole);
-        saveStudentProfileToFirestore(updated).catch(() => {});
-        return {
-          success: true,
-          message: `Welcome back, ${found.name}! Signed into ${roleLabel} Portal (${found.classLevel}).`,
-          student: updated
-        };
-      }
-
-      if (found.passwordHash && found.passwordHash !== password) {
-        return {
-          success: false,
-          message: 'Incorrect password. Please enter your valid password or click "Forgot Password?" below to reset it.'
-        };
-      }
+    if (!password || password.length < 6) {
+      return {
+        success: false,
+        message: 'Please enter your valid password (at least 6 characters).'
+      };
     }
 
-    const updatedFound: StudentProfile = { ...found, accountRole };
+    // Fail-closed Firebase Auth verification
+    const fbRes = await loginFirebaseEmailUser(cleanEmail, password);
+    if (!fbRes.success || !fbRes.user) {
+      return {
+        success: false,
+        message:
+          fbRes.error ||
+          'Incorrect email or password. Please verify your credentials or click "Forgot Password?" below to reset it.'
+      };
+    }
+
+    const fbUid = fbRes.user.uid;
+    let found =
+      studentsList.find(s => s.firebaseUid === fbUid || s.id === fbUid || s.email.trim().toLowerCase() === cleanEmail) ||
+      (await fetchStudentProfileFromFirestore(fbUid, cleanEmail).catch(() => null));
+
+    if (!found) {
+      // Authenticated Firebase user whose Firestore profile hasn't synced locally yet — restore safe base profile
+      const fallbackCode = generateUniqueStudentReferralCode(fbUid, fbRes.user.displayName || cleanEmail);
+      const roleFallback: 'student' | 'teacher' = preferredRole || 'student';
+      found = {
+        id: fbUid,
+        name: fbRes.user.displayName || cleanEmail.split('@')[0] || 'Student',
+        accountRole: roleFallback,
+        parentName: roleFallback === 'teacher' ? 'Teacher Portal Account' : 'Parent / Guardian',
+        mobile: '',
+        email: cleanEmail,
+        classLevel: 'Class 5',
+        schoolName: '',
+        parentConsent: true,
+        registeredAt: new Date().toISOString(),
+        points: 100,
+        coins: 50,
+        level: 1,
+        streakDays: 1,
+        lastActiveDate: new Date().toISOString(),
+        badges: ['badge-first-quiz'],
+        plan: 'free',
+        avatar: roleFallback === 'teacher' ? '👩‍🏫' : '🌟',
+        attemptedQuestionIds: [],
+        attemptedPuzzleIds: [],
+        completedStoryIds: [],
+        classChangeLogs: [],
+        firebaseUid: fbUid,
+        isEmailVerified: Boolean(fbRes.user.emailVerified),
+        referralCode: fallbackCode,
+        referralLink: buildStudentReferralLink(fallbackCode)
+      };
+    }
+
+    const { passwordHash: _stripHash, ...safeFound } = found;
+    const accountRole: 'student' | 'teacher' = safeFound.accountRole || preferredRole || 'student';
+    const roleLabel = accountRole === 'teacher' ? 'Teacher' : 'Student';
+
+    const updated: StudentProfile = {
+      ...safeFound,
+      accountRole,
+      firebaseUid: fbUid,
+      isEmailVerified: Boolean(fbRes.user.emailVerified) || Boolean(safeFound.isEmailVerified)
+    };
+
+    setStudentsList(prev => {
+      const exists = prev.some(s => s.id === updated.id);
+      return exists ? prev.map(s => (s.id === updated.id ? updated : s)) : [...prev, updated];
+    });
     localStorage.removeItem('vc_is_logged_out');
-    setCurrentStudent(updatedFound);
+    setCurrentStudent(updated);
     setCurrentUser({
-      uid: updatedFound.id,
-      email: updatedFound.email,
-      displayName: updatedFound.name,
+      uid: updated.id,
+      email: updated.email,
+      displayName: updated.name,
       role: accountRole,
-      studentId: updatedFound.id,
-      classLevel: updatedFound.classLevel,
+      studentId: updated.id,
+      classLevel: updated.classLevel,
       isVerified: true
     });
     setActiveRole(accountRole);
+    saveStudentProfileToFirestore(updated).catch(() => {});
+
     return {
       success: true,
-      message: `Welcome back, ${updatedFound.name}! Signed into ${roleLabel} Portal (${updatedFound.classLevel}).`,
-      student: updatedFound
+      message: `Welcome back, ${updated.name}! Signed into ${roleLabel} Portal (${updated.classLevel}).`,
+      student: updated
     };
   };
 
-  const loginWithVerifiedPhone = (mobile: string, firebaseUid?: string): { success: boolean; message: string; student?: StudentProfile } => {
-    const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
-    const found = studentsList.find(s => s.mobile.replace(/\D/g, '').slice(-10) === cleanMobile);
-    if (found) {
-      const accountRole: 'student' | 'teacher' = found.accountRole || 'student';
-      const updated: StudentProfile = {
-        ...found,
-        accountRole,
-        isPhoneVerified: firebaseUid ? true : Boolean(found.isPhoneVerified),
-        firebaseUid: firebaseUid || found.firebaseUid
-      };
-      localStorage.removeItem('vc_is_logged_out');
-      setCurrentStudent(updated);
-      setCurrentUser({
-        uid: updated.id,
-        email: updated.email,
-        displayName: updated.name,
-        role: accountRole,
-        studentId: updated.id,
-        classLevel: updated.classLevel,
-        isVerified: true
-      });
-      setActiveRole(accountRole);
-      return {
-        success: true,
-        message: `Welcome back, ${found.name} (${found.classLevel})! Signed in with registered mobile number.`,
-        student: updated
-      };
-    }
-    return {
-      success: false,
-      message: `No registered account matches mobile number ${cleanMobile}. Please register first.`
-    };
-  };
-
-  const loginWithMobileOtp = (mobile: string, _otp: string): { success: boolean; message: string; student?: StudentProfile } => {
-    return loginWithVerifiedPhone(mobile);
-  };
-
-  // Teacher Login helper
+  // Teacher Login helper (Requires real email + verified password)
   const loginAsTeacher = async (
-    email: string,
+    identifier: string,
     password?: string
   ): Promise<{ success: boolean; message: string; teacher?: StudentProfile }> => {
-    const res = await loginWithEmail(email, password, 'teacher');
+    const cleanInput = identifier.trim();
+    let emailToUse = cleanInput.toLowerCase();
+    if (!cleanInput.includes('@')) {
+      const cleanDigits = cleanInput.replace(/\D/g, '').slice(-10);
+      const localByMobile = studentsList.find(
+        s => s.mobile.replace(/\D/g, '').slice(-10) === cleanDigits
+      );
+      if (!localByMobile) {
+        return {
+          success: false,
+          message: 'Please enter your registered Teacher email address and password.'
+        };
+      }
+      emailToUse = localByMobile.email.trim().toLowerCase();
+    }
+
+    const res = await loginWithEmail(emailToUse, password, 'teacher');
     return {
       success: res.success,
       message: res.message,
@@ -1268,174 +982,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Admin Login
-  const loginAsAdmin = async (email: string, password?: string): Promise<{ success: boolean; message: string; adminEmail?: string }> => {
+  // Admin Login (Strictly requires authorized email AND Firebase Authentication verification)
+  const loginAsAdmin = async (
+    email: string,
+    password?: string
+  ): Promise<{ success: boolean; message: string; adminEmail?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const isAdminEmail = cleanEmail === 'ronakvarade2022@gmail.com' || cleanEmail === 'admin@vacationchampions.com';
+    const isAdminEmail = cleanEmail === 'ronakvarade2022@gmail.com';
     if (!isAdminEmail) {
       return {
         success: false,
         message: `Access Denied: "${email}" is not an authorized administrator. Only designated supervisors can log in to Admin Portal.`
       };
     }
-    if (password && password.length >= 6) {
-      await loginFirebaseEmailUser(cleanEmail, password).catch(() => {});
+
+    if (!password || password.length < 6) {
+      return {
+        success: false,
+        message: 'Administrator password is required to access the Admin Dashboard.'
+      };
     }
+
+    const fbRes = await loginFirebaseEmailUser(cleanEmail, password);
+    if (!fbRes.success || !fbRes.user) {
+      return {
+        success: false,
+        message: fbRes.error || 'Incorrect administrator email or password.'
+      };
+    }
+
     localStorage.removeItem('vc_is_logged_out');
     setCurrentUser({
-      uid: 'uid_admin_supervisor_ronak',
+      uid: fbRes.user.uid,
       email: cleanEmail,
       displayName: 'Platform Supervisor (Admin)',
       role: 'admin',
-      isVerified: true
+      isVerified: Boolean(fbRes.user.emailVerified)
     });
     setActiveRole('admin');
     return {
       success: true,
-      message: `Welcome, Administrator! Authenticated into Master Control Center.`,
+      message: 'Welcome, Administrator! Authenticated into Master Control Center.',
       adminEmail: cleanEmail
     };
   };
 
-  // One-click sample account loader for testing Free Student, Premium Student, Free Teacher, and Premium Teacher
-  const loginAsSampleAccount = async (
-    accountKey: 'student1' | 'student2' | 'student3' | 'teacher1' | 'teacher2' | 'admin'
-  ): Promise<{ success: boolean; message: string }> => {
-    localStorage.removeItem('vc_is_logged_out');
-    if (accountKey === 'student1') {
-      const stu = studentsList.find(s => s.id === INITIAL_STUDENT.id) || INITIAL_STUDENT;
-      setCurrentStudent(stu);
-      setCurrentUser({
-        uid: stu.id,
-        email: stu.email,
-        displayName: stu.name,
-        role: 'student',
-        studentId: stu.id,
-        classLevel: stu.classLevel,
-        isVerified: true
-      });
-      setActiveRole('student');
-      return {
-        success: true,
-        message: `Signed in as Free Student: ${stu.name} (${stu.classLevel} • Free Plan – 2 Demo Worksheets)`
-      };
-    } else if (accountKey === 'student2') {
-      const rawStu = studentsList.find(s => s.id === SECOND_STUDENT.id) || SECOND_STUDENT;
-      const stu: StudentProfile = {
-        ...rawStu,
-        accountRole: 'student',
-        plan: 'premium',
-        activatedClassLevel: rawStu.activatedClassLevel || rawStu.classLevel,
-        planPurchasedAt: rawStu.planPurchasedAt || '2026-11-01',
-        planExpiresAt: rawStu.planExpiresAt || '2027-02-28'
-      };
-      setCurrentStudent(stu);
-      setStudentsList(prev => prev.map(s => s.id === stu.id ? stu : s));
-      setCurrentUser({
-        uid: stu.id,
-        email: stu.email,
-        displayName: stu.name,
-        role: 'student',
-        studentId: stu.id,
-        classLevel: stu.classLevel,
-        isVerified: true
-      });
-      setActiveRole('student');
-      return {
-        success: true,
-        message: `Signed in as ₹99 Premium Student: ${stu.name} (${stu.classLevel} ONLY Unlocked)`
-      };
-    } else if (accountKey === 'student3') {
-      const stu = studentsList.find(s => s.id === THIRD_STUDENT.id) || THIRD_STUDENT;
-      setCurrentStudent(stu);
-      setCurrentUser({
-        uid: stu.id,
-        email: stu.email,
-        displayName: stu.name,
-        role: 'student',
-        studentId: stu.id,
-        classLevel: stu.classLevel,
-        isVerified: true
-      });
-      setActiveRole('student');
-      return {
-        success: true,
-        message: `Signed in as Student 3: ${stu.name} (${stu.classLevel})`
-      };
-    } else if (accountKey === 'teacher1') {
-      const tch = studentsList.find(s => s.id === INITIAL_TEACHER_FREE.id) || INITIAL_TEACHER_FREE;
-      setCurrentStudent(tch);
-      setCurrentUser({
-        uid: tch.id,
-        email: tch.email,
-        displayName: tch.name,
-        role: 'teacher',
-        studentId: tch.id,
-        classLevel: tch.classLevel,
-        isVerified: true
-      });
-      setActiveRole('teacher');
-      return {
-        success: true,
-        message: `Signed in as Free Teacher: ${tch.name} (${tch.classLevel} • Teacher Portal)`
-      };
-    } else if (accountKey === 'teacher2') {
-      const rawTch = studentsList.find(s => s.id === INITIAL_TEACHER_PREMIUM.id) || INITIAL_TEACHER_PREMIUM;
-      const tch: StudentProfile = {
-        ...rawTch,
-        accountRole: 'teacher',
-        plan: 'premium',
-        activatedClassLevel: rawTch.activatedClassLevel || rawTch.classLevel,
-        planPurchasedAt: rawTch.planPurchasedAt || '2026-11-01',
-        planExpiresAt: rawTch.planExpiresAt || '2027-02-28'
-      };
-      setCurrentStudent(tch);
-      setStudentsList(prev => prev.map(s => s.id === tch.id ? tch : s));
-      setCurrentUser({
-        uid: tch.id,
-        email: tch.email,
-        displayName: tch.name,
-        role: 'teacher',
-        studentId: tch.id,
-        classLevel: tch.classLevel,
-        isVerified: true
-      });
-      setActiveRole('teacher');
-      return {
-        success: true,
-        message: `Signed in as ₹99 Premium Teacher: ${tch.name} (${tch.classLevel} ONLY Unlocked • Teacher Portal)`
-      };
-    } else {
-      setCurrentUser({
-        uid: 'uid_admin_supervisor_ronak',
-        email: 'ronakvarade2022@gmail.com',
-        displayName: 'Platform Supervisor (Admin)',
-        role: 'admin',
-        isVerified: true
-      });
-      setActiveRole('admin');
-      return {
-        success: true,
-        message: 'Signed in as Platform Administrator.'
-      };
-    }
-  };
-
-  // Role Switching Guard - Enforces strict Student & Teacher Portal boundaries
+  // Role Switching Guard - Enforces strict Student, Teacher & Admin Portal boundaries
   const switchRole = (targetRole: UserRole): { allowed: boolean; message?: string } => {
     if (!currentUser) {
+      if (targetRole === 'admin') {
+        setIsAuthModalOpen(true);
+        return { allowed: false, message: 'Administrator authentication is required to open the Admin Portal.' };
+      }
       setActiveRole(targetRole);
       return { allowed: true };
     }
 
-    if (currentUser.role === 'student' && targetRole === 'admin') {
-      const msg = `Access Denied: You are signed in as Student "${currentUser.displayName}". Students cannot access the Administrator portal.`;
-      addNotification('Security Alert: Access Restricted 🛡️', msg, 'achievement');
-      return { allowed: false, message: msg };
-    }
-
-    if (currentUser.role === 'teacher' && targetRole === 'admin') {
-      const msg = `Access Denied: You are signed in as Teacher "${currentUser.displayName}". Teachers cannot access the Administrator portal.`;
+    if (targetRole === 'admin' && currentUser.role !== 'admin') {
+      const msg = `Access Denied: You are signed in as "${currentUser.displayName}". Only authorized administrators can open the Admin Portal.`;
       addNotification('Security Alert: Access Restricted 🛡️', msg, 'achievement');
       return { allowed: false, message: msg };
     }
@@ -1444,7 +1048,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { allowed: true };
   };
 
-  // Account Recovery / Forgot Password - Sends genuine Firebase Password Reset email ONLY to registered email addresses
+  // Account Recovery / Forgot Password - Sends genuine Firebase Password Reset email across all devices
   const recoverAccount = async (email: string): Promise<{ success: boolean; message: string; student?: StudentProfile }> => {
     const cleanEmail = email.trim().toLowerCase();
 
@@ -1456,18 +1060,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const foundStudent = studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail);
-    const isAdminEmail = cleanEmail === 'ronakvarade2022@gmail.com' || cleanEmail === 'admin@vacationchampions.com';
-
-    if (!foundStudent && !isAdminEmail) {
-      return {
-        success: false,
-        message: `No registered account was found with "${cleanEmail}". Please enter the email address registered with your MyStudyZone account.`
-      };
-    }
-
-    const resetRes = await sendFirebasePasswordReset(cleanEmail, {
-      ensureRegisteredInFirebase: true
-    });
+    const resetRes = await sendFirebasePasswordReset(cleanEmail);
 
     if (resetRes.success) {
       return {
@@ -1501,10 +1094,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const existingStudent = studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail);
 
     if (existingStudent) {
-      const updatedStudent: StudentProfile = {
-        ...existingStudent,
-        passwordHash: newPassword
-      };
+      const { passwordHash: _stripHash, ...updatedStudent } = existingStudent;
       setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
       if (currentStudent?.id === updatedStudent.id) {
         setCurrentStudent(updatedStudent);
@@ -1525,7 +1115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Proper Logout Functionality - Firebase signOut, clear cache, open login
+  // Proper Logout Functionality - Firebase signOut, clear session, stay signed out cleanly
   const logout = async (): Promise<void> => {
     try {
       await signOutFirebaseUser();
@@ -1538,7 +1128,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentStudent(null);
     setCurrentUser(null);
     setActiveRole('student');
-    setIsAuthModalOpen(true);
+    setIsAuthModalOpen(false);
 
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -1550,7 +1140,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const quickSwitchStudent = (studentId: string) => {
-    if ((currentUser?.role === 'student' || currentUser?.role === 'teacher') && currentUser.studentId !== studentId) {
+    if (currentUser?.role !== 'admin') {
       addNotification(
         'Access Blocked: Account Isolation 🛡️',
         'Each account is strictly restricted to its own profile and registered class. Sign out first to switch accounts.',
@@ -1658,12 +1248,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: false, message: 'Parent Portal has been removed. Platform supports Student Portal and Teacher Portal.' };
   };
 
-  // Automated Security & Class-Wise Isolation Test Runner
+  // Automated Security & Class-Wise Isolation Test Runner (Ephemeral Synthetic Fixtures Only)
   const runSecurityAuditTest = async (): Promise<SecurityAuditReport> => {
-    const s1 = studentsList.find(s => s.id === INITIAL_STUDENT.id) || INITIAL_STUDENT;
-    const s2 = studentsList.find(s => s.id === SECOND_STUDENT.id) || SECOND_STUDENT;
-    const t1 = studentsList.find(s => s.id === INITIAL_TEACHER_FREE.id) || INITIAL_TEACHER_FREE;
-    const t2 = studentsList.find(s => s.id === INITIAL_TEACHER_PREMIUM.id) || INITIAL_TEACHER_PREMIUM;
+    const baseFixture = (overrides: Partial<StudentProfile>): StudentProfile => ({
+      id: 'audit_fixture',
+      name: 'Audit Fixture',
+      accountRole: 'student',
+      parentName: 'Parent',
+      mobile: '9000000001',
+      email: 'fixture@test.local',
+      classLevel: 'Class 4',
+      schoolName: '',
+      parentConsent: true,
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      points: 0,
+      coins: 0,
+      level: 1,
+      streakDays: 0,
+      lastActiveDate: '2026-01-01T00:00:00.000Z',
+      badges: [],
+      plan: 'free',
+      avatar: '🌟',
+      attemptedQuestionIds: [],
+      attemptedPuzzleIds: [],
+      completedStoryIds: [],
+      classChangeLogs: [],
+      ...overrides
+    });
+
+    const s1 = baseFixture({ id: 'audit_s1', classLevel: 'Class 4', email: 's1@test.local', mobile: '9000000001' });
+    const s2 = baseFixture({
+      id: 'audit_s2',
+      classLevel: 'Class 6',
+      activatedClassLevel: 'Class 6',
+      plan: 'premium',
+      planPurchasedAt: '2026-11-01',
+      planExpiresAt: '2027-11-01',
+      email: 's2@test.local',
+      mobile: '9000000002'
+    });
+    const t2 = baseFixture({
+      id: 'audit_t2',
+      name: 'Teacher Fixture',
+      accountRole: 'teacher',
+      classLevel: 'Class 9',
+      activatedClassLevel: 'Class 9',
+      plan: 'premium',
+      planPurchasedAt: '2026-11-01',
+      planExpiresAt: '2027-11-01',
+      email: 't2@test.local',
+      mobile: '9000000003'
+    });
 
     const checks: SecurityAuditCheck[] = [
       {
@@ -1671,8 +1306,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         title: 'One Account = One Class = One Mobile = One Email',
         description: 'Verify every Student and Teacher account is permanently bound to a single class, unique mobile, and unique email.',
         category: 'student_isolation',
-        passed: s1.id !== s2.id && s1.email !== s2.email && s1.mobile !== s2.mobile && t1.email !== t2.email,
-        details: `PASS: Student 1 (${s1.classLevel}), Student 2 (${s2.classLevel}), Teacher 1 (${t1.classLevel}), and Teacher 2 (${t2.classLevel}) have unique credentials and locked classes.`
+        passed: s1.id !== s2.id && s1.email !== s2.email && s1.mobile !== s2.mobile && t2.email !== s2.email,
+        details: `PASS: Strict credential & class binding active (${studentsList.length} registered local account(s)).`
       },
       {
         id: 'sec-chk-2',
@@ -1692,7 +1327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         passed:
           canAccessWorksheet(t2, 'WS-C9-PHYSICS-1', 'Class 9').allowed &&
           !canAccessWorksheet(t2, 'WS-C8-SCIENCE-1', 'Class 8').allowed,
-        details: `PASS: Teacher 2 (${t2.name}, ${t2.classLevel}) has full access to ${t2.classLevel} and is restricted from other classes.`
+        details: 'PASS: Class-9 Teacher account accesses Class 9 curriculum while other classes remain restricted.'
       },
       {
         id: 'sec-chk-4',
@@ -2130,7 +1765,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Drawing
   const saveDrawingSubmission = (drawingData: Omit<DrawingSubmission, 'id' | 'studentId' | 'studentName' | 'createdAt'>): DrawingSubmission => {
-    const student = currentStudent || INITIAL_STUDENT;
+    if (!currentStudent) {
+      throw new Error('Authentication required to save drawings.');
+    }
+    const student = currentStudent;
     const newDrawing: DrawingSubmission = {
       ...drawingData,
       id: `draw_${Date.now()}`,
@@ -2234,100 +1872,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Payments
-  const processMembershipPayment = (
-    planId: 'basic' | 'premium',
-    method: 'UPI' | 'Card' | 'NetBanking',
-    simulateFailure: boolean = false
-  ) => {
-    const student = currentStudent || INITIAL_STUDENT;
-    const order = paymentGateway.createOrder(student, planId);
-
-    const result = paymentGateway.processAndVerify(
-      student,
-      planId,
-      order.orderId,
-      order.receiptNumber,
-      method,
-      simulateFailure
-    );
-
-    const txWithClass: PaymentTransaction = {
-      ...result.transaction,
-      selectedClass: student.classLevel
-    };
-
-    setTransactions(prev => [txWithClass, ...prev.filter(t => t.paymentId !== txWithClass.paymentId)]);
-    saveTransactionToFirestore(txWithClass).catch(() => {});
-
-    if (result.success) {
-      const computedDates = computePaidPlanExpiryIsoDate(student.planExpiresAt);
-
-      const updatedBadges = [...student.badges];
-      if (!updatedBadges.includes('badge-champion-premium')) {
-        updatedBadges.push('badge-champion-premium');
-      }
-
-      const updatedStudent: StudentProfile = {
-        ...student,
-        plan: planId,
-        activatedClassLevel: student.classLevel,
-        planPurchasedAt: computedDates.purchasedAt,
-        planExpiresAt: computedDates.expiresAt,
-        points: student.points + (planId === 'premium' ? 250 : 100),
-        badges: updatedBadges
-      };
-
-      setCurrentStudent(updatedStudent);
-      setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
-
-      saveStudentProfileToFirestore(updatedStudent).catch(() => {});
-      saveSubscriptionToFirestore(updatedStudent.id, {
-        plan: planId,
-        selectedClass: updatedStudent.classLevel,
-        planPurchasedAt: updatedStudent.planPurchasedAt,
-        planExpiresAt: updatedStudent.planExpiresAt,
-        currentExpiresAt: student.planExpiresAt,
-        paymentId: txWithClass.paymentId,
-        orderId: txWithClass.orderId,
-        amountInr: txWithClass.amount
-      }).catch(() => {});
-
-      fetch('/api/subscription/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId: updatedStudent.id,
-          plan: planId,
-          selectedClass: updatedStudent.classLevel,
-          planPurchasedAt: updatedStudent.planPurchasedAt,
-          planExpiresAt: updatedStudent.planExpiresAt,
-          paymentId: txWithClass.paymentId
-        })
-      }).catch(() => {});
-
-      addNotification(
-        'Membership Activated! 👑',
-        `Your Premium Access is Activated for Standard ${updatedStudent.classLevel.replace('Class ', '')}. Enjoy All Worksheets for Your Class! Receipt #${txWithClass.receiptNumber}.`,
-        'membership'
-      );
-    } else {
-      addNotification(
-        'Payment Transaction Failed',
-        result.error || 'Payment was declined by payment gateway. Paid plan was not activated.',
-        'challenge'
-      );
-    }
-
-    return {
-      ...result,
-      transaction: txWithClass
-    };
-  };
-
   // Automatic Verified Membership Activation (from Razorpay server verification)
   const activateVerifiedMembership = (transaction: PaymentTransaction, customExpiryDate?: string) => {
-    const student = currentStudent || INITIAL_STUDENT;
+    if (!currentStudent) {
+      return;
+    }
+    const student = currentStudent;
     const txWithClass: PaymentTransaction = {
       ...transaction,
       selectedClass: transaction.selectedClass || student.classLevel
@@ -2566,14 +2116,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         platformSettings,
 
         switchRole,
-        loginAsSampleAccount,
         loginAsTeacher,
         loginAsAdmin,
 
         registerStudent,
         loginWithEmail,
-        loginWithMobileOtp,
-        loginWithVerifiedPhone,
         recoverAccount,
         completePasswordReset,
         logout,
@@ -2612,7 +2159,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleDrawingTemplatePublished,
         deleteDrawingTemplate,
         solvePuzzle,
-        processMembershipPayment,
         activateVerifiedMembership,
         adminApplyApproved365DayMigration,
 

@@ -35,7 +35,7 @@ import {
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage
 } from './utils/subscriptionAccess';
-import { Trophy, GraduationCap, Lock, BookOpen, FileText, Volume2, Activity, Award, Crown } from 'lucide-react';
+import { Trophy, GraduationCap, Lock, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, CheckCircle2, Play, LogIn, UserPlus, ShieldCheck } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -54,9 +54,8 @@ const FEATURE_TITLES: Record<string, string> = {
 const AppContent: React.FC = () => {
   const {
     activeRole,
+    currentUser,
     currentStudent,
-    studentsList,
-    quickSwitchStudent,
     isAuthModalOpen,
     setIsAuthModalOpen,
   } = useApp();
@@ -75,7 +74,7 @@ const AppContent: React.FC = () => {
   const isLearningPortal = activeRole === 'student' || activeRole === 'teacher';
   const isTeacherPortal = activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
 
-  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=STUDY123)
+  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=...)
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -133,6 +132,11 @@ const AppContent: React.FC = () => {
   const openMembershipWithPlan = (_plan: 'basic' | 'premium' = 'premium') => {
     setMembershipInitialPlan('premium');
     setIsMembershipOpen(true);
+  };
+
+  const openAuthModalWithTab = (defaultTab: 'login' | 'teacher' | 'register' | 'admin' | 'forgot' = 'login') => {
+    setAuthDefaultTab(defaultTab);
+    setIsAuthModalOpen(true);
   };
 
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
@@ -194,19 +198,24 @@ const AppContent: React.FC = () => {
       <Header
         currentTab={currentTab}
         setCurrentTab={(tab) => handleNavigateTab(tab)}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
         onOpenMembership={() => openMembershipWithPlan('premium')}
       />
 
       {/* Main Content Arena */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 pb-12">
-        {/* Live Interactive DEMO Playground (No payment required, isolated state) */}
+        {/* Live Interactive Visitor DEMO Playground (All Classes 1st–10th preview, zero DB writes) */}
         {currentTab === 'demo' ? (
-          <DemoSectionView onUpgradeClick={() => openMembershipWithPlan('premium')} />
+          <DemoSectionView
+            onUpgradeClick={() => openMembershipWithPlan('premium')}
+            onRegisterClick={() => openAuthModalWithTab('register')}
+            onSignInClick={() => openAuthModalWithTab('login')}
+            isAuthenticated={Boolean(currentStudent)}
+          />
         ) : currentTab === 'referrals' ? (
           <ReferralHubView
             currentUserId={currentStudent?.id || 'guest_ambassador'}
-            userName={currentStudent?.name || 'Champion Ambassador'}
+            userName={currentStudent?.name || 'Visitor Preview'}
             userEmail={currentStudent?.email || ''}
             userMobile={currentStudent?.mobile || ''}
             initialRole="student"
@@ -223,6 +232,8 @@ const AppContent: React.FC = () => {
           <TermsAndPrivacyView initialTab="terms" onNavigateTab={(t) => handleNavigateTab(t)} />
         ) : currentTab === 'privacy' ? (
           <TermsAndPrivacyView initialTab="privacy" onNavigateTab={(t) => handleNavigateTab(t)} />
+        ) : currentTab === 'refund' ? (
+          <TermsAndPrivacyView initialTab="refund" onNavigateTab={(t) => handleNavigateTab(t)} />
         ) : currentTab === 'disclaimer' ? (
           <TermsAndPrivacyView initialTab="disclaimer" onNavigateTab={(t) => handleNavigateTab(t)} />
         ) : currentTab === 'about' ? (
@@ -239,74 +250,137 @@ const AppContent: React.FC = () => {
           />
         ) : (
           <>
-            {/* Signed Out Gate for Student & Teacher Portals */}
+            {/* Signed-Out Public Welcome Screen (Explore Demo + Sign In + Register) */}
             {isLearningPortal && !currentStudent && (
-              <div className="max-w-xl mx-auto my-12 bg-white rounded-3xl p-8 border border-amber-300 shadow-xl text-center space-y-6 animate-in zoom-in-95">
-                <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-4xl shadow-lg shadow-orange-500/20">
-                  {activeRole === 'teacher' ? '👩‍🏫' : '🏆'}
-                </div>
+              <div className="space-y-8 animate-in fade-in duration-200">
+                <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-amber-950 text-white p-7 sm:p-10 shadow-2xl border border-amber-400/20">
+                  <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    <div className="lg:col-span-7 space-y-4">
+                      <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-300 text-xs font-black uppercase tracking-wider">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Standards 1st to 10th • Maharashtra State Board Aligned</span>
+                      </span>
+                      <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-black leading-tight tracking-tight">
+                        MyStudyZone
+                        <span className="block text-amber-300 text-xl sm:text-2xl font-extrabold mt-1">
+                          Learn, Practice, Explore and Achieve Excellence.
+                        </span>
+                      </h1>
+                      <p className="text-sm sm:text-base text-slate-200 leading-relaxed max-w-2xl">
+                        Explore interactive quizzes across every subject, chapter-wise online worksheets, 95 English &amp; Marathi audio stories, Sudoku, brain riddles, Drawing Studio, Cricket quizzes, and MSCE Scholarship preparation — all before you decide to register or subscribe.
+                      </p>
 
-                <div className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
-                    MyStudyZone – An Interactive Learning Platform for Students
-                  </span>
-                  <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 mt-2">
-                    {activeRole === 'teacher' ? 'Welcome to the Teacher Portal!' : 'Welcome to the Student Portal!'}
-                  </h2>
-                  <p className="text-xs sm:text-sm font-bold text-amber-800">
-                    Learn, Practice, Explore and Achieve Excellence.
-                  </p>
-                  <p className="text-sm text-slate-600 max-w-md mx-auto font-medium leading-relaxed">
-                    Sign in or register a class-wise Student or Teacher account (Standard 1st to Standard 10th) to access all subjects, online worksheets, 4-level quizzes, stories with audio, current affairs, and scholarship tests!
-                  </p>
-                </div>
-
-                {/* Quick Switch from Available Registered Accounts */}
-                {studentsList.length > 0 && (
-                  <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-2.5 text-left">
-                    <span className="text-xs font-extrabold text-amber-900 block">
-                      Select Registered Student or Teacher Account on this Device:
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {studentsList.map((s) => (
+                      {/* Primary Visitor Actions */}
+                      <div className="flex flex-wrap items-center gap-3 pt-2">
                         <button
-                          key={s.id}
-                          onClick={() => quickSwitchStudent(s.id)}
-                          className="p-3 rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-100/40 text-left transition-all cursor-pointer flex items-center gap-2.5 shadow-2xs"
+                          type="button"
+                          onClick={() => handleNavigateTab('demo')}
+                          className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black text-sm shadow-lg transition-all flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-2xl">{s.avatar}</span>
-                          <div className="overflow-hidden">
-                            <p className="font-bold text-xs text-slate-900 truncate">{s.name}</p>
-                            <p className="text-[10px] text-amber-800 font-extrabold">
-                              {s.accountRole === 'teacher' ? '👩‍🏫 Teacher' : '🎓 Student'} • {s.classLevel} • {s.plan === 'premium' ? '₹99 Premium' : 'Free Plan'}
-                            </p>
-                          </div>
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Explore Demo (Classes 1st–10th)</span>
                         </button>
-                      ))}
+                        <button
+                          type="button"
+                          onClick={() => openAuthModalWithTab('register')}
+                          className="px-5 py-3.5 rounded-2xl bg-white hover:bg-amber-50 text-slate-950 font-black text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <UserPlus className="w-4 h-4 text-indigo-700" />
+                          <span>Register Free Account</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openAuthModalWithTab(activeRole === 'teacher' ? 'teacher' : 'login')}
+                          className="px-5 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/25 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          <span>Sign In ({activeRole === 'teacher' ? 'Teacher' : 'Student'})</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right Quick Overview Card */}
+                    <div className="lg:col-span-5 bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/15 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                          What You Can Try in Demo Mode
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-[10px] font-black">
+                          100% Free Preview
+                        </span>
+                      </div>
+                      <ul className="space-y-2.5 text-xs text-slate-100 font-semibold">
+                        <li className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Switch &amp; preview any class from Standard 1st to 10th</span>
+                        </li>
+                        <li className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Try live English &amp; Mathematics sample worksheets</span>
+                        </li>
+                        <li className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Play 4-Level quizzes, 4×4 Sudoku &amp; Brain Riddles</span>
+                        </li>
+                        <li className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Listen to English &amp; Marathi stories with speed control</span>
+                        </li>
+                        <li className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Preview Dashboard &amp; Student Progress Analytics</span>
+                        </li>
+                      </ul>
                     </div>
                   </div>
-                )}
+                </section>
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  <button
-                    onClick={() => {
-                      setAuthDefaultTab(activeRole === 'teacher' ? 'teacher' : 'login');
-                      setIsAuthModalOpen(true);
-                    }}
-                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer"
-                  >
-                    Sign In ({activeRole === 'teacher' ? 'Teacher Portal' : 'Student Portal'})
-                  </button>
-                  <button
-                    onClick={() => {
-                      setAuthDefaultTab('register');
-                      setIsAuthModalOpen(true);
-                    }}
-                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
-                  >
-                    Register New Account
-                  </button>
-                </div>
+                {/* Two Simple Membership Plans Overview */}
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black uppercase tracking-wider">
+                        Free Plan • Lifetime
+                      </span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black text-slate-900">₹0</span>
+                        <span className="text-xs font-bold text-emerald-700">/ Forever</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                        Every registered Student &amp; Teacher gets lifetime access to 2 Demo Worksheets (English &amp; Mathematics for their selected class), English &amp; Mathematics 4-level quizzes, Brain Puzzles, and Sudoku.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAuthModalWithTab('register')}
+                      className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs cursor-pointer transition-all"
+                    >
+                      Create Free Account
+                    </button>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-amber-50 via-white to-orange-50 rounded-3xl p-6 border-2 border-amber-400 shadow-sm flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <span className="inline-block px-3 py-1 rounded-full bg-amber-500 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                        Premium Plan • 365 Days (1 Year)
+                      </span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black text-amber-700">₹99</span>
+                        <span className="text-xs font-bold text-slate-600">/ 365 Days from verified purchase</span>
+                      </div>
+                      <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                        Unlocks all worksheets &amp; subjects for your registered class, 45 Story World + 50 Shivaji Maharaj audio stories, Drawing Studio, Cricket Quizzes, MSCE Scholarship Prep, AI Skills Academy, Certificates &amp; ₹5 Referral Wallet.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleNavigateTab('demo')}
+                      className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs cursor-pointer shadow-xs transition-all"
+                    >
+                      Try Live Demo Before Subscribing →
+                    </button>
+                  </div>
+                </section>
               </div>
             )}
 
@@ -478,7 +552,27 @@ const AppContent: React.FC = () => {
               </>
             )}
 
-            {activeRole === 'admin' && <AdminDashboard />}
+            {activeRole === 'admin' && currentUser?.role === 'admin' && <AdminDashboard />}
+            {activeRole === 'admin' && currentUser?.role !== 'admin' && (
+              <div className="max-w-md mx-auto my-16 bg-white rounded-3xl p-8 border border-rose-200 shadow-lg text-center space-y-4">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <h2 className="text-xl font-display font-extrabold text-slate-900">
+                  Administrator Authentication Required
+                </h2>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Please sign in with your authorized Administrator account to access the Admin Console.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openAuthModalWithTab('admin')}
+                  className="px-6 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs cursor-pointer"
+                >
+                  Open Admin Sign In
+                </button>
+              </div>
+            )}
           </>
         )}
       </main>
@@ -488,6 +582,7 @@ const AppContent: React.FC = () => {
         isOpen={isMembershipOpen}
         onClose={() => setIsMembershipOpen(false)}
         initialSelectedPlan={membershipInitialPlan}
+        onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
       />
 
       <PlanUpgradePromptModal
@@ -570,6 +665,8 @@ const AppContent: React.FC = () => {
             <button type="button" onClick={() => handleNavigateTab('terms')} className="hover:text-amber-800 cursor-pointer">Terms &amp; Conditions</button>
             <span>•</span>
             <button type="button" onClick={() => handleNavigateTab('privacy')} className="hover:text-amber-800 cursor-pointer">Privacy Policy</button>
+            <span>•</span>
+            <button type="button" onClick={() => handleNavigateTab('refund')} className="hover:text-amber-800 cursor-pointer">Refund Policy</button>
             <span>•</span>
             <button type="button" onClick={() => handleNavigateTab('disclaimer')} className="hover:text-amber-800 cursor-pointer">Educational Disclaimer</button>
           </div>

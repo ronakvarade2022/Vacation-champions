@@ -1,5 +1,4 @@
 import { PaymentTransaction, StudentProfile } from '../types';
-import { computeSubscriptionActivationDates } from '../utils/subscriptionDateUtils';
 
 export interface RazorpayConfigResponse {
   success: boolean;
@@ -616,7 +615,7 @@ export async function launchRazorpayCheckout(options: {
     key: resolvedPublicKeyId,
     amount: Number(orderData.amount) || planAmountPaise, // in paise (9900)
     currency: orderData.currency || 'INR',
-    name: 'Vacation Champions',
+    name: 'MyStudyZone',
     description: `${planTitle} • ${student.name}`,
     order_id: orderData.orderId,
     prefill,
@@ -799,83 +798,3 @@ export async function launchRazorpayCheckout(options: {
     });
   }
 }
-
-// Backwards-compatible paymentGateway bridge
-export const paymentGateway = {
-  createOrder(_student: StudentProfile, _planId: 'basic' | 'premium' = 'premium') {
-    const amount = 99;
-    const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
-    const orderId = `order_vc_${Date.now()}_${Math.floor(Math.random() * 899 + 100)}`;
-    return { orderId, amount, receiptNumber };
-  },
-
-  processAndVerify(
-    student: StudentProfile,
-    _planId: 'basic' | 'premium' = 'premium',
-    orderId: string,
-    receiptNumber: string,
-    method: 'UPI' | 'Card' | 'NetBanking' | string = 'UPI',
-    simulateFailure: boolean = false
-  ): { success: boolean; transaction: PaymentTransaction; error?: string } {
-    const amount = 99;
-    const paymentId = `pay_vc_${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 89 + 10)}`;
-
-    if (simulateFailure) {
-      const failedTx: PaymentTransaction = {
-        id: `tx_${Date.now()}`,
-        receiptNumber,
-        studentId: student.id,
-        studentName: student.name,
-        parentEmail: student.email,
-        parentMobile: student.mobile,
-        planId: 'premium',
-        planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
-        amount,
-        currency: 'INR',
-        orderId,
-        paymentId: 'failed_' + paymentId,
-        signature: 'invalid_sig',
-        method,
-        status: 'FAILED',
-        createdAt: new Date().toISOString()
-      };
-      return {
-        success: false,
-        transaction: failedTx,
-        error: 'Payment declined by bank issuer.'
-      };
-    }
-
-    const activation = computeSubscriptionActivationDates({
-      verificationTimestamp: new Date(),
-      existingPlan: student.plan,
-      existingExpiresAt: student.planExpiresAt
-    });
-
-    const successfulTx: PaymentTransaction = {
-      id: `tx_${Date.now()}`,
-      receiptNumber,
-      studentId: student.id,
-      studentName: student.name,
-      parentEmail: student.email,
-      parentMobile: student.mobile,
-      planId: 'premium',
-      planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
-      amount,
-      currency: 'INR',
-      orderId,
-      paymentId,
-      signature: 'verified_sig_' + orderId,
-      method,
-      status: 'SUCCESS',
-      createdAt: activation.verifiedAtUtcIso,
-      membershipStartDate: activation.purchasedDateIst,
-      membershipExpiryDate: activation.expiryDateIst
-    };
-
-    return {
-      success: true,
-      transaction: successfulTx
-    };
-  }
-};

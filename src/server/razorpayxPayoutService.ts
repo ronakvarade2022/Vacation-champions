@@ -138,7 +138,7 @@ export async function dispatchRazorpayXPayout(params: PayoutDispatchParams): Pro
         reference_id: `cnt_${params.userId.slice(0, 30)}`,
         notes: {
           userId: params.userId,
-          platform: 'Vacation Champions'
+          platform: 'MyStudyZone'
         }
       })
     });
@@ -232,11 +232,11 @@ export async function dispatchRazorpayXPayout(params: PayoutDispatchParams): Pro
       purpose: 'cashback',
       queue_if_low_balance: true,
       reference_id: params.payoutId.slice(0, 40),
-      narration: 'VC Cashback Reward',
+      narration: 'MyStudyZone Cashback',
       notes: {
         userId: params.userId,
         payoutId: params.payoutId,
-        platform: 'Vacation Champions'
+        platform: 'MyStudyZone'
       }
     };
 

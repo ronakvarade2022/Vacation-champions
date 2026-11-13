@@ -43,7 +43,7 @@ import { canAccessFeature, getStudentPlanInfo } from '../utils/subscriptionAcces
 interface HeaderProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
-  onOpenAuth: () => void;
+  onOpenAuth: (defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot') => void;
   onOpenMembership: () => void;
 }
 
@@ -103,7 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Dedicated DEMO Section Button (Strictly 2 Isolated Demo Records per Section) */}
+            {/* Dedicated Visitor Demo Section Button */}
             <button
               type="button"
               onClick={() => setCurrentTab('demo')}
@@ -112,9 +112,10 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-slate-900 text-amber-300 border-amber-300 shadow-xs'
                   : 'bg-amber-900/60 hover:bg-amber-900 text-white border-amber-300/40'
               }`}
-              title="Open isolated DEMO section (2 DEMO DATA records per module)"
+              title="Explore interactive MyStudyZone Demo (Classes 1st to 10th)"
             >
-              <span>🎯 DEMO</span>
+              <Sparkles className="w-3 h-3" />
+              <span>Explore Demo</span>
             </button>
 
             {/* Portal Switcher Tabs: Student Portal & Teacher Portal (+ Admin) */}
@@ -156,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-3 cursor-pointer group"
         >
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
-            <Trophy className="w-6 h-6 animate-pulse" />
+            <Trophy className="w-6 h-6" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -414,8 +415,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Membership Badge or Upgrade CTA */}
-          {(() => {
+          {/* Membership Badge or Upgrade CTA (Authenticated Learners Only) */}
+          {currentStudent && (() => {
             const pInfo = getStudentPlanInfo(currentStudent);
             if (pInfo.effectivePlan === 'free') {
               return (
@@ -461,58 +462,86 @@ export const Header: React.FC<HeaderProps> = ({
             );
           })()}
 
-          {/* Notification Bell */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg text-slate-600 hover:text-amber-800 hover:bg-amber-100/50 transition-colors cursor-pointer"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+          {/* Signed-Out Visitor Quick CTAs (Desktop) */}
+          {!currentStudent && !currentUser && (
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentTab('demo')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  currentTab === 'demo'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Explore Demo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenAuth('register')}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-xs"
+              >
+                Register Free
+              </button>
+            </div>
+          )}
 
-            {/* Notifications Dropdown Panel */}
-            {showNotifications && (
-              <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-sm sm:w-80 w-auto mx-auto bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50">
-                <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-100 flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-amber-900">Notifications & Alerts</h4>
-                  <span className="text-[10px] text-slate-500">{notifications.length} total</span>
-                </div>
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                  {notifications.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-500">No new notifications.</div>
-                  ) : (
-                    notifications.map(n => (
-                      <div
-                        key={n.id}
-                        onClick={() => markNotificationAsRead(n.id)}
-                        className={`p-3 text-xs hover:bg-amber-50/50 transition-colors cursor-pointer ${n.read ? 'opacity-70' : 'bg-amber-50/30'}`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-slate-800">{n.title}</span>
-                          <span className="text-[10px] text-slate-400">{n.timestamp}</span>
+          {/* Notification Bell (Authenticated Users Only) */}
+          {(currentStudent || currentUser) && (
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 rounded-lg text-slate-600 hover:text-amber-800 hover:bg-amber-100/50 transition-colors cursor-pointer"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notifications Dropdown Panel */}
+              {showNotifications && (
+                <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-sm sm:w-80 w-auto mx-auto bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50">
+                  <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-100 flex items-center justify-between">
+                    <h4 className="font-bold text-xs text-amber-900">Notifications &amp; Alerts</h4>
+                    <span className="text-[10px] text-slate-500">{notifications.length} total</span>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-500">No new notifications.</div>
+                    ) : (
+                      notifications.map(n => (
+                        <div
+                          key={n.id}
+                          onClick={() => markNotificationAsRead(n.id)}
+                          className={`p-3 text-xs hover:bg-amber-50/50 transition-colors cursor-pointer ${n.read ? 'opacity-70' : 'bg-amber-50/30'}`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-slate-800">{n.title}</span>
+                            <span className="text-[10px] text-slate-400">{n.timestamp}</span>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed text-[11px]">{n.message}</p>
                         </div>
-                        <p className="text-slate-600 leading-relaxed text-[11px]">{n.message}</p>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Prominent Student Profile Button with Icon & Direct Profile Popup */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowProfileDropdown(!showProfileDropdown);
-                setShowNotifications(false);
-              }}
+          {/* Prominent Student/Teacher Profile Button (Authenticated Learners Only) */}
+          {currentStudent && (
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowProfileDropdown(!showProfileDropdown);
+                  setShowNotifications(false);
+                }}
               className={`px-2.5 sm:px-3 py-1.5 rounded-xl font-extrabold text-xs flex items-center gap-1.5 sm:gap-2 border transition-all cursor-pointer ${
                 showProfileDropdown || currentTab === 'profile'
                   ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-300'
@@ -866,6 +895,7 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </div>
+          )}
 
           {/* Dedicated Logout Button with Direct In-Place Confirmation at Logout Place Only */}
           {currentUser || currentStudent ? (
@@ -939,12 +969,12 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           ) : (
             <button
-              onClick={onOpenAuth}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
-              title="Login / Sign In (लॉगिन)"
+              onClick={() => onOpenAuth('login')}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+              title="Sign In to MyStudyZone"
             >
               <LogIn className="w-3.5 h-3.5 text-white" />
-              <span>Login</span>
+              <span>Sign In</span>
             </button>
           )}
 
@@ -1177,10 +1207,11 @@ export const Header: React.FC<HeaderProps> = ({
               className={`w-full p-2.5 rounded-xl text-center font-extrabold text-xs border transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 currentTab === 'demo'
                   ? 'bg-slate-900 text-amber-300 border-amber-400'
-                  : 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'
+                  : 'bg-indigo-50 text-indigo-900 border-indigo-200 hover:bg-indigo-100'
               }`}
             >
-              <span>🎯 DEMO Section (Strictly 2 Isolated Demo Records)</span>
+              <Sparkles className="w-4 h-4" />
+              <span>Explore Demo Mode (Classes 1st to 10th)</span>
             </button>
             <button
               onClick={() => { onOpenMembership(); setMobileMenuOpen(false); }}
@@ -1188,23 +1219,23 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Star className="w-4 h-4 fill-amber-300 text-amber-300" />
               <span>
-                {getStudentPlanInfo(currentStudent).isPaidPlanExpired
+                {currentStudent && getStudentPlanInfo(currentStudent).isPaidPlanExpired
                   ? 'Renew Premium Plan (₹99 – 365 Days / 1 Year)'
-                  : 'Upgrade to Premium Plan (₹99 – 365 Days / 1 Year)'}
+                  : 'View Plans & ₹99 Premium (365 Days / 1 Year)'}
               </span>
             </button>
 
-            {/* Mobile Profile & Logout / Login Buttons */}
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-100">
-              <button
-                type="button"
-                onClick={() => { setCurrentTab('profile'); setMobileMenuOpen(false); }}
-                className="p-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <User className="w-4 h-4" />
-                <span>My Profile (प्रोफाइल)</span>
-              </button>
-              {currentUser || currentStudent ? (
+            {/* Mobile Profile & Logout / Sign In & Register Buttons */}
+            {currentUser || currentStudent ? (
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-100">
+                <button
+                  type="button"
+                  onClick={() => { setCurrentTab('profile'); setMobileMenuOpen(false); }}
+                  className="p-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <User className="w-4 h-4" />
+                  <span>My Profile</span>
+                </button>
                 <button
                   type="button"
                   onClick={async () => {
@@ -1214,19 +1245,29 @@ export const Header: React.FC<HeaderProps> = ({
                   className="p-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Logout (लॉग आउट)</span>
+                  <span>Logout</span>
                 </button>
-              ) : (
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-100">
                 <button
                   type="button"
-                  onClick={() => { setMobileMenuOpen(false); onOpenAuth(); }}
+                  onClick={() => { setMobileMenuOpen(false); onOpenAuth('register'); }}
+                  className="p-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Register Free</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMobileMenuOpen(false); onOpenAuth('login'); }}
                   className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>Login (लॉगिन)</span>
+                  <span>Sign In</span>
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}

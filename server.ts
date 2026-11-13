@@ -23,7 +23,9 @@ import {
   referralTransactions,
   payoutRequests
 } from './src/server/referralStore.ts';
+import { doc, getDoc } from 'firebase/firestore';
 import {
+  serverDb,
   getResolvedRazorpayCredentials,
   createRazorpayClient,
   createRazorpayOrderBackend,
@@ -1131,7 +1133,7 @@ app.get('/api/referrals/leaderboard', (_req: Request, res: Response) => {
       userId: s.userId,
       userName: s.name,
       className: 'Class 5',
-      schoolName: s.schoolName || 'Vacation Champions Academy',
+      schoolName: s.schoolName || 'MyStudyZone Academy',
       city: 'Maharashtra',
       successfulReferrals: s.paidReferralsCount,
       totalEarnings: s.totalEarned,
@@ -1335,8 +1337,65 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
   return existing;
 }
 
+async function evaluateServerSubscriptionFromStore(
+  studentId: string
+): Promise<ServerStudentSubscription> {
+  const cleanId = String(studentId || '').trim();
+  const cached = cleanId ? serverStudentSubscriptions.get(cleanId) : undefined;
+  if (cached) {
+    return evaluateServerSubscription(cleanId);
+  }
+
+  if (cleanId) {
+    try {
+      const snap = await getDoc(doc(serverDb, 'students', cleanId));
+      if (snap.exists()) {
+        const data = snap.data() as Record<string, any>;
+        const rawPlan = data?.plan;
+        if (rawPlan === 'premium' || rawPlan === 'basic') {
+          const validity = evaluateSubscriptionValidity(
+            rawPlan,
+            data?.planPurchasedAt,
+            data?.planExpiresAt
+          );
+          if (!validity.isExpired) {
+            const hydrated: ServerStudentSubscription = {
+              studentId: cleanId,
+              plan: 'premium',
+              selectedClass: String(data?.classLevel || 'Class 1'),
+              activatedClassLevel: String(data?.activatedClassLevel || data?.classLevel || 'Class 1'),
+              accountRole: data?.accountRole === 'teacher' ? 'teacher' : 'student',
+              isLifetimeFree: false,
+              planPurchasedAt: data?.planPurchasedAt || validity.purchaseDateIst || undefined,
+              planExpiresAt: data?.planExpiresAt || validity.expiryDateIst || null,
+              paymentId: data?.lastPaymentId ? String(data.lastPaymentId) : undefined,
+              updatedAt: new Date().toISOString()
+            };
+            serverStudentSubscriptions.set(cleanId, hydrated);
+            return hydrated;
+          }
+        }
+        return {
+          studentId: cleanId,
+          plan: 'free',
+          selectedClass: String(data?.classLevel || 'Class 1'),
+          activatedClassLevel: null,
+          accountRole: data?.accountRole === 'teacher' ? 'teacher' : 'student',
+          isLifetimeFree: true,
+          planExpiresAt: null,
+          updatedAt: new Date().toISOString()
+        };
+      }
+    } catch {
+      // Fall back safely to free tier if Firestore lookup is unavailable
+    }
+  }
+
+  return evaluateServerSubscription(cleanId);
+}
+
 // 8.1 Sync student/teacher subscription (only allows paid plan if backed by verified paymentId)
-app.post('/api/subscription/sync', (req: Request, res: Response) => {
+app.post('/api/subscription/sync', async (req: Request, res: Response) => {
   try {
     const {
       studentId,
@@ -1356,12 +1415,19 @@ app.post('/api/subscription/sync', (req: Request, res: Response) => {
     const resolvedRole = accountRole === 'teacher' ? 'teacher' : 'student';
 
     if (plan === 'basic' || plan === 'premium') {
-      if (!paymentId) {
+      const cleanPaymentId = String(paymentId || '').trim();
+      const isSyntheticPayment =
+        !cleanPaymentId ||
+        cleanPaymentId.startsWith('pay_sim_') ||
+        cleanPaymentId.startsWith('demo_') ||
+        cleanPaymentId === 'simulated';
+      if (isSyntheticPayment) {
         return res.status(403).json({
           success: false,
           error: 'Paid Premium Plan (₹99) requires a verified paymentId.'
         });
       }
+
       const fallbackDates = computeSubscriptionActivationDates({
         verificationTimestamp: planPurchasedAt || new Date()
       });
@@ -1374,7 +1440,7 @@ app.post('/api/subscription/sync', (req: Request, res: Response) => {
         isLifetimeFree: false,
         planPurchasedAt: planPurchasedAt || fallbackDates.purchasedDateIst,
         planExpiresAt: planExpiresAt || fallbackDates.expiryDateIst,
-        paymentId: String(paymentId),
+        paymentId: cleanPaymentId,
         updatedAt: new Date().toISOString()
       };
       serverStudentSubscriptions.set(String(studentId), record);
@@ -1400,9 +1466,9 @@ app.post('/api/subscription/sync', (req: Request, res: Response) => {
 });
 
 // 8.2 Get student/teacher subscription status
-app.get('/api/subscription/status/:studentId', (req: Request, res: Response) => {
+app.get('/api/subscription/status/:studentId', async (req: Request, res: Response) => {
   const studentId = String(req.params.studentId || '');
-  const sub = evaluateServerSubscription(studentId);
+  const sub = await evaluateServerSubscriptionFromStore(studentId);
   const userClass = sub.selectedClass || sub.activatedClassLevel || 'Class 1';
   const demoIds = getServerFreeDemoIdsForClass(userClass);
   return res.json({
@@ -1436,15 +1502,13 @@ app.get('/api/subscription/status/:studentId', (req: Request, res: Response) => 
 const SERVER_WORKSHEET_UPGRADE_MSG =
   'Unlock All Worksheets for Your Class – Only ₹99!';
 
-// 8.3 Backend access verification for features, subjects, and worksheets (strictly class-wise)
-app.post('/api/subscription/verify-access', (req: Request, res: Response) => {
-  const { studentId, feature, subject, worksheetId, clientPlan, selectedClass } = req.body;
-  const sub = evaluateServerSubscription(String(studentId || ''));
+// 8.3 Backend access verification for features, subjects, and worksheets (strictly class-wise & server-verified)
+app.post('/api/subscription/verify-access', async (req: Request, res: Response) => {
+  const { studentId, feature, subject, worksheetId, selectedClass } = req.body || {};
+  const sub = await evaluateServerSubscriptionFromStore(String(studentId || ''));
   const userClass = String(selectedClass || sub.selectedClass || sub.activatedClassLevel || 'Class 1').trim();
   const effectivePlan: 'free' | 'premium' =
-    clientPlan === 'premium' || clientPlan === 'basic' || sub.plan === 'premium' || sub.plan === 'basic'
-      ? 'premium'
-      : 'free';
+    sub.plan === 'premium' || sub.plan === 'basic' ? 'premium' : 'free';
 
   if (worksheetId) {
     const cleanWsId = String(worksheetId).trim();
@@ -1507,10 +1571,10 @@ app.post('/api/subscription/verify-access', (req: Request, res: Response) => {
 });
 
 // 8.4 Dedicated Class-Wise Worksheet Access Verification API (Standards 1st to 10th)
-app.get('/api/worksheets/access/:studentId', (req: Request, res: Response) => {
+app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response) => {
   const studentId = String(req.params.studentId || '').trim();
   const queryClass = req.query.selectedClass ? String(req.query.selectedClass).trim() : '';
-  const sub = evaluateServerSubscription(studentId);
+  const sub = await evaluateServerSubscriptionFromStore(studentId);
   const isPremium = sub.plan === 'premium' || sub.plan === 'basic';
   const userClass = queryClass || sub.selectedClass || sub.activatedClassLevel || 'Class 1';
   const demoIds = getServerFreeDemoIdsForClass(userClass);
@@ -1532,8 +1596,8 @@ app.get('/api/worksheets/access/:studentId', (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/worksheets/verify-access', (req: Request, res: Response) => {
-  const { studentId, worksheetId, clientPlan, selectedClass } = req.body || {};
+app.post('/api/worksheets/verify-access', async (req: Request, res: Response) => {
+  const { studentId, worksheetId, selectedClass } = req.body || {};
   const cleanStudentId = String(studentId || '').trim();
   const cleanWorksheetId = String(worksheetId || '').trim();
 
@@ -1545,18 +1609,14 @@ app.post('/api/worksheets/verify-access', (req: Request, res: Response) => {
     });
   }
 
-  const sub = evaluateServerSubscription(cleanStudentId);
+  const sub = await evaluateServerSubscriptionFromStore(cleanStudentId);
   const userClass = String(
     selectedClass || sub.selectedClass || sub.activatedClassLevel || parseServerWorksheetClass(cleanWorksheetId) || 'Class 1'
   ).trim();
   const wsClass = parseServerWorksheetClass(cleanWorksheetId) || userClass;
   const isSameClass = wsClass === userClass;
 
-  const isPremium =
-    sub.plan === 'premium' ||
-    sub.plan === 'basic' ||
-    clientPlan === 'premium' ||
-    clientPlan === 'basic';
+  const isPremium = sub.plan === 'premium' || sub.plan === 'basic';
   const demoIds = new Set(getServerFreeDemoIdsForClass(userClass));
   const isDemo = isSameClass && demoIds.has(cleanWorksheetId);
   const allowed = isSameClass && (isPremium || isDemo);

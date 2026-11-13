@@ -11,6 +11,48 @@ const processedPaymentIds = new Set();
 const processedOrderIds = new Set();
 const transactionLedger = [];
 
+const PAID_SUBSCRIPTION_VALIDITY_DAYS = 365;
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+function formatIstDateString(date) {
+  const istShifted = new Date(date.getTime() + IST_OFFSET_MS);
+  const y = istShifted.getUTCFullYear();
+  const m = String(istShifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(istShifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDaysIst(dateStr, days) {
+  const parts = String(dateStr || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return '';
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + days));
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(dt.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function computeNetlifySubscriptionDates(now = new Date(), existingExpiresAt = null) {
+  const purchasedDateIst = formatIstDateString(now);
+  let baseDateIst = purchasedDateIst;
+  if (existingExpiresAt) {
+    const parsedExp = String(existingExpiresAt).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(parsedExp) && parsedExp > purchasedDateIst) {
+      baseDateIst = parsedExp;
+    }
+  }
+  const expiryDateIst = addDaysIst(baseDateIst, PAID_SUBSCRIPTION_VALIDITY_DAYS);
+  const startMs = Date.parse(`${purchasedDateIst}T00:00:00Z`);
+  const endMs = Date.parse(`${expiryDateIst}T00:00:00Z`);
+  const daysRemaining = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+  return {
+    startDateIso: purchasedDateIst,
+    expiryDateIso: expiryDateIst,
+    daysRemaining,
+    validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
+  };
+}
+
 function sanitizeEnvValue(val) {
   if (!val) return '';
   return String(val).trim().replace(/^["']+|["']+$/g, '').trim();
@@ -249,11 +291,11 @@ export async function handler(event) {
       plans: {
         premium: {
           id: 'premium',
-          name: 'PREMIUM PLAN – ₹99 – 90 Days',
+          name: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
           amount: 99,
           amountPaise: 9900,
           currency: 'INR',
-          durationDays: 90
+          durationDays: 365
         }
       }
     });
@@ -314,7 +356,7 @@ export async function handler(event) {
             mobile: String(mobile || '').slice(0, 250),
             planId: 'premium',
             subscriptionTier: 'premium',
-            validityDays: '90'
+            validityDays: '365'
           }
         })
       });
@@ -375,7 +417,7 @@ export async function handler(event) {
 
       const amountInPaise = 9900;
       const amountInRupees = 99;
-      const planTitle = 'PREMIUM PLAN – ₹99 – 90 Days';
+      const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
       const authHeader = 'Basic ' + Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString('base64');
 
       const qrRes = await fetch('https://api.razorpay.com/v1/payments/qr_codes', {
@@ -386,7 +428,7 @@ export async function handler(event) {
         },
         body: JSON.stringify({
           type: 'upi_qr',
-          name: 'Vacation Champions',
+          name: 'MyStudyZone',
           usage: 'single_use',
           fixed_amount: true,
           payment_amount: amountInPaise,
@@ -398,7 +440,7 @@ export async function handler(event) {
             mobile: String(mobile || '').slice(0, 250),
             planId: 'premium',
             subscriptionTier: 'premium',
-            validityDays: '90'
+            validityDays: '365'
           }
         })
       });
@@ -477,11 +519,11 @@ export async function handler(event) {
       if (successfulPayment) {
         const paymentId = successfulPayment.id;
         const now = new Date();
-        const startDateIso = now.toISOString().split('T')[0];
-        const expiryDate = new Date(now);
-        expiryDate.setDate(expiryDate.getDate() + 90);
-        const expiryDateIso = expiryDate.toISOString().split('T')[0];
-        const planTitle = 'PREMIUM PLAN – ₹99 – 90 Days';
+        const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
+        const dates = computeNetlifySubscriptionDates(now, existingStudentDoc?.planExpiresAt);
+        const startDateIso = dates.startDateIso;
+        const expiryDateIso = dates.expiryDateIso;
+        const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
         const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
         // Patch Firestore
@@ -489,12 +531,12 @@ export async function handler(event) {
           patchFirestoreDocument('students', String(studentId), {
             id: String(studentId),
             plan: resolvedPlanId,
-            subscriptionTier: resolvedPlanId === 'premium' ? 'premium' : 'standard',
+            subscriptionTier: 'premium',
             planLabel: planTitle,
             isLifetimeFree: false,
             planPurchasedAt: startDateIso,
             planExpiresAt: expiryDateIso,
-            subscriptionValidityDays: 90,
+            subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
             subscriptionStatus: 'ACTIVE',
             lastPaymentId: paymentId,
             lastOrderId: qrId,
@@ -558,7 +600,7 @@ export async function handler(event) {
             status: 'ACTIVE',
             paymentId,
             orderId: qrId,
-            daysRemaining: 90
+            daysRemaining: dates.daysRemaining
           }
         });
       }
@@ -683,25 +725,19 @@ export async function handler(event) {
         });
       }
 
-      // Compute exact 90-day expiry date
+      // Compute exact 365-day expiry date in IST
       const now = new Date();
-      const startDateIso = now.toISOString().split('T')[0];
-      let baseDate = new Date(now);
-
-      if (currentExpiresAt && new Date(currentExpiresAt) > now) {
-        baseDate = new Date(currentExpiresAt);
-      }
-
-      const expiryDate = new Date(baseDate);
-      expiryDate.setDate(expiryDate.getDate() + 90);
-      const expiryDateIso = expiryDate.toISOString().split('T')[0];
-      const daysRemaining = Math.max(
-        1,
-        Math.round((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
+      const dates = computeNetlifySubscriptionDates(
+        now,
+        currentExpiresAt || existingStudentDoc?.planExpiresAt
       );
+      const startDateIso = dates.startDateIso;
+      const expiryDateIso = dates.expiryDateIso;
+      const daysRemaining = dates.daysRemaining;
 
       const verifiedAmount = 99;
-      const planTitle = 'PREMIUM PLAN – ₹99 – 90 Days';
+      const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
       const subscriptionTier = 'premium';
       const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
       const resolvedMethod = captureCheck.method || payMethod || 'RAZORPAY';
@@ -757,7 +793,7 @@ export async function handler(event) {
           isLifetimeFree: false,
           planPurchasedAt: startDateIso,
           planExpiresAt: expiryDateIso,
-          subscriptionValidityDays: 90,
+          subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
           subscriptionStatus: 'ACTIVE',
           lastPaymentId: razorpay_payment_id,
           lastOrderId: razorpay_order_id,
@@ -808,7 +844,7 @@ export async function handler(event) {
         parentEmail: String(email),
         parentMobile: String(mobile),
         planId: 'premium',
-        planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+        planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
         amount: 99,
         currency: 'INR',
         orderId: orderId || `ord_failed_${Date.now()}`,
@@ -901,22 +937,22 @@ export async function handler(event) {
 
         if (studentId && paymentId) {
           const now = new Date();
-          const startDateIso = now.toISOString().split('T')[0];
-          const expiryDate = new Date(now);
-          expiryDate.setDate(expiryDate.getDate() + 90);
-          const expiryDateIso = expiryDate.toISOString().split('T')[0];
+          const existingStudentDoc = await getFirestoreDocument('students', studentId);
+          const dates = computeNetlifySubscriptionDates(now, existingStudentDoc?.planExpiresAt);
+          const startDateIso = dates.startDateIso;
+          const expiryDateIso = dates.expiryDateIso;
           const amountInr = 99;
-          const planTitle = 'PREMIUM PLAN – ₹99 – 90 Days';
+          const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
 
           await patchFirestoreDocument('students', studentId, {
             id: studentId,
             plan: planId,
-            subscriptionTier: planId === 'premium' ? 'premium' : 'standard',
+            subscriptionTier: 'premium',
             planLabel: planTitle,
             isLifetimeFree: false,
             planPurchasedAt: startDateIso,
             planExpiresAt: expiryDateIso,
-            subscriptionValidityDays: 90,
+            subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
             subscriptionStatus: 'ACTIVE',
             lastPaymentId: paymentId,
             lastOrderId: orderId,
@@ -930,7 +966,7 @@ export async function handler(event) {
             studentId,
             plan: planId,
             planExpiresAt: expiryDateIso,
-            validityDays: 90
+            validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
           });
         }
       }
@@ -991,15 +1027,6 @@ export async function handler(event) {
   // 9. REFERRAL SYSTEM ENDPOINTS FOR PUBLISHED MYSTUDYZONE.IN (/api/referrals/*)
   function generateUniqueNetlifyReferralCode(studentId) {
     const cleanId = String(studentId || '').trim();
-    const reserved = {
-      student1: 'STUDY123',
-      uid_aarav_c4_987654: 'STUDY123',
-      student2: 'STUDY456',
-      uid_ananya_c6_982201: 'STUDY456',
-      student3: 'STUDY789',
-      uid_rohan_c7_983301: 'STUDY789'
-    };
-    if (reserved[cleanId]) return reserved[cleanId];
 
     const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
     let h1 = 2166136261;
@@ -1129,32 +1156,6 @@ export async function handler(event) {
       });
     }
 
-    const builtIn = {
-      STUDY123: { id: 'student1', name: 'Aarav Sharma', classLevel: 'Class 5' },
-      STUDY456: { id: 'student2', name: 'Ananya Patil', classLevel: 'Class 3' },
-      STUDY789: { id: 'student3', name: 'Rohan Deshmukh', classLevel: 'Class 7' }
-    };
-
-    if (builtIn[cleanCode]) {
-      const match = builtIn[cleanCode];
-      if (currentUserId && currentUserId === match.id) {
-        return jsonResponse(200, {
-          valid: false,
-          message: 'Self-referral is not allowed. You cannot use your own referral code.'
-        });
-      }
-      return jsonResponse(200, {
-        valid: true,
-        code: cleanCode,
-        referralCode: cleanCode,
-        referrerUserId: match.id,
-        referrerName: match.name,
-        referrerClass: match.classLevel,
-        plan99Cashback: 5,
-        message: `Valid code! Referred by ${match.name} (${match.classLevel}).`
-      });
-    }
-
     // Query Firestore for matching referralCode
     try {
       const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents:runQuery`;
@@ -1249,44 +1250,42 @@ export async function handler(event) {
 
   // 9.6 GET /api/referrals/leaderboard
   if (method === 'GET' && normalizedPath === '/referrals/leaderboard') {
-    return jsonResponse(200, {
-      success: true,
-      leaderboard: [
-        {
-          rank: 1,
-          userId: 'student1',
-          userName: 'Aarav Sharma',
-          className: 'Class 5',
-          schoolName: 'Vacation Champions Academy',
-          city: 'Pune',
-          successfulReferrals: 12,
-          totalEarnings: 85,
-          currentTier: 'Silver'
-        },
-        {
-          rank: 2,
-          userId: 'student2',
-          userName: 'Ananya Patil',
-          className: 'Class 3',
-          schoolName: 'Vacation Champions Academy',
-          city: 'Mumbai',
-          successfulReferrals: 8,
-          totalEarnings: 55,
-          currentTier: 'Bronze'
-        },
-        {
-          rank: 3,
-          userId: 'student3',
-          userName: 'Rohan Deshmukh',
-          className: 'Class 7',
-          schoolName: 'Vacation Champions Academy',
-          city: 'Nagpur',
-          successfulReferrals: 5,
-          totalEarnings: 25,
-          currentTier: 'Bronze'
-        }
-      ]
-    });
+    try {
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents:runQuery`;
+      const qRes = await fetch(queryUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: 'referrals' }],
+            limit: 50
+          }
+        })
+      });
+      const rows = await qRes.json().catch(() => []);
+      const parsed = Array.isArray(rows)
+        ? rows
+            .map((r) => r?.document?.fields)
+            .filter(Boolean)
+            .map((f) => ({
+              userId: f.userId?.stringValue || '',
+              userName: f.userName?.stringValue || f.name?.stringValue || 'Student Champion',
+              className: f.className?.stringValue || 'Student',
+              schoolName: f.schoolName?.stringValue || 'MyStudyZone Academy',
+              city: f.city?.stringValue || 'Maharashtra',
+              successfulReferrals: Number(f.successfulReferrals?.integerValue || f.successfulReferrals?.doubleValue || 0),
+              totalEarnings: Number(f.totalEarnings?.integerValue || f.totalEarnings?.doubleValue || 0),
+              currentTier: f.currentTier?.stringValue || 'None'
+            }))
+            .filter((item) => item.successfulReferrals > 0)
+            .sort((a, b) => b.successfulReferrals - a.successfulReferrals)
+            .slice(0, 10)
+            .map((item, idx) => ({ rank: idx + 1, ...item }))
+        : [];
+      return jsonResponse(200, { success: true, leaderboard: parsed });
+    } catch {
+      return jsonResponse(200, { success: true, leaderboard: [] });
+    }
   }
 
   return jsonResponse(404, {

@@ -113,7 +113,7 @@ export function createRazorpayClient(): Razorpay | null {
 }
 
 /**
- * Cloud Function / Backend Handler: Create a Razorpay LIVE Order for ₹99 (Premium - 90 Days).
+ * Cloud Function / Backend Handler: Create a Razorpay LIVE Order for ₹99 (Premium - 365 Days / 1 Year).
  * Enforces server-authoritative pricing in paise (9900) and returns only the public Key ID.
  * Never creates dummy or simulated orders.
  */
@@ -230,7 +230,7 @@ export function verifyRazorpaySignatureBackend(params: {
 
 /**
  * Cloud Function / Backend Handler: Create a Razorpay LIVE Dynamic UPI QR Code
- * for ₹99 (Premium - 90 Days).
+ * for ₹99 (Premium - 365 Days / 1 Year).
  * Uses Razorpay QR Code API (POST /v1/payments/qr_codes).
  */
 export async function createRazorpayQrCodeBackend(params: {
@@ -270,7 +270,7 @@ export async function createRazorpayQrCodeBackend(params: {
     },
     body: JSON.stringify({
       type: 'upi_qr',
-      name: 'Vacation Champions',
+      name: 'MyStudyZone',
       usage: 'single_use',
       fixed_amount: true,
       payment_amount: amountInPaise,
@@ -319,7 +319,7 @@ export async function createRazorpayQrCodeBackend(params: {
 /**
  * Cloud Function / Backend Handler: Check the live payment status of a Razorpay QR Code.
  * Queries Razorpay Payments API for payments received on this QR code.
- * Upon successful payment, automatically activates the 90-day subscription in Firestore.
+ * Upon successful payment, automatically activates the 365-day subscription in Firestore.
  */
 export async function checkRazorpayQrCodeStatusBackend(params: {
   qrId: string;
@@ -377,7 +377,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
     const orderId = qrId;
     const method = String(successfulPayment.method || 'UPI').toUpperCase();
 
-    // Auto-update student document and transactions ledger in Firestore for 90 days!
+    // Auto-update student document and transactions ledger in Firestore for 365 days!
     const activation = await updateStudentSubscriptionInFirestoreBackend({
       studentId: String(studentId),
       studentName: String(studentName || qrData?.notes?.studentName || 'Student'),

@@ -2,16 +2,19 @@
   "entities": {
     "StudentProfile": {
       "title": "StudentProfile",
-      "description": "Student user profile information with enrolled class, learning points, streak, attendance, assignments, and fee details.",
+      "description": "Authenticated student or teacher profile with enrolled class (Class 1 to Class 10), learning points, streak, and subscription validity.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
+        "firebaseUid": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 100 },
         "parentName": { "type": "string", "maxLength": 100 },
         "parentEmail": { "type": "string", "maxLength": 150 },
         "mobile": { "type": "string", "maxLength": 20 },
         "email": { "type": "string", "maxLength": 150 },
         "classLevel": { "type": "string", "maxLength": 20 },
+        "activatedClassLevel": { "type": "string", "maxLength": 20 },
+        "accountRole": { "type": "string", "enum": ["student", "teacher"] },
         "schoolName": { "type": "string", "maxLength": 150 },
         "parentConsent": { "type": "boolean" },
         "points": { "type": "number" },
@@ -20,8 +23,13 @@
         "streakDays": { "type": "number" },
         "lastActiveDate": { "type": "string", "maxLength": 50 },
         "plan": { "type": "string", "enum": ["free", "basic", "premium"] },
+        "planPurchasedAt": { "type": "string", "maxLength": 50 },
+        "planExpiresAt": { "type": "string", "maxLength": 50 },
+        "lastPaymentId": { "type": "string", "maxLength": 100 },
         "registeredAt": { "type": "string", "maxLength": 50 },
         "avatar": { "type": "string", "maxLength": 20 },
+        "referralCode": { "type": "string", "maxLength": 32 },
+        "referralLink": { "type": "string", "maxLength": 200 },
         "linkedParentId": { "type": "string", "maxLength": 128 },
         "attendanceRate": { "type": "number" },
         "feeStatus": { "type": "string", "enum": ["PAID", "PARTIAL", "DUE"] }
@@ -111,7 +119,7 @@
     },
     "PaymentTransaction": {
       "title": "PaymentTransaction",
-      "description": "Verified payment receipt record.",
+      "description": "Verified Razorpay payment receipt record (₹99 / 365 days).",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
@@ -122,14 +130,14 @@
         "planId": { "type": "string", "enum": ["basic", "premium"] },
         "amount": { "type": "number" },
         "paymentId": { "type": "string", "maxLength": 100 },
-        "status": { "type": "string", "enum": ["SUCCESS", "FAILED", "PENDING"] },
+        "status": { "type": "string", "enum": ["SUCCESS", "FAILED", "PENDING", "REFUNDED"] },
         "createdAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "receiptNumber", "studentId", "amount", "status"]
     },
     "Announcement": {
       "title": "Announcement",
-      "description": "School and vacation champions announcements broadcast by admin.",
+      "description": "School and MyStudyZone announcements broadcast by admin.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
@@ -140,12 +148,90 @@
         "author": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "title", "content", "publishedAt"]
+    },
+    "ReferralAccount": {
+      "title": "ReferralAccount",
+      "description": "Student or teacher referral wallet and unique code record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "referralCode": { "type": "string", "maxLength": 32 },
+        "referralLink": { "type": "string", "maxLength": 200 },
+        "availableWalletBalance": { "type": "number" },
+        "totalEarnings": { "type": "number" }
+      },
+      "required": ["userId", "referralCode"]
+    },
+    "ReferralTransaction": {
+      "title": "ReferralTransaction",
+      "description": "Credited or pending referral reward transaction.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "referrerId": { "type": "string", "maxLength": 128 },
+        "buyerStudentId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["PENDING", "CREDITED", "REVERSED"] }
+      },
+      "required": ["id", "referrerId", "buyerStudentId", "status"]
+    },
+    "PayoutRequest": {
+      "title": "PayoutRequest",
+      "description": "Ambassador wallet withdrawal request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["REQUESTED", "PENDING", "PROCESSED", "COMPLETED", "FAILED", "REJECTED"] }
+      },
+      "required": ["id", "userId", "amount"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Student support inquiry or technical ticket.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ticketNumber": { "type": "string", "maxLength": 50 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["id", "studentId", "subject", "description"]
+    },
+    "Grievance": {
+      "title": "Grievance",
+      "description": "Formal student or parent grievance record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "grievanceNumber": { "type": "string", "maxLength": 50 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["id", "studentId", "subject", "description"]
+    },
+    "QuestionReport": {
+      "title": "QuestionReport",
+      "description": "Student-submitted quiz question accuracy report.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "questionId": { "type": "string", "maxLength": 128 },
+        "issueType": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "studentId", "questionId"]
     }
   },
   "firestore": {
     "/students/{studentId}": {
       "schema": { "$ref": "#/entities/StudentProfile" },
-      "description": "Collection of individual student profiles partitioned by student ID."
+      "description": "Collection of authenticated student and teacher profiles partitioned by Firebase UID."
     },
     "/students/{studentId}/attempts/{attemptId}": {
       "schema": { "$ref": "#/entities/QuizAttempt" },
@@ -169,11 +255,35 @@
     },
     "/transactions/{transactionId}": {
       "schema": { "$ref": "#/entities/PaymentTransaction" },
-      "description": "Payment transactions ledger for memberships."
+      "description": "Verified Razorpay payment transactions ledger for memberships."
     },
     "/announcements/{announcementId}": {
       "schema": { "$ref": "#/entities/Announcement" },
-      "description": "Broadcast announcements from school administrators."
+      "description": "Broadcast announcements from administrators."
+    },
+    "/referrals/{userId}": {
+      "schema": { "$ref": "#/entities/ReferralAccount" },
+      "description": "Referral ambassador accounts and cashback wallet balances."
+    },
+    "/referral_transactions/{txId}": {
+      "schema": { "$ref": "#/entities/ReferralTransaction" },
+      "description": "Referral reward credit and reversal history."
+    },
+    "/payout_requests/{payoutId}": {
+      "schema": { "$ref": "#/entities/PayoutRequest" },
+      "description": "Ambassador withdrawal requests."
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "User-submitted support tickets."
+    },
+    "/grievances/{grievanceId}": {
+      "schema": { "$ref": "#/entities/Grievance" },
+      "description": "User-submitted formal grievances."
+    },
+    "/question_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/QuestionReport" },
+      "description": "Student quiz question accuracy reports."
     }
   }
 }

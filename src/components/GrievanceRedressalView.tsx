@@ -397,7 +397,7 @@ export const GrievanceRedressalView: React.FC<GrievanceRedressalViewProps> = ({ 
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Designated Officer</span>
                   <p className="font-extrabold text-slate-900">Academic Review Council</p>
-                  <p className="text-[11px] text-slate-500">Vacation Champions / mystudyzone.in</p>
+                  <p className="text-[11px] text-slate-500">MyStudyZone / mystudyzone.in</p>
                 </div>
 
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">

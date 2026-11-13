@@ -6,15 +6,6 @@
 
 export const PUBLISHED_REFERRAL_BASE_URL = 'https://mystudyzone.in/register';
 
-const RESERVED_STUDENT_CODES: Record<string, string> = {
-  student1: 'STUDY123',
-  uid_aarav_c4_987654: 'STUDY123',
-  student2: 'STUDY456',
-  uid_ananya_c6_982201: 'STUDY456',
-  student3: 'STUDY789',
-  uid_rohan_c7_983301: 'STUDY789',
-};
-
 /**
  * Normalizes a referral code string and rejects generic/placeholder codes.
  */
@@ -33,11 +24,8 @@ export function sanitizeReferralCode(code?: string | null): string {
 
 /**
  * Generates a deterministic, unique referral code for a student based on their unique UID.
- * - student1 -> STUDY123
- * - student2 -> STUDY456
- * - student3 -> STUDY789
- * - Any other UID -> STUDY + deterministic 6-character alphanumeric code derived from UID
- * Ensures zero collisions against `existingCodes` if provided.
+ * Produces STUDY + deterministic 6-character alphanumeric code derived from UID
+ * and ensures zero collisions against `existingCodes` if provided.
  */
 export function generateUniqueStudentReferralCode(
   studentId: string,
@@ -50,14 +38,6 @@ export function generateUniqueStudentReferralCode(
     for (const c of existingCodes) {
       const norm = sanitizeReferralCode(c);
       if (norm) usedSet.add(norm);
-    }
-  }
-
-  // Check reserved sample student mapping first
-  if (RESERVED_STUDENT_CODES[cleanId]) {
-    const reserved = RESERVED_STUDENT_CODES[cleanId];
-    if (!usedSet.has(reserved)) {
-      return reserved;
     }
   }
 
@@ -115,7 +95,7 @@ export function buildStudentReferralLink(referralCode: string): string {
 }
 
 /**
- * Builds the concise display link (e.g. mystudyzone.in/register?ref=STUDY123)
+ * Builds the concise display link (e.g. mystudyzone.in/register?ref=STUDY...)
  */
 export function buildStudentReferralDisplayLink(referralCode: string): string {
   const cleanCode = sanitizeReferralCode(referralCode);
