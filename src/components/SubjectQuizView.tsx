@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
+import { ClassLevel, SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
 import { randomizeQuizQuestions } from '../services/answerRandomizerService';
 import confetti from 'canvas-confetti';
 import { 
@@ -25,7 +25,7 @@ import {
   Flame
 } from 'lucide-react';
 
-import { canAccessSubject } from '../utils/subscriptionAccess';
+import { canAccessSubject, getClassSubscriptionInfo } from '../utils/subscriptionAccess';
 import { PlanUpgradePromptModal } from './PlanUpgradePromptModal';
 import { ReportQuestionModal } from './ReportQuestionModal';
 import {
@@ -37,7 +37,7 @@ import {
 interface SubjectQuizViewProps {
   initialSubject?: SubjectName;
   initialLevel?: QuizLevel;
-  onOpenMembership?: (plan?: 'basic' | 'premium') => void;
+  onOpenMembership?: (plan?: 'basic' | 'premium', targetClass?: ClassLevel) => void;
 }
 
 const QUESTION_FORMAT_LABELS: Record<string, { label: string; badgeColor: string }> = {
@@ -114,7 +114,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     fetchClassSubjectLevelQuestionsAsync,
     getSubjectLevelProgress,
     submitQuizAttempt,
-    promoteOrUpdateStudentClass
+    switchActiveClass
   } = useApp();
 
   const availableSubjectsForClass = React.useMemo(() => {
@@ -424,35 +424,65 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
           </div>
         </div>
 
-        {/* Classes 1 to 10 Quick Selector Bar (Locked to User's Registered Class) */}
+        {/* Classes 1 to 10 Quick Selector Bar (Multi-Class Switcher & ₹99 Activation) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
-            Registered Class:
+            Class Workspace:
           </span>
           {ALL_10_CLASSES.map(cls => {
             const isCurrClass = currentStudent.classLevel === cls;
+            const cInfo = getClassSubscriptionInfo(currentStudent, cls);
             return (
               <button
                 key={cls}
                 type="button"
-                onClick={() => {
-                  if (cls !== currentStudent.classLevel) {
-                    promoteOrUpdateStudentClass(cls, `Attempted to switch quiz class to ${cls}`);
+                onClick={async () => {
+                  if (cInfo.isAccessible) {
+                    if (cls !== currentStudent.classLevel) {
+                      const nextSubjs = getSubjectsForClass(cls);
+                      await switchActiveClass(cls);
+                      setQuizState('idle');
+                      setQuestions([]);
+                      setAnswersLog([]);
+                      if (!nextSubjs.includes(selectedSubject)) {
+                        setSelectedSubject(nextSubjs[0] || 'Mathematics');
+                      }
+                    }
+                  } else {
+                    onOpenMembership?.('premium', cls);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border inline-flex items-center gap-1 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border inline-flex items-center gap-1 cursor-pointer ${
                   isCurrClass
-                    ? 'bg-slate-900 text-amber-300 border-slate-900 shadow-xs cursor-default'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-70 cursor-not-allowed'
+                    ? 'bg-slate-900 text-amber-300 border-slate-900 shadow-xs'
+                    : cInfo.isPaidActive
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : cInfo.isFreeBase
+                    ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-300'
+                    : cInfo.isExpired
+                    ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300'
+                    : 'bg-slate-50 hover:bg-amber-50 text-slate-500 border-slate-200 hover:border-amber-300'
                 }`}
                 title={
                   isCurrClass
-                    ? `Active Registered Class: ${cls}`
-                    : `Locked: Your account is registered for ${currentStudent.classLevel} only.`
+                    ? `Active Workspace: ${cls}`
+                    : cInfo.isAccessible
+                    ? `Switch quiz workspace to ${cls}`
+                    : cInfo.isExpired
+                    ? `${cls} expired — Click to renew for ₹99 (365 Days)`
+                    : `Click to unlock ${cls} for ₹99 (365 Days)`
                 }
               >
-                {!isCurrClass && <Lock className="w-3 h-3" />}
+                {!cInfo.isAccessible && <Lock className="w-3 h-3 text-amber-600" />}
                 <span>{cls}</span>
+                {!isCurrClass && cInfo.isPaidActive && (
+                  <span className="text-[9px] px-1 rounded bg-emerald-600 text-white">Paid</span>
+                )}
+                {!isCurrClass && !cInfo.isAccessible && (
+                  <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-900">
+                    {cInfo.isExpired ? 'Renew' : '₹99'}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1066,7 +1096,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         upgradeMessage={lockedSubjectPrompt.reason}
         onSelectUpgradePlan={(plan: 'basic' | 'premium') => {
           setLockedSubjectPrompt(prev => ({ ...prev, isOpen: false }));
-          onOpenMembership?.(plan);
+          onOpenMembership?.(plan, currentStudent.classLevel);
         }}
       />
 

@@ -10,6 +10,8 @@ import {
   CreateQrResponse
 } from '../services/paymentService';
 import {
+  ALL_CLASS_LEVELS,
+  getClassSubscriptionInfo,
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage,
   formatStandardOrdinal
@@ -17,24 +19,31 @@ import {
 import {
   X, CheckCircle2, ShieldCheck, Crown, Lock, CreditCard, Smartphone,
   AlertCircle, Sparkles, RefreshCw, Copy, Check, Loader2,
-  QrCode, ArrowLeft, Timer, CheckCircle, Gift
+  QrCode, ArrowLeft, Timer, CheckCircle, Gift, GraduationCap
 } from 'lucide-react';
-import { PaymentTransaction } from '../types';
+import { ClassLevel, PaymentTransaction } from '../types';
 
 interface MembershipModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSelectedPlan?: 'basic' | 'premium';
+  initialSelectedClass?: ClassLevel;
   onRequestAuth?: (defaultTab?: 'login' | 'register') => void;
+  onSwitchActiveClass?: (cls: ClassLevel) => void;
 }
 
 export const MembershipModal: React.FC<MembershipModalProps> = ({
   isOpen,
   onClose,
+  initialSelectedClass,
   onRequestAuth,
+  onSwitchActiveClass,
 }) => {
-  const { currentStudent, activateVerifiedMembership } = useApp();
+  const { currentStudent, activateVerifiedMembership, switchActiveClass } = useApp();
 
+  const [targetClass, setTargetClass] = useState<ClassLevel>(
+    initialSelectedClass || currentStudent?.classLevel || 'Class 5'
+  );
   const [step, setStep] = useState<'select' | 'qr_code' | 'processing' | 'success' | 'failed'>('select');
   const [isCreatingOrder, setIsCreatingOrder] = useState<boolean>(false);
   const [lastTransaction, setLastTransaction] = useState<PaymentTransaction | null>(null);
@@ -76,6 +85,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setTargetClass(initialSelectedClass || currentStudent?.classLevel || 'Class 5');
       setStep('select');
       setIsCreatingOrder(false);
       isCheckoutBusyRef.current = false;
@@ -120,7 +130,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [isOpen, currentStudent?.referredByCode]);
+  }, [isOpen, initialSelectedClass, currentStudent?.classLevel, currentStudent?.referredByCode]);
 
   // QR Code active countdown timer & auto-polling effect
   useEffect(() => {
@@ -148,12 +158,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             qrData.qrId,
             currentStudent,
             'premium',
-            referralCodeInput.trim()
+            referralCodeInput.trim(),
+            targetClass
           );
           if (checkRes.paid && checkRes.status === 'PAID') {
             clearQrTimers();
             setQrStatus('PAID');
-            setQrStatusNotice('Payment Verified! Activating ₹99 Premium subscription...');
+            setQrStatusNotice(`Payment Verified! Activating ₹99 Premium subscription for ${targetClass}...`);
             if ((checkRes as any).referral?.credited) {
               setReferralCreditedNotice(
                 `₹5 Referral Cashback Credited! (Referrer: ${(checkRes as any).referral.referrerName})`
@@ -183,11 +194,12 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [step, qrData, currentStudent, referralCodeInput]);
+  }, [step, qrData, currentStudent, referralCodeInput, targetClass]);
 
   if (!isOpen) return null;
 
-  const planInfo = getStudentPlanInfo(currentStudent);
+  const targetClassInfo = getClassSubscriptionInfo(currentStudent, targetClass);
+  const planInfo = getStudentPlanInfo(currentStudent, undefined, targetClass);
 
   // Format countdown seconds into MM:SS
   const formatCountdown = (seconds: number) => {
@@ -219,10 +231,10 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = referralCodeInput.trim().toUpperCase();
 
     try {
-      // Ensure Razorpay script is loaded in parallel with ₹99 order creation
+      // Ensure Razorpay script is loaded in parallel with ₹99 order creation for targetClass
       const [scriptReady, orderData] = await Promise.all([
         loadRazorpayScript(),
-        createRazorpayOrder(currentStudent, 'premium', activeRefCode)
+        createRazorpayOrder(currentStudent, 'premium', activeRefCode, targetClass)
       ]);
 
       if (!scriptReady || typeof (window as any).Razorpay !== 'function') {
@@ -244,6 +256,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
         orderData,
         student: currentStudent,
         planId: 'premium',
+        selectedClass: targetClass,
         referralCode: activeRefCode || undefined,
         onCheckoutOpened: () => {
           isCheckoutBusyRef.current = false;
@@ -321,11 +334,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = referralCodeInput.trim().toUpperCase();
 
     try {
-      const data = await createRazorpayQrCode(currentStudent, 'premium', activeRefCode);
+      const data = await createRazorpayQrCode(currentStudent, 'premium', activeRefCode, targetClass);
       setQrData(data);
       setQrCountdown(data.expiresInSeconds || 600);
       setQrStatus('WAITING');
-      setQrStatusNotice('Scan using Google Pay, PhonePe, Paytm or any UPI App to pay ₹99.');
+      setQrStatusNotice(`Scan using Google Pay, PhonePe, Paytm or any UPI App to pay ₹99 for ${targetClass}.`);
       setStep('qr_code');
       isCheckoutBusyRef.current = false;
       setIsCreatingOrder(false);
@@ -342,13 +355,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
   const handleManualCheckQrStatus = async () => {
     if (!qrData || !currentStudent || isCheckingQr) return;
     setIsCheckingQr(true);
-    setQrStatusNotice('Checking ₹99 payment with Razorpay & Bank...');
+    setQrStatusNotice(`Checking ₹99 payment (${targetClass}) with Razorpay & Bank...`);
     try {
       const checkRes = await checkRazorpayQrStatus(
         qrData.qrId,
         currentStudent,
         'premium',
-        referralCodeInput.trim()
+        referralCodeInput.trim(),
+        targetClass
       );
       if (checkRes.paid && checkRes.status === 'PAID') {
         clearQrTimers();
@@ -460,6 +474,76 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
+          {/* Class 1 to 10 Subscription Selector Strip */}
+          {currentStudent && step === 'select' && (
+            <div className="mb-5 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-indigo-700" />
+                  <span className="text-xs font-black uppercase tracking-wider text-indigo-950">
+                    Select Class to Activate, Switch, or Renew (Class 1 to Class 10)
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-indigo-800">
+                  Selected: <strong>{targetClass}</strong> (₹99 / 365 Days per class)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {ALL_CLASS_LEVELS.map((cls) => {
+                  const cInfo = getClassSubscriptionInfo(currentStudent, cls);
+                  const isTarget = cls === targetClass;
+                  return (
+                    <button
+                      key={cls}
+                      type="button"
+                      onClick={() => setTargetClass(cls)}
+                      className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                        isTarget
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm ring-2 ring-indigo-300'
+                          : cInfo.isPaidActive
+                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-300'
+                          : cInfo.isFreeBase
+                          ? 'bg-white hover:bg-indigo-50 text-slate-800 border-indigo-300'
+                          : cInfo.isExpired
+                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-300'
+                          : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-black">{cls}</span>
+                        {cInfo.isPaidActive ? (
+                          <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isTarget ? 'bg-emerald-400 text-slate-950' : 'bg-emerald-200 text-emerald-900'}`}>
+                            Paid
+                          </span>
+                        ) : cInfo.isFreeBase ? (
+                          <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isTarget ? 'bg-white/25 text-white' : 'bg-indigo-100 text-indigo-800'}`}>
+                            Free
+                          </span>
+                        ) : cInfo.isExpired ? (
+                          <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isTarget ? 'bg-rose-400 text-slate-950' : 'bg-rose-200 text-rose-900'}`}>
+                            Expired
+                          </span>
+                        ) : (
+                          <Lock className={`w-3 h-3 ${isTarget ? 'text-amber-300' : 'text-slate-400'}`} />
+                        )}
+                      </div>
+                      <span className={`text-[10px] block truncate mt-0.5 font-semibold ${isTarget ? 'text-indigo-100' : 'text-slate-500'}`}>
+                        {cInfo.isPaidActive
+                          ? cInfo.daysRemainingDisplay
+                          : cInfo.isFreeBase
+                          ? 'Free Base Class'
+                          : cInfo.isExpired
+                          ? 'Renew ₹99'
+                          : 'Locked • ₹99'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Active Subscription Banner */}
           {currentStudent && (
             <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
@@ -469,49 +553,80 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <div>
                     <p className="text-xs font-bold text-slate-500">
                       {currentStudent.accountRole === 'teacher' ? 'Teacher' : 'Student'}:{' '}
-                      <strong className="text-slate-900">{currentStudent.name}</strong> (Standard {formatStandardOrdinal(currentStudent.classLevel)} • {currentStudent.classLevel})
+                      <strong className="text-slate-900">{currentStudent.name}</strong> (Target Class: Standard {formatStandardOrdinal(targetClass)} • {targetClass})
                     </p>
                     <p className="text-sm font-black text-indigo-950">
-                      Current Active Plan:{' '}
-                      <span className="text-emerald-700">{planInfo.planDisplayName}</span>
+                      Status for {targetClass}:{' '}
+                      <span className={targetClassInfo.isLocked && !targetClassInfo.isExpired ? 'text-amber-700' : targetClassInfo.isExpired ? 'text-rose-700' : 'text-emerald-700'}>
+                        {targetClassInfo.status === 'LOCKED'
+                          ? `LOCKED — Purchase ₹99 (365 Days) to Unlock`
+                          : planInfo.planDisplayName}
+                      </span>
                       {' • '}
                       <span className="text-xs font-bold text-slate-600">
-                        {planInfo.isLifetimeFree
-                          ? `Validity: ${planInfo.daysRemainingDisplay}`
-                          : `Purchased: ${planInfo.purchasedDisplay} • Expires: ${planInfo.expiryDisplay} • ${planInfo.daysRemainingDisplay}`}
+                        {targetClassInfo.isPaidActive
+                          ? `Purchased: ${planInfo.purchasedDisplay} • Expires: ${planInfo.expiryDisplay} • ${planInfo.daysRemainingDisplay}`
+                          : targetClassInfo.daysRemainingDisplay}
                       </span>
                     </p>
                   </div>
                 </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-black border ${
-                    planInfo.isPaidPlanExpired
-                      ? 'bg-rose-100 text-rose-800 border-rose-300'
+                <div className="flex flex-wrap items-center gap-2">
+                  {targetClassInfo.isAccessible && currentStudent.classLevel !== targetClass && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await switchActiveClass(targetClass);
+                        onSwitchActiveClass?.(targetClass);
+                        resetModal();
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black cursor-pointer shadow-xs"
+                    >
+                      Switch Workspace to {targetClass} →
+                    </button>
+                  )}
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-black border ${
+                      targetClassInfo.isExpired
+                        ? 'bg-rose-100 text-rose-800 border-rose-300'
+                        : targetClassInfo.status === 'LOCKED'
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : planInfo.isExpiringToday
+                        ? 'bg-amber-100 text-amber-900 border-amber-400'
+                        : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    }`}
+                  >
+                    {targetClassInfo.isExpired
+                      ? '● EXPIRED — RENEW ₹99'
+                      : targetClassInfo.status === 'LOCKED'
+                      ? '● LOCKED — PAY ₹99 TO UNLOCK'
                       : planInfo.isExpiringToday
-                      ? 'bg-amber-100 text-amber-900 border-amber-400'
-                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                  }`}
-                >
-                  {planInfo.isPaidPlanExpired
-                    ? '● EXPIRED — FREE PLAN ACTIVE (RENEW BELOW)'
-                    : planInfo.isExpiringToday
-                    ? '● EXPIRING TODAY — RENEW FOR +365 DAYS'
-                    : `● ACTIVE (${planInfo.daysRemainingDisplay})`}
-                </span>
+                      ? '● EXPIRING TODAY — RENEW FOR +365 DAYS'
+                      : `● ACTIVE (${targetClassInfo.isPaidActive ? planInfo.daysRemainingDisplay : 'Free Base'})`}
+                  </span>
+                </div>
               </div>
 
-              {planInfo.effectivePlan === 'premium' && (
+              {targetClassInfo.isPaidActive && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-black flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{getPremiumActivatedBannerMessage(currentStudent.classLevel)}</span>
+                  <span>{getPremiumActivatedBannerMessage(targetClass)}</span>
                 </div>
               )}
 
-              {planInfo.isPaidPlanExpired && (
+              {targetClassInfo.status === 'LOCKED' && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs font-bold flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>
+                    <strong>{targetClass}</strong> is an additional class and stays locked until your ₹99 payment is verified. Your existing active classes remain unaffected.
+                  </span>
+                </div>
+              )}
+
+              {targetClassInfo.isExpired && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-bold text-rose-900">
-                    ⚠️ Your previous <strong>{planInfo.expiredPlanName}</strong> ({planInfo.expiryDisplay}). You are currently on{' '}
-                    <strong>FREE PLAN – ₹0 – Lifetime</strong>. Renew your ₹99 Premium Plan below for Standard {formatStandardOrdinal(currentStudent.classLevel)}!
+                    ⚠️ Your <strong>{targetClass}</strong> 365-day subscription expired ({targetClassInfo.expiryDisplay}). Renew {targetClass} below for ₹99 (365 Days) — your other active classes stay unaffected!
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -520,7 +635,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       onClick={() => handleInitiateCheckout()}
                       className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-black text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
                     >
-                      <span>Pay Online (₹99) →</span>
+                      <span>Renew {targetClass} (₹99) →</span>
                     </button>
                     <button
                       type="button"
@@ -545,7 +660,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center gap-3 text-indigo-950 animate-in fade-in duration-150">
                   <Loader2 className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
                   <span className="text-xs sm:text-sm font-black">
-                    Generating Razorpay {gatewayMode} payment request for Standard {formatStandardOrdinal(currentStudent?.classLevel)} PREMIUM PLAN – ₹99 (365 Days / 1 Year)...
+                    Generating Razorpay {gatewayMode} payment request for Standard {formatStandardOrdinal(targetClass)} ({targetClass}) PREMIUM PLAN – ₹99 (365 Days / 1 Year)...
                   </span>
                 </div>
               )}
@@ -554,7 +669,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 {/* PLAN 1: FREE PLAN – ₹0 – Lifetime */}
                 <div
                   className={`p-6 rounded-3xl border-2 flex flex-col justify-between transition-all ${
-                    planInfo.effectivePlan === 'free'
+                    targetClassInfo.isFreeBase && !targetClassInfo.isPaidActive
                       ? 'border-emerald-500 bg-emerald-50/30 shadow-sm'
                       : 'border-slate-200 bg-slate-50/60'
                   }`}
@@ -565,7 +680,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                         FREE DEMO ACCESS
                       </span>
                       <span className="text-xs font-bold text-emerald-700">
-                        Standard {formatStandardOrdinal(currentStudent?.classLevel)}
+                        {targetClassInfo.isFreeBase ? `Standard ${formatStandardOrdinal(targetClass)}` : 'Base Class Only'}
                       </span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900">
@@ -577,13 +692,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     </div>
 
                     <p className="text-xs font-bold text-slate-600 mb-3">
-                      Free demo access for your registered class (Standard {formatStandardOrdinal(currentStudent?.classLevel)}):
+                      Free demo access applies to your base registered class ({currentStudent?.primaryClassLevel || currentStudent?.classLevel || targetClass}):
                     </p>
 
                     <ul className="space-y-2.5 text-xs text-slate-700 font-bold mb-6">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>2 Free Demo Worksheets: 1 English &amp; 1 Mathematics (Standard {formatStandardOrdinal(currentStudent?.classLevel)})</span>
+                        <span>2 Free Demo Worksheets: 1 English &amp; 1 Mathematics (Base Class)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -591,11 +706,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>English &amp; Mathematics Subject Quizzes (All 4 Levels)</span>
+                        <span>English &amp; Mathematics Subject Quizzes (Base Class)</span>
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>All Other Worksheets for Standard {formatStandardOrdinal(currentStudent?.classLevel)} Locked</span>
+                        <span>All Other Worksheets for Standard {formatStandardOrdinal(targetClass)} Locked</span>
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -603,22 +718,24 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>Worksheets for Other Classes Strictly Locked</span>
+                        <span>Additional Classes (₹99 Each) Locked Until Paid Activation</span>
                       </li>
                     </ul>
                   </div>
 
                   <div className="w-full py-3 rounded-2xl bg-emerald-100 text-emerald-900 font-black text-xs text-center border border-emerald-300">
-                    {planInfo.effectivePlan === 'free'
-                      ? '✓ Currently Active (FREE PLAN – 2 Demo Worksheets)'
-                      : '✓ Included Forever as Base Plan'}
+                    {targetClassInfo.isFreeBase && !targetClassInfo.isPaidActive
+                      ? `✓ Active on Base Class (${targetClass})`
+                      : !targetClassInfo.isFreeBase
+                      ? `🔒 Not Included for ${targetClass} — Pay ₹99 to Unlock`
+                      : '✓ Base Plan Included Forever'}
                   </div>
                 </div>
 
                 {/* PLAN 2: PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
                 <div className="p-6 rounded-3xl border-2 border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/60 shadow-xl flex flex-col justify-between relative transition-all">
                   <div className="absolute -top-3 right-4 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> STANDARD {formatStandardOrdinal(currentStudent?.classLevel).toUpperCase()} UNLOCK
+                    <Sparkles className="w-3 h-3" /> STANDARD {formatStandardOrdinal(targetClass).toUpperCase()} UNLOCK
                   </div>
 
                   <div>
@@ -629,25 +746,25 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       <span className="text-xs font-bold text-amber-800">1 Year (365 Days) Validity</span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900">
-                      PREMIUM PLAN – ₹99 (Standard {formatStandardOrdinal(currentStudent?.classLevel)})
+                      PREMIUM PLAN – ₹99 (Standard {formatStandardOrdinal(targetClass)})
                     </h3>
                     <div className="mt-2 mb-4 flex items-baseline gap-1">
                       <span className="text-4xl font-black text-amber-600">₹99</span>
-                      <span className="text-xs text-slate-500 font-bold">/ 1 Year (365 Days) • Standard {formatStandardOrdinal(currentStudent?.classLevel)}</span>
+                      <span className="text-xs text-slate-500 font-bold">/ 1 Year (365 Days) • Standard {formatStandardOrdinal(targetClass)}</span>
                     </div>
 
                     <p className="text-xs font-bold text-amber-900 mb-3">
-                      Unlock all worksheets &amp; subjects for your registered class (Standard {formatStandardOrdinal(currentStudent?.classLevel)}):
+                      Unlock all worksheets &amp; subjects for Standard {formatStandardOrdinal(targetClass)} ({targetClass}):
                     </p>
 
                     <ul className="space-y-2 text-xs text-slate-800 font-bold mb-5">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Unlock All Worksheets for Standard {formatStandardOrdinal(currentStudent?.classLevel)} (All Subjects)</span>
+                        <span>Unlock All Worksheets for Standard {formatStandardOrdinal(targetClass)} (All Subjects)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Unlock All Subjects Available for Standard {formatStandardOrdinal(currentStudent?.classLevel)} (4 Levels)</span>
+                        <span>Unlock All Subjects Available for Standard {formatStandardOrdinal(targetClass)} (4 Levels)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -663,7 +780,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       </li>
                       <li className="flex items-start gap-2 text-indigo-800">
                         <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                        <span>Class-Wise Security: Linked Strictly to Standard {formatStandardOrdinal(currentStudent?.classLevel)}</span>
+                        <span>Independent 365-Day Validity Linked to {targetClass} on Your Account</span>
                       </li>
                     </ul>
 
@@ -825,13 +942,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               <div className="p-6 rounded-3xl bg-gradient-to-b from-indigo-950 via-slate-900 to-indigo-950 text-white shadow-2xl text-center space-y-4 border border-indigo-800">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                    RAZORPAY DYNAMIC UPI QR CODE • PREMIUM PLAN (₹99)
+                    RAZORPAY DYNAMIC UPI QR CODE • {targetClass.toUpperCase()} (₹99)
                   </span>
                   <h3 className="text-xl font-black mt-0.5">
-                    Scan &amp; Pay ₹99
+                    Scan &amp; Pay ₹99 ({targetClass})
                   </h3>
                   <p className="text-xs text-indigo-200 mt-0.5">
-                    Student: <strong>{currentStudent?.name}</strong> ({currentStudent?.classLevel}) • 365 Days (1 Year) Access
+                    Account: <strong>{currentStudent?.name}</strong> • Unlocking: <strong>{targetClass}</strong> (365 Days / 1 Year Access)
                   </p>
                 </div>
 
@@ -985,7 +1102,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   Welcome to PREMIUM PLAN – ₹99! 👑
                 </h3>
                 <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 font-black text-xs sm:text-sm max-w-lg mx-auto">
-                  {getPremiumActivatedBannerMessage(currentStudent?.classLevel)}
+                  {getPremiumActivatedBannerMessage((lastTransaction.selectedClass as ClassLevel) || targetClass)}
                 </div>
                 {referralCreditedNotice && (
                   <p className="mt-2 inline-block px-3 py-1 rounded-xl bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300">
@@ -1014,7 +1131,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex justify-between">
                   <span className="text-slate-400">Activated Class:</span>
                   <span className="font-extrabold text-emerald-700">
-                    Standard {formatStandardOrdinal(currentStudent?.classLevel)} ({currentStudent?.classLevel})
+                    Standard {formatStandardOrdinal((lastTransaction.selectedClass as ClassLevel) || targetClass)} ({(lastTransaction.selectedClass as ClassLevel) || targetClass})
                   </span>
                 </div>
                 <div className="flex justify-between">

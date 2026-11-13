@@ -19,7 +19,7 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, arrayUnion, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { StudentProfile } from '../types';
+import { ClassLevel, ClassSubscriptionRecord, StudentProfile } from '../types';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -29,6 +29,9 @@ import {
   computeSubscriptionActivationDates,
   PAID_SUBSCRIPTION_VALIDITY_DAYS,
 } from '../utils/subscriptionDateUtils';
+import {
+  normalizeClassLevelValue,
+} from '../utils/subscriptionAccess';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
@@ -543,10 +546,13 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     const studentRef = doc(db, 'students', student.id);
     const referralRef = doc(db, 'referrals', student.id);
 
-    // Check existing student/referral doc in Firestore so an existing student's referralCode NEVER changes
+    // Check existing student/referral doc in Firestore so an existing student's referralCode and classSubscriptions NEVER disappear
     let existingCode = sanitizeReferralCode(student.referralCode);
     let existingReferredByCode = sanitizeReferralCode(student.referredByCode);
     let existingReferredByStudentId = student.referredByStudentId || undefined;
+    let existingPrimaryClass: ClassLevel | undefined = normalizeClassLevelValue(student.primaryClassLevel) || undefined;
+    let existingClassSubscriptions: Partial<Record<ClassLevel, ClassSubscriptionRecord>> = {};
+    let existingActivatedClasses: ClassLevel[] = [];
 
     try {
       const [stuSnap, refSnap] = await Promise.all([
@@ -574,6 +580,19 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
           refData?.referredByUserId ||
           undefined;
       }
+      if (!existingPrimaryClass && stuData?.primaryClassLevel) {
+        existingPrimaryClass = normalizeClassLevelValue(stuData.primaryClassLevel) || undefined;
+      } else if (!existingPrimaryClass && stuData?.classLevel) {
+        existingPrimaryClass = normalizeClassLevelValue(stuData.classLevel) || undefined;
+      }
+      if (stuData?.classSubscriptions && typeof stuData.classSubscriptions === 'object') {
+        existingClassSubscriptions = stuData.classSubscriptions;
+      }
+      if (Array.isArray(stuData?.activatedClasses)) {
+        existingActivatedClasses = stuData.activatedClasses
+          .map((c: string) => normalizeClassLevelValue(c))
+          .filter(Boolean) as ClassLevel[];
+      }
     } catch {
       // Offline or first write — proceed with deterministic code
     }
@@ -582,9 +601,34 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       existingCode || generateUniqueStudentReferralCode(student.id, student.name);
     const permanentReferralLink = buildStudentReferralLink(permanentReferralCode);
 
-    const activePlan = student.plan === 'basic' || student.plan === 'premium' ? 'premium' : 'free';
+    const mergedClassSubscriptions: Partial<Record<ClassLevel, ClassSubscriptionRecord>> = {
+      ...existingClassSubscriptions,
+      ...(student.classSubscriptions || {}),
+    };
+    const activePaidClasses = new Set<ClassLevel>(existingActivatedClasses);
+    for (const clsItem of student.activatedClasses || []) {
+      const norm = normalizeClassLevelValue(clsItem);
+      if (norm) activePaidClasses.add(norm);
+    }
+    for (const [k, rec] of Object.entries(mergedClassSubscriptions)) {
+      const cls = normalizeClassLevelValue(rec?.classLevel || k);
+      if (cls && rec && (rec.plan === 'premium' || rec.plan === 'basic') && rec.status === 'ACTIVE') {
+        activePaidClasses.add(cls);
+      }
+    }
+
+    const activePlan =
+      student.plan === 'basic' || student.plan === 'premium' || activePaidClasses.size > 0
+        ? 'premium'
+        : 'free';
     const isPaid = activePlan === 'premium';
     const fallbackDates = isPaid ? computePaidPlanExpiryIsoDate() : null;
+
+    const resolvedPrimaryClass =
+      existingPrimaryClass ||
+      normalizeClassLevelValue(student.primaryClassLevel) ||
+      normalizeClassLevelValue(student.classLevel) ||
+      'Class 1';
 
     const resolvedPurchasedAt = isPaid
       ? student.planPurchasedAt || fallbackDates?.purchasedAt
@@ -593,7 +637,7 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       ? student.planExpiresAt || fallbackDates?.expiresAt
       : undefined;
     const resolvedActivatedClass = isPaid
-      ? student.activatedClassLevel || student.classLevel
+      ? student.activatedClassLevel || Array.from(activePaidClasses)[0] || student.classLevel
       : undefined;
 
     const planLabel = isPaid
@@ -606,6 +650,9 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       JSON.stringify({
         ...safeStudentFields,
         accountRole: student.accountRole || 'student',
+        primaryClassLevel: resolvedPrimaryClass,
+        activatedClasses: Array.from(activePaidClasses),
+        classSubscriptions: mergedClassSubscriptions,
         plan: activePlan,
         planLabel,
         activatedClassLevel: isPaid ? resolvedActivatedClass : null,
@@ -894,36 +941,88 @@ export async function saveSubscriptionToFirestore(
 
   try {
     const studentRef = doc(db, 'students', studentId);
+    const targetClass = normalizeClassLevelValue(subscriptionData.selectedClass);
+    let existingData: any = null;
 
-    // Prevent duplicate subscription activation for the same paymentId
-    if (subscriptionData.paymentId) {
-      try {
-        const existingSnap = await getDoc(studentRef);
-        if (existingSnap.exists()) {
-          const existingData = existingSnap.data();
-          if (existingData?.lastPaymentId === subscriptionData.paymentId) {
-            return {
-              success: true,
-              alreadyActivated: true,
-              plan: subscriptionData.plan,
-              activatedClassLevel: existingData?.activatedClassLevel || activatedClassLevel,
-              planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
-              planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
-              validityDays,
-            };
-          }
+    try {
+      const existingSnap = await getDoc(studentRef);
+      if (existingSnap.exists()) {
+        existingData = existingSnap.data();
+        const existingTargetClassRec =
+          targetClass && existingData?.classSubscriptions?.[targetClass];
+        if (
+          subscriptionData.paymentId &&
+          (existingTargetClassRec?.paymentId === subscriptionData.paymentId ||
+            (!targetClass && existingData?.lastPaymentId === subscriptionData.paymentId))
+        ) {
+          return {
+            success: true,
+            alreadyActivated: true,
+            plan: subscriptionData.plan,
+            activatedClassLevel: existingData?.activatedClassLevel || activatedClassLevel,
+            planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
+            planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
+            validityDays,
+          };
         }
-      } catch {
-        // Proceed with setDoc if read fails
+      }
+    } catch {
+      // Proceed with setDoc if read fails
+    }
+
+    const existingClassMap: Partial<Record<ClassLevel, ClassSubscriptionRecord>> =
+      existingData?.classSubscriptions && typeof existingData.classSubscriptions === 'object'
+        ? { ...existingData.classSubscriptions }
+        : {};
+
+    if (isPaid && targetClass) {
+      existingClassMap[targetClass] = {
+        classLevel: targetClass,
+        plan: subscriptionData.plan,
+        status: 'ACTIVE',
+        purchasedAt: planPurchasedAt,
+        expiresAt: planExpiresAt || undefined,
+        paymentId: subscriptionData.paymentId || undefined,
+        orderId: subscriptionData.orderId || undefined,
+        amountInr,
+        validityDays: PAID_PLAN_VALIDITY_DAYS,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const activatedSet = new Set<ClassLevel>();
+    if (Array.isArray(existingData?.activatedClasses)) {
+      for (const cls of existingData.activatedClasses) {
+        const norm = normalizeClassLevelValue(cls);
+        if (norm) activatedSet.add(norm);
       }
     }
+    for (const [k, rec] of Object.entries(existingClassMap)) {
+      const norm = normalizeClassLevelValue(rec?.classLevel || k);
+      if (norm && rec && (rec.plan === 'premium' || rec.plan === 'basic') && rec.status === 'ACTIVE') {
+        activatedSet.add(norm);
+      }
+    }
+    if (isPaid && targetClass) {
+      activatedSet.add(targetClass);
+    }
+
+    const resolvedPrimaryClass =
+      normalizeClassLevelValue(existingData?.primaryClassLevel) ||
+      normalizeClassLevelValue(existingData?.classLevel) ||
+      targetClass ||
+      undefined;
 
     const cleanSub = JSON.parse(
       JSON.stringify({
         id: studentId,
         plan: subscriptionData.plan,
         planLabel,
+        classLevel: targetClass || existingData?.classLevel || undefined,
+        primaryClassLevel: resolvedPrimaryClass,
         activatedClassLevel,
+        activatedClasses: Array.from(activatedSet),
+        classSubscriptions: existingClassMap,
         isLifetimeFree: subscriptionData.plan === 'free',
         planPurchasedAt,
         planExpiresAt,
@@ -1014,7 +1113,11 @@ export async function saveTransactionToFirestore(transaction: {
 export async function fetchStudentSubscriptionFromFirestore(studentId: string): Promise<{
   found: boolean;
   plan?: 'free' | 'basic' | 'premium';
+  classLevel?: ClassLevel;
+  primaryClassLevel?: ClassLevel;
   activatedClassLevel?: string | null;
+  activatedClasses?: ClassLevel[];
+  classSubscriptions?: Partial<Record<ClassLevel, ClassSubscriptionRecord>>;
   planPurchasedAt?: string;
   planExpiresAt?: string | null;
 }> {
@@ -1031,12 +1134,43 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
     return {
       found: true,
       plan,
+      classLevel: normalizeClassLevelValue(data?.classLevel) || undefined,
+      primaryClassLevel:
+        normalizeClassLevelValue(data?.primaryClassLevel) ||
+        normalizeClassLevelValue(data?.classLevel) ||
+        undefined,
       activatedClassLevel: data?.activatedClassLevel || data?.classLevel || null,
+      activatedClasses: Array.isArray(data?.activatedClasses)
+        ? (data.activatedClasses
+            .map((c: string) => normalizeClassLevelValue(c))
+            .filter(Boolean) as ClassLevel[])
+        : [],
+      classSubscriptions:
+        data?.classSubscriptions && typeof data.classSubscriptions === 'object'
+          ? data.classSubscriptions
+          : undefined,
       planPurchasedAt: data?.planPurchasedAt || undefined,
       planExpiresAt: data?.planExpiresAt || null,
     };
   } catch {
     return { found: false };
+  }
+}
+
+// 10c. Persist verified switch between already-unlocked classes on a user account
+export async function switchStudentActiveClassInFirestore(
+  studentId: string,
+  targetClass: ClassLevel
+): Promise<{ success: boolean }> {
+  if (!studentId) return { success: false };
+  try {
+    await updateDoc(doc(db, 'students', studentId), {
+      classLevel: targetClass,
+      lastActiveDate: new Date().toISOString(),
+    });
+    return { success: true };
+  } catch {
+    return { success: false };
   }
 }
 

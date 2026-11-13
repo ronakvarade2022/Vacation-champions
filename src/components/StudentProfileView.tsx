@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { ClassLevel } from '../types';
 import { 
   User, 
   Phone, 
@@ -33,7 +34,12 @@ import {
   Gift,
   Link as LinkIcon
 } from 'lucide-react';
-import { getStudentPlanInfo } from '../utils/subscriptionAccess';
+import {
+  getStudentPlanInfo,
+  getClassSubscriptionInfo,
+  getActivatedClassesList,
+  getPrimaryBaseClass,
+} from '../utils/subscriptionAccess';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -42,7 +48,7 @@ import {
 import { ALL_10_CLASSES, ALL_10_CLASSES_META, getSubjectsForClass } from '../data/classCurriculumConfig';
 
 interface StudentProfileViewProps {
-  onOpenMembership: (plan?: 'basic' | 'premium') => void;
+  onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel) => void;
   onNavigateTab: (tab: string) => void;
 }
 
@@ -59,7 +65,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     logout,
     allAttempts,
     savedDrawings,
-    promoteOrUpdateStudentClass
+    switchActiveClass
   } = useApp();
   const [copiedRefLink, setCopiedRefLink] = useState(false);
   const [copiedRefCode, setCopiedRefCode] = useState(false);
@@ -136,7 +142,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Learn, Practice, Explore and Achieve Excellence. • Account UID: <span className="font-mono font-bold text-slate-700">{currentStudent.id}</span> • Registered Class: <strong className="text-slate-800">{currentStudent.classLevel}</strong>
+              Learn, Practice, Explore and Achieve Excellence. • Account UID: <span className="font-mono font-bold text-slate-700">{currentStudent.id}</span> • Active Class: <strong className="text-slate-800">{currentStudent.classLevel}</strong> • Base Free Class: <strong className="text-indigo-700">{getPrimaryBaseClass(currentStudent)}</strong>
             </p>
           </div>
         </div>
@@ -155,8 +161,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                   {currentStudent.name}
                 </h2>
                 <span className="px-3 py-0.5 rounded-full bg-white/20 text-white font-extrabold text-xs border border-white/25">
-                  {currentStudent.classLevel}
+                  Active: {currentStudent.classLevel}
                 </span>
+                {getActivatedClassesList(currentStudent).length > 0 && (
+                  <span className="px-3 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-xs">
+                    {getActivatedClassesList(currentStudent).length} Paid Class{getActivatedClassesList(currentStudent).length === 1 ? '' : 'es'}
+                  </span>
+                )}
                 <span className="px-3 py-0.5 rounded-full bg-slate-950/75 text-amber-300 font-extrabold text-xs border border-amber-300/40 flex items-center gap-1">
                   <Crown className="w-3.5 h-3.5 text-amber-300" />
                   <span>{planInfo.planDisplayName}</span>
@@ -191,41 +202,45 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 self-start sm:self-center shrink-0">
             <button
-              onClick={() => onOpenMembership('premium')}
+              onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
               className="px-4 py-2.5 rounded-2xl bg-white text-amber-900 font-extrabold text-xs shadow-md hover:bg-amber-50 transition-all cursor-pointer"
             >
               {planInfo.isPaidPlanExpired
-                ? 'Renew Premium (₹99 – 365 Days)'
+                ? `Renew ${currentStudent.classLevel} (₹99)`
                 : planInfo.effectivePlan === 'premium'
-                ? 'Extend Premium (₹99 – 365 Days)'
-                : 'Upgrade to Premium (₹99)'}
+                ? `Extend ${currentStudent.classLevel} (₹99)`
+                : `Upgrade ${currentStudent.classLevel} (₹99)`}
             </button>
           </div>
         </div>
       </div>
 
-      {/* PERMANENT REGISTERED CLASS SECTION (One Account – One Class Policy) */}
+      {/* CLASS-WISE SUBSCRIPTIONS & ACCESS SECTION (Multi-Class Account Support) */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg">🔒</span>
+              <span className="text-lg">🎓</span>
               <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
-                Permanently Registered Class ({currentStudent.classLevel}) • One Account = One Class
+                Class-Wise Subscriptions &amp; Access (Classes 1st to 10th)
               </h2>
             </div>
             <p className="text-xs text-slate-600 font-medium mt-0.5">
-              Your {currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'} account is permanently linked to <strong>{currentStudent.classLevel}</strong>. Users cannot switch or access multiple classes by modifying their profile.
+              Your {currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'} account supports multiple class subscriptions on the same mobile &amp; email. Switch between unlocked classes or activate an additional class for <strong>₹99 (365 Days)</strong>.
             </p>
           </div>
-          <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-extrabold self-start sm:self-center shrink-0">
-            Locked Class: {currentStudent.classLevel} ({getSubjectsForClass(currentStudent.classLevel).length} Subjects)
-          </span>
+          <button
+            type="button"
+            onClick={() => onOpenMembership('premium')}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-extrabold self-start sm:self-center shrink-0 cursor-pointer shadow-xs"
+          >
+            + Activate Another Class (₹99)
+          </button>
         </div>
 
         {promotionBannerMsg && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-2">
-            <Lock className="w-4 h-4 text-rose-600 shrink-0" />
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{promotionBannerMsg}</span>
           </div>
         )}
@@ -234,33 +249,123 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           {ALL_10_CLASSES.map((cls) => {
             const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
             const isCurrent = currentStudent.classLevel === cls;
+            const cInfo = getClassSubscriptionInfo(currentStudent, cls);
             return (
               <button
                 key={cls}
                 type="button"
-                onClick={() => {
-                  if (!isCurrent) {
-                    const res = promoteOrUpdateStudentClass(cls, `Attempted to change class to ${cls}`);
-                    setPromotionBannerMsg(res.message);
-                    setTimeout(() => setPromotionBannerMsg(null), 5000);
+                onClick={async () => {
+                  if (cInfo.isAccessible) {
+                    if (!isCurrent) {
+                      const res = await switchActiveClass(cls);
+                      setPromotionBannerMsg(res.message);
+                      setTimeout(() => setPromotionBannerMsg(null), 4500);
+                    }
+                  } else {
+                    onOpenMembership('premium', cls);
                   }
                 }}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
+                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                   isCurrent
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02] cursor-default'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-70 cursor-not-allowed'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]'
+                    : cInfo.isPaidActive
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-400'
+                    : cInfo.isFreeBase
+                    ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-300'
+                    : cInfo.isExpired
+                    ? 'bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-300'
+                    : 'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200 hover:border-amber-300'
                 }`}
               >
                 <div className="text-xs font-black flex items-center justify-center gap-1">
-                  {!isCurrent && <Lock className="w-2.5 h-2.5" />}
+                  {!cInfo.isAccessible && <Lock className="w-2.5 h-2.5 text-amber-600" />}
                   <span>{cls}</span>
                 </div>
-                <div className={`text-[10px] font-semibold ${isCurrent ? 'text-indigo-100' : 'text-slate-400'}`}>
-                  {isCurrent ? 'Registered' : meta?.marathiLabel}
+                <div className={`text-[10px] font-bold ${isCurrent ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  {isCurrent
+                    ? 'Active Now'
+                    : cInfo.isPaidActive
+                    ? `Paid (${cInfo.daysRemaining}d)`
+                    : cInfo.isFreeBase
+                    ? 'Free Base'
+                    : cInfo.isExpired
+                    ? 'Expired • ₹99'
+                    : meta?.marathiLabel}
                 </div>
               </button>
             );
           })}
+        </div>
+
+        {/* Per-Class Subscription Ledger (Active Paid, Expired & Base Free Classes) */}
+        <div className="pt-2 space-y-2">
+          <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+            Your Class Subscription Statuses ({getSubjectsForClass(currentStudent.classLevel).length} Subjects in Active {currentStudent.classLevel})
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {ALL_10_CLASSES.map((cls) => getClassSubscriptionInfo(currentStudent, cls))
+              .filter((cInfo) => cInfo.isPaidActive || cInfo.isExpired || cInfo.isFreeBase)
+              .map((cInfo) => (
+                <div
+                  key={cInfo.classLevel}
+                  className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
+                    cInfo.isPaidActive
+                      ? 'bg-emerald-50/70 border-emerald-300'
+                      : cInfo.isExpired
+                      ? 'bg-rose-50/70 border-rose-300'
+                      : 'bg-indigo-50/60 border-indigo-200'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-black text-slate-900">{cInfo.classLevel}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          cInfo.isPaidActive
+                            ? 'bg-emerald-600 text-white'
+                            : cInfo.isExpired
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-indigo-600 text-white'
+                        }`}
+                      >
+                        {cInfo.isPaidActive ? 'Active Paid' : cInfo.isExpired ? 'Expired' : 'Free Base'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
+                      {cInfo.isPaidActive
+                        ? `Expires: ${cInfo.expiryDisplay} • ${cInfo.daysRemainingDisplay}`
+                        : cInfo.isExpired
+                        ? `${cInfo.expiryDisplay}`
+                        : 'Lifetime Free Demo (2 Worksheets, English & Math)'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {cInfo.isAccessible && cInfo.classLevel !== currentStudent.classLevel && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await switchActiveClass(cInfo.classLevel);
+                          setPromotionBannerMsg(res.message);
+                          setTimeout(() => setPromotionBannerMsg(null), 4000);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 text-white font-bold text-[11px] cursor-pointer hover:bg-slate-800"
+                      >
+                        Switch
+                      </button>
+                    )}
+                    {(!cInfo.isPaidActive || cInfo.isExpired) && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenMembership('premium', cInfo.classLevel)}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer"
+                      >
+                        {cInfo.isExpired ? 'Renew ₹99' : 'Upgrade ₹99'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
         </div>
       </div>
 
@@ -422,7 +527,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           {/* 3. My Subscription / Plan Details */}
           <button
             type="button"
-            onClick={() => onOpenMembership('premium')}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
             className="p-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-all text-left flex items-start gap-3 cursor-pointer group"
           >
             <div className="w-9 h-9 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center shrink-0">
@@ -632,7 +737,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
           <button
             type="button"
-            onClick={() => onOpenMembership('premium')}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
             className="self-start sm:self-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
           >
             {planInfo.isPaidPlanExpired ? (
@@ -711,7 +816,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
           {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
           <div
-            onClick={() => onOpenMembership('premium')}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
             className={`p-4 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
               planInfo.effectivePlan === 'premium' ? 'border-amber-500 bg-amber-50/60' : 'border-amber-300 hover:border-amber-500 bg-amber-50/30'
             }`}
@@ -797,15 +902,15 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             </p>
           </div>
 
-          {/* Permanent Class */}
+          {/* Active & Base Enrolled Class */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-500 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Enrolled Class</span>
+                <School className="w-3.5 h-3.5 text-slate-400" />
+                <span>Active Workspace Class</span>
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900">
-                Grade Locked
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-900">
+                Base: {getPrimaryBaseClass(currentStudent)}
               </span>
             </div>
             <p className="font-bold text-sm text-slate-800">

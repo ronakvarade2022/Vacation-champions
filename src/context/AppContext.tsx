@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   StudentProfile, 
   RegistrationResult,
+  ClassSubscriptionRecord,
   QuizQuestion, 
   QuizAttempt, 
   StoryItem, 
@@ -47,10 +48,15 @@ import {
   saveTransactionToFirestore,
   fetchStudentSubscriptionFromFirestore,
   fetchStudentProfileFromFirestore,
+  switchStudentActiveClassInFirestore,
   computePaidPlanExpiryIsoDate,
   ensureStudentReferralCodeInFirestore,
   onAuthStateChanged
 } from '../services/firebase';
+import {
+  checkExistingAccountApi,
+  switchStudentActiveClassApi,
+} from '../services/paymentService';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -64,8 +70,14 @@ import {
 } from '../data/scholarshipData';
 import {
   canAccessWorksheet,
+  canSwitchToClass,
   formatStandardOrdinal,
+  getActivatedClassesList,
+  getClassSubscriptionInfo,
   getPremiumActivatedBannerMessage,
+  getPrimaryBaseClass,
+  getRawClassSubscriptionsMap,
+  normalizeClassLevelValue,
   WORKSHEET_PREMIUM_UPGRADE_MESSAGE
 } from '../utils/subscriptionAccess';
 import {
@@ -134,7 +146,22 @@ interface AppContextType {
   loginAsTeacher: (email: string, password?: string) => Promise<{ success: boolean; message: string; teacher?: StudentProfile }>;
   loginAsAdmin: (email: string, password?: string) => Promise<{ success: boolean; message: string; adminEmail?: string }>;
   
-  // Auth & Session methods - Strict 1 Account = 1 Class = 1 Mobile = 1 Email
+  // Auth & Session methods - Multi-Class Subscriptions Linked to Unique Mobile & Email Account
+  checkAccountForMultiClassRegistration: (
+    email: string,
+    mobile: string,
+    targetClass?: ClassLevel
+  ) => Promise<{
+    exists: boolean;
+    matchedPair: boolean;
+    mismatchField?: 'email' | 'mobile' | null;
+    existingStudentName?: string;
+    existingClass?: ClassLevel;
+    accountRole?: 'student' | 'teacher';
+    activeClasses?: ClassLevel[];
+    alreadyUnlockedTargetClass?: boolean;
+    localStudent?: StudentProfile;
+  }>;
   registerStudent: (
     data: Omit<StudentProfile, 'id' | 'points' | 'coins' | 'level' | 'streakDays' | 'lastActiveDate' | 'badges' | 'plan' | 'attemptedQuestionIds' | 'attemptedPuzzleIds' | 'completedStoryIds' | 'registeredAt' | 'classChangeLogs' | 'subjectProgress'>,
     options?: {
@@ -166,8 +193,9 @@ interface AppContextType {
   // Automated Security Verification Test Runner
   runSecurityAuditTest: () => Promise<SecurityAuditReport>;
 
-  // Class Promotion & Student Class Update (Classes 1 to 10)
+  // Class Promotion & Multi-Class Switching (Classes 1 to 10)
   adminPromoteOrCorrectClass: (studentId: string, newClass: ClassLevel, reason: string, adminName?: string) => { success: boolean; message: string };
+  switchActiveClass: (targetClass: ClassLevel) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
   promoteOrUpdateStudentClass: (newClass: ClassLevel, reason?: string) => { success: boolean; message: string };
   updateStudentClass: (newClass: ClassLevel) => void;
 
@@ -362,9 +390,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return {
               ...safeS,
               accountRole: safeS.accountRole || 'student',
+              primaryClassLevel:
+                normalizeClassLevelValue(safeS.primaryClassLevel) ||
+                normalizeClassLevelValue(safeS.classLevel) ||
+                'Class 1',
               activatedClassLevel:
                 safeS.activatedClassLevel ||
                 (safeS.plan === 'premium' || safeS.plan === 'basic' ? safeS.classLevel : undefined),
+              activatedClasses: Array.isArray(safeS.activatedClasses) ? safeS.activatedClasses : undefined,
+              classSubscriptions: safeS.classSubscriptions || undefined,
               referralCode: uniqueCode,
               referralLink: buildStudentReferralLink(uniqueCode),
               isPhoneVerified: Boolean(safeS.isPhoneVerified),
@@ -401,11 +435,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...safeParsed,
           accountRole: safeParsed.accountRole || 'student',
+          primaryClassLevel:
+            normalizeClassLevelValue(safeParsed.primaryClassLevel) ||
+            normalizeClassLevelValue(safeParsed.classLevel) ||
+            'Class 1',
           activatedClassLevel:
             safeParsed.activatedClassLevel ||
             (safeParsed.plan === 'premium' || safeParsed.plan === 'basic'
               ? safeParsed.classLevel
               : undefined),
+          activatedClasses: Array.isArray(safeParsed.activatedClasses)
+            ? safeParsed.activatedClasses
+            : undefined,
+          classSubscriptions: safeParsed.classSubscriptions || undefined,
           referralCode: code,
           referralLink: buildStudentReferralLink(code)
         };
@@ -641,36 +683,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let cancelled = false;
     fetchStudentSubscriptionFromFirestore(activeId).then((fbSub) => {
       if (cancelled || !fbSub.found || !fbSub.plan) return;
+      const applySubSync = (profile: StudentProfile): StudentProfile => {
+        const mergedClassSubs =
+          fbSub.classSubscriptions || profile.classSubscriptions
+            ? { ...(profile.classSubscriptions || {}), ...(fbSub.classSubscriptions || {}) }
+            : undefined;
+        const mergedActivatedClasses =
+          fbSub.activatedClasses && fbSub.activatedClasses.length > 0
+            ? fbSub.activatedClasses
+            : profile.activatedClasses;
+        const resolvedPrimary =
+          fbSub.primaryClassLevel || profile.primaryClassLevel || profile.classLevel;
+        return {
+          ...profile,
+          plan: fbSub.plan!,
+          primaryClassLevel: resolvedPrimary,
+          activatedClassLevel:
+            (fbSub.activatedClassLevel as ClassLevel) || profile.activatedClassLevel || profile.classLevel,
+          activatedClasses: mergedActivatedClasses,
+          classSubscriptions: mergedClassSubs,
+          planPurchasedAt: fbSub.planPurchasedAt || profile.planPurchasedAt,
+          planExpiresAt: fbSub.planExpiresAt || profile.planExpiresAt,
+        };
+      };
+
       setCurrentStudent((prev) => {
         if (!prev || prev.id !== activeId) return prev;
+        const next = applySubSync(prev);
         if (
-          prev.plan === fbSub.plan &&
-          (prev.planExpiresAt || null) === (fbSub.planExpiresAt || null)
+          prev.plan === next.plan &&
+          (prev.planExpiresAt || null) === (next.planExpiresAt || null) &&
+          JSON.stringify(prev.classSubscriptions || {}) === JSON.stringify(next.classSubscriptions || {})
         ) {
           return prev;
         }
-        return {
-          ...prev,
-          plan: fbSub.plan!,
-          activatedClassLevel:
-            (fbSub.activatedClassLevel as ClassLevel) || prev.activatedClassLevel || prev.classLevel,
-          planPurchasedAt: fbSub.planPurchasedAt || prev.planPurchasedAt,
-          planExpiresAt: fbSub.planExpiresAt || undefined,
-        };
+        return next;
       });
       setStudentsList((prevList) =>
-        prevList.map((s) =>
-          s.id === activeId
-            ? {
-                ...s,
-                plan: fbSub.plan!,
-                activatedClassLevel:
-                  (fbSub.activatedClassLevel as ClassLevel) || s.activatedClassLevel || s.classLevel,
-                planPurchasedAt: fbSub.planPurchasedAt || s.planPurchasedAt,
-                planExpiresAt: fbSub.planExpiresAt || undefined,
-              }
-            : s
-        )
+        prevList.map((s) => (s.id === activeId ? applySubSync(s) : s))
       );
     });
 
@@ -713,8 +763,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentStudent?.id]);
 
-  // Strict Auth Functions - One Account = One Class = One Mobile = One Email (Applies to both Students and Teachers)
-    const registerStudent = (
+  // Multi-Class Auth Helpers - Single Account with Independent Class Subscriptions (Students & Teachers)
+  const checkAccountForMultiClassRegistration = async (
+    email: string,
+    mobile: string,
+    targetClass?: ClassLevel
+  ) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
+
+    // 1. Check local student list first
+    const localByMobile = cleanMobile.length === 10
+      ? studentsList.find(s => s.mobile.replace(/\D/g, '').slice(-10) === cleanMobile)
+      : undefined;
+    const localByEmail = cleanEmail.includes('@')
+      ? studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail)
+      : undefined;
+
+    if (localByMobile && localByEmail && localByMobile.id === localByEmail.id) {
+      const activeClasses = getActivatedClassesList(localByMobile).map(c => c.classLevel);
+      const alreadyUnlockedTargetClass = targetClass
+        ? canSwitchToClass(localByMobile, targetClass).allowed
+        : false;
+      return {
+        exists: true,
+        matchedPair: true,
+        mismatchField: null,
+        existingStudentName: localByMobile.name,
+        existingClass: localByMobile.classLevel,
+        accountRole: localByMobile.accountRole || 'student',
+        activeClasses,
+        alreadyUnlockedTargetClass,
+        localStudent: localByMobile,
+      };
+    }
+
+    if (localByMobile && localByEmail && localByMobile.id !== localByEmail.id) {
+      return {
+        exists: true,
+        matchedPair: false,
+        mismatchField: 'mobile' as const,
+        existingStudentName: localByMobile.name,
+        existingClass: localByMobile.classLevel,
+      };
+    }
+
+    if (localByMobile) {
+      return {
+        exists: true,
+        matchedPair: false,
+        mismatchField: 'mobile' as const,
+        existingStudentName: localByMobile.name,
+        existingClass: localByMobile.classLevel,
+      };
+    }
+
+    if (localByEmail) {
+      return {
+        exists: true,
+        matchedPair: false,
+        mismatchField: 'email' as const,
+        existingStudentName: localByEmail.name,
+        existingClass: localByEmail.classLevel,
+      };
+    }
+
+    // 2. Check Firestore/Backend across devices
+    const serverRes = await checkExistingAccountApi(cleanEmail, cleanMobile);
+    if (serverRes.exists) {
+      const serverActiveClasses = (serverRes.activeClasses || [])
+        .map(c => normalizeClassLevelValue(c))
+        .filter(Boolean) as ClassLevel[];
+      const targetNorm = targetClass ? normalizeClassLevelValue(targetClass) : null;
+      const alreadyUnlockedTargetClass = Boolean(
+        targetNorm &&
+          (serverActiveClasses.includes(targetNorm) ||
+            normalizeClassLevelValue(serverRes.primaryClassLevel) === targetNorm)
+      );
+      return {
+        exists: true,
+        matchedPair: Boolean(serverRes.matchedPair),
+        mismatchField: serverRes.mismatchField || null,
+        existingStudentName: serverRes.studentName,
+        existingClass: normalizeClassLevelValue(serverRes.primaryClassLevel) || undefined,
+        accountRole: serverRes.accountRole || 'student',
+        activeClasses: serverActiveClasses,
+        alreadyUnlockedTargetClass,
+      };
+    }
+
+    return { exists: false, matchedPair: false };
+  };
+
+  const registerStudent = (
     data: Omit<StudentProfile, 'id' | 'points' | 'coins' | 'level' | 'streakDays' | 'lastActiveDate' | 'badges' | 'plan' | 'attemptedQuestionIds' | 'attemptedPuzzleIds' | 'completedStoryIds' | 'registeredAt' | 'classChangeLogs' | 'subjectProgress'>,
     options?: {
       verifiedFirebaseUid?: string;
@@ -743,31 +884,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // 1. Strict Duplicate Mobile Check (One Mobile Number = One Account across both Students & Teachers)
     const existingMobile = studentsList.find(s => s.mobile.replace(/\D/g, '').slice(-10) === cleanMobile);
+    const existingEmail = studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail);
+
+    // 1. Same user (same mobile + same email) adding/activating an additional class on their existing account
+    if (existingMobile && existingEmail && existingMobile.id === existingEmail.id) {
+      const targetCheck = canSwitchToClass(existingMobile, data.classLevel);
+      return {
+        success: false,
+        existingAccountMatchedPair: true,
+        existingStudent: existingMobile,
+        existingStudentName: existingMobile.name,
+        existingClass: existingMobile.classLevel,
+        alreadyUnlockedTargetClass: targetCheck.allowed,
+        needsExistingAccountAuth: true,
+        message: targetCheck.allowed
+          ? `Account recognized for "${existingMobile.name}"! ${data.classLevel} is already unlocked on your account. Sign in to switch directly to ${data.classLevel}.`
+          : `Existing account recognized for "${existingMobile.name}" (${existingMobile.email})! To unlock ${data.classLevel} (₹99 / 365 Days) on your existing account without creating a duplicate, verify your account password and proceed to subscription checkout.`
+      };
+    }
+
+    // 2. Strict Single-Field Conflict Guard (Mobile belongs to one user, Email does not match)
     if (existingMobile) {
       return {
         success: false,
         duplicateField: 'mobile',
         existingStudentName: existingMobile.name,
         existingClass: existingMobile.classLevel,
-        message: `Mobile number ${cleanMobile} is already registered with "${existingMobile.name}" (${existingMobile.classLevel}). One mobile number cannot be used for multiple accounts.`
+        message: `Mobile number ${cleanMobile} is already registered with "${existingMobile.name}" (${existingMobile.email}). Enter your exact registered Email & Mobile pair to activate another class on that account.`
       };
     }
 
-    // 2. Strict Duplicate Email Check (One Email Address = One Account across both Students & Teachers)
-    const existingEmail = studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail);
+    // 3. Strict Single-Field Conflict Guard (Email belongs to an account, Mobile differs)
     if (existingEmail) {
       return {
         success: false,
         duplicateField: 'email',
         existingStudentName: existingEmail.name,
         existingClass: existingEmail.classLevel,
-        message: `Email address "${cleanEmail}" is already registered with "${existingEmail.name}" (${existingEmail.classLevel}). One email address cannot be used for multiple accounts.`
+        message: `Email address "${cleanEmail}" is already registered with "${existingEmail.name}" (${existingEmail.classLevel}). Enter your exact registered Mobile & Email pair to add another class to that account.`
       };
     }
 
-    // 3. Create & Activate Student or Teacher Account (School Name is OPTIONAL)
+    // 4. Create & Activate Brand-New Student or Teacher Account (School Name is OPTIONAL)
     const phoneOwnershipVerified = Boolean(options?.isPhoneVerified);
     const emailOwnershipVerified = Boolean(options?.isEmailVerified);
     const newUid =
@@ -790,6 +949,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...data,
       id: newUid,
       accountRole: resolvedAccountRole,
+      primaryClassLevel: data.classLevel,
+      activatedClasses: [],
+      classSubscriptions: {},
       schoolName: (data.schoolName || '').trim(), // Optional field
       parentName: data.parentName || (resolvedAccountRole === 'teacher' ? 'Teacher Portal Account' : data.name),
       firebaseUid: options?.verifiedFirebaseUid,
@@ -836,7 +998,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification(
       `${roleLabel} Account Registered! 🎓✨`,
-      `Welcome ${newStudent.name}! Permanently registered for Standard ${formatStandardOrdinal(newStudent.classLevel)} (${newStudent.classLevel}).`,
+      `Welcome ${newStudent.name}! Registered in Standard ${formatStandardOrdinal(newStudent.classLevel)} (${newStudent.classLevel}). You can activate additional classes anytime from your dashboard!`,
       'achievement'
     );
 
@@ -1276,11 +1438,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...overrides
     });
 
-    const s1 = baseFixture({ id: 'audit_s1', classLevel: 'Class 4', email: 's1@test.local', mobile: '9000000001' });
+    const s1 = baseFixture({
+      id: 'audit_s1',
+      classLevel: 'Class 4',
+      primaryClassLevel: 'Class 4',
+      email: 's1@test.local',
+      mobile: '9000000001'
+    });
     const s2 = baseFixture({
       id: 'audit_s2',
       classLevel: 'Class 6',
+      primaryClassLevel: 'Class 5',
       activatedClassLevel: 'Class 6',
+      activatedClasses: ['Class 6'],
+      classSubscriptions: {
+        'Class 5': {
+          classLevel: 'Class 5',
+          plan: 'premium',
+          status: 'EXPIRED',
+          purchasedAt: '2024-01-01',
+          expiresAt: '2025-01-01',
+          amountInr: 99,
+          validityDays: 365
+        },
+        'Class 6': {
+          classLevel: 'Class 6',
+          plan: 'premium',
+          status: 'ACTIVE',
+          purchasedAt: '2026-11-01',
+          expiresAt: '2027-11-01',
+          amountInr: 99,
+          validityDays: 365
+        }
+      },
       plan: 'premium',
       planPurchasedAt: '2026-11-01',
       planExpiresAt: '2027-11-01',
@@ -1292,7 +1482,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: 'Teacher Fixture',
       accountRole: 'teacher',
       classLevel: 'Class 9',
+      primaryClassLevel: 'Class 9',
       activatedClassLevel: 'Class 9',
+      activatedClasses: ['Class 9'],
+      classSubscriptions: {
+        'Class 9': {
+          classLevel: 'Class 9',
+          plan: 'premium',
+          status: 'ACTIVE',
+          purchasedAt: '2026-11-01',
+          expiresAt: '2027-11-01',
+          amountInr: 99,
+          validityDays: 365
+        }
+      },
       plan: 'premium',
       planPurchasedAt: '2026-11-01',
       planExpiresAt: '2027-11-01',
@@ -1303,31 +1506,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const checks: SecurityAuditCheck[] = [
       {
         id: 'sec-chk-1',
-        title: 'One Account = One Class = One Mobile = One Email',
-        description: 'Verify every Student and Teacher account is permanently bound to a single class, unique mobile, and unique email.',
+        title: 'Unique Mobile & Email Identity With Multi-Class Linked Plans',
+        description: 'Verify accounts retain a single unique UID/email/mobile while supporting independent class subscriptions.',
         category: 'student_isolation',
         passed: s1.id !== s2.id && s1.email !== s2.email && s1.mobile !== s2.mobile && t2.email !== s2.email,
-        details: `PASS: Strict credential & class binding active (${studentsList.length} registered local account(s)).`
+        details: `PASS: Strict credential binding active (${studentsList.length} registered local account(s)).`
       },
       {
         id: 'sec-chk-2',
-        title: 'Class-Wise ₹99 Premium Worksheet Isolation',
-        description: 'Verify ₹99 Premium unlocks ONLY the user\'s selected class and keeps all other 9 classes locked.',
+        title: 'Per-Class Independent Expiry & ₹99 Strict Lock Enforcement',
+        description: 'Verify Class 5 expiry locks Class 5 without revoking active Class 6, and unpaid Class 7 remains strictly locked.',
         category: 'student_isolation',
         passed:
           canAccessWorksheet(s2, 'WS-C6-SCIENCE-2', 'Class 6').allowed &&
-          !canAccessWorksheet(s2, 'WS-C5-SCIENCE-2', 'Class 5').allowed,
-        details: 'PASS: Premium Student in Class 6 can access all Class 6 worksheets while Class 1–5 and Class 7–10 worksheets remain strictly locked.'
+          !canAccessWorksheet(s2, 'WS-C5-SCIENCE-2', 'Class 5').allowed &&
+          !canAccessWorksheet(s2, 'WS-C7-SCIENCE-2', 'Class 7').allowed &&
+          !canSwitchToClass(s2, 'Class 7').allowed &&
+          canSwitchToClass(s2, 'Class 6').allowed,
+        details: 'PASS: Expired Class 5 & unpaid Class 7 stay locked while active Class 6 remains fully accessible.'
       },
       {
         id: 'sec-chk-3',
         title: 'Teacher Portal Class-Wise Restriction',
-        description: 'Verify Teachers can access only the class selected during registration.',
+        description: 'Verify Teachers can access only activated or base registered classes.',
         category: 'parent_isolation',
         passed:
           canAccessWorksheet(t2, 'WS-C9-PHYSICS-1', 'Class 9').allowed &&
           !canAccessWorksheet(t2, 'WS-C8-SCIENCE-1', 'Class 8').allowed,
-        details: 'PASS: Class-9 Teacher account accesses Class 9 curriculum while other classes remain restricted.'
+        details: 'PASS: Class-9 Teacher account accesses Class 9 curriculum while unactivated classes remain restricted.'
       },
       {
         id: 'sec-chk-4',
@@ -1383,27 +1589,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // STRICT RULE: Do NOT allow students or teachers to access multiple classes by changing their profile or dashboard class switcher!
+  // Switch Active Class (Strictly permitted ONLY to the account's Free Base class or ACTIVE paid ₹99 classes)
+  const switchActiveClass = async (
+    targetClass: ClassLevel
+  ): Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }> => {
+    if (!currentStudent) {
+      return { success: false, message: 'Please sign in first.', needsPurchase: true };
+    }
+    const normalizedTarget = normalizeClassLevelValue(targetClass) || currentStudent.classLevel;
+    const accessCheck = canSwitchToClass(currentStudent, normalizedTarget);
+
+    if (!accessCheck.allowed) {
+      addNotification(
+        accessCheck.needsRenewal ? `${normalizedTarget} Subscription Expired ⏳` : `${normalizedTarget} Locked 🔒`,
+        accessCheck.reason,
+        'membership'
+      );
+      return {
+        success: false,
+        message: accessCheck.reason,
+        needsPurchase: accessCheck.needsPurchase,
+        needsRenewal: accessCheck.needsRenewal,
+      };
+    }
+
+    if (currentStudent.classLevel === normalizedTarget) {
+      return {
+        success: true,
+        message: `Your workspace is already active on Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
+      };
+    }
+
+    const updatedStudent: StudentProfile = {
+      ...currentStudent,
+      classLevel: normalizedTarget,
+      lastActiveDate: new Date().toISOString(),
+    };
+
+    setCurrentStudent(updatedStudent);
+    setStudentsList(prev => prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s)));
+    setCurrentUser(prev =>
+      prev ? { ...prev, classLevel: normalizedTarget } : prev
+    );
+
+    switchStudentActiveClassInFirestore(updatedStudent.id, normalizedTarget).catch(() => {});
+    (async () => {
+      let token: string | undefined;
+      try {
+        token = await auth.currentUser?.getIdToken();
+      } catch {}
+      await switchStudentActiveClassApi(updatedStudent.id, normalizedTarget, token);
+    })().catch(() => {});
+
+    addNotification(
+      `Switched to ${normalizedTarget} 🎓`,
+      `Active learning dashboard switched to Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
+      'achievement'
+    );
+
+    return {
+      success: true,
+      message: `Switched workspace to Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
+    };
+  };
+
+  // Synchronous wrapper for class switching: unlocks ONLY if already purchased/active or base Free class
   const promoteOrUpdateStudentClass = (newClass: ClassLevel, _reason?: string): { success: boolean; message: string } => {
     if (!currentStudent) {
       return { success: false, message: 'Please sign in first.' };
     }
-    if (currentStudent.classLevel === newClass) {
+    const accessCheck = canSwitchToClass(currentStudent, newClass);
+    if (!accessCheck.allowed) {
+      addNotification('Class Access Restricted 🔒', accessCheck.reason, 'membership');
       return {
-        success: true,
-        message: `Your account is active for Standard ${formatStandardOrdinal(currentStudent.classLevel)} (${currentStudent.classLevel}).`
+        success: false,
+        message: accessCheck.reason
       };
     }
-    const lockMsg = `Class Locked: Your account is permanently registered for Standard ${formatStandardOrdinal(currentStudent.classLevel)} (${currentStudent.classLevel}). Each account can access only one selected class.`;
-    addNotification('One Account – One Class Policy 🔒', lockMsg, 'achievement');
+    void switchActiveClass(newClass);
     return {
-      success: false,
-      message: lockMsg
+      success: true,
+      message: `Switched active workspace to Standard ${formatStandardOrdinal(newClass)} (${newClass}).`
     };
   };
 
   const updateStudentClass = (newClass: ClassLevel) => {
-    promoteOrUpdateStudentClass(newClass);
+    void switchActiveClass(newClass);
   };
 
   const submitWorksheetAttempt = (attemptData: Omit<WorksheetAttemptRecord, 'id' | 'completedAt'>): WorksheetAttemptRecord => {
@@ -1878,9 +2149,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const student = currentStudent;
+    const targetClass: ClassLevel =
+      normalizeClassLevelValue(transaction.selectedClass) ||
+      normalizeClassLevelValue(student.classLevel) ||
+      'Class 1';
+
     const txWithClass: PaymentTransaction = {
       ...transaction,
-      selectedClass: transaction.selectedClass || student.classLevel
+      selectedClass: targetClass
     };
 
     // Prevent duplicate subscription activation or duplicate points for an already-processed payment
@@ -1896,27 +2172,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const computedDates = computePaidPlanExpiryIsoDate(student.planExpiresAt);
+    const existingClassMap = getRawClassSubscriptionsMap(student);
+    const targetExistingExpiry = existingClassMap[targetClass]?.expiresAt;
+    const computedDates = computePaidPlanExpiryIsoDate(targetExistingExpiry);
     const resolvedPurchasedAt = txWithClass.membershipStartDate || computedDates.purchasedAt;
     const resolvedExpiresAt =
       customExpiryDate || txWithClass.membershipExpiryDate || computedDates.expiresAt;
+
+    const updatedClassSubscriptions: Partial<Record<ClassLevel, ClassSubscriptionRecord>> = {
+      ...existingClassMap,
+      [targetClass]: {
+        classLevel: targetClass,
+        plan: txWithClass.planId,
+        status: 'ACTIVE',
+        purchasedAt: resolvedPurchasedAt,
+        expiresAt: resolvedExpiresAt,
+        paymentId: txWithClass.paymentId,
+        orderId: txWithClass.orderId,
+        amountInr: txWithClass.amount || 99,
+        validityDays: 365,
+        updatedAt: new Date().toISOString()
+      }
+    };
 
     const updatedBadges = [...student.badges];
     if (txWithClass.planId === 'premium' && !updatedBadges.includes('badge-champion-premium')) {
       updatedBadges.push('badge-champion-premium');
     }
 
+    const tempForActiveList: StudentProfile = {
+      ...student,
+      classSubscriptions: updatedClassSubscriptions
+    };
+    const updatedActivatedClasses = getActivatedClassesList(tempForActiveList).map(i => i.classLevel);
+    if (!updatedActivatedClasses.includes(targetClass)) {
+      updatedActivatedClasses.push(targetClass);
+    }
+
     const updatedStudent: StudentProfile = {
       ...student,
+      classLevel: targetClass,
+      primaryClassLevel: getPrimaryBaseClass(student),
       plan: txWithClass.planId,
-      activatedClassLevel: student.classLevel,
+      activatedClassLevel: targetClass,
+      activatedClasses: updatedActivatedClasses,
+      classSubscriptions: updatedClassSubscriptions,
       planPurchasedAt: resolvedPurchasedAt,
       planExpiresAt: resolvedExpiresAt,
+      lastPaymentId: txWithClass.paymentId,
+      lastOrderId: txWithClass.orderId,
       points: student.points + (txWithClass.planId === 'premium' ? 250 : 100),
-      badges: updatedBadges
+      badges: updatedBadges,
+      lastActiveDate: new Date().toISOString()
     };
 
     setCurrentStudent(updatedStudent);
+    setCurrentUser(prev =>
+      prev ? { ...prev, classLevel: targetClass } : prev
+    );
     setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     setTransactions(prev => [txWithClass, ...prev.filter(t => t.paymentId !== txWithClass.paymentId)]);
 
@@ -1924,10 +2237,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveStudentProfileToFirestore(updatedStudent).catch(() => {});
     saveSubscriptionToFirestore(updatedStudent.id, {
       plan: txWithClass.planId,
-      selectedClass: updatedStudent.classLevel,
-      planPurchasedAt: updatedStudent.planPurchasedAt,
-      planExpiresAt: updatedStudent.planExpiresAt,
-      currentExpiresAt: student.planExpiresAt,
+      selectedClass: targetClass,
+      planPurchasedAt: resolvedPurchasedAt,
+      planExpiresAt: resolvedExpiresAt,
+      currentExpiresAt: targetExistingExpiry,
       paymentId: txWithClass.paymentId,
       orderId: txWithClass.orderId,
       amountInr: txWithClass.amount
@@ -1947,17 +2260,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify({
           studentId: updatedStudent.id,
           plan: txWithClass.planId,
-          selectedClass: updatedStudent.classLevel,
-          planPurchasedAt: updatedStudent.planPurchasedAt,
-          planExpiresAt: updatedStudent.planExpiresAt,
-          paymentId: txWithClass.paymentId
+          selectedClass: targetClass,
+          planPurchasedAt: resolvedPurchasedAt,
+          planExpiresAt: resolvedExpiresAt,
+          paymentId: txWithClass.paymentId,
+          orderId: txWithClass.orderId
         })
       });
     })().catch(() => {});
 
     addNotification(
-      'Membership Activated! 👑',
-      `Your Premium Access is Activated for Standard ${updatedStudent.classLevel.replace('Class ', '')}. Enjoy All Worksheets for Your Class! Payment ID: ${txWithClass.paymentId}.`,
+      `${targetClass} Membership Activated! 👑`,
+      `Your Premium Access is Activated for Standard ${formatStandardOrdinal(targetClass)} (${targetClass}) — Valid 365 Days until ${formatDateIstDisplay(resolvedExpiresAt)}. Payment ID: ${txWithClass.paymentId}.`,
       'membership'
     );
   };
@@ -2130,6 +2444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginAsTeacher,
         loginAsAdmin,
 
+        checkAccountForMultiClassRegistration,
         registerStudent,
         loginWithEmail,
         recoverAccount,
@@ -2141,6 +2456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openAuthModal: () => setIsAuthModalOpen(true),
         closeAuthModal: () => setIsAuthModalOpen(false),
         adminPromoteOrCorrectClass,
+        switchActiveClass,
         promoteOrUpdateStudentClass,
         updateStudentClass,
         submitWorksheetAttempt,

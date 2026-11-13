@@ -11,7 +11,7 @@ import {
 } from '../services/firebase';
 import { referralService } from '../services/referralService';
 import { sanitizeReferralCode } from '../utils/referralCoding';
-import { formatStandardOrdinal } from '../utils/subscriptionAccess';
+import { formatStandardOrdinal, getClassSubscriptionInfo } from '../utils/subscriptionAccess';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -19,6 +19,7 @@ interface AuthModalProps {
   defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot';
   initialEmail?: string;
   onSuccess?: () => void;
+  onExistingAccountProceedToSubscription?: (targetClass: ClassLevel) => void;
 }
 
 const CLASS_LEVELS: ClassLevel[] = [
@@ -42,10 +43,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   defaultTab = 'login',
   initialEmail = '',
   onSuccess,
+  onExistingAccountProceedToSubscription,
 }) => {
   const {
     studentsList,
     registerStudent,
+    checkAccountForMultiClassRegistration,
+    switchActiveClass,
     loginWithEmail,
     loginAsTeacher,
     loginAsAdmin,
@@ -104,6 +108,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Multi-Class Existing Account Recognition State (Same Mobile + Email -> Add Additional Class)
+  const [existingAccountMatch, setExistingAccountMatch] = useState<{
+    email: string;
+    mobile: string;
+    studentName: string;
+    accountRole: 'student' | 'teacher';
+    activeClasses: ClassLevel[];
+    existingClass?: ClassLevel;
+    alreadyUnlockedTargetClass: boolean;
+  } | null>(null);
+  const [existingAccountPassword, setExistingAccountPassword] = useState('');
+  const [showExistingPassword, setShowExistingPassword] = useState(false);
+
   useEffect(() => {
     setTab(defaultTab);
     if (initialEmail) {
@@ -123,7 +140,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
     setError('');
     setSuccessMsg('');
+    setExistingAccountMatch(null);
+    setExistingAccountPassword('');
   }, [defaultTab, initialEmail, isOpen]);
+
+  // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-class addition)
+  useEffect(() => {
+    if (!isOpen || tab !== 'register') return;
+    const cleanEmail = regEmail.trim().toLowerCase();
+    const cleanMobile = regMobile.replace(/\D/g, '').slice(-10);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || !/^[6-9]\d{9}$/.test(cleanMobile)) {
+      setExistingAccountMatch(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass)
+        .then((res) => {
+          if (cancelled) return;
+          if (res.exists && res.matchedPair) {
+            setExistingAccountMatch({
+              email: cleanEmail,
+              mobile: cleanMobile,
+              studentName: res.existingStudentName || 'Registered User',
+              accountRole: res.accountRole || 'student',
+              activeClasses: res.activeClasses || (res.existingClass ? [res.existingClass] : []),
+              existingClass: res.existingClass,
+              alreadyUnlockedTargetClass: Boolean(res.alreadyUnlockedTargetClass),
+            });
+            setError('');
+          } else {
+            setExistingAccountMatch(null);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setExistingAccountMatch(null);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, tab, regEmail, regMobile, regClass]);
 
   // Live validate referral code when entered or captured from URL
   useEffect(() => {
@@ -190,19 +250,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClose();
   };
 
-  // --- 3. Student & Teacher Class-Wise Registration (School Name is OPTIONAL) ---
+  // --- Existing Account Verification -> Proceed Directly to Activate Additional Class (No Duplicate Account) ---
+  const handleVerifyExistingAccountAndProceed = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!existingAccountMatch) return;
+
+    setError('');
+    setSuccessMsg('');
+
+    const passwordToUse = existingAccountPassword || regPassword;
+    if (!passwordToUse) {
+      setError('Please enter your existing account password to verify ownership and continue.');
+      return;
+    }
+
+    setIsLoading(true);
+    const loginRes =
+      existingAccountMatch.accountRole === 'teacher'
+        ? await loginAsTeacher(existingAccountMatch.email, passwordToUse)
+        : await loginWithEmail(existingAccountMatch.email, passwordToUse);
+    setIsLoading(false);
+
+    if (!loginRes.success) {
+      setError(loginRes.message);
+      return;
+    }
+
+    // Check latest status after authentication (in case active classes synced from Firestore)
+    const loggedStudent = 'student' in loginRes ? loginRes.student : 'teacher' in loginRes ? loginRes.teacher : undefined;
+    const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass);
+
+    onSuccess?.();
+    onClose();
+
+    if (targetInfo.isAccessible) {
+      await switchActiveClass(regClass);
+    } else if (onExistingAccountProceedToSubscription) {
+      onExistingAccountProceedToSubscription(regClass);
+    }
+  };
+
+  // --- 3. Student & Teacher Class-Wise Registration (Supports New Accounts + Existing Account Class Addition) ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
 
     const roleLabel = regRoleType === 'teacher' ? 'Teacher' : 'Student';
-
-    if (!regName.trim() || regName.trim().length < 2) {
-      setError(`Please enter the ${roleLabel.toLowerCase()} full name.`);
-      return;
-    }
-
     const cleanEmail = regEmail.trim().toLowerCase();
     if (!isValidEmail(cleanEmail)) {
       setError('Please enter a valid email address.');
@@ -215,25 +309,67 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Strict Unique Mobile Check (One mobile number = One account)
-    const duplicateMobile = studentsList.find(
-      s => s.mobile.replace(/\D/g, '').slice(-10) === cleanMobile
-    );
-    if (duplicateMobile) {
+    // Check if this Email + Mobile belongs to an existing account before blocking or creating duplicates
+    setIsLoading(true);
+    const existingCheck = await checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass);
+    setIsLoading(false);
+
+    if (existingCheck.exists) {
+      if (existingCheck.matchedPair) {
+        const matchedState = {
+          email: cleanEmail,
+          mobile: cleanMobile,
+          studentName: existingCheck.existingStudentName || 'Registered User',
+          accountRole: existingCheck.accountRole || ('student' as const),
+          activeClasses: existingCheck.activeClasses || (existingCheck.existingClass ? [existingCheck.existingClass] : []),
+          existingClass: existingCheck.existingClass,
+          alreadyUnlockedTargetClass: Boolean(existingCheck.alreadyUnlockedTargetClass),
+        };
+        setExistingAccountMatch(matchedState);
+
+        // If user already entered their password in the password box, authenticate directly!
+        if (regPassword.length >= 6 || existingAccountPassword.length >= 1) {
+          const pw = existingAccountPassword || regPassword;
+          setIsLoading(true);
+          const loginRes =
+            matchedState.accountRole === 'teacher'
+              ? await loginAsTeacher(cleanEmail, pw)
+              : await loginWithEmail(cleanEmail, pw);
+          setIsLoading(false);
+          if (!loginRes.success) {
+            setError(
+              `Existing account found for ${matchedState.studentName}! Enter your registered account password below to unlock ${regClass}. (${loginRes.message})`
+            );
+            return;
+          }
+          const loggedStudent = 'student' in loginRes ? loginRes.student : 'teacher' in loginRes ? loginRes.teacher : undefined;
+          const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass);
+          onSuccess?.();
+          onClose();
+          if (targetInfo.isAccessible) {
+            await switchActiveClass(regClass);
+          } else {
+            onExistingAccountProceedToSubscription?.(regClass);
+          }
+          return;
+        }
+
+        setSuccessMsg(
+          `Existing account recognized (${matchedState.studentName})! Enter your account password below to continue to ${regClass} activation.`
+        );
+        return;
+      }
+
       setError(
-        `One mobile number = One account. Mobile number ${cleanMobile} is already registered with "${duplicateMobile.name}" (${duplicateMobile.classLevel}).`
+        existingCheck.mismatchField === 'mobile'
+          ? `Mobile number ${cleanMobile} is already registered to another account. To add ${regClass} to an existing account, enter BOTH your exact registered Email Address and Mobile Number together.`
+          : `Email "${cleanEmail}" is already registered to another account. To add ${regClass} to an existing account, enter BOTH your exact registered Email Address and Mobile Number together.`
       );
       return;
     }
 
-    // Strict Unique Email Check (One email = One account)
-    const duplicateEmail = studentsList.find(
-      s => s.email.trim().toLowerCase() === cleanEmail
-    );
-    if (duplicateEmail) {
-      setError(
-        `One email address = One account. Email "${cleanEmail}" is already registered with "${duplicateEmail.name}". Please sign in instead.`
-      );
+    if (!regName.trim() || regName.trim().length < 2) {
+      setError(`Please enter the ${roleLabel.toLowerCase()} full name.`);
       return;
     }
 
@@ -248,7 +384,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // NOTE: School Name is strictly OPTIONAL for both Students and Teachers!
-
     setIsLoading(true);
 
     // Validate optional referral code before creating account (prevents invalid referrals and self-referrals)
@@ -456,7 +591,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <p className="text-indigo-100 text-xs sm:text-sm mt-1">
             {tab === 'login' && 'Sign in with your registered Email Address & Password'}
             {tab === 'teacher' && 'Sign in to the dedicated Teacher Portal for your registered class (Standards 1st to 10th)'}
-            {tab === 'register' && 'Select ONE class from Standard 1st to Standard 10th • School Name is Optional'}
+            {tab === 'register' && 'Select Class 1st to 10th • Use your existing Mobile & Email anytime to add additional classes'}
             {tab === 'forgot' && 'Enter your registered email address to receive a secure Firebase password reset link'}
             {tab === 'admin' && 'Authorized Administrator sign-in to manage platform settings'}
           </p>
@@ -823,11 +958,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* One Account – One Class – One Phone – One Email Policy Banner */}
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                <span className="text-[11px] font-bold text-amber-950 leading-snug">
-                  <strong>One Account = One Class:</strong> Select one class from <strong>Standard 1st to Standard 10th</strong>. Your selected class ({regClass}) will be permanently saved to your account.
+              {/* Class-Wise & Multi-Class Account Banner */}
+              <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
+                <span className="text-[11px] font-bold text-indigo-950 leading-snug">
+                  <strong>Class-Wise Registration &amp; Additional Classes:</strong> Select any class from <strong>Class 1 to Class 10</strong> below. Already registered? Enter your <strong>existing Mobile Number &amp; Email</strong> to activate an additional class (₹99 / 365 Days) on the same account!
                 </span>
               </div>
 
@@ -867,19 +1002,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onChange={(e) => setRegName(e.target.value)}
                     placeholder={regRoleType === 'teacher' ? 'e.g. Prof. Meera Joshi' : 'e.g. Aarav Patil'}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                    required
+                    required={!existingAccountMatch}
                   />
                 </div>
               </div>
 
-              {/* 2. Mobile Number (10 digits, 1 phone = 1 account) */}
+              {/* 2. Mobile Number */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Mobile Number (10 Digits) *
                   </label>
                   <span className="text-[10px] font-bold text-indigo-600">
-                    One Mobile = One Account
+                    Same Mobile Works for Extra Classes
                   </span>
                 </div>
                 <div className="relative">
@@ -896,14 +1031,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* 3. Email Address (1 email = 1 account) */}
+              {/* 3. Email Address */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Email Address *
                   </label>
                   <span className="text-[10px] font-bold text-indigo-600">
-                    One Email = One Account
+                    Same Email Works for Extra Classes
                   </span>
                 </div>
                 <div className="relative">
@@ -919,57 +1054,137 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* 4. Password & Confirm Password */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Password *
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type={showRegPassword ? 'text' : 'password'}
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Min 6 chars"
-                      className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowRegPassword(!showRegPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                    >
-                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+              {/* Existing Account Recognized Panel — Seamlessly Verify & Purchase Additional Class (No Duplicate Account) */}
+              {existingAccountMatch && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-indigo-50 border-2 border-emerald-400 space-y-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+                        ✓ Existing {existingAccountMatch.accountRole === 'teacher' ? 'Teacher' : 'Student'} Account Recognized
+                      </span>
+                      <h4 className="text-sm font-black text-slate-900 mt-1">
+                        Welcome back, {existingAccountMatch.studentName}!
+                      </h4>
+                      <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                        Your account already works across multiple classes — no duplicate account needed.
+                        {existingAccountMatch.activeClasses.length > 0 && (
+                          <> Active classes: <strong>{existingAccountMatch.activeClasses.join(', ')}</strong>.</>
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Confirm Password *
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type={showRegPassword ? 'text' : 'password'}
-                      value={regConfirmPassword}
-                      onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      placeholder="Re-enter password"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
 
-              {/* 5. Select ONE Class from Standard 1st to Standard 10th */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between">
+                    <span className="font-bold text-slate-700">Selected Class:</span>
+                    <span
+                      className={`font-black px-2.5 py-0.5 rounded-full text-[11px] ${
+                        existingAccountMatch.alreadyUnlockedTargetClass
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-900'
+                      }`}
+                    >
+                      {regClass} •{' '}
+                      {existingAccountMatch.alreadyUnlockedTargetClass
+                        ? 'Already Unlocked (Free Switch)'
+                        : 'Locked • ₹99 (365 Days) on Payment'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Enter Your Existing Account Password to Verify *
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showExistingPassword ? 'text' : 'password'}
+                        value={existingAccountPassword}
+                        onChange={(e) => setExistingAccountPassword(e.target.value)}
+                        placeholder="Enter your existing password"
+                        className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-emerald-300 focus:border-emerald-600 focus:outline-none text-sm bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowExistingPassword(!showExistingPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showExistingPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => handleVerifyExistingAccountAndProceed()}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-60 text-white font-black text-xs shadow-md transition-all cursor-pointer"
+                  >
+                    {isLoading
+                      ? 'Verifying Account...'
+                      : existingAccountMatch.alreadyUnlockedTargetClass
+                      ? `Verify Password & Switch to ${regClass} →`
+                      : `Verify Password & Continue to Unlock ${regClass} (₹99) →`}
+                  </button>
+                </div>
+              )}
+
+              {/* 4. Password & Confirm Password (for New Account Creation) */}
+              {!existingAccountMatch && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Password *
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showRegPassword ? 'text' : 'password'}
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Min 6 chars"
+                        className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegPassword(!showRegPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Confirm Password *
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showRegPassword ? 'text' : 'password'}
+                        value={regConfirmPassword}
+                        onChange={(e) => setRegConfirmPassword(e.target.value)}
+                        placeholder="Re-enter password"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Select Class from Class 1 to Class 10 (Both Dropdown + Selectable Cards) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Select Class (Standard 1st to 10th) *
+                    Select Class (Class 1 to Class 10) *
                   </label>
                   <span className="text-[10px] font-bold text-emerald-700">
-                    Permanently Saved to Account
+                    {existingAccountMatch
+                      ? existingAccountMatch.alreadyUnlockedTargetClass
+                        ? 'Unlocked on Account'
+                        : '₹99 / 365 Days to Activate'
+                      : 'Free Base Plan Included'}
                   </span>
                 </div>
                 <div className="relative">
@@ -985,6 +1200,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="grid grid-cols-5 gap-1.5">
+                  {CLASS_LEVELS.map((c) => {
+                    const isSelected = regClass === c;
+                    const isAlreadyActive = existingAccountMatch?.activeClasses.includes(c);
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setRegClass(c)}
+                        className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-black'
+                            : isAlreadyActive
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold hover:bg-emerald-100'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 font-bold hover:border-indigo-300'
+                        }`}
+                      >
+                        <span className="text-[11px] block leading-tight">{c}</span>
+                        <span
+                          className={`text-[9px] block leading-tight mt-0.5 ${
+                            isSelected
+                              ? 'text-indigo-100'
+                              : isAlreadyActive
+                              ? 'text-emerald-700'
+                              : 'text-slate-400'
+                          }`}
+                        >
+                          {isAlreadyActive ? 'Active ✓' : formatStandardOrdinal(c)}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

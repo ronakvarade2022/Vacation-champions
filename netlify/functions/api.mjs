@@ -202,6 +202,27 @@ function jsonResponse(statusCode, payload) {
   };
 }
 
+const VALID_NETLIFY_CLASSES = [
+  'Class 1',
+  'Class 2',
+  'Class 3',
+  'Class 4',
+  'Class 5',
+  'Class 6',
+  'Class 7',
+  'Class 8',
+  'Class 9',
+  'Class 10'
+];
+
+function normalizeNetlifyClassLevel(raw) {
+  const str = String(raw || '').trim();
+  const m = /^(?:Class\s*)?(\d{1,2})(?:st|nd|rd|th)?$/i.exec(str);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return n >= 1 && n <= 10 ? `Class ${n}` : null;
+}
+
 function toFirestoreValue(val) {
   if (val === null || val === undefined) return { nullValue: null };
   if (typeof val === 'boolean') return { booleanValue: val };
@@ -210,7 +231,100 @@ function toFirestoreValue(val) {
       ? { integerValue: String(val) }
       : { doubleValue: val };
   }
+  if (Array.isArray(val)) {
+    return {
+      arrayValue: {
+        values: val.map((item) => toFirestoreValue(item))
+      }
+    };
+  }
+  if (typeof val === 'object') {
+    const fields = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== undefined) {
+        fields[k] = toFirestoreValue(v);
+      }
+    }
+    return { mapValue: { fields } };
+  }
   return { stringValue: String(val) };
+}
+
+function fromFirestoreValue(v) {
+  if (!v || typeof v !== 'object') return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('booleanValue' in v) return Boolean(v.booleanValue);
+  if ('nullValue' in v) return null;
+  if ('arrayValue' in v) {
+    const vals = Array.isArray(v.arrayValue?.values) ? v.arrayValue.values : [];
+    return vals.map((item) => fromFirestoreValue(item));
+  }
+  if ('mapValue' in v) {
+    const obj = {};
+    const fields = v.mapValue?.fields || {};
+    for (const [k, fv] of Object.entries(fields)) {
+      obj[k] = fromFirestoreValue(fv);
+    }
+    return obj;
+  }
+  return null;
+}
+
+function buildUpdatedNetlifyClassSubscriptions(existingDoc, targetClass, startDateIso, expiryDateIso, paymentId, orderId, amountInr = 99) {
+  const existingMap =
+    existingDoc?.classSubscriptions && typeof existingDoc.classSubscriptions === 'object'
+      ? { ...existingDoc.classSubscriptions }
+      : {};
+
+  if (existingDoc?.plan && existingDoc.plan !== 'free') {
+    const legacyCls =
+      normalizeNetlifyClassLevel(existingDoc.activatedClassLevel) ||
+      normalizeNetlifyClassLevel(existingDoc.classLevel) ||
+      targetClass;
+    if (!existingMap[legacyCls]) {
+      existingMap[legacyCls] = {
+        classLevel: legacyCls,
+        plan: existingDoc.plan === 'basic' ? 'basic' : 'premium',
+        status: 'ACTIVE',
+        purchasedAt: existingDoc.planPurchasedAt,
+        expiresAt: existingDoc.planExpiresAt,
+        paymentId: existingDoc.lastPaymentId,
+        orderId: existingDoc.lastOrderId,
+        amountInr: 99,
+        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
+      };
+    }
+  }
+
+  existingMap[targetClass] = {
+    classLevel: targetClass,
+    plan: 'premium',
+    status: 'ACTIVE',
+    purchasedAt: startDateIso,
+    expiresAt: expiryDateIso,
+    paymentId,
+    orderId,
+    amountInr,
+    validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+    updatedAt: new Date().toISOString()
+  };
+
+  const todayIst = formatIstDateString(new Date());
+  const activatedClasses = VALID_NETLIFY_CLASSES.filter((cls) => {
+    const rec = existingMap[cls];
+    if (!rec || rec.plan === 'free') return false;
+    const exp = String(rec.expiresAt || '').slice(0, 10);
+    return !exp || exp >= todayIst;
+  });
+
+  const primaryClassLevel =
+    normalizeNetlifyClassLevel(existingDoc?.primaryClassLevel) ||
+    normalizeNetlifyClassLevel(existingDoc?.classLevel) ||
+    targetClass;
+
+  return { existingMap, activatedClasses, primaryClassLevel };
 }
 
 async function patchFirestoreDocument(collectionName, docId, fieldsObj) {
@@ -261,11 +375,7 @@ async function getFirestoreDocument(collectionName, docId) {
     if (!docData || !docData.fields) return null;
     const parsed = {};
     for (const [k, v] of Object.entries(docData.fields)) {
-      if ('stringValue' in v) parsed[k] = v.stringValue;
-      else if ('integerValue' in v) parsed[k] = Number(v.integerValue);
-      else if ('doubleValue' in v) parsed[k] = Number(v.doubleValue);
-      else if ('booleanValue' in v) parsed[k] = Boolean(v.booleanValue);
-      else if ('nullValue' in v) parsed[k] = null;
+      parsed[k] = fromFirestoreValue(v);
     }
     return parsed;
   } catch {
@@ -393,7 +503,8 @@ export async function handler(event) {
       const body = JSON.parse(event.body || '{}');
       const rawPlan = body.planId || body.plan || 'premium';
       const planId = rawPlan === 'premium' ? 'premium' : null;
-      const { studentId, studentName, email, mobile } = body;
+      const { studentId, studentName, email, mobile, selectedClass, classLevel } = body;
+      const normalizedClass = normalizeNetlifyClassLevel(selectedClass || classLevel) || '';
 
       if (!studentId) {
         return jsonResponse(400, {
@@ -440,6 +551,8 @@ export async function handler(event) {
             studentName: String(studentName || 'Student').slice(0, 250),
             email: String(email || '').slice(0, 250),
             mobile: String(mobile || '').slice(0, 250),
+            selectedClass: normalizedClass,
+            classLevel: normalizedClass,
             planId: 'premium',
             subscriptionTier: 'premium',
             validityDays: '365'
@@ -466,6 +579,7 @@ export async function handler(event) {
         keyId: creds.keyId,
         receiptNumber,
         planId,
+        selectedClass: normalizedClass || undefined,
         isMock: false,
         mode: creds.isLive ? 'LIVE' : 'TEST'
       });
@@ -483,7 +597,8 @@ export async function handler(event) {
       const body = JSON.parse(event.body || '{}');
       const rawPlan = body.planId || body.plan || 'premium';
       const planId = rawPlan === 'premium' ? 'premium' : null;
-      const { studentId, studentName, email, mobile } = body;
+      const { studentId, studentName, email, mobile, selectedClass, classLevel } = body;
+      const normalizedClass = normalizeNetlifyClassLevel(selectedClass || classLevel) || '';
 
       if (!studentId) {
         return jsonResponse(400, { success: false, error: 'Student authentication required.' });
@@ -503,7 +618,9 @@ export async function handler(event) {
 
       const amountInPaise = 9900;
       const amountInRupees = 99;
-      const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+      const planTitle = normalizedClass
+        ? `PREMIUM PLAN (${normalizedClass}) – ₹99 – 365 Days`
+        : 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
       const authHeader = 'Basic ' + Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString('base64');
 
       const qrRes = await fetch('https://api.razorpay.com/v1/payments/qr_codes', {
@@ -524,6 +641,8 @@ export async function handler(event) {
             studentName: String(studentName || 'Student').slice(0, 250),
             email: String(email || '').slice(0, 250),
             mobile: String(mobile || '').slice(0, 250),
+            selectedClass: normalizedClass,
+            classLevel: normalizedClass,
             planId: 'premium',
             subscriptionTier: 'premium',
             validityDays: '365'
@@ -549,6 +668,7 @@ export async function handler(event) {
         amountRupees: amountInRupees,
         currency: 'INR',
         planId,
+        selectedClass: normalizedClass || undefined,
         planTitle,
         status: qrData.status || 'active',
         createdAt: qrData.created_at || Math.floor(Date.now() / 1000),
@@ -568,7 +688,7 @@ export async function handler(event) {
     try {
       const qrId = normalizedPath.replace('/razorpay/qr-status/', '').split('?')[0];
       const params = event.queryStringParameters || {};
-      const { studentId, planId, studentName, email, mobile } = params;
+      const { studentId, planId, studentName, email, mobile, selectedClass, classLevel } = params;
 
       const creds = getResolvedRazorpayCredentials();
       if (!creds.isConfigured || !creds.keySecret) {
@@ -606,16 +726,35 @@ export async function handler(event) {
         const paymentId = successfulPayment.id;
         const now = new Date();
         const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
-        const dates = computeNetlifySubscriptionDates(now, existingStudentDoc?.planExpiresAt);
+        const resolvedClass =
+          normalizeNetlifyClassLevel(qrData?.notes?.selectedClass || qrData?.notes?.classLevel || selectedClass || classLevel) ||
+          normalizeNetlifyClassLevel(existingStudentDoc?.classLevel) ||
+          'Class 1';
+        const existingClassExpiry = existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt;
+        const dates = computeNetlifySubscriptionDates(now, existingClassExpiry);
         const startDateIso = dates.startDateIso;
         const expiryDateIso = dates.expiryDateIso;
-        const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+        const planTitle = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
         const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
+        const { existingMap, activatedClasses, primaryClassLevel } = buildUpdatedNetlifyClassSubscriptions(
+          existingStudentDoc,
+          resolvedClass,
+          startDateIso,
+          expiryDateIso,
+          paymentId,
+          qrId,
+          amountRupees
+        );
 
         // Patch Firestore
         await Promise.all([
           patchFirestoreDocument('students', String(studentId), {
             id: String(studentId),
+            classLevel: resolvedClass,
+            primaryClassLevel,
+            activatedClassLevel: resolvedClass,
+            activatedClasses,
+            classSubscriptions: existingMap,
             plan: resolvedPlanId,
             subscriptionTier: 'premium',
             planLabel: planTitle,
@@ -636,6 +775,8 @@ export async function handler(event) {
             studentName: String(studentName || 'Student'),
             parentEmail: String(email || ''),
             parentMobile: String(mobile || ''),
+            selectedClass: resolvedClass,
+            classLevel: resolvedClass,
             planId: resolvedPlanId,
             planTitle,
             amount: amountRupees,
@@ -657,6 +798,8 @@ export async function handler(event) {
           status: 'PAID',
           paymentId,
           orderId: qrId,
+          selectedClass: resolvedClass,
+          activatedClasses,
           method: 'UPI',
           amount: amountRupees,
           transaction: {
@@ -664,6 +807,7 @@ export async function handler(event) {
             receiptNumber,
             studentId: String(studentId),
             studentName: String(studentName || 'Student'),
+            selectedClass: resolvedClass,
             planId: resolvedPlanId,
             planTitle,
             amount: amountRupees,
@@ -678,6 +822,8 @@ export async function handler(event) {
             membershipId: `mem_${paymentId}`,
             studentId: String(studentId),
             studentName: String(studentName || 'Student'),
+            selectedClass: resolvedClass,
+            activatedClasses,
             planId: resolvedPlanId,
             planTitle,
             amount: amountRupees,
@@ -724,6 +870,8 @@ export async function handler(event) {
         studentName,
         email,
         mobile,
+        selectedClass,
+        classLevel,
         method: payMethod = 'UPI',
         currentExpiresAt
       } = body;
@@ -762,6 +910,7 @@ export async function handler(event) {
         return jsonResponse(200, {
           success: true,
           alreadyProcessed: true,
+          selectedClass: existingTx?.selectedClass,
           transaction: existingTx,
           message: 'This payment has already been verified and activated.'
         });
@@ -821,22 +970,42 @@ export async function handler(event) {
         });
       }
 
-      // Compute exact 365-day expiry date in IST
+      // Compute exact 365-day expiry date in IST ONLY for the resolved selectedClass
       const now = new Date();
       const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
+      const resolvedClass =
+        normalizeNetlifyClassLevel(
+          captureCheck.notes?.selectedClass ||
+            captureCheck.notes?.classLevel ||
+            selectedClass ||
+            classLevel
+        ) ||
+        normalizeNetlifyClassLevel(existingStudentDoc?.classLevel) ||
+        'Class 1';
+      const existingClassExpiry = existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt;
       const dates = computeNetlifySubscriptionDates(
         now,
-        currentExpiresAt || existingStudentDoc?.planExpiresAt
+        existingClassExpiry || (!existingStudentDoc?.classSubscriptions ? (currentExpiresAt || existingStudentDoc?.planExpiresAt) : undefined)
       );
       const startDateIso = dates.startDateIso;
       const expiryDateIso = dates.expiryDateIso;
       const daysRemaining = dates.daysRemaining;
 
       const verifiedAmount = 99;
-      const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+      const planTitle = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
       const subscriptionTier = 'premium';
       const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
       const resolvedMethod = captureCheck.method || payMethod || 'RAZORPAY';
+
+      const { existingMap, activatedClasses, primaryClassLevel } = buildUpdatedNetlifyClassSubscriptions(
+        existingStudentDoc,
+        resolvedClass,
+        startDateIso,
+        expiryDateIso,
+        razorpay_payment_id,
+        razorpay_order_id,
+        verifiedAmount
+      );
 
       const transactionRecord = {
         id: `tx_${razorpay_payment_id}`,
@@ -845,6 +1014,8 @@ export async function handler(event) {
         studentName: String(studentName || 'Student'),
         parentEmail: String(email || ''),
         parentMobile: String(mobile || ''),
+        selectedClass: resolvedClass,
+        classLevel: resolvedClass,
         planId,
         planTitle,
         amount: verifiedAmount,
@@ -864,6 +1035,8 @@ export async function handler(event) {
         membershipId: `mem_${razorpay_payment_id}`,
         studentId: String(studentId),
         studentName: String(studentName || 'Student'),
+        selectedClass: resolvedClass,
+        activatedClasses,
         planId,
         planTitle,
         amount: verifiedAmount,
@@ -883,6 +1056,11 @@ export async function handler(event) {
       await Promise.all([
         patchFirestoreDocument('students', String(studentId), {
           id: String(studentId),
+          classLevel: resolvedClass,
+          primaryClassLevel,
+          activatedClassLevel: resolvedClass,
+          activatedClasses,
+          classSubscriptions: existingMap,
           plan: planId,
           subscriptionTier,
           planLabel: planTitle,
@@ -906,6 +1084,9 @@ export async function handler(event) {
       return jsonResponse(200, {
         success: true,
         alreadyProcessed: false,
+        selectedClass: resolvedClass,
+        activatedClasses,
+        classSubscriptions: existingMap,
         transaction: transactionRecord,
         membership: membershipRecord
       });
@@ -1038,14 +1219,33 @@ export async function handler(event) {
         if (studentId && paymentId) {
           const now = new Date();
           const existingStudentDoc = await getFirestoreDocument('students', studentId);
-          const dates = computeNetlifySubscriptionDates(now, existingStudentDoc?.planExpiresAt);
+          const resolvedClass =
+            normalizeNetlifyClassLevel(notes.selectedClass || notes.classLevel) ||
+            normalizeNetlifyClassLevel(existingStudentDoc?.classLevel) ||
+            'Class 1';
+          const existingClassExpiry = existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt;
+          const dates = computeNetlifySubscriptionDates(now, existingClassExpiry);
           const startDateIso = dates.startDateIso;
           const expiryDateIso = dates.expiryDateIso;
           const amountInr = 99;
-          const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+          const planTitle = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
+          const { existingMap, activatedClasses, primaryClassLevel } = buildUpdatedNetlifyClassSubscriptions(
+            existingStudentDoc,
+            resolvedClass,
+            startDateIso,
+            expiryDateIso,
+            paymentId,
+            orderId,
+            amountInr
+          );
 
           await patchFirestoreDocument('students', studentId, {
             id: studentId,
+            classLevel: resolvedClass,
+            primaryClassLevel,
+            activatedClassLevel: resolvedClass,
+            activatedClasses,
+            classSubscriptions: existingMap,
             plan: planId,
             subscriptionTier: 'premium',
             planLabel: planTitle,
@@ -1064,6 +1264,8 @@ export async function handler(event) {
             status: 'ok',
             event: eventType,
             studentId,
+            selectedClass: resolvedClass,
+            activatedClasses,
             plan: planId,
             planExpiresAt: expiryDateIso,
             validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
@@ -1080,6 +1282,83 @@ export async function handler(event) {
     }
   }
 
+  // 5b. POST /api/auth/check-existing-account
+  if (method === 'POST' && normalizedPath === '/auth/check-existing-account') {
+    try {
+      const body = JSON.parse(event.body || '{}');
+      const cleanEmail = String(body.email || '').trim().toLowerCase();
+      const cleanMobile = String(body.mobile || '').replace(/\D/g, '').slice(-10);
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents:runQuery`;
+
+      const querySingleField = async (fieldPath, val) => {
+        if (!val) return null;
+        const { db } = getNetlifyFirebaseAdmin();
+        if (db) {
+          const snap = await db.collection('students').where(fieldPath, '==', val).limit(1).get();
+          if (snap.empty) return null;
+          return { id: snap.docs[0].id, data: snap.docs[0].data() };
+        }
+        const qRes = await fetch(queryUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: 'students' }],
+              where: {
+                fieldFilter: {
+                  field: { fieldPath },
+                  op: 'EQUAL',
+                  value: { stringValue: val }
+                }
+              },
+              limit: 1
+            }
+          })
+        });
+        const rows = await qRes.json().catch(() => []);
+        const doc = Array.isArray(rows) ? rows[0]?.document : null;
+        if (!doc?.fields) return null;
+        const parsed = {};
+        for (const [k, fv] of Object.entries(doc.fields)) parsed[k] = fromFirestoreValue(fv);
+        return { id: doc.name.split('/').pop(), data: parsed };
+      };
+
+      const [emailDoc, mobileDoc] = await Promise.all([
+        cleanEmail ? querySingleField('email', cleanEmail) : Promise.resolve(null),
+        cleanMobile.length >= 10 ? querySingleField('mobile', cleanMobile) : Promise.resolve(null)
+      ]);
+
+      if (!emailDoc && !mobileDoc) {
+        return jsonResponse(200, { success: true, exists: false, matchedPair: false, activeClasses: [] });
+      }
+      if (emailDoc && mobileDoc && emailDoc.id === mobileDoc.id) {
+        const todayIst = formatIstDateString(new Date());
+        const map = emailDoc.data?.classSubscriptions || {};
+        const activeClasses = VALID_NETLIFY_CLASSES.filter((c) => {
+          const r = map[c];
+          return r && r.plan !== 'free' && (!r.expiresAt || String(r.expiresAt).slice(0, 10) >= todayIst);
+        });
+        return jsonResponse(200, {
+          success: true,
+          exists: true,
+          matchedPair: true,
+          accountRole: emailDoc.data?.accountRole === 'teacher' ? 'teacher' : 'student',
+          primaryClassLevel: emailDoc.data?.primaryClassLevel || emailDoc.data?.classLevel || 'Class 1',
+          activeClasses
+        });
+      }
+      return jsonResponse(200, {
+        success: true,
+        exists: true,
+        matchedPair: false,
+        mismatchField: emailDoc && !mobileDoc ? 'email' : 'mobile',
+        activeClasses: []
+      });
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err?.message });
+    }
+  }
+
   // 6. POST /api/subscription/sync
   if (method === 'POST' && normalizedPath === '/subscription/sync') {
     try {
@@ -1087,6 +1366,8 @@ export async function handler(event) {
       const cleanStudentId = String(body.studentId || '').trim();
       const requestedPlan = body.plan || 'free';
       const cleanPaymentId = String(body.paymentId || '').trim();
+      const targetClass =
+        normalizeNetlifyClassLevel(body.selectedClass || body.activatedClassLevel) || 'Class 1';
 
       if (!cleanStudentId) {
         return jsonResponse(400, { success: false, error: 'studentId is required.' });
@@ -1125,6 +1406,7 @@ export async function handler(event) {
         success: true,
         subscription: {
           studentId: cleanStudentId,
+          selectedClass: targetClass,
           plan: requestedPlan === 'premium' || requestedPlan === 'basic' ? 'premium' : 'free',
           planPurchasedAt: body.planPurchasedAt,
           planExpiresAt: body.planExpiresAt,
@@ -1137,6 +1419,46 @@ export async function handler(event) {
     }
   }
 
+  // 6b. POST /api/subscription/switch-class
+  if (method === 'POST' && normalizedPath === '/subscription/switch-class') {
+    try {
+      const body = JSON.parse(event.body || '{}');
+      const cleanStudentId = String(body.studentId || '').trim();
+      const targetClass = normalizeNetlifyClassLevel(
+        body.targetClass || body.selectedClass || body.classLevel
+      );
+      if (!cleanStudentId || !targetClass) {
+        return jsonResponse(400, { success: false, allowed: false, error: 'studentId and targetClass are required.' });
+      }
+      const docData = await getFirestoreDocument('students', cleanStudentId);
+      const primaryClass = normalizeNetlifyClassLevel(docData?.primaryClassLevel || docData?.classLevel) || 'Class 1';
+      const entry = docData?.classSubscriptions?.[targetClass];
+      const todayIst = formatIstDateString(new Date());
+      const isPaidActive =
+        entry &&
+        entry.plan !== 'free' &&
+        (!entry.expiresAt || String(entry.expiresAt).slice(0, 10) >= todayIst);
+      const isAccessible = isPaidActive || targetClass === primaryClass;
+
+      if (!isAccessible) {
+        return jsonResponse(403, {
+          success: false,
+          allowed: false,
+          needsPurchase: !entry,
+          needsRenewal: Boolean(entry),
+          error: `${targetClass} is locked. Activate or renew ${targetClass} for ₹99 (365 Days).`
+        });
+      }
+
+      if (cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')) {
+        await patchFirestoreDocument('students', cleanStudentId, { classLevel: targetClass });
+      }
+      return jsonResponse(200, { success: true, allowed: true, selectedClass: targetClass });
+    } catch (err) {
+      return jsonResponse(500, { success: false, allowed: false, error: err?.message });
+    }
+  }
+
   // 7. GET /api/subscription/status/:studentId
   if (method === 'GET' && normalizedPath.startsWith('/subscription/status/')) {
     const studentId = normalizedPath.replace('/subscription/status/', '');
@@ -1145,6 +1467,10 @@ export async function handler(event) {
       success: true,
       subscription: {
         studentId,
+        selectedClass: docData?.classLevel || 'Class 1',
+        primaryClassLevel: docData?.primaryClassLevel || docData?.classLevel || 'Class 1',
+        activatedClasses: docData?.activatedClasses || [],
+        classSubscriptions: docData?.classSubscriptions || {},
         plan: docData?.plan || 'free',
         planPurchasedAt: docData?.planPurchasedAt || null,
         planExpiresAt: docData?.planExpiresAt || null,

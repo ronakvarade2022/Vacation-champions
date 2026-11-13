@@ -35,16 +35,23 @@ import {
   Scale,
   AlertTriangle,
   Mail,
-  Phone
+  Phone,
+  ChevronDown
 } from 'lucide-react';
 
-import { canAccessFeature, getStudentPlanInfo } from '../utils/subscriptionAccess';
+import {
+  ALL_CLASS_LEVELS,
+  canAccessFeature,
+  getAccessibleClassesList,
+  getClassSubscriptionInfo,
+  getStudentPlanInfo
+} from '../utils/subscriptionAccess';
 
 interface HeaderProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onOpenAuth: (defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot') => void;
-  onOpenMembership: () => void;
+  onOpenMembership: (targetClass?: ClassLevel) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -58,6 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
     currentUser,
     switchRole,
     currentStudent, 
+    switchActiveClass,
     notifications,
     markNotificationAsRead,
     logout
@@ -67,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showClassSwitcher, setShowClassSwitcher] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -385,21 +394,120 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Section: Class Selector, Student/Teacher Badge & Actions */}
         <div className="flex items-center gap-3">
-          {/* Permanent Class Grade Badge (Rule: One Account = One Class Locked) */}
-          {isLearningRole && currentStudent && (
-            <div 
-              className="flex items-center gap-1.5 bg-amber-100/80 border border-amber-300/90 px-2.5 py-1 rounded-xl shadow-2xs"
-              title={`Permanently registered in ${currentStudent.classLevel}. Each account can access only one class.`}
-            >
-              <Lock className="w-3 h-3 text-amber-700" />
-              <span className="text-xs font-extrabold text-amber-950">
-                {currentStudent.classLevel}
-              </span>
-              <span className="text-[9px] bg-amber-200/90 text-amber-900 px-1 py-0.2 rounded font-extrabold uppercase tracking-wider hidden sm:inline">
-                Locked
-              </span>
-            </div>
-          )}
+          {/* Active Class & Multi-Class Switcher Badge (Switch Only Unlocked Classes • Locked Stay Locked) */}
+          {isLearningRole && currentStudent && (() => {
+            const accessibleClasses = getAccessibleClassesList(currentStudent);
+            return (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowClassSwitcher(!showClassSwitcher);
+                    setShowNotifications(false);
+                    setShowProfileDropdown(false);
+                  }}
+                  className="flex items-center gap-1.5 bg-amber-100/90 hover:bg-amber-200/80 border border-amber-300/90 px-2.5 py-1 rounded-xl shadow-2xs cursor-pointer transition-colors"
+                  title={`Active Class: ${currentStudent.classLevel} (${accessibleClasses.length} unlocked). Click to switch or add classes.`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5 text-amber-800" />
+                  <span className="text-xs font-extrabold text-amber-950">
+                    {currentStudent.classLevel}
+                  </span>
+                  {accessibleClasses.length > 1 && (
+                    <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-black hidden sm:inline">
+                      {accessibleClasses.length} Classes
+                    </span>
+                  )}
+                  <ChevronDown className="w-3 h-3 text-amber-800" />
+                </button>
+
+                {showClassSwitcher && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowClassSwitcher(false)}
+                    />
+                    <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-xs sm:w-72 mx-auto bg-white rounded-2xl shadow-2xl border-2 border-amber-300 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="bg-amber-50 px-3.5 py-2.5 border-b border-amber-200 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-black text-amber-950">Class Subscriptions (1st–10th)</p>
+                          <p className="text-[10px] text-slate-600 font-medium">Switch unlocked classes or activate ₹99/yr</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowClassSwitcher(false)}
+                          className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="p-2.5 grid grid-cols-2 gap-1.5 max-h-72 overflow-y-auto">
+                        {ALL_CLASS_LEVELS.map((cls) => {
+                          const cInfo = getClassSubscriptionInfo(currentStudent, cls);
+                          const isCurrent = currentStudent.classLevel === cls;
+                          return (
+                            <button
+                              key={cls}
+                              type="button"
+                              onClick={async () => {
+                                setShowClassSwitcher(false);
+                                if (cInfo.isAccessible) {
+                                  await switchActiveClass(cls);
+                                } else {
+                                  onOpenMembership(cls);
+                                }
+                              }}
+                              className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                                  : cInfo.isPaidActive
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-300'
+                                  : cInfo.isFreeBase
+                                  ? 'bg-white hover:bg-indigo-50 text-slate-800 border-indigo-300'
+                                  : cInfo.isExpired
+                                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-300'
+                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black">{cls}</span>
+                                {!cInfo.isAccessible && <Lock className="w-3 h-3 text-amber-600" />}
+                              </div>
+                              <span className={`text-[9px] font-bold block truncate ${isCurrent ? 'text-indigo-100' : 'text-slate-500'}`}>
+                                {isCurrent
+                                  ? 'Active Now'
+                                  : cInfo.isPaidActive
+                                  ? `${cInfo.daysRemaining}d left`
+                                  : cInfo.isFreeBase
+                                  ? 'Free Base'
+                                  : cInfo.isExpired
+                                  ? 'Expired • Renew'
+                                  : 'Unlock ₹99'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="p-2.5 border-t border-slate-100 bg-slate-50">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowClassSwitcher(false);
+                            onOpenMembership();
+                          }}
+                          className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-[11px] cursor-pointer shadow-xs"
+                        >
+                          + Activate / Renew Class Subscription (₹99)
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Student/Teacher Stats Pill (Points & Streak) */}
           {isLearningRole && currentStudent && (
@@ -421,7 +529,7 @@ export const Header: React.FC<HeaderProps> = ({
             if (pInfo.effectivePlan === 'free') {
               return (
                 <button
-                  onClick={onOpenMembership}
+                  onClick={() => onOpenMembership(currentStudent.classLevel)}
                   className={`hidden sm:flex items-center gap-1.5 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs hover:shadow-md transition-all cursor-pointer ${
                     pInfo.isPaidPlanExpired
                       ? 'bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700'
@@ -444,7 +552,7 @@ export const Header: React.FC<HeaderProps> = ({
             }
             return (
               <div
-                onClick={onOpenMembership}
+                onClick={() => onOpenMembership(currentStudent.classLevel)}
                 className={`hidden sm:flex items-center gap-1.5 text-[11px] font-extrabold border px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${
                   pInfo.isExpiringToday
                     ? 'bg-amber-100 text-amber-950 border-amber-400 hover:bg-amber-200'

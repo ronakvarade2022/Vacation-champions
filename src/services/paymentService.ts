@@ -1,4 +1,4 @@
-import { PaymentTransaction, StudentProfile } from '../types';
+import { ClassLevel, PaymentTransaction, StudentProfile } from '../types';
 
 export interface RazorpayConfigResponse {
   success: boolean;
@@ -18,6 +18,7 @@ export interface CreateOrderResponse {
   keyId: string;
   receiptNumber: string;
   planId: 'basic' | 'premium';
+  selectedClass?: string;
   isMock?: boolean;
   mode?: 'LIVE' | 'TEST';
   error?: string;
@@ -32,6 +33,7 @@ export interface CreateQrResponse {
   currency: string;
   planId: 'basic' | 'premium';
   planTitle?: string;
+  selectedClass?: string;
   status: string;
   createdAt: number;
   expiresInSeconds: number;
@@ -47,12 +49,14 @@ export interface CheckQrStatusResponse {
   orderId?: string;
   method?: string;
   amount?: number;
+  selectedClass?: string;
   message?: string;
   transaction?: PaymentTransaction;
   membership?: {
     membershipId: string;
     studentId: string;
     studentName: string;
+    selectedClass?: string;
     planId: 'basic' | 'premium';
     planTitle: string;
     amount: number;
@@ -68,11 +72,13 @@ export interface VerifyPaymentResponse {
   success: boolean;
   alreadyProcessed?: boolean;
   message?: string;
+  selectedClass?: string;
   transaction?: PaymentTransaction;
   membership?: {
     membershipId: string;
     studentId: string;
     studentName: string;
+    selectedClass?: string;
     planId: 'basic' | 'premium';
     planTitle: string;
     amount: number;
@@ -88,6 +94,18 @@ export interface VerifyPaymentResponse {
     referrerName?: string;
     reason?: string;
   };
+  error?: string;
+}
+
+export interface CheckExistingAccountResponse {
+  success: boolean;
+  exists: boolean;
+  matchedPair?: boolean;
+  mismatchField?: 'email' | 'mobile' | null;
+  accountRole?: 'student' | 'teacher';
+  studentName?: string;
+  primaryClassLevel?: string | null;
+  activeClasses?: string[];
   error?: string;
 }
 
@@ -210,24 +228,81 @@ export async function getRazorpayConfig(): Promise<RazorpayConfigResponse> {
   }
 }
 
-// 2. Request backend LIVE order creation (enforces server-side ₹99 / 9900 paise Premium pricing)
+// 1b. Check existing account identity for class-wise additional registration
+export async function checkExistingAccountApi(
+  email: string,
+  mobile: string
+): Promise<CheckExistingAccountResponse> {
+  try {
+    const { res } = await fetchPaymentApi(
+      '/auth/check-existing-account',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, mobile })
+      },
+      10000
+    );
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      return { success: false, exists: false };
+    }
+    return data as CheckExistingAccountResponse;
+  } catch {
+    return { success: false, exists: false };
+  }
+}
+
+// 1c. Switch active unlocked class on server
+export async function switchStudentActiveClassApi(
+  studentId: string,
+  targetClass: ClassLevel,
+  idToken?: string
+): Promise<{ success: boolean; classLevel?: string; error?: string }> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+    const { res } = await fetchPaymentApi(
+      '/subscription/switch-class',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ studentId, targetClass })
+      },
+      10000
+    );
+    const data = await res.json().catch(() => ({ success: false }));
+    return {
+      success: Boolean(res.ok && data?.success),
+      classLevel: data?.classLevel,
+      error: data?.error
+    };
+  } catch {
+    return { success: false };
+  }
+}
+
+// 2. Request backend LIVE order creation (enforces server-side ₹99 / 9900 paise Premium pricing per selected class)
 export async function createRazorpayOrder(
   student: StudentProfile,
   _planId: 'basic' | 'premium' = 'premium',
-  referralCode?: string
+  referralCode?: string,
+  selectedClass?: ClassLevel
 ): Promise<CreateOrderResponse> {
   const planId = 'premium';
+  const targetClass = selectedClass || student.classLevel;
   const payload = {
     planId,
     studentId: student.id,
     studentName: student.name,
     email: student.email,
     mobile: student.mobile,
+    selectedClass: targetClass,
     referralCode: referralCode || student.referredByCode || ''
   };
 
   console.info(
-    `[Razorpay] Creating LIVE order for plan 'premium' (₹99 / 9900 paise)...`
+    `[Razorpay] Creating LIVE order for plan 'premium' (${targetClass} • ₹99 / 9900 paise)...`
   );
 
   const { res, urlUsed } = await fetchPaymentApi(
@@ -282,23 +357,26 @@ export async function createRazorpayOrder(
   };
 }
 
-// 2.1 Dynamic Razorpay UPI QR Code Generator (₹99 Premium)
+// 2.1 Dynamic Razorpay UPI QR Code Generator (₹99 Premium per selected class)
 export async function createRazorpayQrCode(
   student: StudentProfile,
   _planId: 'basic' | 'premium' = 'premium',
-  referralCode?: string
+  referralCode?: string,
+  selectedClass?: ClassLevel
 ): Promise<CreateQrResponse> {
   const planId = 'premium';
+  const targetClass = selectedClass || student.classLevel;
   const payload = {
     planId,
     studentId: student.id,
     studentName: student.name,
     email: student.email,
     mobile: student.mobile,
+    selectedClass: targetClass,
     referralCode: referralCode || student.referredByCode || ''
   };
 
-  console.info(`[Razorpay QR] Generating dynamic UPI QR code for plan 'premium' (₹99)...`);
+  console.info(`[Razorpay QR] Generating dynamic UPI QR code for ${targetClass} (₹99)...`);
 
   const { res, urlUsed } = await fetchPaymentApi(
     '/razorpay/create-qr',
@@ -331,11 +409,14 @@ export async function checkRazorpayQrStatus(
   qrId: string,
   student: StudentProfile,
   _planId: 'basic' | 'premium' = 'premium',
-  referralCode?: string
+  referralCode?: string,
+  selectedClass?: ClassLevel
 ): Promise<CheckQrStatusResponse> {
+  const targetClass = selectedClass || student.classLevel;
   const params = new URLSearchParams({
     studentId: student.id,
     planId: 'premium',
+    selectedClass: targetClass,
     studentName: student.name || 'Student',
     email: student.email || '',
     mobile: student.mobile || '',
@@ -359,6 +440,7 @@ export async function verifyRazorpayPayment(payload: {
   razorpay_payment_id: string;
   razorpay_signature: string;
   planId: 'basic' | 'premium';
+  selectedClass?: string;
   studentId: string;
   studentName: string;
   email: string;
@@ -542,6 +624,7 @@ export async function launchRazorpayCheckout(options: {
   orderData: CreateOrderResponse;
   student: StudentProfile;
   planId: 'basic' | 'premium';
+  selectedClass?: ClassLevel;
   referralCode?: string;
   onCheckoutOpened?: () => void;
   onVerifyingStart?: () => void;
@@ -552,12 +635,16 @@ export async function launchRazorpayCheckout(options: {
     orderData,
     student,
     planId,
+    selectedClass,
     referralCode,
     onCheckoutOpened,
     onVerifyingStart,
     onSuccess,
     onFailure
   } = options;
+
+  const targetClass: ClassLevel =
+    selectedClass || (orderData.selectedClass as ClassLevel) || student.classLevel;
 
   const isLoaded = await loadRazorpayScript();
   const RazorpayConstructor =
@@ -587,7 +674,7 @@ export async function launchRazorpayCheckout(options: {
     return;
   }
 
-  const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+  const planTitle = `PREMIUM PLAN – ₹99 – 365 Days (${targetClass})`;
   const planAmountPaise = 9900;
 
   // Sanitize prefill fields so Razorpay Live Checkout never fails prefill validation
@@ -611,6 +698,10 @@ export async function launchRazorpayCheckout(options: {
 
   let hasSettled = false;
 
+  const targetClassExistingExpiry =
+    student.classSubscriptions?.[targetClass]?.expiresAt ||
+    (student.activatedClassLevel === targetClass ? student.planExpiresAt : undefined);
+
   const rzpOptions: Record<string, any> = {
     key: resolvedPublicKeyId,
     amount: Number(orderData.amount) || planAmountPaise, // in paise (9900)
@@ -622,7 +713,8 @@ export async function launchRazorpayCheckout(options: {
     notes: {
       studentId: String(student.id),
       studentName: String(student.name),
-      classLevel: String(student.classLevel),
+      selectedClass: String(targetClass),
+      classLevel: String(targetClass),
       planId: 'premium',
       subscriptionTier: 'premium',
       validityDays: '365',
@@ -653,6 +745,7 @@ export async function launchRazorpayCheckout(options: {
             orderId: orderData.orderId,
             paymentId: `cancelled_${Date.now()}`,
             planId: 'premium',
+            selectedClass: targetClass,
             studentId: student.id,
             studentName: student.name,
             email: student.email,
@@ -676,7 +769,8 @@ export async function launchRazorpayCheckout(options: {
       hasSettled = true;
       console.info('[Razorpay Checkout] Payment completed, verifying signature on backend:', {
         orderId: response.razorpay_order_id || orderData.orderId,
-        paymentId: response.razorpay_payment_id
+        paymentId: response.razorpay_payment_id,
+        selectedClass: targetClass
       });
 
       if (onVerifyingStart) {
@@ -689,11 +783,12 @@ export async function launchRazorpayCheckout(options: {
           razorpay_payment_id: response.razorpay_payment_id,
           razorpay_signature: response.razorpay_signature,
           planId: 'premium',
+          selectedClass: targetClass,
           studentId: student.id,
           studentName: student.name,
           email: student.email,
           mobile: student.mobile,
-          currentExpiresAt: student.planExpiresAt,
+          currentExpiresAt: targetClassExistingExpiry,
           referralCode: referralCode || student.referredByCode
         });
 
@@ -724,7 +819,7 @@ export async function launchRazorpayCheckout(options: {
 
   try {
     console.info(
-      `[Razorpay Checkout] Opening Razorpay LIVE modal for Order ${orderData.orderId} (₹99 / ${planAmountPaise} paise)`
+      `[Razorpay Checkout] Opening Razorpay LIVE modal for Order ${orderData.orderId} (${targetClass} • ₹99 / ${planAmountPaise} paise)`
     );
     const razorpayInstance = new RazorpayConstructor(rzpOptions);
     activeRazorpayInstance = razorpayInstance;
@@ -765,6 +860,7 @@ export async function launchRazorpayCheckout(options: {
           orderId: failedOrderId,
           paymentId: failedPaymentId,
           planId: 'premium',
+          selectedClass: targetClass,
           studentId: student.id,
           studentName: student.name,
           email: student.email,

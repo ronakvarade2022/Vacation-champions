@@ -145,6 +145,9 @@ service cloud.firestore {
           incoming().email is string &&
           incoming().classLevel is string &&
           (!('plan' in incoming()) || incoming().plan == 'free') &&
+          (!('activatedClasses' in incoming()) || incoming().activatedClasses.size() == 0) &&
+          (!('classSubscriptions' in incoming()) || incoming().classSubscriptions.size() == 0) &&
+          (!('primaryClassLevel' in incoming()) || incoming().primaryClassLevel == incoming().classLevel) &&
           (!('lastPaymentId' in incoming()) || incoming().lastPaymentId == null) &&
           (!('planExpiresAt' in incoming()) || incoming().planExpiresAt == null)
         )
@@ -155,10 +158,23 @@ service cloud.firestore {
           (isOwner(studentId) || (isSignedIn() && existing().firebaseUid == request.auth.uid)) &&
           incoming().id == existing().id &&
           (!('registeredAt' in existing()) || incoming().registeredAt == existing().registeredAt) &&
-          incoming().get('classLevel', null) == existing().get('classLevel', null) &&
+          (
+            incoming().get('classLevel', null) == existing().get('classLevel', null) ||
+            (
+              incoming().classLevel is string &&
+              incoming().classLevel.size() <= 20 &&
+              (
+                incoming().classLevel == existing().get('primaryClassLevel', existing().get('classLevel', '')) ||
+                incoming().classLevel in existing().get('activatedClasses', [])
+              )
+            )
+          ) &&
           incoming().plan == existing().plan &&
+          incoming().get('primaryClassLevel', null) == existing().get('primaryClassLevel', null) &&
           incoming().get('subscriptionTier', null) == existing().get('subscriptionTier', null) &&
           incoming().get('activatedClassLevel', null) == existing().get('activatedClassLevel', null) &&
+          incoming().get('activatedClasses', null) == existing().get('activatedClasses', null) &&
+          incoming().get('classSubscriptions', null) == existing().get('classSubscriptions', null) &&
           incoming().get('planPurchasedAt', null) == existing().get('planPurchasedAt', null) &&
           incoming().get('planExpiresAt', null) == existing().get('planExpiresAt', null) &&
           incoming().get('lastPaymentId', null) == existing().get('lastPaymentId', null) &&

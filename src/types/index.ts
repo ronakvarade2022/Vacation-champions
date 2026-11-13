@@ -103,9 +103,14 @@ export interface StudentProfile {
   isEmailVerified?: boolean;
   firebaseUid?: string;
   passwordHash?: string;
-  // Student & Teacher Portal role & Class-Wise Premium Subscription activation
+  // Student & Teacher Portal role & Class-Wise Multi-Class Subscription activation
   accountRole?: 'student' | 'teacher';
+  primaryClassLevel?: ClassLevel;
   activatedClassLevel?: ClassLevel;
+  activatedClasses?: ClassLevel[];
+  classSubscriptions?: Partial<Record<ClassLevel, ClassSubscriptionRecord>>;
+  lastPaymentId?: string;
+  lastOrderId?: string;
   // Referral & School Governance extensions
   referralCode?: string;
   referralLink?: string;
@@ -115,6 +120,19 @@ export interface StudentProfile {
   attendanceRecords?: AttendanceRecord[];
   assignments?: AssignmentItem[];
   feeRecords?: FeeRecord[];
+}
+
+export interface ClassSubscriptionRecord {
+  classLevel: ClassLevel;
+  plan: 'free' | 'basic' | 'premium';
+  status: 'ACTIVE' | 'EXPIRED' | 'LOCKED';
+  purchasedAt?: string;
+  expiresAt?: string;
+  paymentId?: string;
+  orderId?: string;
+  amountInr?: number;
+  validityDays?: number;
+  updatedAt?: string;
 }
 
 export interface ParentProfile {
@@ -194,6 +212,10 @@ export interface RegistrationResult {
   duplicateField?: 'email' | 'mobile';
   existingStudentName?: string;
   existingClass?: ClassLevel;
+  existingStudent?: StudentProfile;
+  existingAccountMatchedPair?: boolean;
+  alreadyUnlockedTargetClass?: boolean;
+  needsExistingAccountAuth?: boolean;
   student?: StudentProfile;
   requiresDualVerification?: boolean;
 }

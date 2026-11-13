@@ -3,15 +3,12 @@ import type { Request, Response } from 'express';
 import {
   getResolvedRazorpayCredentials,
   sanitizeEnvValue,
-  isPlaceholderValue
+  isPlaceholderValue,
+  normalizeBackendClassLevel,
+  updateStudentSubscriptionInFirestoreBackend
 } from '../firebase/index.ts';
-import { serverGetDoc, serverSetDoc } from '../firebase/admin.ts';
+import { serverGetDoc } from '../firebase/admin.ts';
 import { verifyAndConfirmCapturedPayment } from '../src/server/razorpayPaymentStatusService.ts';
-import {
-  computeSubscriptionActivationDates,
-  evaluateSubscriptionValidity,
-  PAID_SUBSCRIPTION_VALIDITY_DAYS
-} from '../src/utils/subscriptionDateUtils.ts';
 
 export interface WebhookVerificationResult {
   valid: boolean;
@@ -35,10 +32,8 @@ export function verifyWebhookSignature(
 
   const candidateSecrets: string[] = [];
   if (rawWebhookSecret && !isPlaceholderValue(rawWebhookSecret)) {
-    // When RAZORPAY_WEBHOOK_SECRET is configured, strictly verify using only the webhook secret
     candidateSecrets.push(rawWebhookSecret);
   } else if (creds.keySecret) {
-    // Only fall back to API keySecret if RAZORPAY_WEBHOOK_SECRET is unset
     candidateSecrets.push(creds.keySecret);
   }
 
@@ -80,6 +75,7 @@ export interface CapturedPaymentSubscriptionResult {
   alreadyProcessed: boolean;
   studentId: string;
   studentName: string;
+  selectedClass: string;
   planId: 'basic' | 'premium';
   subscriptionTier: 'standard' | 'premium';
   planLabel: string;
@@ -91,12 +87,14 @@ export interface CapturedPaymentSubscriptionResult {
   expiryDateIso: string;
   daysRemaining: number;
   receiptNumber: string;
+  activatedClasses: string[];
+  classSubscriptions: Record<string, any>;
 }
 
 /**
  * Retrieves the user document from Firestore (/students/{studentId}) and updates
- * their subscription status ('premium' or 'standard'/'basic') with a new expiration
- * date set to 365 days from the current date (or +365 days if renewing an active plan).
+ * their per-class subscription (`classSubscriptions[selectedClass]`) with a 365-day
+ * expiry date without altering any other class's subscription dates.
  */
 export async function processPaymentCapturedEvent(params: {
   paymentEntity: Record<string, any>;
@@ -129,8 +127,6 @@ export async function processPaymentCapturedEvent(params: {
   }
 
   const planId: 'premium' = 'premium';
-  const subscriptionTier: 'premium' = 'premium';
-  const planLabel = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const amountInr = 99;
   let method = String(paymentEntity?.method || 'RAZORPAY').toUpperCase();
 
@@ -169,9 +165,7 @@ export async function processPaymentCapturedEvent(params: {
     );
   }
 
-  // 1. Retrieve existing user document from Firestore (/students/{studentId}) via Firebase Admin SDK
   const existingData = await serverGetDoc('students', studentId).catch(() => null);
-
   const studentName = String(
     notes.studentName || existingData?.name || 'Student'
   ).trim();
@@ -181,129 +175,49 @@ export async function processPaymentCapturedEvent(params: {
   const mobile = String(
     notes.mobile || paymentEntity?.contact || existingData?.mobile || ''
   ).trim();
+  const selectedClass =
+    normalizeBackendClassLevel(notes.selectedClass || notes.classLevel) ||
+    normalizeBackendClassLevel(existingData?.classLevel) ||
+    'Class 1';
 
-  const now = new Date();
-
-  // Idempotency protection: if this paymentId was already applied to the user document
-  if (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId) {
-    const validity = evaluateSubscriptionValidity(
-      'premium',
-      existingData.planPurchasedAt,
-      existingData.planExpiresAt,
-      now
-    );
-    return {
-      success: true,
-      alreadyProcessed: true,
-      studentId,
-      studentName,
-      planId,
-      subscriptionTier,
-      planLabel,
-      amountInr,
-      paymentId,
-      orderId,
-      method,
-      startDateIso: validity.purchaseDateIst || existingData.planPurchasedAt,
-      expiryDateIso: validity.expiryDateIst || existingData.planExpiresAt,
-      daysRemaining: validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      receiptNumber: `REC-VC-${paymentId.slice(-6).toUpperCase()}`
-    };
-  }
-
-  // 2. Calculate new expiration date set to 365 days from verified purchase date in IST (or +365 days if renewing before expiry)
-  const activation = computeSubscriptionActivationDates({
-    verificationTimestamp: now,
-    existingPlan: existingData?.plan,
-    existingExpiresAt: existingData?.planExpiresAt
-  });
-
-  const startDateIso = activation.purchasedDateIst;
-  const expiryDateIso = activation.expiryDateIst;
-  const daysRemaining = activation.daysRemaining;
-  const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
-
-  // 3. Update the user's Firestore document with the new subscription status and 365-day expiry date via Firebase Admin SDK
-  await serverSetDoc(
-    'students',
+  const activation = await updateStudentSubscriptionInFirestoreBackend({
     studentId,
-    {
-      id: studentId,
-      plan: planId,
-      subscriptionTier,
-      planLabel,
-      isLifetimeFree: false,
-      planPurchasedAt: startDateIso,
-      planExpiresAt: expiryDateIso,
-      subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      subscriptionStatus: 'ACTIVE',
-      lastPaymentId: paymentId,
-      lastOrderId: orderId,
-      lastPaymentAmountInr: amountInr,
-      verifiedAtUtc: activation.verifiedAtUtcIso,
-      subscriptionUpdatedAt: activation.verifiedAtUtcIso
-    },
-    { merge: true }
-  );
-
-  // 4. Record the verified payment transaction in Firestore (/transactions/tx_{paymentId}) via Firebase Admin SDK
-  const safePaymentId = paymentId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const txDocId = safePaymentId.startsWith('tx_')
-    ? safePaymentId
-    : `tx_${safePaymentId}`;
-
-  await serverSetDoc(
-    'transactions',
-    txDocId,
-    {
-      id: txDocId,
-      receiptNumber,
-      studentId: studentId.slice(0, 128),
-      studentName: studentName.slice(0, 100),
-      parentEmail: email.slice(0, 150),
-      parentMobile: mobile.slice(0, 20),
-      planId,
-      subscriptionTier,
-      planTitle: planLabel,
-      amount: amountInr,
-      currency: 'INR',
-      orderId,
-      paymentId,
-      signature,
-      method,
-      status: 'SUCCESS',
-      createdAt: now.toISOString(),
-      verifiedAt: now.toISOString(),
-      membershipStartDate: startDateIso,
-      membershipExpiryDate: expiryDateIso,
-      savedToFirestoreAt: now.toISOString()
-    },
-    { merge: true }
-  );
+    studentName,
+    email,
+    mobile,
+    selectedClass,
+    planId,
+    paymentId,
+    orderId,
+    signature,
+    method,
+    amountInr
+  });
 
   return {
     success: true,
-    alreadyProcessed: false,
+    alreadyProcessed: activation.alreadyProcessed,
     studentId,
     studentName,
-    planId,
-    subscriptionTier,
-    planLabel,
+    selectedClass: activation.selectedClass,
+    planId: activation.plan,
+    subscriptionTier: activation.subscriptionTier,
+    planLabel: activation.planLabel,
     amountInr,
     paymentId,
     orderId,
     method,
-    startDateIso,
-    expiryDateIso,
-    daysRemaining,
-    receiptNumber
+    startDateIso: activation.startDateIso,
+    expiryDateIso: activation.expiryDateIso,
+    daysRemaining: activation.daysRemaining,
+    receiptNumber: activation.receiptNumber,
+    activatedClasses: activation.activatedClasses || [activation.selectedClass],
+    classSubscriptions: activation.classSubscriptions || {}
   };
 }
 
 /**
  * Express / Cloud Function HTTP Handler for Razorpay Webhooks.
- * Verifies 'X-Razorpay-Signature', extracts 'payment.captured', retrieves the
- * user document from Firestore, and updates their subscription with a 365-day expiry date.
  */
 export async function handleRazorpayWebhook(req: Request, res: Response) {
   try {
@@ -352,6 +266,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response) {
         status: 'ok',
         event: eventType,
         studentId: result.studentId,
+        selectedClass: result.selectedClass,
         plan: result.planId,
         subscriptionTier: result.subscriptionTier,
         planExpiresAt: result.expiryDateIso,

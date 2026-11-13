@@ -27,11 +27,12 @@ import { AboutUsView } from './components/AboutUsView';
 import { ContactUsView } from './components/ContactUsView';
 import { FaqsView } from './components/FaqsView';
 import { WorksheetsView } from './components/WorksheetsView';
-import { SubjectName, QuizLevel } from './types';
+import { ClassLevel, SubjectName, QuizLevel } from './types';
 import {
   canAccessFeature,
   canAccessSubject,
   formatStandardOrdinal,
+  getActivatedClassesList,
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage
 } from './utils/subscriptionAccess';
@@ -70,6 +71,7 @@ const AppContent: React.FC = () => {
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState<boolean>(false);
   const [membershipInitialPlan, setMembershipInitialPlan] = useState<'basic' | 'premium'>('premium');
+  const [membershipTargetClass, setMembershipTargetClass] = useState<ClassLevel | undefined>(undefined);
 
   const isLearningPortal = activeRole === 'student' || activeRole === 'teacher';
   const isTeacherPortal = activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
@@ -129,8 +131,9 @@ const AppContent: React.FC = () => {
     reasonMessage: '',
   });
 
-  const openMembershipWithPlan = (_plan: 'basic' | 'premium' = 'premium') => {
+  const openMembershipWithPlan = (_plan: 'basic' | 'premium' = 'premium', targetClass?: ClassLevel) => {
     setMembershipInitialPlan('premium');
+    setMembershipTargetClass(targetClass || currentStudent?.classLevel);
     setIsMembershipOpen(true);
   };
 
@@ -199,7 +202,7 @@ const AppContent: React.FC = () => {
         currentTab={currentTab}
         setCurrentTab={(tab) => handleNavigateTab(tab)}
         onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
-        onOpenMembership={() => openMembershipWithPlan('premium')}
+        onOpenMembership={(targetClass) => openMembershipWithPlan('premium', targetClass)}
       />
 
       {/* Main Content Arena */}
@@ -395,11 +398,13 @@ const AppContent: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-xs font-extrabold uppercase tracking-wider">
                             <GraduationCap className="w-3.5 h-3.5" />
-                            <span>Dedicated Teacher Portal • Standard {formatStandardOrdinal(currentStudent.classLevel)} ({currentStudent.classLevel})</span>
+                            <span>Dedicated Teacher Portal • Active: Standard {formatStandardOrdinal(currentStudent.classLevel)} ({currentStudent.classLevel})</span>
                           </span>
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-amber-200 text-xs font-bold">
-                            <Lock className="w-3 h-3" />
-                            <span>One Account = One Active Class ({currentStudent.classLevel} Only)</span>
+                            <Sparkles className="w-3 h-3" />
+                            <span>
+                              Multi-Class Ready ({getActivatedClassesList(currentStudent).length} Paid Class{getActivatedClassesList(currentStudent).length === 1 ? '' : 'es'})
+                            </span>
                           </span>
                         </div>
                         <h2 className="text-xl sm:text-2xl font-display font-black">
@@ -416,17 +421,21 @@ const AppContent: React.FC = () => {
                         {!isPremiumActive ? (
                           <button
                             type="button"
-                            onClick={() => openMembershipWithPlan('premium')}
+                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel)}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs shadow-md cursor-pointer"
                           >
                             <Crown className="w-4 h-4" />
                             <span>Unlock All {currentStudent.classLevel} Worksheets – ₹99</span>
                           </button>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-emerald-500 text-white font-black text-xs">
+                          <button
+                            type="button"
+                            onClick={() => openMembershipWithPlan('premium')}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer transition-colors"
+                          >
                             <Crown className="w-4 h-4" />
-                            <span>₹99 Premium Active ({currentStudent.classLevel})</span>
-                          </span>
+                            <span>₹99 Active ({currentStudent.classLevel}) • Add Class</span>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -500,7 +509,7 @@ const AppContent: React.FC = () => {
                 {currentTab === 'dashboard' && (
                   <StudentDashboard
                     onNavigateTab={handleNavigateTab}
-                    onOpenMembership={() => openMembershipWithPlan('premium')}
+                    onOpenMembership={(plan, targetClass) => openMembershipWithPlan(plan || 'premium', targetClass)}
                   />
                 )}
 
@@ -508,14 +517,14 @@ const AppContent: React.FC = () => {
                   <SubjectQuizView
                     initialSubject={quizInitialSubject}
                     initialLevel={quizInitialLevel}
-                    onOpenMembership={() => openMembershipWithPlan('premium')}
+                    onOpenMembership={(plan, targetClass) => openMembershipWithPlan(plan || 'premium', targetClass)}
                   />
                 )}
 
                 {currentTab === 'worksheets' && (
                   <WorksheetsView
                     initialSubject={quizInitialSubject}
-                    onUnlockClick={() => openMembershipWithPlan('premium')}
+                    onUnlockClick={(targetClass) => openMembershipWithPlan('premium', targetClass)}
                   />
                 )}
 
@@ -545,7 +554,7 @@ const AppContent: React.FC = () => {
 
                 {(currentTab === 'profile' || currentTab === 'account' || currentTab === 'subscription') && (
                   <StudentProfileView
-                    onOpenMembership={() => openMembershipWithPlan('premium')}
+                    onOpenMembership={(plan, targetClass) => openMembershipWithPlan(plan || 'premium', targetClass)}
                     onNavigateTab={(t) => handleNavigateTab(t)}
                   />
                 )}
@@ -582,6 +591,7 @@ const AppContent: React.FC = () => {
         isOpen={isMembershipOpen}
         onClose={() => setIsMembershipOpen(false)}
         initialSelectedPlan={membershipInitialPlan}
+        initialSelectedClass={membershipTargetClass}
         onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
       />
 
@@ -594,7 +604,7 @@ const AppContent: React.FC = () => {
         upgradeMessage={upgradePrompt.reasonMessage}
         onSelectUpgradePlan={() => {
           setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
-          openMembershipWithPlan('premium');
+          openMembershipWithPlan('premium', currentStudent?.classLevel);
         }}
         onTryDemo={() => {
           setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
@@ -606,6 +616,9 @@ const AppContent: React.FC = () => {
         isOpen={isAuthModalOpen || isAuthOpen}
         defaultTab={authDefaultTab}
         initialEmail={authInitialEmail}
+        onExistingAccountProceedToSubscription={(targetClass) => {
+          openMembershipWithPlan('premium', targetClass);
+        }}
         onClose={() => {
           setIsAuthModalOpen(false);
           setIsAuthOpen(false);

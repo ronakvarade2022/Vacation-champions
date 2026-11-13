@@ -22,6 +22,30 @@ export const serverDb = getFirestore(
   firebaseConfig.firestoreDatabaseId
 );
 
+export const VALID_CLASS_LEVELS = [
+  'Class 1',
+  'Class 2',
+  'Class 3',
+  'Class 4',
+  'Class 5',
+  'Class 6',
+  'Class 7',
+  'Class 8',
+  'Class 9',
+  'Class 10'
+] as const;
+
+export function normalizeBackendClassLevel(raw?: string | null): string | null {
+  const str = String(raw || '').trim();
+  const match = /^(?:Class\s*)?(\d{1,2})(?:st|nd|rd|th)?$/i.exec(str);
+  if (!match) return null;
+  const num = parseInt(match[1], 10);
+  if (num >= 1 && num <= 10) {
+    return `Class ${num}`;
+  }
+  return null;
+}
+
 export interface ResolvedRazorpayCredentials {
   keyId: string;
   keySecret: string;
@@ -126,9 +150,10 @@ export async function createRazorpayOrderBackend(params: {
   studentName?: string;
   email?: string;
   mobile?: string;
+  selectedClass?: string;
   referralCode?: string;
 }) {
-  const { studentId, studentName, email, mobile, referralCode } = params;
+  const { studentId, studentName, email, mobile, selectedClass, referralCode } = params;
 
   if (!studentId) {
     throw new Error('Student authentication required.');
@@ -139,6 +164,7 @@ export async function createRazorpayOrderBackend(params: {
     );
   }
 
+  const normalizedClass = normalizeBackendClassLevel(selectedClass) || '';
   const planId = 'premium' as const;
   const amountInPaise = 9900;
   const amountInRupees = 99;
@@ -162,6 +188,8 @@ export async function createRazorpayOrderBackend(params: {
       studentName: String(studentName || 'Student').slice(0, 250),
       email: String(email || '').slice(0, 250),
       mobile: String(mobile || '').slice(0, 250),
+      selectedClass: normalizedClass,
+      classLevel: normalizedClass,
       planId: 'premium',
       subscriptionTier: 'premium',
       validityDays: '365',
@@ -196,6 +224,7 @@ export async function createRazorpayOrderBackend(params: {
     keyId: creds.keyId,
     receiptNumber,
     planId,
+    selectedClass: normalizedClass || undefined,
     isMock: false,
     mode: (creds.isLive ? 'LIVE' : 'TEST') as 'LIVE' | 'TEST'
   };
@@ -242,9 +271,10 @@ export async function createRazorpayQrCodeBackend(params: {
   studentName?: string;
   email?: string;
   mobile?: string;
+  selectedClass?: string;
   referralCode?: string;
 }) {
-  const { studentId, studentName, email, mobile, referralCode } = params;
+  const { studentId, studentName, email, mobile, selectedClass, referralCode } = params;
   if (!studentId) {
     throw new Error('Student authentication required.');
   }
@@ -252,10 +282,13 @@ export async function createRazorpayQrCodeBackend(params: {
     throw new Error('Invalid plan selected. Only the ₹99 Premium Plan is available.');
   }
 
+  const normalizedClass = normalizeBackendClassLevel(selectedClass) || '';
   const planId = 'premium' as const;
   const amountInPaise = 9900;
   const amountInRupees = 99;
-  const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+  const planTitle = normalizedClass
+    ? `PREMIUM PLAN (${normalizedClass}) – ₹99 – 365 Days`
+    : 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const creds = getResolvedRazorpayCredentials();
 
   if (!creds.isConfigured || !creds.keySecret) {
@@ -283,6 +316,8 @@ export async function createRazorpayQrCodeBackend(params: {
         studentName: String(studentName || 'Student').slice(0, 250),
         email: String(email || '').slice(0, 250),
         mobile: String(mobile || '').slice(0, 250),
+        selectedClass: normalizedClass,
+        classLevel: normalizedClass,
         planId: 'premium',
         subscriptionTier: 'premium',
         validityDays: '365',
@@ -310,6 +345,7 @@ export async function createRazorpayQrCodeBackend(params: {
     amountRupees: amountInRupees,
     currency: 'INR',
     planId,
+    selectedClass: normalizedClass || undefined,
     planTitle,
     status: qrData.status || 'active',
     createdAt: qrData.created_at || Math.floor(Date.now() / 1000),
@@ -322,7 +358,7 @@ export async function createRazorpayQrCodeBackend(params: {
 /**
  * Cloud Function / Backend Handler: Check the live payment status of a Razorpay QR Code.
  * Queries Razorpay Payments API for payments received on this QR code.
- * Upon successful payment, automatically activates the 365-day subscription in Firestore.
+ * Upon successful payment, automatically activates the 365-day subscription for that class in Firestore.
  */
 export async function checkRazorpayQrCodeStatusBackend(params: {
   qrId: string;
@@ -331,9 +367,10 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
   studentName?: string;
   email?: string;
   mobile?: string;
+  selectedClass?: string;
   referralCode?: string;
 }) {
-  const { qrId, studentId, studentName, email, mobile, referralCode } = params;
+  const { qrId, studentId, studentName, email, mobile, selectedClass, referralCode } = params;
   const creds = getResolvedRazorpayCredentials();
 
   if (!creds.isConfigured || !creds.keySecret) {
@@ -358,6 +395,9 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
   const resolvedPlanId: 'premium' = 'premium';
   const expectedAmountPaise = 9900;
   const amountRupees = 99;
+  const resolvedClass =
+    normalizeBackendClassLevel(qrData?.notes?.selectedClass || qrData?.notes?.classLevel || selectedClass) ||
+    undefined;
 
   // 2. Fetch payments received on this QR Code
   const paymentsRes = await fetch(
@@ -386,6 +426,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
       studentName: String(studentName || qrData?.notes?.studentName || 'Student'),
       email: String(email || qrData?.notes?.email || ''),
       mobile: String(mobile || qrData?.notes?.mobile || ''),
+      selectedClass: resolvedClass,
       planId: resolvedPlanId,
       paymentId: String(paymentId),
       orderId: String(orderId),
@@ -402,6 +443,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
       orderId,
       method,
       amount: amountRupees,
+      selectedClass: activation.selectedClass,
       transaction: {
         id: `tx_${paymentId}`,
         receiptNumber: activation.receiptNumber,
@@ -409,6 +451,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
         studentName: String(studentName || 'Student'),
         parentEmail: String(email || ''),
         parentMobile: String(mobile || ''),
+        selectedClass: activation.selectedClass,
         planId: resolvedPlanId,
         planTitle: activation.planLabel,
         amount: amountRupees,
@@ -426,6 +469,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
         membershipId: `mem_${paymentId}`,
         studentId: String(studentId),
         studentName: String(studentName || 'Student'),
+        selectedClass: activation.selectedClass,
         planId: resolvedPlanId,
         planTitle: activation.planLabel,
         amount: amountRupees,
@@ -517,6 +561,7 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   studentName?: string;
   email?: string;
   mobile?: string;
+  selectedClass?: string;
   planId: 'basic' | 'premium';
   paymentId: string;
   orderId: string;
@@ -527,6 +572,7 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
 }): Promise<{
   success: boolean;
   alreadyProcessed: boolean;
+  selectedClass: string;
   plan: 'basic' | 'premium';
   subscriptionTier: 'standard' | 'premium';
   planLabel: string;
@@ -534,13 +580,15 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   expiryDateIso: string;
   daysRemaining: number;
   receiptNumber: string;
+  activatedClasses: string[];
+  classSubscriptions: Record<string, any>;
 }> {
   const {
     studentId,
     studentName = 'Student',
     email = '',
     mobile = '',
-    planId,
+    selectedClass,
     paymentId,
     orderId,
     signature = 'verified_webhook_signature',
@@ -550,45 +598,13 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
 
   const normalizedPlan: 'premium' = 'premium';
   const subscriptionTier: 'premium' = 'premium';
-  const planLabel = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const verifiedAmount = amountInr || 99;
-
   const now = new Date();
-  let existingPlan: string | undefined = undefined;
-  let candidateExistingExpiry: string | undefined = params.currentExpiresAt;
-  let alreadyProcessed = false;
-
   const safeStudentId = String(studentId).trim();
 
+  let existingData: Record<string, any> | null = null;
   try {
-    const existingData = await serverGetDoc('students', safeStudentId);
-    if (existingData) {
-      existingPlan = existingData?.plan;
-      // Idempotency check: if this exact paymentId already updated Firestore, return existing expiry
-      if (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId) {
-        const validity = evaluateSubscriptionValidity(
-          'premium',
-          existingData.planPurchasedAt,
-          existingData.planExpiresAt,
-          now
-        );
-        return {
-          success: true,
-          alreadyProcessed: true,
-          plan: normalizedPlan,
-          subscriptionTier,
-          planLabel,
-          startDateIso: validity.purchaseDateIst || existingData.planPurchasedAt,
-          expiryDateIso: validity.expiryDateIst || existingData.planExpiresAt,
-          daysRemaining: validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS,
-          receiptNumber: `REC-VC-${paymentId.slice(-6).toUpperCase()}`
-        };
-      }
-
-      if (existingData?.planExpiresAt) {
-        candidateExistingExpiry = existingData.planExpiresAt;
-      }
-    }
+    existingData = await serverGetDoc('students', safeStudentId);
   } catch (readErr) {
     console.log(
       '[Firestore Backend] Notice reading existing student doc:',
@@ -596,10 +612,87 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     );
   }
 
-  // Compute accurate 365-day activation / renewal dates in IST (Asia/Kolkata)
+  const resolvedClass =
+    normalizeBackendClassLevel(selectedClass) ||
+    normalizeBackendClassLevel(existingData?.classLevel) ||
+    normalizeBackendClassLevel(existingData?.activatedClassLevel) ||
+    'Class 1';
+
+  const planLabel = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
+
+  // Reconstruct existing multi-class subscriptions map (preserving legacy single-class paid users)
+  const existingMap: Record<string, any> =
+    existingData?.classSubscriptions && typeof existingData.classSubscriptions === 'object'
+      ? { ...existingData.classSubscriptions }
+      : {};
+
+  if (existingData?.plan && existingData.plan !== 'free') {
+    const legacyClass =
+      normalizeBackendClassLevel(existingData.activatedClassLevel) ||
+      normalizeBackendClassLevel(existingData.classLevel) ||
+      resolvedClass;
+    if (!existingMap[legacyClass]) {
+      existingMap[legacyClass] = {
+        classLevel: legacyClass,
+        plan: existingData.plan === 'basic' ? 'basic' : 'premium',
+        status: 'ACTIVE',
+        purchasedAt: existingData.planPurchasedAt,
+        expiresAt: existingData.planExpiresAt,
+        paymentId: existingData.lastPaymentId,
+        orderId: existingData.lastOrderId,
+        amountInr: 99,
+        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
+      };
+    }
+  }
+
+  // Idempotency check: check if this exact paymentId was already processed on the student document or any class entry
+  const existingMatchingClassEntry = Object.values(existingMap).find(
+    (entry: any) => entry && entry.paymentId === paymentId
+  );
+  if (
+    existingMatchingClassEntry ||
+    (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId)
+  ) {
+    const refEntry = existingMatchingClassEntry || existingMap[resolvedClass] || existingData;
+    const refClass = refEntry?.classLevel || resolvedClass;
+    const validity = evaluateSubscriptionValidity(
+      'premium',
+      refEntry?.purchasedAt || refEntry?.planPurchasedAt,
+      refEntry?.expiresAt || refEntry?.planExpiresAt,
+      now
+    );
+    const activeClasses = VALID_CLASS_LEVELS.filter((cls) => {
+      const rec = existingMap[cls];
+      if (!rec || rec.plan === 'free') return false;
+      return !evaluateSubscriptionValidity(rec.plan, rec.purchasedAt, rec.expiresAt, now).isExpired;
+    });
+    return {
+      success: true,
+      alreadyProcessed: true,
+      selectedClass: refClass,
+      plan: normalizedPlan,
+      subscriptionTier,
+      planLabel,
+      startDateIso:
+        validity.purchaseDateIst || refEntry?.purchasedAt || refEntry?.planPurchasedAt || '',
+      expiryDateIso:
+        validity.expiryDateIst || refEntry?.expiresAt || refEntry?.planExpiresAt || '',
+      daysRemaining: validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS,
+      receiptNumber: `REC-VC-${paymentId.slice(-6).toUpperCase()}`,
+      activatedClasses: activeClasses,
+      classSubscriptions: existingMap
+    };
+  }
+
+  // Compute accurate 365-day activation / renewal dates ONLY for `resolvedClass`
+  const targetExistingEntry = existingMap[resolvedClass];
+  const candidateExistingExpiry = targetExistingEntry?.expiresAt || undefined;
+  const candidateExistingPlan = targetExistingEntry?.plan || 'free';
+
   const activation = computeSubscriptionActivationDates({
     verificationTimestamp: now,
-    existingPlan: existingPlan || (candidateExistingExpiry ? 'premium' : 'free'),
+    existingPlan: candidateExistingPlan,
     existingExpiresAt: candidateExistingExpiry
   });
 
@@ -608,6 +701,33 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   const daysRemaining = activation.daysRemaining;
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
+  const updatedClassSubscriptions: Record<string, any> = {
+    ...existingMap,
+    [resolvedClass]: {
+      classLevel: resolvedClass,
+      plan: normalizedPlan,
+      status: 'ACTIVE',
+      purchasedAt: startDateIso,
+      expiresAt: expiryDateIso,
+      paymentId: String(paymentId),
+      orderId: String(orderId),
+      amountInr: verifiedAmount,
+      validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+      updatedAt: activation.verifiedAtUtcIso
+    }
+  };
+
+  const activatedClasses = VALID_CLASS_LEVELS.filter((cls) => {
+    const rec = updatedClassSubscriptions[cls];
+    if (!rec || rec.plan === 'free') return false;
+    return !evaluateSubscriptionValidity(rec.plan, rec.purchasedAt, rec.expiresAt, now).isExpired;
+  });
+
+  const preservedPrimaryClass =
+    normalizeBackendClassLevel(existingData?.primaryClassLevel) ||
+    normalizeBackendClassLevel(existingData?.classLevel) ||
+    resolvedClass;
+
   try {
     // 1. Update Student Profile Document in Firestore (/students/{studentId}) via Firebase Admin SDK
     await serverSetDoc(
@@ -615,6 +735,11 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
       safeStudentId,
       {
         id: safeStudentId,
+        classLevel: resolvedClass,
+        primaryClassLevel: preservedPrimaryClass,
+        activatedClassLevel: resolvedClass,
+        activatedClasses,
+        classSubscriptions: updatedClassSubscriptions,
         plan: normalizedPlan, // 'premium' (Premium ₹99)
         subscriptionTier, // 'premium'
         planLabel,
@@ -648,6 +773,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
         studentName: String(studentName || 'Student').slice(0, 100),
         parentEmail: String(email || '').slice(0, 150),
         parentMobile: String(mobile || '').slice(0, 20),
+        selectedClass: resolvedClass,
+        classLevel: resolvedClass,
         planId: normalizedPlan,
         subscriptionTier,
         planTitle: planLabel,
@@ -675,13 +802,16 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
 
   return {
     success: true,
-    alreadyProcessed,
+    alreadyProcessed: false,
+    selectedClass: resolvedClass,
     plan: normalizedPlan,
     subscriptionTier,
     planLabel,
     startDateIso,
     expiryDateIso,
     daysRemaining,
-    receiptNumber
+    receiptNumber,
+    activatedClasses,
+    classSubscriptions: updatedClassSubscriptions
   };
 }

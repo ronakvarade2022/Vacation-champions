@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { SubjectName } from '../types';
+import { ClassLevel, SubjectName } from '../types';
 import { calculateLevel, ALL_BADGES } from '../data/badgesData';
 import { 
   Trophy, 
@@ -39,7 +39,13 @@ import {
 } from 'lucide-react';
 import { QuizLevel, SubjectLevelProgress } from '../types';
 import { StudentMasteryChart } from './StudentMasteryChart';
-import { getStudentPlanInfo, canAccessSubject, canAccessFeature } from '../utils/subscriptionAccess';
+import {
+  getStudentPlanInfo,
+  canAccessSubject,
+  canAccessFeature,
+  getClassSubscriptionInfo,
+  getActivatedClassesList,
+} from '../utils/subscriptionAccess';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -56,7 +62,7 @@ import { FileText, GraduationCap } from 'lucide-react';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
-  onOpenMembership: (plan?: 'basic' | 'premium') => void;
+  onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -69,7 +75,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     allStories, 
     savedDrawings, 
     getSubjectLevelProgress,
-    promoteOrUpdateStudentClass
+    switchActiveClass
   } = useApp();
   const [selectedSubjectForLevels, setSelectedSubjectForLevels] = useState<SubjectName | null>(null);
   const [copiedDashRefLink, setCopiedDashRefLink] = useState(false);
@@ -157,8 +163,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 MyStudyZone – An Interactive Learning Platform for Students
               </span>
               <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-amber-100 flex items-center gap-1.5 border border-white/20">
-                <Lock className="w-3.5 h-3.5 text-amber-200" />
-                <span>{currentStudent.classLevel} (Permanent)</span>
+                <GraduationCap className="w-3.5 h-3.5 text-amber-200" />
+                <span>
+                  Active: {currentStudent.classLevel}
+                  {getActivatedClassesList(currentStudent).length > 0
+                    ? ` • ${getActivatedClassesList(currentStudent).length} Paid`
+                    : ''}
+                </span>
               </span>
               <span className="bg-black/25 px-2.5 py-1 rounded-full text-[11px] font-mono text-amber-200">
                 UID: {currentStudent.id}
@@ -423,7 +434,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 {planInfo.isPaidPlanExpired ? (
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('premium')}
+                    onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -432,20 +443,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 ) : planInfo.effectivePlan === 'free' ? (
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('premium')}
+                    onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Upgrade to ₹99 Premium (365 Days)</span>
+                    <span>Upgrade {currentStudent.classLevel} to ₹99 Premium</span>
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('premium')}
+                    onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
                     className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Extend 365-Day Validity (₹99)</span>
+                    <span>Extend {currentStudent.classLevel} (₹99)</span>
                   </button>
                 )}
               </div>
@@ -538,7 +549,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
               {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
               <div
-                onClick={() => onOpenMembership('premium')}
+                onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
                 className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all cursor-pointer ${
                   planInfo.effectivePlan === 'premium'
                     ? 'border-amber-500 bg-gradient-to-br from-amber-50 to-orange-50/70 shadow-md'
@@ -650,7 +661,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
         {/* Plan Status */}
         <div 
-          onClick={() => onOpenMembership()}
+          onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
           className="col-span-2 lg:col-span-1 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-300 shadow-xs flex items-center gap-3 cursor-pointer hover:border-amber-400 transition-colors"
         >
           <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center text-xl shrink-0">
@@ -669,7 +680,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       </div>
 
       {/* ========================================================
-          ALL 10 CLASSES OVERVIEW & PERMANENT REGISTERED CLASS LOCK (One Account = One Class)
+          ALL 10 CLASSES OVERVIEW & MULTI-CLASS SWITCHER (Classes 1st to 10th)
           ======================================================== */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200/90 shadow-md space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -680,67 +691,100 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-display font-black text-slate-900">
-                  Your Registered Class Curriculum ({currentStudent.classLevel})
+                  Class-Wise Curriculum &amp; Subscriptions (Active: {currentStudent.classLevel})
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-extrabold border border-emerald-300 flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-emerald-700" />
-                  <span>One Account = One Active Class</span>
+                  <Sparkles className="w-3 h-3 text-emerald-700" />
+                  <span>
+                    Multi-Class Ready ({getActivatedClassesList(currentStudent).length} Paid Class{getActivatedClassesList(currentStudent).length === 1 ? '' : 'es'})
+                  </span>
                 </span>
               </div>
               <p className="text-xs text-slate-600 font-medium mt-0.5">
-                Your account is permanently registered for <strong>Standard {currentStudent.classLevel.replace('Class ', '')} ({currentStudent.classLevel})</strong>. All subjects, 4 quiz levels, and online worksheets are unlocked strictly for your registered class.
+                Click any unlocked class below to switch your learning workspace, or tap any locked/expired class to activate it for <strong>₹99 (365 Days)</strong> on your same account!
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-extrabold text-indigo-900 bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 self-start md:self-center shrink-0">
-            <Lock className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Registered: {currentStudent.classLevel}</span>
-            <span>•</span>
-            <span>{activeClassSubjects.length} Subjects</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => onOpenMembership('premium')}
+            className="flex items-center gap-2 text-xs font-extrabold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-4 py-2.5 rounded-xl shadow-xs self-start md:self-center shrink-0 cursor-pointer transition-all"
+          >
+            <Crown className="w-3.5 h-3.5 text-amber-300" />
+            <span>Add / Activate Class (₹99)</span>
+          </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
           {ALL_10_CLASSES.map((cls) => {
             const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
             const isSelected = currentStudent.classLevel === cls;
+            const cInfo = getClassSubscriptionInfo(currentStudent, cls);
             const subjCount = getSubjectsForClass(cls).length;
+
+            let cardStyle = 'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200 hover:border-amber-300 cursor-pointer';
+            if (isSelected) {
+              cardStyle = 'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md scale-[1.02] cursor-default';
+            } else if (cInfo.isPaidActive) {
+              cardStyle = 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-400 cursor-pointer shadow-xs';
+            } else if (cInfo.isFreeBase) {
+              cardStyle = 'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-300 cursor-pointer';
+            } else if (cInfo.isExpired) {
+              cardStyle = 'bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-300 cursor-pointer';
+            }
+
             return (
               <button
                 key={cls}
                 type="button"
                 onClick={() => {
-                  if (cls !== currentStudent.classLevel) {
-                    promoteOrUpdateStudentClass(cls, `Attempted to switch class to ${cls}`);
+                  if (cInfo.isAccessible) {
+                    if (cls !== currentStudent.classLevel) {
+                      void switchActiveClass(cls);
+                    }
+                  } else {
+                    onOpenMembership('premium', cls);
                   }
                 }}
-                className={`p-3 rounded-2xl border text-center transition-all relative ${
-                  isSelected
-                    ? 'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md scale-[1.02] cursor-default'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-75 cursor-not-allowed'
-                }`}
+                className={`p-3 rounded-2xl border text-center transition-all relative ${cardStyle}`}
                 title={
                   isSelected
-                    ? `Active Registered Class: ${cls}`
-                    : `Locked: Your account is permanently registered for ${currentStudent.classLevel} only.`
+                    ? `Active Workspace: ${cls} (${cInfo.daysRemainingDisplay})`
+                    : cInfo.isAccessible
+                    ? `Switch workspace to ${cls} (${cInfo.daysRemainingDisplay})`
+                    : cInfo.isExpired
+                    ? `${cls} expired — Click to renew for ₹99 (365 Days)`
+                    : `Click to activate ${cls} for ₹99 (365 Days)`
                 }
               >
                 {isSelected ? (
                   <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black uppercase">
                     Active
                   </span>
+                ) : cInfo.isPaidActive ? (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase">
+                    Paid • {cInfo.daysRemaining}d
+                  </span>
+                ) : cInfo.isFreeBase ? (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[9px] font-black uppercase">
+                    Free Base
+                  </span>
+                ) : cInfo.isExpired ? (
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase">
+                    Expired
+                  </span>
                 ) : (
-                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold uppercase flex items-center gap-0.5">
-                    <Lock className="w-2.5 h-2.5" /> Locked
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold uppercase flex items-center gap-0.5">
+                    <Lock className="w-2.5 h-2.5" /> ₹99
                   </span>
                 )}
                 <div className="text-xs sm:text-sm font-black">{cls}</div>
-                <div className={`text-[10px] font-bold mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
+                <div className={`text-[10px] font-bold mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>
                   {meta?.marathiLabel}
                 </div>
                 <div className={`text-[9px] font-extrabold mt-1 px-1.5 py-0.5 rounded-md inline-block ${
-                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-500'
+                  isSelected ? 'bg-white/20 text-white' : 'bg-white/80 text-slate-700'
                 }`}>
                   {subjCount} Subjects
                 </div>
