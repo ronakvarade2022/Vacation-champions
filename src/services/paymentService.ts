@@ -1,4 +1,5 @@
 import { PaymentTransaction, StudentProfile } from '../types';
+import { computeSubscriptionActivationDates } from '../utils/subscriptionDateUtils';
 
 export interface RazorpayConfigResponse {
   success: boolean;
@@ -587,7 +588,7 @@ export async function launchRazorpayCheckout(options: {
     return;
   }
 
-  const planTitle = 'PREMIUM PLAN – ₹99 – 90 Days';
+  const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const planAmountPaise = 9900;
 
   // Sanitize prefill fields so Razorpay Live Checkout never fails prefill validation
@@ -625,7 +626,7 @@ export async function launchRazorpayCheckout(options: {
       classLevel: String(student.classLevel),
       planId: 'premium',
       subscriptionTier: 'premium',
-      validityDays: '90',
+      validityDays: '365',
       referralCode: referralCode || student.referredByCode || ''
     },
     retry: {
@@ -828,7 +829,7 @@ export const paymentGateway = {
         parentEmail: student.email,
         parentMobile: student.mobile,
         planId: 'premium',
-        planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+        planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
         amount,
         currency: 'INR',
         orderId,
@@ -845,6 +846,12 @@ export const paymentGateway = {
       };
     }
 
+    const activation = computeSubscriptionActivationDates({
+      verificationTimestamp: new Date(),
+      existingPlan: student.plan,
+      existingExpiresAt: student.planExpiresAt
+    });
+
     const successfulTx: PaymentTransaction = {
       id: `tx_${Date.now()}`,
       receiptNumber,
@@ -853,7 +860,7 @@ export const paymentGateway = {
       parentEmail: student.email,
       parentMobile: student.mobile,
       planId: 'premium',
-      planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+      planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
       amount,
       currency: 'INR',
       orderId,
@@ -861,13 +868,9 @@ export const paymentGateway = {
       signature: 'verified_sig_' + orderId,
       method,
       status: 'SUCCESS',
-      createdAt: new Date().toISOString(),
-      membershipStartDate: new Date().toISOString().split('T')[0],
-      membershipExpiryDate: new Date(
-        Date.now() + 90 * 24 * 60 * 60 * 1000
-      )
-        .toISOString()
-        .split('T')[0]
+      createdAt: activation.verifiedAtUtcIso,
+      membershipStartDate: activation.purchasedDateIst,
+      membershipExpiryDate: activation.expiryDateIst
     };
 
     return {

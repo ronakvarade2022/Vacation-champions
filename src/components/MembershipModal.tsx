@@ -41,7 +41,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
   const [isDomainMismatchError, setIsDomainMismatchError] = useState(false);
   const [copiedDomainUrl, setCopiedDomainUrl] = useState(false);
   const [expiryDateStr, setExpiryDateStr] = useState('');
-  const [daysRemainingNum, setDaysRemainingNum] = useState(90);
+  const [daysRemainingNum, setDaysRemainingNum] = useState(365);
   const [gatewayMode, setGatewayMode] = useState<'LIVE' | 'TEST'>('LIVE');
 
   // Optional Referral Code Input for ₹5 Cashback on ₹99 Premium Purchase
@@ -164,7 +164,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               );
               setLastTransaction(checkRes.transaction);
               setExpiryDateStr(checkRes.membership?.expiryDate || '');
-              setDaysRemainingNum(checkRes.membership?.daysRemaining || 90);
+              setDaysRemainingNum(checkRes.membership?.daysRemaining || 365);
               setStep('success');
             }
           } else if (checkRes.status === 'EXPIRED') {
@@ -269,7 +269,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             }
             setLastTransaction(verifyResult.transaction);
             setExpiryDateStr(verifyResult.membership?.expiryDate || '');
-            setDaysRemainingNum(verifyResult.membership?.daysRemaining || 90);
+            setDaysRemainingNum(verifyResult.membership?.daysRemaining || 365);
             setStep('success');
           } else {
             const verifyErr =
@@ -363,7 +363,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
           );
           setLastTransaction(checkRes.transaction);
           setExpiryDateStr(checkRes.membership?.expiryDate || '');
-          setDaysRemainingNum(checkRes.membership?.daysRemaining || 90);
+          setDaysRemainingNum(checkRes.membership?.daysRemaining || 365);
           setStep('success');
         }
       } else if (checkRes.status === 'EXPIRED') {
@@ -437,7 +437,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       <span className="text-emerald-700">{planInfo.planDisplayName}</span>
                       {' • '}
                       <span className="text-xs font-bold text-slate-600">
-                        Validity: {planInfo.daysRemainingDisplay}
+                        {planInfo.isLifetimeFree
+                          ? `Validity: ${planInfo.daysRemainingDisplay}`
+                          : `Purchased: ${planInfo.purchasedDisplay} • Expires: ${planInfo.expiryDisplay} • ${planInfo.daysRemainingDisplay}`}
                       </span>
                     </p>
                   </div>
@@ -446,11 +448,15 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   className={`px-3 py-1 rounded-full text-xs font-black border ${
                     planInfo.isPaidPlanExpired
                       ? 'bg-rose-100 text-rose-800 border-rose-300'
+                      : planInfo.isExpiringToday
+                      ? 'bg-amber-100 text-amber-900 border-amber-400'
                       : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                   }`}
                 >
                   {planInfo.isPaidPlanExpired
                     ? '● EXPIRED — FREE PLAN ACTIVE (RENEW BELOW)'
+                    : planInfo.isExpiringToday
+                    ? '● EXPIRING TODAY — RENEW FOR +365 DAYS'
                     : `● ACTIVE (${planInfo.daysRemainingDisplay})`}
                 </span>
               </div>
@@ -500,7 +506,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center gap-3 text-indigo-950 animate-in fade-in duration-150">
                   <Loader2 className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
                   <span className="text-xs sm:text-sm font-black">
-                    Generating Razorpay {gatewayMode} payment request for Standard {formatStandardOrdinal(currentStudent?.classLevel)} PREMIUM PLAN – ₹99 (90 Days)...
+                    Generating Razorpay {gatewayMode} payment request for Standard {formatStandardOrdinal(currentStudent?.classLevel)} PREMIUM PLAN – ₹99 (365 Days / 1 Year)...
                   </span>
                 </div>
               )}
@@ -570,7 +576,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   </div>
                 </div>
 
-                {/* PLAN 2: PREMIUM PLAN – ₹99 – 90 Days */}
+                {/* PLAN 2: PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
                 <div className="p-6 rounded-3xl border-2 border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/60 shadow-xl flex flex-col justify-between relative transition-all">
                   <div className="absolute -top-3 right-4 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
                     <Sparkles className="w-3 h-3" /> STANDARD {formatStandardOrdinal(currentStudent?.classLevel).toUpperCase()} UNLOCK
@@ -581,14 +587,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900">
                         CLASS-WISE PREMIUM PLAN
                       </span>
-                      <span className="text-xs font-bold text-amber-800">90 Days Validity</span>
+                      <span className="text-xs font-bold text-amber-800">1 Year (365 Days) Validity</span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900">
                       PREMIUM PLAN – ₹99 (Standard {formatStandardOrdinal(currentStudent?.classLevel)})
                     </h3>
                     <div className="mt-2 mb-4 flex items-baseline gap-1">
                       <span className="text-4xl font-black text-amber-600">₹99</span>
-                      <span className="text-xs text-slate-500 font-bold">/ 90 Days • Standard {formatStandardOrdinal(currentStudent?.classLevel)}</span>
+                      <span className="text-xs text-slate-500 font-bold">/ 1 Year (365 Days) • Standard {formatStandardOrdinal(currentStudent?.classLevel)}</span>
                     </div>
 
                     <p className="text-xs font-bold text-amber-900 mb-3">
@@ -669,14 +675,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                      SELECTED PLAN: PREMIUM PLAN (₹99 – 90 Days)
+                      SELECTED PLAN: PREMIUM PLAN (₹99 – 365 Days / 1 Year)
                     </span>
                     <h4 className="text-base sm:text-lg font-extrabold mt-0.5">
                       Choose Your Payment Method (₹99)
                     </h4>
                   </div>
                   <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    90 Days Validity • Instant Activation
+                    1 Year (365 Days) Validity • Instant Activation
                   </span>
                 </div>
 
@@ -718,7 +724,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex items-center gap-2.5 text-xs text-slate-600">
                   <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span>
-                    <strong>Strict Payment Verification:</strong> Both Online Checkout &amp; UPI QR Codes are verified directly via Razorpay before activating your 90-day ₹99 Premium plan.
+                    <strong>Strict Payment Verification:</strong> Both Online Checkout &amp; UPI QR Codes are verified directly via Razorpay before activating your 1-year (365-day) ₹99 Premium plan.
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
@@ -759,7 +765,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     Scan &amp; Pay ₹99
                   </h3>
                   <p className="text-xs text-indigo-200 mt-0.5">
-                    Student: <strong>{currentStudent?.name}</strong> ({currentStudent?.classLevel}) • 90 Days Access
+                    Student: <strong>{currentStudent?.name}</strong> ({currentStudent?.classLevel}) • 365 Days (1 Year) Access
                   </p>
                 </div>
 
@@ -891,7 +897,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             <div className="py-12 text-center space-y-4">
               <div className="w-16 h-16 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin mx-auto" />
               <h3 className="text-lg font-display font-bold text-slate-900">
-                Verifying Payment Signature & Activating 90-Day Subscription...
+                Verifying Payment Signature & Activating 365-Day (1 Year) Subscription...
               </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 Confirming cryptographic payment signature and capture status with Razorpay & Firebase for your ₹99 Premium Plan. Please do not close this window.
@@ -948,7 +954,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex justify-between">
                   <span className="text-slate-400">Activated Plan:</span>
                   <span className="font-bold text-indigo-700">
-                    Premium Plan (₹99 – 90 Days)
+                    Premium Plan (₹99 – 365 Days / 1 Year)
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -956,9 +962,15 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <span className="font-extrabold text-emerald-600">₹99.00</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Valid Until:</span>
+                  <span className="text-slate-400">Purchase Date (IST):</span>
                   <span className="font-bold text-slate-800">
-                    {expiryDateStr || '90 Days'} ({daysRemainingNum} Days Remaining)
+                    {lastTransaction.membershipStartDate || planInfo.purchasedDateIso || 'Verified Today (IST)'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Valid Until (Expiry Date IST):</span>
+                  <span className="font-bold text-emerald-700">
+                    {expiryDateStr || lastTransaction.membershipExpiryDate || '365 Days (1 Year)'} ({daysRemainingNum} Days Remaining)
                   </span>
                 </div>
               </div>

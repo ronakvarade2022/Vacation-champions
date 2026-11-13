@@ -60,7 +60,7 @@ export const FaqsView: React.FC<FaqsViewProps> = ({
             Frequently Asked Questions (FAQs)
           </h1>
           <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed font-medium">
-            Find immediate answers about subscription plans, 90-day activations, quiz progression, audio stories, and account safety.
+            Find immediate answers about subscription plans, 365-day (1-year) activations, quiz progression, audio stories, and account safety.
           </p>
         </div>
 
@@ -70,7 +70,7 @@ export const FaqsView: React.FC<FaqsViewProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search questions (e.g. ₹99 plan, 90 days, payment, Marathi stories)..."
+            placeholder="Search questions (e.g. ₹99 plan, 365 days, payment, Marathi stories)..."
             className="w-full px-4 py-3.5 pl-11 rounded-2xl bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden shadow-lg border-2 border-amber-300"
           />
           <Search className="w-5 h-5 text-amber-600 absolute left-3.5 top-3.5 pointer-events-none" />

@@ -25,6 +25,10 @@ import {
   buildStudentReferralLink,
   sanitizeReferralCode,
 } from '../utils/referralCoding';
+import {
+  computeSubscriptionActivationDates,
+  PAID_SUBSCRIPTION_VALIDITY_DAYS,
+} from '../utils/subscriptionDateUtils';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
@@ -571,40 +575,34 @@ export async function signOutFirebaseUser(): Promise<void> {
   }
 }
 
-export const PAID_PLAN_VALIDITY_DAYS = 90; // 3 Months (90 Days) validity for ₹99 Premium Plan
+export const PAID_PLAN_VALIDITY_DAYS = PAID_SUBSCRIPTION_VALIDITY_DAYS; // 1 Year (365 Days) validity for ₹99 Premium Plan
 
-export function computePaidPlanExpiryIsoDate(existingExpiresAt?: string | null): {
+export function computePaidPlanExpiryIsoDate(
+  existingExpiresAt?: string | null,
+  verificationTimestamp?: Date | string | number
+): {
   purchasedAt: string;
   expiresAt: string;
   validityDays: number;
+  verifiedAtUtcIso: string;
+  isRenewalBeforeExpiry: boolean;
 } {
-  const now = new Date();
-  const purchasedAt = now.toISOString().split('T')[0];
-  const expiry = new Date(now);
+  const activation = computeSubscriptionActivationDates({
+    verificationTimestamp,
+    existingPlan: existingExpiresAt ? 'premium' : 'free',
+    existingExpiresAt,
+  });
 
-  if (existingExpiresAt) {
-    const parsedExisting = new Date(existingExpiresAt);
-    if (!isNaN(parsedExisting.getTime()) && parsedExisting.getTime() > now.getTime()) {
-      // Extend active subscription by 90 days (3 months) from current expiry
-      parsedExisting.setDate(parsedExisting.getDate() + PAID_PLAN_VALIDITY_DAYS);
-      return {
-        purchasedAt,
-        expiresAt: parsedExisting.toISOString().split('T')[0],
-        validityDays: PAID_PLAN_VALIDITY_DAYS,
-      };
-    }
-  }
-
-  // Set 3-month (90-day) expiration from activation date
-  expiry.setDate(now.getDate() + PAID_PLAN_VALIDITY_DAYS);
   return {
-    purchasedAt,
-    expiresAt: expiry.toISOString().split('T')[0],
+    purchasedAt: activation.purchasedDateIst,
+    expiresAt: activation.expiryDateIst,
     validityDays: PAID_PLAN_VALIDITY_DAYS,
+    verifiedAtUtcIso: activation.verifiedAtUtcIso,
+    isRenewalBeforeExpiry: activation.isRenewalBeforeExpiry,
   };
 }
 
-// 9. Persist Student Profile to Firestore (with 90-day paid plan expiry enforcement & permanent unique referral code)
+// 9. Persist Student Profile to Firestore (with 365-day paid plan expiry enforcement & permanent unique referral code)
 export async function saveStudentProfileToFirestore(student: StudentProfile & { firebaseUid?: string }) {
   try {
     const studentRef = doc(db, 'students', student.id);
@@ -664,7 +662,7 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       : undefined;
 
     const planLabel = isPaid
-      ? `PREMIUM PLAN – ₹99 – 90 Days (${resolvedActivatedClass || student.classLevel})`
+      ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year) (${resolvedActivatedClass || student.classLevel})`
       : 'FREE PLAN – ₹0 – Lifetime';
 
     // Clean undefined values before Firestore setDoc
@@ -970,7 +968,7 @@ export async function findReferrerByCodeInFirestore(
   };
 }
 
-// 10. Persist Subscription Upgrade to Firestore (sets 3-month / 90-day expiration & class-wise activation for ₹99 Premium Plan)
+// 10. Persist Subscription Upgrade to Firestore (sets 1-year / 365-day expiration & class-wise activation for ₹99 Premium Plan)
 export async function saveSubscriptionToFirestore(
   studentId: string,
   subscriptionData: {
@@ -1004,7 +1002,7 @@ export async function saveSubscriptionToFirestore(
   const activatedClassLevel = isPaid ? subscriptionData.selectedClass || null : null;
   const validityDays: number | 'Lifetime' = isPaid ? PAID_PLAN_VALIDITY_DAYS : 'Lifetime';
   const planLabel = isPaid
-    ? `PREMIUM PLAN – ₹99 – 90 Days${activatedClassLevel ? ` (${activatedClassLevel})` : ''}`
+    ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year)${activatedClassLevel ? ` (${activatedClassLevel})` : ''}`
     : 'FREE PLAN – ₹0 – Lifetime';
   const amountInr =
     subscriptionData.amountInr ??

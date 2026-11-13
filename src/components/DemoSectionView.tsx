@@ -1385,11 +1385,11 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({ onUpgradeClick
                   <span className="text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500 text-slate-950">
                     FULL UNLOCK • BEST VALUE
                   </span>
-                  <span className="text-xs font-bold text-amber-800">3 Months</span>
+                  <span className="text-xs font-bold text-amber-800">1 Year (365 Days)</span>
                 </div>
                 <h3 className="text-xl font-black text-slate-900">PREMIUM PLAN</h3>
                 <div className="text-3xl font-black text-amber-600 my-2">
-                  ₹99 <span className="text-xs font-bold text-slate-500">/ 3 Months</span>
+                  ₹99 <span className="text-xs font-bold text-slate-500">/ 1 Year (365 Days)</span>
                 </div>
                 <ul className="space-y-2 text-xs font-bold text-slate-800 mt-4">
                   <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" /> Full Access to Entire Application</li>

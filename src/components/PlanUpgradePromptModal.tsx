@@ -72,7 +72,7 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
               </p>
               {planInfo.isPaidPlanExpired && (
                 <p className="text-[11px] font-extrabold text-rose-700">
-                  ⚠️ Your previous {planInfo.expiredPlanName} ({planInfo.expiryDisplay}). Renew below for 90 Days access!
+                  ⚠️ Your previous {planInfo.expiredPlanName} ({planInfo.expiryDisplay}). Renew below for 365 Days (1 Year) access!
                 </p>
               )}
               <p className="text-xs text-slate-700 font-medium leading-relaxed">
@@ -149,7 +149,7 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
               </div>
             </div>
 
-            {/* 2. PREMIUM PLAN – ₹99 – 90 Days */}
+            {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
             <div className="rounded-2xl p-5 border-2 border-orange-500 bg-gradient-to-b from-orange-50 to-amber-50/60 shadow-lg flex flex-col justify-between space-y-4 relative">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -157,14 +157,14 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
                     <Crown className="w-3 h-3" />
                     <span>Premium Plan</span>
                   </span>
-                  <span className="text-[10px] font-extrabold text-orange-800">90 Days</span>
+                  <span className="text-[10px] font-extrabold text-orange-800">1 Year (365 Days)</span>
                 </div>
                 <div>
                   <h4 className="font-display font-extrabold text-sm text-slate-900">
-                    PREMIUM PLAN – ₹99 – 90 Days
+                    PREMIUM PLAN – ₹99 – 365 Days (1 Year)
                   </h4>
                   <p className="text-2xl font-extrabold text-orange-700 mt-0.5">
-                    ₹99 <span className="text-[11px] font-medium text-slate-500">/ 90 Days</span>
+                    ₹99 <span className="text-[11px] font-medium text-slate-500">/ 1 Year (365 Days)</span>
                   </p>
                 </div>
                 <ul className="space-y-1.5 text-slate-800 font-medium">
@@ -202,8 +202,8 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>
                   {planInfo.isPaidPlanExpired
-                    ? 'Renew ₹99 Premium Plan (90 Days)'
-                    : 'Upgrade to ₹99 Premium Plan (90 Days)'}
+                    ? 'Renew ₹99 Premium Plan (365 Days / 1 Year)'
+                    : 'Upgrade to ₹99 Premium Plan (365 Days / 1 Year)'}
                 </span>
               </button>
             </div>

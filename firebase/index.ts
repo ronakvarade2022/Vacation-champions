@@ -3,6 +3,11 @@ import fs from 'fs';
 import Razorpay from 'razorpay';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  computeSubscriptionActivationDates,
+  evaluateSubscriptionValidity,
+  PAID_SUBSCRIPTION_VALIDITY_DAYS
+} from '../src/utils/subscriptionDateUtils.ts';
 
 const firebaseConfig = JSON.parse(
   fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')
@@ -156,7 +161,7 @@ export async function createRazorpayOrderBackend(params: {
       mobile: String(mobile || '').slice(0, 250),
       planId: 'premium',
       subscriptionTier: 'premium',
-      validityDays: '90',
+      validityDays: '365',
       referralCode: String(referralCode || '').slice(0, 100)
     }
   });
@@ -247,7 +252,7 @@ export async function createRazorpayQrCodeBackend(params: {
   const planId = 'premium' as const;
   const amountInPaise = 9900;
   const amountInRupees = 99;
-  const planTitle = 'PREMIUM PLAN – ₹99 – 90 Days';
+  const planTitle = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const creds = getResolvedRazorpayCredentials();
 
   if (!creds.isConfigured || !creds.keySecret) {
@@ -277,7 +282,7 @@ export async function createRazorpayQrCodeBackend(params: {
         mobile: String(mobile || '').slice(0, 250),
         planId: 'premium',
         subscriptionTier: 'premium',
-        validityDays: '90',
+        validityDays: '365',
         referralCode: String(referralCode || '').slice(0, 100)
       }
     })
@@ -500,8 +505,8 @@ export function verifyRazorpayWebhookSignature(
 
 /**
  * Updates the student's Firestore document (`/students/{studentId}`) and
- * records the verified transaction in `/transactions/{txId}` with a 90-day expiry date.
- *Idempotent: prevents duplicate 90-day extensions if both client verification and webhook fire.
+ * records the verified transaction in `/transactions/{txId}` with a 365-day expiry date.
+ * Idempotent: prevents duplicate 365-day extensions if both client verification and webhook fire.
  */
 export async function updateStudentSubscriptionInFirestoreBackend(params: {
   studentId: string;
@@ -541,12 +546,12 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
 
   const normalizedPlan: 'premium' = 'premium';
   const subscriptionTier: 'premium' = 'premium';
-  const planLabel = 'PREMIUM PLAN – ₹99 – 90 Days';
+  const planLabel = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const verifiedAmount = amountInr || 99;
 
   const now = new Date();
-  const startDateIso = now.toISOString().split('T')[0];
-  let baseExpiryDate = new Date(now);
+  let existingPlan: string | undefined = undefined;
+  let candidateExistingExpiry: string | undefined = params.currentExpiresAt;
   let alreadyProcessed = false;
 
   const safeStudentId = String(studentId).trim();
@@ -556,19 +561,14 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     const existingSnap = await getDoc(studentRef);
     if (existingSnap.exists()) {
       const existingData = existingSnap.data();
+      existingPlan = existingData?.plan;
       // Idempotency check: if this exact paymentId already updated Firestore, return existing expiry
       if (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId) {
-        const existingExpiryIso =
-          existingData.planExpiresAt ||
-          new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0];
-        const daysRem = Math.max(
-          0,
-          Math.ceil(
-            (new Date(existingExpiryIso).getTime() - now.getTime()) /
-              (1000 * 60 * 60 * 24)
-          )
+        const validity = evaluateSubscriptionValidity(
+          'premium',
+          existingData.planPurchasedAt,
+          existingData.planExpiresAt,
+          now
         );
         return {
           success: true,
@@ -576,28 +576,16 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
           plan: normalizedPlan,
           subscriptionTier,
           planLabel,
-          startDateIso: existingData.planPurchasedAt || startDateIso,
-          expiryDateIso: existingExpiryIso,
-          daysRemaining: daysRem || 90,
+          startDateIso: validity.purchaseDateIst || existingData.planPurchasedAt,
+          expiryDateIso: validity.expiryDateIst || existingData.planExpiresAt,
+          daysRemaining: validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS,
           receiptNumber: `REC-VC-${paymentId.slice(-6).toUpperCase()}`
         };
       }
 
-      // If student currently has an active unexpired paid plan, extend by 90 days
-      const candidateExistingExpiry =
-        params.currentExpiresAt || existingData?.planExpiresAt;
-      if (
-        candidateExistingExpiry &&
-        new Date(candidateExistingExpiry) > now &&
-        (existingData?.plan === 'basic' || existingData?.plan === 'premium')
-      ) {
-        baseExpiryDate = new Date(candidateExistingExpiry);
+      if (existingData?.planExpiresAt) {
+        candidateExistingExpiry = existingData.planExpiresAt;
       }
-    } else if (
-      params.currentExpiresAt &&
-      new Date(params.currentExpiresAt) > now
-    ) {
-      baseExpiryDate = new Date(params.currentExpiresAt);
     }
   } catch (readErr) {
     console.log(
@@ -606,14 +594,16 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     );
   }
 
-  // Add 90 days (3 months) validity
-  const expiryDate = new Date(baseExpiryDate);
-  expiryDate.setDate(expiryDate.getDate() + 90);
-  const expiryDateIso = expiryDate.toISOString().split('T')[0];
-  const daysRemaining = Math.max(
-    1,
-    Math.round((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  );
+  // Compute accurate 365-day activation / renewal dates in IST (Asia/Kolkata)
+  const activation = computeSubscriptionActivationDates({
+    verificationTimestamp: now,
+    existingPlan: existingPlan || (candidateExistingExpiry ? 'premium' : 'free'),
+    existingExpiresAt: candidateExistingExpiry
+  });
+
+  const startDateIso = activation.purchasedDateIst;
+  const expiryDateIso = activation.expiryDateIst;
+  const daysRemaining = activation.daysRemaining;
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
   try {
@@ -628,12 +618,13 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
         isLifetimeFree: false,
         planPurchasedAt: startDateIso,
         planExpiresAt: expiryDateIso,
-        subscriptionValidityDays: 90,
+        subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
         subscriptionStatus: 'ACTIVE',
         lastPaymentId: paymentId,
         lastOrderId: orderId,
         lastPaymentAmountInr: verifiedAmount,
-        subscriptionUpdatedAt: now.toISOString()
+        verifiedAtUtc: activation.verifiedAtUtcIso,
+        subscriptionUpdatedAt: activation.verifiedAtUtcIso
       },
       { merge: true }
     );

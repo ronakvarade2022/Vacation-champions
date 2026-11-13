@@ -39,9 +39,15 @@ import {
 import { LogoutConfirmModal } from './LogoutConfirmModal';
 import { AdminReferralPanel } from './AdminReferralPanel';
 import { AdminSupportPanel } from './AdminSupportPanel';
+import { getStudentPlanInfo } from '../utils/subscriptionAccess';
+import {
+  auditStudentSubscriptionRecord,
+  evaluateSubscriptionValidity,
+  formatDateIstDisplay,
+} from '../utils/subscriptionDateUtils';
 
 const ALL_CLASSES: ClassLevel[] = [
-  'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8'
+  'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
 ];
 
 const ALL_14_SUBJECTS: SubjectName[] = [
@@ -79,10 +85,16 @@ export const AdminDashboard: React.FC = () => {
     deleteQuestion,
     updateQuestionStatus,
     adminPromoteOrCorrectClass,
+    adminApplyApproved365DayMigration,
     logout
   } = useApp();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [subscriptionMigrationFeedback, setSubscriptionMigrationFeedback] = useState<{
+    studentId: string;
+    message: string;
+    success: boolean;
+  } | null>(null);
   const [activeSection, setActiveSection] = useState<'students' | 'questions' | 'progression' | 'duplicates' | 'stories' | 'drawings' | 'payments' | 'referrals' | 'settings' | 'cricket' | 'scholarship' | 'support' | 'profile'>('questions');
   const [studentSearch, setStudentSearch] = useState<string>('');
   const [questionSearch, setQuestionSearch] = useState<string>('');
@@ -941,72 +953,250 @@ export const AdminDashboard: React.FC = () => {
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-amber-50/70 border-b border-slate-200 text-amber-950 font-bold uppercase text-[10px]">
                 <tr>
-                  <th className="p-3">Student Name & UID</th>
+                  <th className="p-3">Student Name &amp; UID</th>
                   <th className="p-3">Registered Email</th>
                   <th className="p-3">Verified Mobile</th>
                   <th className="p-3">Permanent Class</th>
                   <th className="p-3">Plan</th>
-                  <th className="p-3">Payment Status</th>
-                  <th className="p-3">Registration Date</th>
-                  <th className="p-3">Activation Date</th>
+                  <th className="p-3">Subscription Status</th>
+                  <th className="p-3">Purchase Date (IST)</th>
+                  <th className="p-3">Expiry Date (IST)</th>
+                  <th className="p-3">Remaining Days</th>
                   <th className="p-3 text-right">Admin Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredStudents.map((s) => (
-                  <tr key={s.id} className="hover:bg-amber-50/20">
-                    <td className="p-3">
-                      <div className="flex items-center gap-2 font-bold text-slate-900">
-                        <span className="text-lg">{s.avatar}</span>
-                        <div>
-                          <p>{s.name}</p>
-                          <p className="text-[10px] font-mono font-medium text-slate-400">UID: {s.id}</p>
+                {filteredStudents.map((s) => {
+                  const sPlanInfo = getStudentPlanInfo(s);
+                  const sAudit = auditStudentSubscriptionRecord(s);
+                  return (
+                    <tr key={s.id} className="hover:bg-amber-50/20">
+                      <td className="p-3">
+                        <div className="flex items-center gap-2 font-bold text-slate-900">
+                          <span className="text-lg">{s.avatar}</span>
+                          <div>
+                            <p>{s.name}</p>
+                            <p className="text-[10px] font-mono font-medium text-slate-400">
+                              UID: {s.id} ({s.accountRole === 'teacher' ? 'Teacher' : 'Student'})
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="p-3 text-slate-700 font-mono text-[11px]">{s.email}</td>
-                    <td className="p-3 text-slate-700 font-mono text-[11px] font-bold">{s.mobile}</td>
-                    <td className="p-3">
-                      <span className="inline-flex items-center gap-1 bg-amber-100/90 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-lg text-xs font-extrabold">
-                        <Lock className="w-3 h-3 text-amber-700" />
-                        <span>{s.classLevel}</span>
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${s.plan === 'premium' || s.plan === 'basic' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-600'}`}>
-                        {s.plan === 'premium' || s.plan === 'basic' ? 'Premium (₹99)' : 'Free Plan'}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${s.plan !== 'free' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
-                        {s.plan !== 'free' ? 'Active / Paid' : 'Unpaid (Trial)'}
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-500 font-mono text-[11px]">
-                      {s.registeredAt ? new Date(s.registeredAt).toLocaleDateString() : '2026-05-01'}
-                    </td>
-                    <td className="p-3 text-slate-500 font-mono text-[11px]">
-                      {s.planPurchasedAt || '—'}
-                    </td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={() => {
-                          setEditingStudent(s);
-                          setTargetNewClass(s.classLevel);
-                          setClassChangeReason('Annual academic grade promotion');
-                          setClassChangeFeedback(null);
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                        title="Promote or correct student's grade"
-                      >
-                        <GraduationCap className="w-3.5 h-3.5" />
-                        <span>Promote / Correct</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-3 text-slate-700 font-mono text-[11px]">{s.email}</td>
+                      <td className="p-3 text-slate-700 font-mono text-[11px] font-bold">{s.mobile}</td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center gap-1 bg-amber-100/90 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-lg text-xs font-extrabold">
+                          <Lock className="w-3 h-3 text-amber-700" />
+                          <span>{s.classLevel}</span>
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${s.plan === 'premium' || s.plan === 'basic' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-600'}`}>
+                          {s.plan === 'premium' || s.plan === 'basic' ? 'Premium (₹99 • 365d)' : 'Free Plan'}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                          sPlanInfo.isPaidPlanExpired
+                            ? 'bg-rose-100 text-rose-800'
+                            : sPlanInfo.isExpiringToday
+                            ? 'bg-amber-100 text-amber-900'
+                            : s.plan !== 'free'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {sPlanInfo.isPaidPlanExpired
+                            ? 'EXPIRED (Free Active)'
+                            : sPlanInfo.isExpiringToday
+                            ? 'EXPIRING TODAY'
+                            : s.plan !== 'free'
+                            ? 'ACTIVE (Paid)'
+                            : 'ACTIVE (Lifetime Free)'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-700 font-mono text-[11px]">
+                        {sAudit.currentPurchaseDateIst ? (
+                          <div>
+                            <span className="font-bold text-slate-900 block">{formatDateIstDisplay(sAudit.currentPurchaseDateIst)}</span>
+                            <span className="text-[10px] text-slate-400">{sAudit.currentPurchaseDateIst}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">— (Free)</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-slate-700 font-mono text-[11px]">
+                        {sAudit.currentExpiryDateIst ? (
+                          <div>
+                            <span className="font-bold text-emerald-800 block">{formatDateIstDisplay(sAudit.currentExpiryDateIst)}</span>
+                            <span className="text-[10px] text-slate-400">{sAudit.currentExpiryDateIst}</span>
+                          </div>
+                        ) : (
+                          <span className="text-emerald-700 font-bold">Lifetime</span>
+                        )}
+                      </td>
+                      <td className="p-3 font-extrabold text-[11px]">
+                        <span className={
+                          sPlanInfo.isPaidPlanExpired
+                            ? 'text-rose-700'
+                            : sPlanInfo.isExpiringToday
+                            ? 'text-amber-700'
+                            : 'text-emerald-700'
+                        }>
+                          {sPlanInfo.daysRemainingDisplay}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => {
+                            setEditingStudent(s);
+                            setTargetNewClass(s.classLevel);
+                            setClassChangeReason('Annual academic grade promotion');
+                            setClassChangeFeedback(null);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                          title="Promote or correct student's grade"
+                        >
+                          <GraduationCap className="w-3.5 h-3.5" />
+                          <span>Promote / Correct</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+          </div>
+
+          {/* EXISTING STUDENT SUBSCRIPTION DATE AUDIT & 365-DAY MIGRATION REVIEW PANEL */}
+          <div className="bg-amber-50/50 rounded-2xl p-5 border border-amber-200 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm sm:text-base font-display font-extrabold text-slate-900 flex items-center gap-2">
+                  <span>📅 Existing Student Subscription Date Audit &amp; 365-Day Review</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-300">
+                    IST (Asia/Kolkata) Verified
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Non-destructive audit of all existing student and teacher subscription records. Existing expiry dates are preserved as stored and are only updated to 365 days (`purchaseDate + 365 days`) when explicitly approved below.
+                </p>
+              </div>
+            </div>
+
+            {subscriptionMigrationFeedback && (
+              <div className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
+                subscriptionMigrationFeedback.success
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-50 text-rose-900 border-rose-300'
+              }`}>
+                <span>{subscriptionMigrationFeedback.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setSubscriptionMigrationFeedback(null)}
+                  className="text-slate-500 hover:text-slate-800 ml-3 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div className="border border-slate-200 rounded-2xl bg-white overflow-hidden overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px]">
+                  <tr>
+                    <th className="p-3">Account &amp; Class</th>
+                    <th className="p-3">Plan</th>
+                    <th className="p-3">Current Purchase Date</th>
+                    <th className="p-3">Current Expiry Date</th>
+                    <th className="p-3">Configured Span</th>
+                    <th className="p-3">Calculated Remaining Days</th>
+                    <th className="p-3">Audit Status</th>
+                    <th className="p-3">Proposed 365-Day Expiry</th>
+                    <th className="p-3 text-right">Approval Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {studentsList.map((stu) => {
+                    const audit = auditStudentSubscriptionRecord(stu);
+                    return (
+                      <tr key={`audit_${stu.id}`} className="hover:bg-slate-50/80">
+                        <td className="p-3">
+                          <span className="font-bold text-slate-900 block">{stu.name}</span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {stu.id} • {stu.classLevel}
+                          </span>
+                        </td>
+                        <td className="p-3 font-bold">
+                          {stu.plan === 'premium' || stu.plan === 'basic' ? 'Premium (₹99)' : 'Free Plan (₹0)'}
+                        </td>
+                        <td className="p-3 font-mono text-[11px]">
+                          {audit.currentPurchaseDateIst
+                            ? `${audit.currentPurchaseDateDisplay} (${audit.currentPurchaseDateIst})`
+                            : '—'}
+                        </td>
+                        <td className="p-3 font-mono text-[11px]">
+                          {audit.currentExpiryDateIst
+                            ? `${audit.currentExpiryDateDisplay} (${audit.currentExpiryDateIst})`
+                            : 'Lifetime'}
+                        </td>
+                        <td className="p-3 font-mono text-[11px]">
+                          {audit.configuredValiditySpanDays !== null
+                            ? `${audit.configuredValiditySpanDays} Days`
+                            : 'Lifetime'}
+                        </td>
+                        <td className="p-3 font-extrabold text-amber-900">
+                          {audit.calculatedDaysRemainingDisplay}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            audit.anomalyType === 'NONE'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}>
+                            {audit.anomalyType === 'NONE' ? '✓ 365d / Lifetime Valid' : audit.anomalyType}
+                          </span>
+                          <p className="text-[10px] text-slate-500 mt-1 max-w-xs">{audit.anomalyDescription}</p>
+                        </td>
+                        <td className="p-3 font-mono text-[11px]">
+                          {audit.proposed365ExpiryDateIst ? (
+                            <div>
+                              <span className="font-bold text-indigo-800 block">
+                                {audit.proposed365ExpiryDateDisplay} ({audit.proposed365ExpiryDateIst})
+                              </span>
+                              <span className="text-[10px] text-emerald-700 font-bold">
+                                ({audit.proposed365DaysRemaining} Days Remaining)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">No change needed</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          {audit.requiresAdminApprovalToMigrate && audit.proposed365ExpiryDateIst ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const res = adminApplyApproved365DayMigration(stu.id);
+                                setSubscriptionMigrationFeedback({
+                                  studentId: stu.id,
+                                  message: res.message,
+                                  success: res.success,
+                                });
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shadow-xs cursor-pointer"
+                            >
+                              Approve 365d ({audit.proposed365ExpiryDateIst})
+                            </button>
+                          ) : (
+                            <span className="text-[11px] font-bold text-emerald-700">✓ Verified</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* SECURE CLASS CORRECTION & PROMOTION MODAL (Rule 1 & Rule 6) */}
@@ -1214,7 +1404,7 @@ export const AdminDashboard: React.FC = () => {
                   </h2>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Server-side cryptographic payment auditing, 30-day membership activations, and reconciliation ledger.
+                  Server-side cryptographic payment auditing, 365-day (1-year) membership activations, and reconciliation ledger.
                 </p>
               </div>
 
@@ -1312,65 +1502,86 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-amber-50/70 border-b border-slate-200 text-amber-950 font-bold uppercase text-[10px]">
                     <tr>
-                      <th className="p-3">Receipt & Date</th>
-                      <th className="p-3">Student Name & UID</th>
+                      <th className="p-3">Receipt &amp; Date (IST)</th>
+                      <th className="p-3">Student Name &amp; UID</th>
                       <th className="p-3">Plan</th>
                       <th className="p-3">Amount</th>
+                      <th className="p-3">Validity Dates (Purchase → Expiry IST)</th>
                       <th className="p-3">Razorpay Payment ID</th>
-                      <th className="p-3">Method</th>
                       <th className="p-3">Status</th>
                       <th className="p-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredTxList.map((t) => (
-                      <tr key={t.id} className="hover:bg-amber-50/20 transition-colors">
-                        <td className="p-3 font-mono">
-                          <span className="font-bold text-amber-900 block">{t.receiptNumber}</span>
-                          <span className="text-[10px] text-slate-400 font-sans">
-                            {new Date(t.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">{t.studentName}</span>
-                          <span className="text-[10px] font-mono text-slate-400">UID: {t.studentId}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${t.planId === 'premium' ? 'bg-orange-100 text-orange-900 border border-orange-200' : 'bg-amber-100 text-amber-900 border border-amber-200'}`}>
-                            {t.planTitle}
-                          </span>
-                        </td>
-                        <td className="p-3 font-extrabold text-slate-900 text-sm">
-                          ₹{t.amount}
-                        </td>
-                        <td className="p-3 font-mono text-[11px] text-slate-500">
-                          {t.paymentId}
-                        </td>
-                        <td className="p-3 text-slate-600 font-medium">
-                          {t.method}
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                            t.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                            t.status === 'PENDING' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                            'bg-rose-100 text-rose-800 border border-rose-300'
-                          }`}>
-                            {t.status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setInspectedTx(t)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer inline-flex items-center gap-1"
-                            title="Inspect complete verified transaction data"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Inspect</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredTxList.map((t) => {
+                      const txValidity =
+                        t.status === 'SUCCESS' && t.membershipExpiryDate
+                          ? evaluateSubscriptionValidity(
+                              'premium',
+                              t.membershipStartDate || t.createdAt,
+                              t.membershipExpiryDate
+                            )
+                          : null;
+                      return (
+                        <tr key={t.id} className="hover:bg-amber-50/20 transition-colors">
+                          <td className="p-3 font-mono">
+                            <span className="font-bold text-amber-900 block">{t.receiptNumber}</span>
+                            <span className="text-[10px] text-slate-400 font-sans">
+                              {formatDateIstDisplay(t.createdAt)}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">{t.studentName}</span>
+                            <span className="text-[10px] font-mono text-slate-400">UID: {t.studentId}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${t.planId === 'premium' ? 'bg-orange-100 text-orange-900 border border-orange-200' : 'bg-amber-100 text-amber-900 border border-amber-200'}`}>
+                              {t.planTitle}
+                            </span>
+                          </td>
+                          <td className="p-3 font-extrabold text-slate-900 text-sm">
+                            ₹{t.amount}
+                          </td>
+                          <td className="p-3 font-mono text-[11px]">
+                            {txValidity ? (
+                              <div>
+                                <span className="text-slate-800 font-bold block">
+                                  {txValidity.purchaseDateIst} → {txValidity.expiryDateIst}
+                                </span>
+                                <span className="text-[10px] text-emerald-700 font-bold">
+                                  {txValidity.daysRemainingDisplay}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-slate-500">
+                            {t.paymentId} ({t.method})
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                              t.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                              t.status === 'PENDING' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                              'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}>
+                              {t.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setInspectedTx(t)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer inline-flex items-center gap-1"
+                              title="Inspect complete verified transaction data"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Inspect</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1430,6 +1641,21 @@ export const AdminDashboard: React.FC = () => {
                       <div>
                         <span className="text-slate-400 block text-[10px]">AMOUNT PAID</span>
                         <span className="font-bold text-slate-900">₹{inspectedTx.amount}.00 INR</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">PURCHASE DATE (IST)</span>
+                        <span className="font-bold text-slate-900">
+                          {inspectedTx.membershipStartDate || formatDateIstDisplay(inspectedTx.createdAt)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">EXPIRY DATE (365 DAYS IST)</span>
+                        <span className="font-bold text-emerald-700">
+                          {inspectedTx.membershipExpiryDate || 'N/A'}
+                        </span>
                       </div>
                     </div>
 

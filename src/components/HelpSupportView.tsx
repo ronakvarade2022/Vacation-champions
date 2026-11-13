@@ -509,7 +509,7 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
                 Premium Subscription Activation (₹99)
               </h4>
               <p className="text-slate-600 leading-relaxed text-[11px]">
-                The Premium Plan (₹99) activates for exactly <strong>90 Days</strong>. If you experience a payment delay, submit a ticket with your Razorpay Payment ID.
+                The Premium Plan (₹99) activates for <strong>1 Year (365 Days)</strong>. If you experience a payment delay, submit a ticket with your Razorpay Payment ID.
               </p>
               <button
                 type="button"

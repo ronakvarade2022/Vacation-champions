@@ -150,7 +150,7 @@ export const TermsAndPrivacyView: React.FC<TermsAndPrivacyViewProps> = ({
             </p>
             <ul className="list-disc list-inside space-y-1.5 pl-2 text-slate-700">
               <li><strong>Free Plan (₹0):</strong> Lifetime access to English & Mathematics quizzes, Brain Puzzles, and Sudoku.</li>
-              <li><strong>Premium Plan (₹99):</strong> Valid for exactly <strong>90 Days (3 Months)</strong> from capture time. Full unlock of all 14 curriculum subjects, 45+ audio stories, Shivaji Maharaj stories, drawing studio, cricket quiz arena, scholarship prep, AI Academy, and ₹5 referral cashback wallet.</li>
+              <li><strong>Premium Plan (₹99):</strong> Valid for <strong>365 Days (1 Year)</strong> from capture time. Full unlock of all 14 curriculum subjects, 45+ audio stories, Shivaji Maharaj stories, drawing studio, cricket quiz arena, scholarship prep, AI Academy, and ₹5 referral cashback wallet.</li>
             </ul>
             <p className="mt-2 text-[11px] text-slate-500">
               Payments are processed securely via Razorpay LIVE. Once digital access is activated, subscription fees are non-refundable except in confirmed duplicate billing cases.

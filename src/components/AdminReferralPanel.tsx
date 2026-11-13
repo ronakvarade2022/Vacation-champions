@@ -485,7 +485,7 @@ export const AdminReferralPanel: React.FC = () => {
 
             {/* Plan 99 settings */}
             <div className="sm:col-span-2 p-4 bg-orange-50/60 rounded-2xl border border-orange-200 space-y-3">
-              <h4 className="font-extrabold text-xs text-orange-900 uppercase">Premium Paid Plan (₹99 – 90 Days) — Referral Cashback</h4>
+              <h4 className="font-extrabold text-xs text-orange-900 uppercase">Premium Paid Plan (₹99 – 365 Days / 1 Year) — Referral Cashback</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-600">Referrer Cashback Reward (₹)</label>

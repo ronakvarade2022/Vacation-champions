@@ -858,7 +858,7 @@ export const AdminSupportPanel: React.FC = () => {
                     required
                     value={faqQuestion}
                     onChange={(e) => setFaqQuestion(e.target.value)}
-                    placeholder="e.g. How does the 90-day validity work?"
+                    placeholder="e.g. How does the 365-day (1-year) validity work?"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200"
                   />
                 </div>

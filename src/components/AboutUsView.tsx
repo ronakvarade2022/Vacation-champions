@@ -135,7 +135,7 @@ export const AboutUsView: React.FC<AboutUsViewProps> = ({
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100">
           <div className="text-xs text-slate-600">
             <p className="font-bold text-slate-800">Affordable Learning Plans for Every Student</p>
-            <p className="text-[11px] text-slate-500">FREE Lifetime Plan (₹0) • Premium Plan ₹99 (90 Days)</p>
+            <p className="text-[11px] text-slate-500">FREE Lifetime Plan (₹0) • Premium Plan ₹99 (365 Days / 1 Year)</p>
           </div>
           <button
             type="button"

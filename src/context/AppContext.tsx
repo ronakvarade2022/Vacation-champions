@@ -66,6 +66,10 @@ import {
   getPremiumActivatedBannerMessage,
   WORKSHEET_PREMIUM_UPGRADE_MESSAGE
 } from '../utils/subscriptionAccess';
+import {
+  auditStudentSubscriptionRecord,
+  formatDateIstDisplay
+} from '../utils/subscriptionDateUtils';
 
 export type UserRole = 'student' | 'teacher' | 'admin';
 
@@ -212,6 +216,12 @@ interface AppContextType {
   // Payment & Membership
   processMembershipPayment: (planId: 'basic' | 'premium', method: 'UPI' | 'Card' | 'NetBanking', simulateFailure?: boolean) => { success: boolean; transaction: PaymentTransaction; error?: string };
   activateVerifiedMembership: (transaction: PaymentTransaction, customExpiryDate?: string) => void;
+  adminApplyApproved365DayMigration: (studentId: string) => {
+    success: boolean;
+    message: string;
+    previousExpiresAt?: string | null;
+    updatedExpiresAt?: string | null;
+  };
 
   // Scholarship methods
   recordScholarshipAttempt: (
@@ -652,8 +662,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...s,
             accountRole: s.accountRole || matchInitial?.accountRole || 'student',
-            plan: isSeedPremium ? 'premium' : s.plan,
-            planExpiresAt: isSeedPremium ? '2027-02-28' : s.planExpiresAt,
+            plan: isSeedPremium ? (s.plan === 'premium' || s.plan === 'basic' ? s.plan : 'premium') : s.plan,
+            planPurchasedAt: isSeedPremium ? (s.planPurchasedAt || matchInitial?.planPurchasedAt || '2026-11-01') : s.planPurchasedAt,
+            planExpiresAt: isSeedPremium ? (s.planExpiresAt || matchInitial?.planExpiresAt || '2027-02-28') : s.planExpiresAt,
             activatedClassLevel:
               s.activatedClassLevel ||
               matchInitial?.activatedClassLevel ||
@@ -713,8 +724,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           accountRole:
             parsed.accountRole ||
             (parsed.id.includes('teacher') ? 'teacher' : 'student'),
-          plan: isSeedPremium ? 'premium' : parsed.plan,
-          planExpiresAt: isSeedPremium ? '2027-02-28' : parsed.planExpiresAt,
+          plan: isSeedPremium ? (parsed.plan === 'premium' || parsed.plan === 'basic' ? parsed.plan : 'premium') : parsed.plan,
+          planPurchasedAt: isSeedPremium ? (parsed.planPurchasedAt || '2026-11-01') : parsed.planPurchasedAt,
+          planExpiresAt: isSeedPremium ? (parsed.planExpiresAt || '2027-02-28') : parsed.planExpiresAt,
           activatedClassLevel:
             parsed.activatedClassLevel ||
             (parsed.plan === 'premium' || parsed.plan === 'basic' || isSeedPremium
@@ -1313,8 +1325,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...rawStu,
         accountRole: 'student',
         plan: 'premium',
-        activatedClassLevel: rawStu.classLevel,
-        planExpiresAt: '2027-02-28'
+        activatedClassLevel: rawStu.activatedClassLevel || rawStu.classLevel,
+        planPurchasedAt: rawStu.planPurchasedAt || '2026-11-01',
+        planExpiresAt: rawStu.planExpiresAt || '2027-02-28'
       };
       setCurrentStudent(stu);
       setStudentsList(prev => prev.map(s => s.id === stu.id ? stu : s));
@@ -1372,8 +1385,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...rawTch,
         accountRole: 'teacher',
         plan: 'premium',
-        activatedClassLevel: rawTch.classLevel,
-        planExpiresAt: '2027-02-28'
+        activatedClassLevel: rawTch.activatedClassLevel || rawTch.classLevel,
+        planPurchasedAt: rawTch.planPurchasedAt || '2026-11-01',
+        planExpiresAt: rawTch.planExpiresAt || '2027-02-28'
       };
       setCurrentStudent(tch);
       setStudentsList(prev => prev.map(s => s.id === tch.id ? tch : s));
@@ -2387,6 +2401,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // Admin-approved migration helper to update an existing paid subscription's expiry date to purchaseDate + 365 days
+  const adminApplyApproved365DayMigration = (studentId: string): {
+    success: boolean;
+    message: string;
+    previousExpiresAt?: string | null;
+    updatedExpiresAt?: string | null;
+  } => {
+    const target = studentsList.find(s => s.id === studentId);
+    if (!target) {
+      return { success: false, message: `Student record "${studentId}" not found.` };
+    }
+    const audit = auditStudentSubscriptionRecord(target);
+    if (!audit.proposed365ExpiryDateIst) {
+      return {
+        success: false,
+        message: `Account "${target.name}" does not have a stored purchase date to calculate a 365-day expiry from.`
+      };
+    }
+
+    const previousExpiresAt = target.planExpiresAt || null;
+    const updatedExpiresAt = audit.proposed365ExpiryDateIst;
+    const updatedPurchasedAt = audit.currentPurchaseDateIst || target.planPurchasedAt;
+
+    const updatedStudent: StudentProfile = {
+      ...target,
+      planPurchasedAt: updatedPurchasedAt || undefined,
+      planExpiresAt: updatedExpiresAt
+    };
+
+    setStudentsList(prev => prev.map(s => (s.id === studentId ? updatedStudent : s)));
+    if (currentStudent?.id === studentId) {
+      setCurrentStudent(updatedStudent);
+    }
+
+    saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+    saveSubscriptionToFirestore(updatedStudent.id, {
+      plan: updatedStudent.plan,
+      selectedClass: updatedStudent.activatedClassLevel || updatedStudent.classLevel,
+      planPurchasedAt: updatedPurchasedAt || undefined,
+      planExpiresAt: updatedExpiresAt
+    }).catch(() => {});
+
+    addNotification(
+      'Subscription Date Corrected (365 Days) 📅',
+      `Updated ${target.name}'s expiry date from ${previousExpiresAt || 'N/A'} to ${formatDateIstDisplay(updatedExpiresAt)} (${updatedExpiresAt}) based on purchase date ${updatedPurchasedAt}.`,
+      'membership'
+    );
+
+    return {
+      success: true,
+      message: `Approved 365-day correction applied for ${target.name}: Purchase Date ${updatedPurchasedAt} → New Expiry Date ${updatedExpiresAt}.`,
+      previousExpiresAt,
+      updatedExpiresAt
+    };
+  };
+
   const updateTimers = (classes2to3: number, classes4to5: number, classes6to8: number) => {
     setPlatformSettings(prev => ({
       ...prev,
@@ -2544,6 +2614,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         solvePuzzle,
         processMembershipPayment,
         activateVerifiedMembership,
+        adminApplyApproved365DayMigration,
 
         recordScholarshipAttempt,
         updateTimers,

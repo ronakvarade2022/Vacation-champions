@@ -9,6 +9,11 @@ import {
   isPlaceholderValue
 } from '../firebase/index.ts';
 import { verifyAndConfirmCapturedPayment } from '../src/server/razorpayPaymentStatusService.ts';
+import {
+  computeSubscriptionActivationDates,
+  evaluateSubscriptionValidity,
+  PAID_SUBSCRIPTION_VALIDITY_DAYS
+} from '../src/utils/subscriptionDateUtils.ts';
 
 const firebaseConfig = JSON.parse(
   fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')
@@ -141,7 +146,7 @@ export async function processPaymentCapturedEvent(params: {
 
   const planId: 'premium' = 'premium';
   const subscriptionTier: 'premium' = 'premium';
-  const planLabel = 'PREMIUM PLAN – ₹99 – 90 Days';
+  const planLabel = 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
   const amountInr = 99;
   let method = String(paymentEntity?.method || 'RAZORPAY').toUpperCase();
 
@@ -190,21 +195,14 @@ export async function processPaymentCapturedEvent(params: {
   ).trim();
 
   const now = new Date();
-  const startDateIso = now.toISOString().split('T')[0];
 
   // Idempotency protection: if this paymentId was already applied to the user document
   if (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId) {
-    const existingExpiryIso =
-      existingData.planExpiresAt ||
-      new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0];
-    const daysRemaining = Math.max(
-      1,
-      Math.ceil(
-        (new Date(existingExpiryIso).getTime() - now.getTime()) /
-          (1000 * 60 * 60 * 24)
-      )
+    const validity = evaluateSubscriptionValidity(
+      'premium',
+      existingData.planPurchasedAt,
+      existingData.planExpiresAt,
+      now
     );
     return {
       success: true,
@@ -218,35 +216,26 @@ export async function processPaymentCapturedEvent(params: {
       paymentId,
       orderId,
       method,
-      startDateIso: existingData.planPurchasedAt || startDateIso,
-      expiryDateIso: existingExpiryIso,
-      daysRemaining,
+      startDateIso: validity.purchaseDateIst || existingData.planPurchasedAt,
+      expiryDateIso: validity.expiryDateIst || existingData.planExpiresAt,
+      daysRemaining: validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS,
       receiptNumber: `REC-VC-${paymentId.slice(-6).toUpperCase()}`
     };
   }
 
-  // 2. Calculate new expiration date set to 90 days from current date (or +90 days if active)
-  let baseDate = new Date(now);
-  if (
-    existingData?.planExpiresAt &&
-    new Date(existingData.planExpiresAt) > now &&
-    (existingData?.plan === 'basic' ||
-      existingData?.plan === 'standard' ||
-      existingData?.plan === 'premium')
-  ) {
-    baseDate = new Date(existingData.planExpiresAt);
-  }
+  // 2. Calculate new expiration date set to 365 days from verified purchase date in IST (or +365 days if renewing before expiry)
+  const activation = computeSubscriptionActivationDates({
+    verificationTimestamp: now,
+    existingPlan: existingData?.plan,
+    existingExpiresAt: existingData?.planExpiresAt
+  });
 
-  const expiryDate = new Date(baseDate);
-  expiryDate.setDate(expiryDate.getDate() + 90);
-  const expiryDateIso = expiryDate.toISOString().split('T')[0];
-  const daysRemaining = Math.max(
-    1,
-    Math.round((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  );
+  const startDateIso = activation.purchasedDateIst;
+  const expiryDateIso = activation.expiryDateIst;
+  const daysRemaining = activation.daysRemaining;
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
-  // 3. Update the user's Firestore document with the new subscription status and 90-day expiry date
+  // 3. Update the user's Firestore document with the new subscription status and 365-day expiry date
   await setDoc(
     studentRef,
     {
@@ -257,12 +246,13 @@ export async function processPaymentCapturedEvent(params: {
       isLifetimeFree: false,
       planPurchasedAt: startDateIso,
       planExpiresAt: expiryDateIso,
-      subscriptionValidityDays: 90,
+      subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
       subscriptionStatus: 'ACTIVE',
       lastPaymentId: paymentId,
       lastOrderId: orderId,
       lastPaymentAmountInr: amountInr,
-      subscriptionUpdatedAt: now.toISOString()
+      verifiedAtUtc: activation.verifiedAtUtcIso,
+      subscriptionUpdatedAt: activation.verifiedAtUtcIso
     },
     { merge: true }
   );
@@ -376,7 +366,7 @@ export async function handleRazorpayWebhook(req: Request, res: Response) {
         plan: result.planId,
         subscriptionTier: result.subscriptionTier,
         planExpiresAt: result.expiryDateIso,
-        validityDays: 90,
+        validityDays: 365,
         alreadyProcessed: result.alreadyProcessed
       });
     }

@@ -195,9 +195,9 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               className="px-4 py-2.5 rounded-2xl bg-white text-amber-900 font-extrabold text-xs shadow-md hover:bg-amber-50 transition-all cursor-pointer"
             >
               {planInfo.isPaidPlanExpired
-                ? 'Renew Premium (₹99 – 90 Days)'
+                ? 'Renew Premium (₹99 – 365 Days)'
                 : planInfo.effectivePlan === 'premium'
-                ? 'Extend Premium (₹99 – 90 Days)'
+                ? 'Extend Premium (₹99 – 365 Days)'
                 : 'Upgrade to Premium (₹99)'}
             </button>
           </div>
@@ -459,7 +459,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             <div className="min-w-0 flex-1">
               <span className="text-[10px] font-bold text-amber-700 uppercase block">Section 3</span>
               <p className="font-extrabold text-xs text-amber-950 truncate">3. My Subscription (₹99 Premium)</p>
-              <p className="text-[11px] text-amber-800 truncate">90-Day plan status &amp; renewal</p>
+              <p className="text-[11px] text-amber-800 truncate">365-Day (1 Year) status &amp; renewal</p>
             </div>
           </button>
 
@@ -653,7 +653,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             </div>
             <p className="text-xs text-slate-500 font-medium mt-1">
               {planInfo.isPaidPlanExpired
-                ? `Your previous ${planInfo.expiredPlanName} expired. You are currently on FREE PLAN – ₹0 – Lifetime. Renew your ₹99 Premium Plan for 90 Days access.`
+                ? `Your previous ${planInfo.expiredPlanName} expired. You are currently on FREE PLAN – ₹0 – Lifetime. Renew your ₹99 Premium Plan for 365 Days (1 Year) access.`
                 : `Current Active Plan: ${planInfo.planDisplayName} • Remaining Validity: ${planInfo.daysRemainingDisplay}`}
             </p>
           </div>
@@ -666,36 +666,54 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             {planInfo.isPaidPlanExpired ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Renew ₹99 Plan (90 Days)</span>
+                <span>Renew ₹99 Plan (365 Days)</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{planInfo.effectivePlan === 'premium' ? 'Extend ₹99 Plan (90 Days)' : 'Upgrade to ₹99 Premium (90 Days)'}</span>
+                <span>{planInfo.effectivePlan === 'premium' ? 'Extend ₹99 Plan (365 Days)' : 'Upgrade to ₹99 Premium (365 Days)'}</span>
               </>
             )}
           </button>
         </div>
 
-        {/* 4 Key Account Subscription Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        {/* 5 Key Account Subscription Metrics (IST Synchronized) */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
           <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="font-bold text-slate-400 uppercase text-[10px] block">Current Active Plan</span>
             <span className="font-extrabold text-xs sm:text-sm text-slate-900 block mt-0.5">{planInfo.planDisplayName}</span>
           </div>
           <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="font-bold text-slate-400 uppercase text-[10px] block">Subscription Status</span>
-            <span className={`font-extrabold text-xs sm:text-sm block mt-0.5 ${planInfo.isPaidPlanExpired ? 'text-rose-700' : 'text-emerald-700'}`}>
-              {planInfo.isPaidPlanExpired ? 'EXPIRED (Free Plan Active)' : 'ACTIVE'}
+            <span className={`font-extrabold text-xs sm:text-sm block mt-0.5 ${
+              planInfo.isPaidPlanExpired
+                ? 'text-rose-700'
+                : planInfo.isExpiringToday
+                ? 'text-amber-700'
+                : 'text-emerald-700'
+            }`}>
+              {planInfo.isPaidPlanExpired
+                ? 'EXPIRED (Free Plan Active)'
+                : planInfo.isExpiringToday
+                ? 'EXPIRING TODAY (IST)'
+                : 'ACTIVE'}
             </span>
           </div>
           <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-            <span className="font-bold text-slate-400 uppercase text-[10px] block">Remaining Validity</span>
-            <span className="font-extrabold text-xs sm:text-sm text-amber-900 block mt-0.5">{planInfo.daysRemainingDisplay}</span>
+            <span className="font-bold text-slate-400 uppercase text-[10px] block">Purchase Date (IST)</span>
+            <span className="font-bold text-xs text-slate-800 block mt-0.5">
+              {planInfo.purchasedDateIso
+                ? `${planInfo.purchasedDisplay} (${planInfo.purchasedDateIso})`
+                : planInfo.purchasedDisplay}
+            </span>
           </div>
           <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-            <span className="font-bold text-slate-400 uppercase text-[10px] block">Valid Until / Expiry</span>
+            <span className="font-bold text-slate-400 uppercase text-[10px] block">Valid Until / Expiry (IST)</span>
             <span className="font-bold text-xs text-emerald-700 block mt-0.5">{planInfo.expiryDisplay}</span>
+          </div>
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 col-span-2 sm:col-span-1">
+            <span className="font-bold text-slate-400 uppercase text-[10px] block">Remaining Validity</span>
+            <span className="font-extrabold text-xs sm:text-sm text-amber-900 block mt-0.5">{planInfo.daysRemainingDisplay}</span>
           </div>
         </div>
 
@@ -719,7 +737,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             </div>
           </div>
 
-          {/* 2. PREMIUM PLAN – ₹99 – 90 Days */}
+          {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
           <div
             onClick={() => onOpenMembership('premium')}
             className={`p-4 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
@@ -728,15 +746,15 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           >
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white inline-block mb-1.5">
-                PREMIUM PLAN – ₹99 – 90 Days
+                PREMIUM PLAN – ₹99 – 365 Days (1 Year)
               </span>
-              <p className="text-base font-black text-amber-900">₹99 • 90 Days (3 Months)</p>
+              <p className="text-base font-black text-amber-900">₹99 • 365 Days (1 Year)</p>
               <p className="text-[11px] text-slate-700 mt-1">
                 Full Unlock: All 14 School Subjects, Shivaji Stories, Story World, Drawing Studio, Cricket, Scholarship (4th &amp; 7th), AI Academy &amp; Certificates.
               </p>
             </div>
             <div className="mt-3 pt-2 border-t border-amber-200/80 text-[11px] font-extrabold text-amber-900 flex items-center justify-between">
-              <span>{planInfo.effectivePlan === 'premium' ? '✓ Active (Extend 90 Days)' : 'Upgrade / Renew ₹99 (90 Days)'}</span>
+              <span>{planInfo.effectivePlan === 'premium' ? '✓ Active (Extend 365 Days)' : 'Upgrade / Renew ₹99 (365 Days)'}</span>
               <ArrowRight className="w-3.5 h-3.5 text-orange-600" />
             </div>
           </div>

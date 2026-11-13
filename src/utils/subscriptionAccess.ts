@@ -1,4 +1,9 @@
 import { ClassLevel, StudentProfile, SubjectName } from '../types';
+import {
+  evaluateSubscriptionValidity,
+  formatDateIstDisplay,
+  PAID_SUBSCRIPTION_VALIDITY_DAYS,
+} from './subscriptionDateUtils';
 
 export type SubscriptionPlanId = 'free' | 'basic' | 'premium';
 
@@ -70,11 +75,11 @@ export const SUBSCRIPTION_PLANS_CATALOG = [
   {
     id: 'premium' as const,
     title: 'PREMIUM PLAN',
-    fullLabel: 'PREMIUM PLAN – ₹99 – 90 Days',
+    fullLabel: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
     priceInr: 99,
     priceText: '₹99',
-    validityText: '90 Days',
-    validitySubtext: '3 Months Validity (Selected Class)',
+    validityText: '365 Days (1 Year)',
+    validitySubtext: '1 Year (365 Days) Validity (Selected Class)',
     summary: 'Complete Class-Wise Unlock: All Worksheets & All Subjects for Your Selected Class, 4 Quiz Levels, Stories with Audio, Drawing, Cricket, Scholarship, AI Academy, Certificates & Referrals',
   },
 ];
@@ -88,23 +93,31 @@ export interface PlanAccessInfo {
   priceLabel: string;
   validityPeriodLabel: string;
   isPaidPlanExpired: boolean;
+  isExpiringToday?: boolean;
   expiredPlanName?: string;
   isLifetimeFree: boolean;
+  purchasedDateIso?: string | null;
+  purchasedDisplay: string;
+  expiryDateIso?: string | null;
   expiryDisplay: string;
   daysRemaining: number | null;
   daysRemainingDisplay: string;
-  statusLabel: 'ACTIVE' | 'EXPIRED';
+  statusLabel: 'ACTIVE' | 'EXPIRING TODAY' | 'EXPIRED';
   activatedClassLevel?: ClassLevel;
 }
 
 /**
- * Computes the effective active subscription plan for a student or teacher.
+ * Computes the effective active subscription plan for a student or teacher
+ * using the unified IST (Asia/Kolkata) subscription validity engine.
  * - Free Plan ('free') is Lifetime and NEVER expires.
- * - Premium Plan ('premium' ₹99) has 90 Days (3 Months) validity for the user's selected class.
+ * - Premium Plan ('premium' ₹99) has 365 Days (1 Year) validity for the user's selected class.
  * - After a paid subscription expires, the user automatically retains the Free Plan (Lifetime)
  *   with a clear option to renew their ₹99 Premium Plan.
  */
-export function getStudentPlanInfo(student: StudentProfile | null | undefined): PlanAccessInfo {
+export function getStudentPlanInfo(
+  student: StudentProfile | null | undefined,
+  referenceNow?: Date | string | number
+): PlanAccessInfo {
   if (!student) {
     return {
       effectivePlan: 'free',
@@ -115,7 +128,11 @@ export function getStudentPlanInfo(student: StudentProfile | null | undefined): 
       priceLabel: '₹0',
       validityPeriodLabel: 'Lifetime',
       isPaidPlanExpired: false,
+      isExpiringToday: false,
       isLifetimeFree: true,
+      purchasedDateIso: null,
+      purchasedDisplay: 'Lifetime Free',
+      expiryDateIso: null,
       expiryDisplay: 'Lifetime (Never Expires)',
       daysRemaining: null,
       daysRemainingDisplay: 'Lifetime (Never Expires)',
@@ -133,7 +150,11 @@ export function getStudentPlanInfo(student: StudentProfile | null | undefined): 
       priceLabel: '₹0',
       validityPeriodLabel: 'Lifetime',
       isPaidPlanExpired: false,
+      isExpiringToday: false,
       isLifetimeFree: true,
+      purchasedDateIso: student.registeredAt ? formatDateIstDisplay(student.registeredAt) : null,
+      purchasedDisplay: 'Lifetime Free Plan',
+      expiryDateIso: null,
       expiryDisplay: 'Lifetime (Never Expires)',
       daysRemaining: null,
       daysRemainingDisplay: 'Lifetime (Never Expires)',
@@ -142,33 +163,16 @@ export function getStudentPlanInfo(student: StudentProfile | null | undefined): 
     };
   }
 
-  // Paid plan: verify if expired (end of expiry day in local time)
-  const now = new Date();
-  let expiry: Date | null = null;
-  if (student.planExpiresAt) {
-    const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(student.planExpiresAt.trim());
-    if (isoMatch) {
-      expiry = new Date(
-        Number(isoMatch[1]),
-        Number(isoMatch[2]) - 1,
-        Number(isoMatch[3]),
-        23,
-        59,
-        59,
-        999
-      );
-    } else {
-      const parsed = new Date(student.planExpiresAt);
-      if (!isNaN(parsed.getTime())) {
-        parsed.setHours(23, 59, 59, 999);
-        expiry = parsed;
-      }
-    }
-  }
-  const isExpired = expiry ? expiry.getTime() < now.getTime() : false;
+  // Evaluate paid plan using the single shared IST (Asia/Kolkata) validity calculator
+  const validity = evaluateSubscriptionValidity(
+    student.plan,
+    student.planPurchasedAt,
+    student.planExpiresAt,
+    referenceNow
+  );
 
-  if (isExpired) {
-    const expiredPlanName = 'PREMIUM PLAN (₹99 – 90 Days)';
+  if (validity.isExpired) {
+    const expiredPlanName = 'PREMIUM PLAN (₹99 – 365 Days)';
     return {
       effectivePlan: 'free',
       storedPlan: 'premium',
@@ -178,48 +182,47 @@ export function getStudentPlanInfo(student: StudentProfile | null | undefined): 
       priceLabel: '₹0 (Free Active)',
       validityPeriodLabel: 'Lifetime (Premium Plan Expired)',
       isPaidPlanExpired: true,
+      isExpiringToday: false,
       expiredPlanName,
       isLifetimeFree: true,
-      expiryDisplay: `Expired on ${student.planExpiresAt} • Free Plan Active`,
+      purchasedDateIso: validity.purchaseDateIst,
+      purchasedDisplay: validity.purchaseDateDisplay,
+      expiryDateIso: validity.expiryDateIst,
+      expiryDisplay: `Expired on ${validity.expiryDateDisplay} (${validity.expiryDateIst || student.planExpiresAt}) • Free Plan Active`,
       daysRemaining: 0,
-      daysRemainingDisplay: '0 Days (Free Plan Active • Renew ₹99 Premium Anytime)',
+      daysRemainingDisplay: '0 Days Remaining (Expired • Free Plan Active)',
       statusLabel: 'EXPIRED',
       activatedClassLevel: student.classLevel
     };
   }
 
-  const todayEnd = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23,
-    59,
-    59,
-    999
-  );
-  const daysRemaining = expiry
-    ? Math.max(
-        1,
-        Math.round((expiry.getTime() - todayEnd.getTime()) / (1000 * 60 * 60 * 24))
-      )
-    : 90;
-
   const activatedClass = student.activatedClassLevel || student.classLevel;
+  const daysRem = validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS;
 
   return {
     effectivePlan: 'premium',
     storedPlan: 'premium',
-    planDisplayName: `PREMIUM PLAN – ₹99 – 90 Days (${activatedClass})`,
-    planFullHeader: `PREMIUM PLAN – ₹99 – 90 Days (Standard ${formatStandardOrdinal(activatedClass)})`,
-    planShortBadge: `Premium Plan (₹99 • ${activatedClass})`,
+    planDisplayName: `PREMIUM PLAN – ₹99 – 365 Days (${activatedClass})`,
+    planFullHeader: `PREMIUM PLAN – ₹99 – 365 Days (Standard ${formatStandardOrdinal(activatedClass)})`,
+    planShortBadge: validity.isExpiringToday
+      ? `Premium (Expires Today • ${activatedClass})`
+      : `Premium Plan (₹99 • ${activatedClass})`,
     priceLabel: '₹99',
-    validityPeriodLabel: '90 Days (3 Months)',
+    validityPeriodLabel: `${validity.configuredValidityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS} Days (1 Year)`,
     isPaidPlanExpired: false,
+    isExpiringToday: validity.isExpiringToday,
     isLifetimeFree: false,
-    expiryDisplay: student.planExpiresAt || 'Active (90 Days)',
-    daysRemaining,
-    daysRemainingDisplay: `${daysRemaining} Days Remaining (of 90 Days)`,
-    statusLabel: 'ACTIVE',
+    purchasedDateIso: validity.purchaseDateIst,
+    purchasedDisplay: validity.purchaseDateDisplay,
+    expiryDateIso: validity.expiryDateIst,
+    expiryDisplay: validity.expiryDateIst
+      ? `${validity.expiryDateDisplay} (${validity.expiryDateIst})`
+      : 'Active (365 Days)',
+    daysRemaining: daysRem,
+    daysRemainingDisplay: validity.isExpiringToday
+      ? 'Expires Today (Active until 11:59 PM IST)'
+      : `${daysRem} ${daysRem === 1 ? 'Day' : 'Days'} Remaining`,
+    statusLabel: validity.isExpiringToday ? 'EXPIRING TODAY' : 'ACTIVE',
     activatedClassLevel: activatedClass
   };
 }
@@ -260,7 +263,7 @@ export function canAccessSubject(
   return {
     allowed: false,
     requiredPlan: 'premium',
-    reason: `${subject} is locked on the Free Plan. Upgrade to the Premium Plan (₹99 – 90 Days) to unlock all subjects and worksheets for your class!`
+    reason: `${subject} is locked on the Free Plan. Upgrade to the Premium Plan (₹99 – 365 Days / 1 Year) to unlock all subjects and worksheets for your class!`
   };
 }
 
@@ -328,7 +331,7 @@ export function canAccessFeature(
     allowed: false,
     requiredPlan: 'premium',
     featureTitle,
-    upgradeMessage: `${featureTitle} is unlocked with the Premium Plan (₹99 – 90 Days), which gives you complete access to all subjects and worksheets for your class!`
+    upgradeMessage: `${featureTitle} is unlocked with the Premium Plan (₹99 – 365 Days / 1 Year), which gives you complete access to all subjects and worksheets for your class!`
   };
 }
 

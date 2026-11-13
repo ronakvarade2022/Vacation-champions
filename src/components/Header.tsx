@@ -428,15 +428,15 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                   title={
                     pInfo.isPaidPlanExpired
-                      ? `Previous ${pInfo.expiredPlanName} expired. Currently on FREE PLAN – ₹0 – Lifetime. Click to renew ₹99 Premium for 90 Days.`
-                      : 'Current Plan: FREE PLAN – ₹0 – Lifetime. Click to upgrade to ₹99 Premium (90 Days).'
+                      ? `Previous ${pInfo.expiredPlanName} expired. Currently on FREE PLAN – ₹0 – Lifetime. Click to renew ₹99 Premium for 365 Days (1 Year).`
+                      : 'Current Plan: FREE PLAN – ₹0 – Lifetime. Click to upgrade to ₹99 Premium (365 Days / 1 Year).'
                   }
                 >
                   <Crown className="w-3.5 h-3.5" />
                   <span>
                     {pInfo.isPaidPlanExpired
                       ? 'Free Plan (Expired) • Renew ₹99'
-                      : 'FREE PLAN (₹0) • Upgrade ₹99 (90d)'}
+                      : 'FREE PLAN (₹0) • Upgrade ₹99 (1 Yr)'}
                   </span>
                 </button>
               );
@@ -444,12 +444,18 @@ export const Header: React.FC<HeaderProps> = ({
             return (
               <div
                 onClick={onOpenMembership}
-                className="hidden sm:flex items-center gap-1.5 text-[11px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-emerald-200 transition-colors"
-                title={`Active Plan: ${pInfo.planDisplayName} • ${pInfo.daysRemainingDisplay}`}
+                className={`hidden sm:flex items-center gap-1.5 text-[11px] font-extrabold border px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${
+                  pInfo.isExpiringToday
+                    ? 'bg-amber-100 text-amber-950 border-amber-400 hover:bg-amber-200'
+                    : 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
+                }`}
+                title={`Active Plan: ${pInfo.planDisplayName} • ${pInfo.daysRemainingDisplay} • Expires: ${pInfo.expiryDisplay}`}
               >
-                <Crown className="w-3.5 h-3.5 text-emerald-600" />
+                <Crown className={`w-3.5 h-3.5 ${pInfo.isExpiringToday ? 'text-amber-700' : 'text-emerald-600'}`} />
                 <span>
-                  PREMIUM – ₹99 ({pInfo.daysRemaining}d left)
+                  {pInfo.isExpiringToday
+                    ? 'PREMIUM – ₹99 (Expires Today)'
+                    : `PREMIUM – ₹99 (${pInfo.daysRemaining}d left)`}
                 </span>
               </div>
             );
@@ -591,24 +597,28 @@ export const Header: React.FC<HeaderProps> = ({
                             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                               pInfo.isPaidPlanExpired
                                 ? 'bg-rose-100 text-rose-800'
+                                : pInfo.isExpiringToday
+                                ? 'bg-amber-200 text-amber-950'
                                 : 'bg-emerald-100 text-emerald-800'
                             }`}>
-                              ● {pInfo.isPaidPlanExpired ? 'Expired' : 'Active'}
+                              ● {pInfo.isPaidPlanExpired ? 'Expired' : pInfo.isExpiringToday ? 'Expires Today' : 'Active'}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
-                              <Crown className="w-4 h-4 text-amber-600" />
-                              {pInfo.planDisplayName}
+                              <Crown className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span className="truncate">{pInfo.planDisplayName}</span>
                             </span>
-                            <span className="font-bold text-emerald-700 text-xs">
+                            <span className="font-bold text-emerald-700 text-xs shrink-0">
                               {pInfo.daysRemainingDisplay}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 font-medium">
                             {pInfo.isPaidPlanExpired
-                              ? 'Your 90-day plan expired. Currently on Free Plan.'
-                              : `Expires on ${pInfo.expiryDisplay}`}
+                              ? `Expired (${pInfo.expiryDisplay}). Currently on Free Plan.`
+                              : pInfo.isLifetimeFree
+                              ? 'Lifetime Validity (Never Expires)'
+                              : `Purchased: ${pInfo.purchasedDisplay} • Expires: ${pInfo.expiryDisplay}`}
                           </p>
                         </div>
                       );
@@ -1158,7 +1168,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
                 <div className="text-[10px] text-slate-600 font-bold">
-                  Plans: FREE (₹0 Lifetime) • PREMIUM (₹99 / 90 Days)
+                  Plans: FREE (₹0 Lifetime) • PREMIUM (₹99 / 365 Days • 1 Year)
                 </div>
               </div>
             )}
@@ -1179,8 +1189,8 @@ export const Header: React.FC<HeaderProps> = ({
               <Star className="w-4 h-4 fill-amber-300 text-amber-300" />
               <span>
                 {getStudentPlanInfo(currentStudent).isPaidPlanExpired
-                  ? 'Renew Premium Plan (₹99 – 90 Days)'
-                  : 'Upgrade to Premium Plan (₹99 – 90 Days)'}
+                  ? 'Renew Premium Plan (₹99 – 365 Days / 1 Year)'
+                  : 'Upgrade to Premium Plan (₹99 – 365 Days / 1 Year)'}
               </span>
             </button>
 

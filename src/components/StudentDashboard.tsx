@@ -401,6 +401,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
                         planInfo.isPaidPlanExpired
                           ? 'bg-rose-100 text-rose-800 border-rose-300'
+                          : planInfo.isExpiringToday
+                          ? 'bg-amber-100 text-amber-900 border-amber-400'
                           : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       }`}
                     >
@@ -409,10 +411,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </div>
                   <p className="text-xs text-slate-600 font-medium mt-1">
                     {planInfo.isPaidPlanExpired
-                      ? `Your previous ${planInfo.expiredPlanName} has expired. You are currently on FREE PLAN – ₹0 – Lifetime. Renew below for 90 Days access!`
+                      ? `Your previous ${planInfo.expiredPlanName} has expired (${planInfo.expiryDisplay}). You are currently on FREE PLAN – ₹0 – Lifetime. Renew below for 365 Days (1 Year) access!`
                       : planInfo.effectivePlan === 'free'
-                      ? 'FREE PLAN – ₹0 – Lifetime active forever (Brain Puzzles, Sudoku, English & Maths). Upgrade to ₹99 Premium Plan (90 Days) anytime!'
-                      : `PREMIUM PLAN – ₹99 – 90 Days active • Full Dashboard Unlocked • Validity: ${planInfo.daysRemainingDisplay} (Expires: ${planInfo.expiryDisplay})`}
+                      ? 'FREE PLAN – ₹0 – Lifetime active forever (Brain Puzzles, Sudoku, English & Maths). Upgrade to ₹99 Premium Plan (365 Days / 1 Year) anytime!'
+                      : `PREMIUM PLAN – ₹99 – 365 Days (1 Year) active • Purchased: ${planInfo.purchasedDisplay} • Expires: ${planInfo.expiryDisplay} • Remaining: ${planInfo.daysRemainingDisplay}`}
                   </p>
                 </div>
               </div>
@@ -425,7 +427,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Renew ₹99 Premium (90 Days)</span>
+                    <span>Renew ₹99 Premium (365 Days)</span>
                   </button>
                 ) : planInfo.effectivePlan === 'free' ? (
                   <button
@@ -434,7 +436,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Upgrade to ₹99 Premium (90 Days)</span>
+                    <span>Upgrade to ₹99 Premium (365 Days)</span>
                   </button>
                 ) : (
                   <button
@@ -443,13 +445,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Extend 90-Day Validity (₹99)</span>
+                    <span>Extend 365-Day Validity (₹99)</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {/* 6 Key Subscription Status Fields (Synchronized with Firebase) */}
+            {/* 6 Key Subscription Status Fields (Synchronized with Firebase & IST) */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                 <span className="font-bold text-slate-400 uppercase text-[10px] block">Active Plan</span>
@@ -458,8 +460,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                 <span className="font-bold text-slate-400 uppercase text-[10px] block">Subscription Status</span>
-                <span className={`font-extrabold text-xs sm:text-sm block mt-0.5 ${planInfo.isPaidPlanExpired ? 'text-rose-700' : 'text-emerald-700'}`}>
-                  {planInfo.isPaidPlanExpired ? 'EXPIRED (Free Active)' : planInfo.isLifetimeFree ? 'ACTIVE (Lifetime)' : 'ACTIVE (Verified)'}
+                <span className={`font-extrabold text-xs sm:text-sm block mt-0.5 ${
+                  planInfo.isPaidPlanExpired
+                    ? 'text-rose-700'
+                    : planInfo.isExpiringToday
+                    ? 'text-amber-700'
+                    : 'text-emerald-700'
+                }`}>
+                  {planInfo.isPaidPlanExpired
+                    ? 'EXPIRED (Free Active)'
+                    : planInfo.isLifetimeFree
+                    ? 'ACTIVE (Lifetime)'
+                    : planInfo.isExpiringToday
+                    ? 'EXPIRING TODAY (IST)'
+                    : 'ACTIVE (Verified)'}
                 </span>
               </div>
 
@@ -469,14 +483,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
 
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="font-bold text-slate-400 uppercase text-[10px] block">Activation Date</span>
+                <span className="font-bold text-slate-400 uppercase text-[10px] block">Purchase Date (IST)</span>
                 <span className="font-bold text-xs text-slate-700 block mt-0.5">
-                  {currentStudent.planPurchasedAt || (currentStudent.registeredAt ? currentStudent.registeredAt.split('T')[0] : 'Active')}
+                  {planInfo.purchasedDateIso
+                    ? `${planInfo.purchasedDisplay} (${planInfo.purchasedDateIso})`
+                    : planInfo.purchasedDisplay}
                 </span>
               </div>
 
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="font-bold text-slate-400 uppercase text-[10px] block">Expiry Date</span>
+                <span className="font-bold text-slate-400 uppercase text-[10px] block">Expiry Date (IST)</span>
                 <span className="font-bold text-xs text-emerald-700 block mt-0.5">
                   {planInfo.expiryDisplay}
                 </span>
@@ -490,7 +506,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
             </div>
 
-            {/* 2 Subscription Plans Cards (Free Plan ₹0 Lifetime & Premium Paid Plan ₹99 – 90 Days) */}
+            {/* 2 Subscription Plans Cards (Free Plan ₹0 Lifetime & Premium Paid Plan ₹99 – 365 Days / 1 Year) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
               {/* 1. FREE PLAN – ₹0 – Lifetime */}
               <div
@@ -520,7 +536,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 </div>
               </div>
 
-              {/* 2. PREMIUM PLAN – ₹99 – 90 Days */}
+              {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
               <div
                 onClick={() => onOpenMembership('premium')}
                 className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all cursor-pointer ${
@@ -532,12 +548,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white">
-                      PREMIUM PLAN – ₹99 – 90 Days
+                      PREMIUM PLAN – ₹99 – 365 Days
                     </span>
-                    <span className="text-[11px] font-extrabold text-amber-800">90 Days</span>
+                    <span className="text-[11px] font-extrabold text-amber-800">1 Year (365 Days)</span>
                   </div>
                   <p className="text-lg font-black text-amber-900">
-                    ₹99 <span className="text-xs font-bold text-amber-800">• 90 Days (3 Months)</span>
+                    ₹99 <span className="text-xs font-bold text-amber-800">• 365 Days (1 Year)</span>
                   </p>
                   <p className="text-[11px] text-slate-700 font-medium mt-1">
                     Full Dashboard Unlock: All 14 Subjects, 50 Shivaji Stories, 45 Moral Stories, Drawing Studio, Cricket, Scholarship (4th &amp; 7th), AI Academy &amp; Certificates.
@@ -548,8 +564,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     {planInfo.effectivePlan === 'premium'
                       ? `✓ Active (${planInfo.daysRemainingDisplay})`
                       : planInfo.isPaidPlanExpired
-                      ? 'Renew Premium Plan (₹99 – 90 Days)'
-                      : 'Unlock Everything (₹99 – 90 Days)'}
+                      ? 'Renew Premium Plan (₹99 – 365 Days)'
+                      : 'Unlock Everything (₹99 – 365 Days)'}
                   </span>
                   <ArrowRight className="w-3.5 h-3.5 text-orange-600" />
                 </div>

@@ -45,6 +45,11 @@ import {
   verifyRazorpayXPayoutWebhookSignature,
   processRazorpayXPayoutWebhookEvent
 } from './src/server/razorpayxPayoutService.ts';
+import {
+  computeSubscriptionActivationDates,
+  evaluateSubscriptionValidity,
+  PAID_SUBSCRIPTION_VALIDITY_DAYS
+} from './src/utils/subscriptionDateUtils.ts';
 
 dotenv.config();
 
@@ -156,11 +161,11 @@ app.get('/api/razorpay/config', (_req: Request, res: Response) => {
     plans: {
       premium: {
         id: 'premium',
-        name: 'PREMIUM PLAN – ₹99 – 90 Days',
+        name: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
         amount: 99,
         amountPaise: 9900,
         currency: 'INR',
-        durationDays: 90
+        durationDays: 365
       }
     }
   });
@@ -342,6 +347,11 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
         t => t.paymentId === razorpay_payment_id || t.orderId === razorpay_order_id
       );
       const existingSub = serverStudentSubscriptions.get(String(studentId));
+      const existingValidity = evaluateSubscriptionValidity(
+        'premium',
+        existing?.membershipStartDate || existingSub?.planPurchasedAt,
+        existing?.membershipExpiryDate || existingSub?.planExpiresAt
+      );
       return res.json({
         success: true,
         alreadyProcessed: true,
@@ -354,12 +364,20 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
               planId: existing.planId,
               planTitle: existing.planTitle,
               amount: existing.amount,
-              startDate: existing.membershipStartDate || new Date().toISOString().split('T')[0],
-              expiryDate: existing.membershipExpiryDate || existingSub?.planExpiresAt || '',
+              startDate:
+                existingValidity.purchaseDateIst ||
+                existing.membershipStartDate ||
+                '',
+              expiryDate:
+                existingValidity.expiryDateIst ||
+                existing.membershipExpiryDate ||
+                existingSub?.planExpiresAt ||
+                '',
               status: 'ACTIVE',
               paymentId: existing.paymentId,
               orderId: existing.orderId,
-              daysRemaining: 90
+              daysRemaining:
+                existingValidity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS
             }
           : undefined,
         message: 'This payment has already been verified and activated.'
@@ -425,25 +443,22 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       capturedMethod = captureStatus.method;
     }
 
-    // Calculate 3-month (90-day) membership with renewal policy
+    // Calculate 1-year (365-day) membership in IST (Asia/Kolkata) with renewal policy
     const now = new Date();
-    const startDate = now;
-    let expiryDate = new Date(now);
-
-    if (currentExpiresAt && new Date(currentExpiresAt) > now) {
-      // Active subscription exists: extend by 90 days
-      const existingExpiry = new Date(currentExpiresAt);
-      existingExpiry.setDate(existingExpiry.getDate() + 90);
-      expiryDate = existingExpiry;
-    } else {
-      // New or expired: 90 days (3 months) from activation
-      expiryDate.setDate(now.getDate() + 90);
-    }
+    const existingServerSub = serverStudentSubscriptions.get(String(studentId));
+    const candidateExistingExpiry =
+      currentExpiresAt || existingServerSub?.planExpiresAt;
+    const activation = computeSubscriptionActivationDates({
+      verificationTimestamp: now,
+      existingPlan: candidateExistingExpiry ? 'premium' : 'free',
+      existingExpiresAt: candidateExistingExpiry
+    });
 
     const verifiedAmount = 99;
     const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
-    const startDateIso = startDate.toISOString().split('T')[0];
-    const expiryDateIso = expiryDate.toISOString().split('T')[0];
+    const startDateIso = activation.purchasedDateIst;
+    const expiryDateIso = activation.expiryDateIst;
+    const daysRemaining = activation.daysRemaining;
 
     const transactionRecord: ServerTransaction = {
       id: `tx_${razorpay_payment_id}`,
@@ -453,7 +468,7 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       parentEmail: String(email || ''),
       parentMobile: String(mobile || ''),
       planId: 'premium',
-      planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+      planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
       amount: verifiedAmount,
       currency: 'INR',
       orderId: razorpay_order_id,
@@ -461,20 +476,18 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       signature: razorpay_signature || 'verified_sig',
       method: capturedMethod,
       status: 'SUCCESS',
-      createdAt: now.toISOString(),
-      verifiedAt: now.toISOString(),
+      createdAt: activation.verifiedAtUtcIso,
+      verifiedAt: activation.verifiedAtUtcIso,
       membershipStartDate: startDateIso,
       membershipExpiryDate: expiryDateIso
     };
-
-    const daysRemaining = Math.max(1, Math.round((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
     const membershipRecord: ServerMembership = {
       membershipId: `mem_${razorpay_payment_id}`,
       studentId: String(studentId),
       studentName: String(studentName || 'Student'),
       planId: 'premium',
-      planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+      planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
       amount: verifiedAmount,
       startDate: startDateIso,
       expiryDate: expiryDateIso,
@@ -488,7 +501,7 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
     processedOrderIds.add(razorpay_order_id);
     transactionLedger.unshift(transactionRecord);
 
-    // Persist verified 90-day subscription and transaction directly to Firestore from backend
+    // Persist verified 365-day subscription and transaction directly to Firestore from backend
     await updateStudentSubscriptionInFirestoreBackend({
       studentId: String(studentId),
       studentName: String(studentName || 'Student'),
@@ -581,7 +594,7 @@ app.post('/api/razorpay/payment-failed', (req: Request, res: Response) => {
       parentEmail: String(email),
       parentMobile: String(mobile),
       planId: validPlanId,
-      planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+      planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
       amount,
       currency: 'INR',
       orderId: String(orderId),
@@ -681,7 +694,7 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
       } | null = null;
 
       if (studentId) {
-        // Retrieve the user document from Firestore and update their 90-day subscription via functions/webhook.ts
+        // Retrieve the user document from Firestore and update their 365-day subscription via functions/webhook.ts
         firestoreUpdateResult = await processPaymentCapturedEvent({
           paymentEntity,
           orderEntity,
@@ -706,14 +719,16 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
           processedOrderIds.add(orderId);
         }
 
-        const nowIso = new Date().toISOString();
+        const fallbackActivation = computeSubscriptionActivationDates({
+          verificationTimestamp: new Date()
+        });
+        const nowIso = fallbackActivation.verifiedAtUtcIso;
         const startDateIso =
-          firestoreUpdateResult?.startDateIso || nowIso.split('T')[0];
+          firestoreUpdateResult?.startDateIso ||
+          fallbackActivation.purchasedDateIst;
         const expiryDateIso =
           firestoreUpdateResult?.expiryDateIso ||
-          new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0];
+          fallbackActivation.expiryDateIst;
         const receiptNumber =
           firestoreUpdateResult?.receiptNumber ||
           `REC-VC-${Date.now().toString().slice(-6)}`;
@@ -726,7 +741,7 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
           parentEmail: email,
           parentMobile: mobile,
           planId,
-          planTitle: 'PREMIUM PLAN – ₹99 – 90 Days',
+          planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
           amount: verifiedAmount,
           currency: 'INR',
           orderId,
@@ -759,7 +774,7 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
       }
 
       console.log(
-        `[Razorpay Webhook payment.captured] Student: ${studentId || 'N/A'} | Tier: ${subscriptionTier} (${planId}) | Expiry: ${firestoreUpdateResult?.expiryDateIso || '90 Days'}`
+        `[Razorpay Webhook payment.captured] Student: ${studentId || 'N/A'} | Tier: ${subscriptionTier} (${planId}) | Expiry: ${firestoreUpdateResult?.expiryDateIso || '365 Days'}`
       );
 
       return res.status(200).json({
@@ -769,7 +784,7 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
         plan: planId,
         subscriptionTier,
         planExpiresAt: firestoreUpdateResult?.expiryDateIso || null,
-        validityDays: 90
+        validityDays: 365
       });
     } else if (eventType === 'refund.processed' || eventType === 'refund.created') {
       const paymentId =
@@ -1295,11 +1310,14 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
     };
   }
 
-  // Check if paid plan is still active
+  // Check if paid plan is still active in IST (Asia/Kolkata)
   if (existing.planExpiresAt) {
-    const exp = new Date(existing.planExpiresAt);
-    exp.setHours(23, 59, 59, 999);
-    if (exp.getTime() < Date.now()) {
+    const validity = evaluateSubscriptionValidity(
+      existing.plan,
+      existing.planPurchasedAt,
+      existing.planExpiresAt
+    );
+    if (validity.isExpired) {
       // Paid plan expired -> automatically falls back to Lifetime Free Plan
       return {
         studentId,
@@ -1344,9 +1362,9 @@ app.post('/api/subscription/sync', (req: Request, res: Response) => {
           error: 'Paid Premium Plan (₹99) requires a verified paymentId.'
         });
       }
-      const defaultExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0];
+      const fallbackDates = computeSubscriptionActivationDates({
+        verificationTimestamp: planPurchasedAt || new Date()
+      });
       const record: ServerStudentSubscription = {
         studentId: String(studentId),
         plan: 'premium',
@@ -1354,8 +1372,8 @@ app.post('/api/subscription/sync', (req: Request, res: Response) => {
         activatedClassLevel: resolvedClass,
         accountRole: resolvedRole,
         isLifetimeFree: false,
-        planPurchasedAt: planPurchasedAt || new Date().toISOString().split('T')[0],
-        planExpiresAt: planExpiresAt || defaultExpiry,
+        planPurchasedAt: planPurchasedAt || fallbackDates.purchasedDateIst,
+        planExpiresAt: planExpiresAt || fallbackDates.expiryDateIst,
         paymentId: String(paymentId),
         updatedAt: new Date().toISOString()
       };
@@ -1405,7 +1423,7 @@ app.get('/api/subscription/status/:studentId', (req: Request, res: Response) => 
         id: 'premium',
         name: 'Premium Plan',
         priceInr: 99,
-        validity: '3 Months (90 Days)',
+        validity: '1 Year (365 Days)',
         selectedClass: sub.activatedClassLevel || userClass,
         allowedSubjects: 'ALL_SUBJECTS_FOR_SELECTED_CLASS',
         allowedWorksheets: `ALL_WORKSHEETS_FOR_${(sub.activatedClassLevel || userClass).toUpperCase().replace(/\s+/g, '_')}`,

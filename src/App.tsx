@@ -154,7 +154,7 @@ const AppContent: React.FC = () => {
             requiredPlan: 'premium',
             reasonMessage:
               subjAccess.reason ||
-              `${subjectParam} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan (90 Days) to unlock all subjects for your class!`,
+              `${subjectParam} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan (365 Days / 1 Year) to unlock all subjects for your class!`,
           });
           return;
         }
@@ -169,7 +169,7 @@ const AppContent: React.FC = () => {
           requiredPlan: 'premium',
           reasonMessage:
             featAccess.upgradeMessage ||
-            'Upgrade to the ₹99 Premium Plan (90 Days) to unlock this learning module!',
+            'Upgrade to the ₹99 Premium Plan (365 Days / 1 Year) to unlock this learning module!',
         });
         return;
       }
@@ -577,7 +577,7 @@ const AppContent: React.FC = () => {
           <div className="flex flex-wrap items-center justify-center gap-4 pt-1 text-[11px] text-slate-400 font-medium">
             <span>FREE PLAN – ₹0 – Lifetime</span>
             <span>•</span>
-            <span>PREMIUM PLAN – ₹99 – 90 Days</span>
+            <span>PREMIUM PLAN – ₹99 – 365 Days (1 Year)</span>
             <span>•</span>
             <span>English &amp; Marathi Female Story Voices</span>
           </div>
