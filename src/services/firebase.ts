@@ -17,9 +17,14 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, arrayUnion, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { StudentProfile } from '../types';
+import {
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  sanitizeReferralCode,
+} from '../utils/referralCoding';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
@@ -599,12 +604,53 @@ export function computePaidPlanExpiryIsoDate(existingExpiresAt?: string | null):
   };
 }
 
-// 9. Persist Student Profile to Firestore (with 90-day paid plan expiry enforcement)
+// 9. Persist Student Profile to Firestore (with 90-day paid plan expiry enforcement & permanent unique referral code)
 export async function saveStudentProfileToFirestore(student: StudentProfile & { firebaseUid?: string }) {
   try {
     const studentRef = doc(db, 'students', student.id);
-    const activePlan = student.plan || 'free';
-    const isPaid = activePlan === 'basic' || activePlan === 'premium';
+    const referralRef = doc(db, 'referrals', student.id);
+
+    // Check existing student/referral doc in Firestore so an existing student's referralCode NEVER changes
+    let existingCode = sanitizeReferralCode(student.referralCode);
+    let existingReferredByCode = sanitizeReferralCode(student.referredByCode);
+    let existingReferredByStudentId = student.referredByStudentId || undefined;
+
+    try {
+      const [stuSnap, refSnap] = await Promise.all([
+        getDoc(studentRef).catch(() => null),
+        getDoc(referralRef).catch(() => null),
+      ]);
+      const stuData = stuSnap && stuSnap.exists() ? stuSnap.data() : null;
+      const refData = refSnap && refSnap.exists() ? refSnap.data() : null;
+
+      const storedCode =
+        sanitizeReferralCode(stuData?.referralCode) ||
+        sanitizeReferralCode(refData?.referralCode);
+      if (storedCode) {
+        existingCode = storedCode;
+      }
+      if (!existingReferredByCode) {
+        existingReferredByCode =
+          sanitizeReferralCode(stuData?.referredByCode) ||
+          sanitizeReferralCode(refData?.referredByCode) ||
+          '';
+      }
+      if (!existingReferredByStudentId) {
+        existingReferredByStudentId =
+          stuData?.referredByStudentId ||
+          refData?.referredByUserId ||
+          undefined;
+      }
+    } catch {
+      // Offline or first write — proceed with deterministic code
+    }
+
+    const permanentReferralCode =
+      existingCode || generateUniqueStudentReferralCode(student.id, student.name);
+    const permanentReferralLink = buildStudentReferralLink(permanentReferralCode);
+
+    const activePlan = student.plan === 'basic' || student.plan === 'premium' ? 'premium' : 'free';
+    const isPaid = activePlan === 'premium';
     const fallbackDates = isPaid ? computePaidPlanExpiryIsoDate() : null;
 
     const resolvedPurchasedAt = isPaid
@@ -614,10 +660,9 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       ? student.planExpiresAt || fallbackDates?.expiresAt
       : undefined;
 
-    const planLabel =
-      isPaid
-        ? 'PREMIUM PLAN – ₹99 – 90 Days'
-        : 'FREE PLAN – ₹0 – Lifetime';
+    const planLabel = isPaid
+      ? 'PREMIUM PLAN – ₹99 – 90 Days'
+      : 'FREE PLAN – ₹0 – Lifetime';
 
     // Clean undefined values before Firestore setDoc
     const cleanData = JSON.parse(
@@ -629,19 +674,283 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
         planPurchasedAt: resolvedPurchasedAt,
         planExpiresAt: isPaid ? resolvedExpiresAt : null,
         subscriptionValidityDays: isPaid ? PAID_PLAN_VALIDITY_DAYS : 'Lifetime',
+        referralCode: permanentReferralCode,
+        referralLink: permanentReferralLink,
+        referredByCode: existingReferredByCode || undefined,
+        referredByStudentId: existingReferredByStudentId || undefined,
         lastActiveDate: new Date().toISOString(),
       })
     );
     await setDoc(studentRef, cleanData, { merge: true });
+
+    // Also ensure /referrals/{student.id} exists in Firestore with the exact same permanent referralCode
+    try {
+      const refSnap = await getDoc(referralRef).catch(() => null);
+      if (!refSnap || !refSnap.exists()) {
+        await setDoc(
+          referralRef,
+          JSON.parse(
+            JSON.stringify({
+              userId: student.id,
+              userName: student.name || 'Student Champion',
+              userRole: 'student',
+              className: student.classLevel || 'Class 5',
+              schoolName: student.schoolName || '',
+              city: 'Maharashtra',
+              email: student.email || '',
+              mobile: student.mobile || '',
+              referralCode: permanentReferralCode,
+              referralLink: permanentReferralLink,
+              referredByCode: existingReferredByCode || undefined,
+              referredByUserId: existingReferredByStudentId || undefined,
+              totalInvitesSent: 0,
+              totalSignups: 0,
+              successfulReferrals: 0,
+              pendingReferrals: 0,
+              totalEarnings: 0,
+              availableWalletBalance: 0,
+              withdrawnAmount: 0,
+              pendingWithdrawalAmount: 0,
+              freeMonthsEarned: 0,
+              totalXPBonus: 0,
+              currentTier: 'None',
+              unlockedRewards: [],
+              createdAt: student.registeredAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            })
+          ),
+          { merge: true }
+        );
+      }
+    } catch {
+      // Non-fatal if /referrals doc already exists with strict update rule
+    }
+
     return {
       success: true,
+      referralCode: permanentReferralCode,
+      referralLink: permanentReferralLink,
       planPurchasedAt: resolvedPurchasedAt,
       planExpiresAt: resolvedExpiresAt,
     };
   } catch (error) {
     console.warn('Firestore save student error:', error);
-    return { success: false, error };
+    return {
+      success: false,
+      referralCode: sanitizeReferralCode(student.referralCode) || generateUniqueStudentReferralCode(student.id, student.name),
+      referralLink: buildStudentReferralLink(
+        sanitizeReferralCode(student.referralCode) || generateUniqueStudentReferralCode(student.id, student.name)
+      ),
+      error,
+    };
   }
+}
+
+// 9b. Ensure a student has a permanent unique referral code in Firestore and return it
+export async function ensureStudentReferralCodeInFirestore(
+  studentId: string,
+  studentName?: string,
+  currentCode?: string
+): Promise<{ referralCode: string; referralLink: string }> {
+  const cleanId = String(studentId || '').trim();
+  const fallbackCode =
+    sanitizeReferralCode(currentCode) ||
+    generateUniqueStudentReferralCode(cleanId, studentName);
+
+  if (!cleanId) {
+    return {
+      referralCode: fallbackCode,
+      referralLink: buildStudentReferralLink(fallbackCode),
+    };
+  }
+
+  try {
+    const studentRef = doc(db, 'students', cleanId);
+    const referralRef = doc(db, 'referrals', cleanId);
+    const [stuSnap, refSnap] = await Promise.all([
+      getDoc(studentRef).catch(() => null),
+      getDoc(referralRef).catch(() => null),
+    ]);
+
+    const stuData = stuSnap && stuSnap.exists() ? stuSnap.data() : null;
+    const refData = refSnap && refSnap.exists() ? refSnap.data() : null;
+
+    const resolvedCode =
+      sanitizeReferralCode(stuData?.referralCode) ||
+      sanitizeReferralCode(refData?.referralCode) ||
+      fallbackCode;
+    const resolvedLink = buildStudentReferralLink(resolvedCode);
+
+    // Persist if missing on student document
+    if (stuData && sanitizeReferralCode(stuData.referralCode) !== resolvedCode) {
+      await setDoc(
+        studentRef,
+        {
+          id: cleanId,
+          referralCode: resolvedCode,
+          referralLink: resolvedLink,
+        },
+        { merge: true }
+      ).catch(() => {});
+    }
+
+    // Persist if missing on referrals document
+    if (!refData) {
+      await setDoc(
+        referralRef,
+        {
+          userId: cleanId,
+          userName: stuData?.name || studentName || 'Student Champion',
+          userRole: 'student',
+          className: stuData?.classLevel || 'Class 5',
+          referralCode: resolvedCode,
+          referralLink: resolvedLink,
+          totalInvitesSent: 0,
+          totalSignups: 0,
+          successfulReferrals: 0,
+          pendingReferrals: 0,
+          totalEarnings: 0,
+          availableWalletBalance: 0,
+          withdrawnAmount: 0,
+          pendingWithdrawalAmount: 0,
+          freeMonthsEarned: 0,
+          totalXPBonus: 0,
+          currentTier: 'None',
+          unlockedRewards: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      ).catch(() => {});
+    }
+
+    return {
+      referralCode: resolvedCode,
+      referralLink: resolvedLink,
+    };
+  } catch {
+    return {
+      referralCode: fallbackCode,
+      referralLink: buildStudentReferralLink(fallbackCode),
+    };
+  }
+}
+
+// 9c. Look up a referrer in Firestore by their unique referralCode
+export async function findReferrerByCodeInFirestore(
+  rawCode: string,
+  currentUserId?: string
+): Promise<{
+  valid: boolean;
+  referrerUserId?: string;
+  referrerName?: string;
+  referrerClass?: string;
+  referralCode?: string;
+  message: string;
+}> {
+  const cleanCode = sanitizeReferralCode(rawCode);
+  if (!cleanCode) {
+    return { valid: false, message: 'Please enter a valid referral code.' };
+  }
+
+  // Check reserved sample students first
+  const builtInMap: Record<string, { ids: string[]; primaryId: string; name: string; classLevel: string }> = {
+    STUDY123: {
+      ids: ['uid_aarav_c4_987654', 'student1'],
+      primaryId: 'uid_aarav_c4_987654',
+      name: 'Aarav Sharma',
+      classLevel: 'Class 4',
+    },
+    STUDY456: {
+      ids: ['uid_ananya_c6_982201', 'student2'],
+      primaryId: 'uid_ananya_c6_982201',
+      name: 'Ananya Deshmukh',
+      classLevel: 'Class 6',
+    },
+    STUDY789: {
+      ids: ['uid_rohan_c7_983301', 'student3'],
+      primaryId: 'uid_rohan_c7_983301',
+      name: 'Rohan Kulkarni',
+      classLevel: 'Class 7',
+    },
+  };
+
+  if (builtInMap[cleanCode]) {
+    const match = builtInMap[cleanCode];
+    if (currentUserId && match.ids.includes(currentUserId)) {
+      return {
+        valid: false,
+        message: 'Self-referral is not allowed. You cannot use your own referral code.',
+      };
+    }
+    return {
+      valid: true,
+      referrerUserId: match.primaryId,
+      referrerName: match.name,
+      referrerClass: match.classLevel,
+      referralCode: cleanCode,
+      message: `Valid code! Referred by ${match.name} (${match.classLevel}).`,
+    };
+  }
+
+  try {
+    const refQuery = query(
+      collection(db, 'referrals'),
+      where('referralCode', '==', cleanCode),
+      limit(1)
+    );
+    const refSnap = await getDocs(refQuery);
+    if (!refSnap.empty) {
+      const data = refSnap.docs[0].data();
+      const ownerId = String(data.userId || refSnap.docs[0].id);
+      if (currentUserId && ownerId === currentUserId) {
+        return {
+          valid: false,
+          message: 'Self-referral is not allowed. You cannot use your own referral code.',
+        };
+      }
+      return {
+        valid: true,
+        referrerUserId: ownerId,
+        referrerName: String(data.userName || 'Student Champion'),
+        referrerClass: String(data.className || 'Student'),
+        referralCode: cleanCode,
+        message: `Valid code! Referred by ${data.userName || 'Student Champion'}.`,
+      };
+    }
+
+    const stuQuery = query(
+      collection(db, 'students'),
+      where('referralCode', '==', cleanCode),
+      limit(1)
+    );
+    const stuSnap = await getDocs(stuQuery);
+    if (!stuSnap.empty) {
+      const data = stuSnap.docs[0].data();
+      const ownerId = String(data.id || stuSnap.docs[0].id);
+      if (currentUserId && ownerId === currentUserId) {
+        return {
+          valid: false,
+          message: 'Self-referral is not allowed. You cannot use your own referral code.',
+        };
+      }
+      return {
+        valid: true,
+        referrerUserId: ownerId,
+        referrerName: String(data.name || 'Student Champion'),
+        referrerClass: String(data.classLevel || 'Student'),
+        referralCode: cleanCode,
+        message: `Valid code! Referred by ${data.name || 'Student Champion'}.`,
+      };
+    }
+  } catch (err) {
+    console.warn('Firestore referral code lookup notice:', err);
+  }
+
+  return {
+    valid: false,
+    message: 'Invalid referral code. Please check the code and try again.',
+  };
 }
 
 // 10. Persist Subscription Upgrade to Firestore (sets 3-month / 90-day expiration for ₹99 Premium Plan)

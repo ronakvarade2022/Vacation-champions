@@ -7,6 +7,8 @@ import dotenv from 'dotenv';
 import Razorpay from 'razorpay';
 import {
   getOrCreateReferralAccount,
+  normalizeReferralAccountForClient,
+  saveAccountToFirestore,
   processReferralPurchase,
   reverseReferralOnRefund,
   validateReferralCode,
@@ -874,7 +876,7 @@ app.get('/api/referrals/account/:userId', async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, error: 'User ID required.' });
     }
 
-    const account = await getOrCreateReferralAccount(
+    const rawAccount = await getOrCreateReferralAccount(
       String(userId),
       (userType as any) || 'student',
       String(name || 'Champion'),
@@ -882,17 +884,48 @@ app.get('/api/referrals/account/:userId', async (req: Request, res: Response) =>
       String(mobile || ''),
       String(schoolName || '')
     );
+    const account = normalizeReferralAccountForClient(rawAccount);
 
-    const userTransactions = referralTransactions.filter(
-      t => t.referrerId === userId || t.buyerStudentId === userId
-    );
-    const userPayouts = payoutRequests.filter(p => p.userId === userId);
+    const userTransactions = referralTransactions
+      .filter(t => t.referrerId === userId || t.buyerStudentId === userId)
+      .slice(0, 30)
+      .map(t => ({
+        ...t,
+        referrerUserId: t.referrerId,
+        referrerCode: t.referralCode,
+        referredUserId: t.buyerStudentId,
+        referredUserName: t.buyerStudentName || 'Student',
+        referredUserClass: 'Class 5',
+        referredUserMobileMasked: '98******10',
+        planPurchased: t.planAmount >= 99 ? 'premium' : 'none',
+        planAmountPaid: t.planAmount || 0,
+        rewardAmount: t.referrerId === userId ? t.referrerReward : t.buyerReward,
+        xpAwarded: t.status === 'CREDITED' ? 200 : 0,
+        status: t.status === 'CREDITED' ? 'VERIFIED_REWARDED' : t.status === 'PENDING' ? 'SIGNED_UP_PENDING_PAYMENT' : t.status,
+      }));
+
+    const userPayouts = payoutRequests
+      .filter(p => p.userId === userId)
+      .slice(0, 30)
+      .map(p => ({
+        ...p,
+        userRole: p.userType === 'teacher' ? 'parent' : 'student',
+        payoutMethod: p.method || 'BANK',
+        bankAccountName: p.bankDetails?.accountHolderName || p.userName,
+        bankAccountNumber: p.bankDetails?.accountNumber || '',
+        bankIfsc: p.bankDetails?.ifscCode || '',
+        status: p.status === 'COMPLETED' ? 'PAID' : p.status === 'REQUESTED' ? 'PENDING' : p.status,
+        transactionRefId: p.transactionReference,
+        adminRemarks: p.adminNotes,
+        requestedAt: p.requestedAt || p.createdAt,
+      }));
 
     return res.json({
       success: true,
       account,
-      transactions: userTransactions.slice(0, 30),
-      payoutRequests: userPayouts.slice(0, 30),
+      transactions: userTransactions,
+      payouts: userPayouts,
+      payoutRequests: userPayouts,
       config: {
         plan49ReferrerReward: referralConfig.plan49ReferrerReward,
         plan49BuyerReward: referralConfig.plan49BuyerReward,
@@ -911,23 +944,36 @@ app.get('/api/referrals/account/:userId', async (req: Request, res: Response) =>
 // 7.2 Register / Activate Ambassador Account
 app.post('/api/referrals/register', async (req: Request, res: Response) => {
   try {
-    const { userId, userType = 'student', name, email, mobile, schoolName } = req.body;
-    if (!userId || !name) {
-      return res.status(400).json({ success: false, error: 'User ID and Name are required.' });
+    const {
+      userId,
+      userType = 'student',
+      userRole,
+      name,
+      userName,
+      email,
+      mobile,
+      schoolName,
+      preferredReferralCode,
+    } = req.body;
+    const resolvedName = String(name || userName || 'Student Champion');
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'User ID is required.' });
     }
 
-    const account = await getOrCreateReferralAccount(
+    const rawAccount = await getOrCreateReferralAccount(
       String(userId),
-      userType === 'teacher' ? 'teacher' : 'student',
-      String(name),
+      userType === 'teacher' || userRole === 'teacher' ? 'teacher' : 'student',
+      resolvedName,
       String(email || ''),
       String(mobile || ''),
-      String(schoolName || '')
+      String(schoolName || ''),
+      preferredReferralCode ? String(preferredReferralCode) : undefined
     );
+    const account = normalizeReferralAccountForClient(rawAccount);
 
     return res.json({
       success: true,
-      message: `Welcome ${account.name}! Your unique referral code is ready.`,
+      message: `Welcome ${account.name}! Your unique referral code ${account.referralCode} is ready.`,
       account
     });
   } catch (error: any) {
@@ -936,35 +982,100 @@ app.post('/api/referrals/register', async (req: Request, res: Response) => {
 });
 
 // 7.2b Track referral code signup during student registration
-app.post('/api/referrals/track-signup', (req: Request, res: Response) => {
+app.post('/api/referrals/track-signup', async (req: Request, res: Response) => {
   try {
-    const { referralCode, newStudentId } = req.body;
-    if (!referralCode || !newStudentId) {
-      return res.status(400).json({ success: false, error: 'referralCode and newStudentId are required.' });
+    const {
+      referralCode,
+      referralCodeUsed,
+      newStudentId,
+      newUserId,
+      newUserName,
+      newUserClass,
+      mobile,
+    } = req.body;
+    const resolvedCode = String(referralCode || referralCodeUsed || '').trim();
+    const resolvedStudentId = String(newStudentId || newUserId || '').trim();
+
+    if (!resolvedStudentId) {
+      return res.status(400).json({ success: false, error: 'newStudentId / newUserId is required.' });
     }
-    const result = trackReferralSignup(String(referralCode), String(newStudentId));
+
+    if (!resolvedCode) {
+      const account = await getOrCreateReferralAccount(
+        resolvedStudentId,
+        'student',
+        String(newUserName || 'Student Champion')
+      );
+      return res.json({
+        success: true,
+        tracked: false,
+        account: normalizeReferralAccountForClient(account),
+      });
+    }
+
+    const result = await trackReferralSignup(
+      resolvedCode,
+      resolvedStudentId,
+      String(newUserName || 'Student'),
+      String(newUserClass || 'Class 5'),
+      String(mobile || '')
+    );
     return res.json({ success: result.tracked, ...result });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 7.3 Validate Referral Code prior to checkout
-app.post('/api/referrals/validate-code', (req: Request, res: Response) => {
+// 7.2c Record referral link share/invite click
+app.post('/api/referrals/invite-click', async (req: Request, res: Response) => {
   try {
-    const { code, currentUserId } = req.body;
-    const result = validateReferralCode(String(code || ''), currentUserId ? String(currentUserId) : undefined);
-    return res.json(result);
+    const { userId } = req.body;
+    if (userId) {
+      const acc = await getOrCreateReferralAccount(String(userId));
+      acc.stats.totalClicks += 1;
+      await saveAccountToFirestore(acc);
+    }
+    return res.json({ success: true });
   } catch (error: any) {
-    return res.status(500).json({ valid: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 7.4 Request Wallet Payout (UPI or Bank) with Automated RazorpayX Dispatch
+// 7.3 Validate Referral Code prior to registration or checkout (supports both GET and POST)
+const handleValidateReferralCode = async (req: Request, res: Response) => {
+  try {
+    const code = req.body?.code || req.body?.referralCode || req.query?.code || req.query?.referralCode || '';
+    const currentUserId = req.body?.currentUserId || req.body?.studentId || req.query?.currentUserId || req.query?.studentId;
+    const resolvedCode = String(code).trim();
+    const result = await validateReferralCode(
+      resolvedCode,
+      currentUserId ? String(currentUserId) : undefined
+    );
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ valid: false, error: error.message, message: error.message });
+  }
+};
+app.post('/api/referrals/validate-code', handleValidateReferralCode);
+app.get('/api/referrals/validate-code', handleValidateReferralCode);
+
+// 7.4 Request Wallet Payout (Bank or UPI) with Automated RazorpayX Dispatch
 app.post('/api/referrals/payout-request', async (req: Request, res: Response) => {
   try {
-    const { userId, amount, method, upiId, bankDetails } = req.body;
-    if (!userId || !amount || !method) {
+    const {
+      userId,
+      amount,
+      method,
+      payoutMethod,
+      upiId,
+      bankDetails,
+      bankAccountName,
+      bankAccountNumber,
+      bankIfsc,
+    } = req.body;
+    const resolvedMethod = (method || payoutMethod || 'BANK') === 'UPI' ? 'UPI' : 'BANK';
+
+    if (!userId || !amount) {
       return res.status(400).json({ success: false, message: 'Missing required withdrawal details.' });
     }
 
@@ -973,12 +1084,21 @@ app.post('/api/referrals/payout-request', async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, message: 'Invalid withdrawal amount.' });
     }
 
+    const resolvedBankDetails = bankDetails || (bankAccountNumber
+      ? {
+          accountHolderName: String(bankAccountName || '').trim(),
+          accountNumber: String(bankAccountNumber || '').trim(),
+          ifscCode: String(bankIfsc || '').trim().toUpperCase(),
+          bankName: 'Verified Bank Account',
+        }
+      : undefined);
+
     const result = await submitPayoutRequest({
       userId: String(userId),
       amount: numAmount,
-      method: method === 'BANK' ? 'BANK' : 'UPI',
+      method: resolvedMethod,
       upiId: upiId ? String(upiId).trim() : undefined,
-      bankDetails
+      bankDetails: resolvedBankDetails
     });
 
     return res.json(result);
@@ -991,7 +1111,27 @@ app.post('/api/referrals/payout-request', async (req: Request, res: Response) =>
 app.get('/api/referrals/leaderboard', (_req: Request, res: Response) => {
   try {
     const data = getLeaderboardData();
-    return res.json({ success: true, ...data });
+    const leaderboard = data.students.map((s, idx) => ({
+      rank: idx + 1,
+      userId: s.userId,
+      userName: s.name,
+      className: 'Class 5',
+      schoolName: s.schoolName || 'Vacation Champions Academy',
+      city: 'Maharashtra',
+      successfulReferrals: s.paidReferralsCount,
+      totalEarnings: s.totalEarned,
+      currentTier:
+        s.paidReferralsCount >= 50
+          ? 'Diamond'
+          : s.paidReferralsCount >= 25
+          ? 'Gold'
+          : s.paidReferralsCount >= 10
+          ? 'Silver'
+          : s.paidReferralsCount >= 5
+          ? 'Bronze'
+          : 'None',
+    }));
+    return res.json({ success: true, leaderboard, ...data });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }

@@ -9,6 +9,8 @@ import {
   registerFirebaseEmailUser,
   saveStudentProfileToFirestore,
 } from '../services/firebase';
+import { referralService } from '../services/referralService';
+import { sanitizeReferralCode } from '../utils/referralCoding';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -76,11 +78,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regReferralCode, setRegReferralCode] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.get('ref') || localStorage.getItem('vc_pending_ref_code') || '';
+      return sanitizeReferralCode(params.get('ref') || params.get('referral') || localStorage.getItem('vc_pending_ref_code'));
     } catch {
       return '';
     }
   });
+  const [referralValidationInfo, setReferralValidationInfo] = useState<{
+    checked: boolean;
+    valid: boolean;
+    referrerName?: string;
+    referrerUserId?: string;
+    message?: string;
+  }>({ checked: false, valid: false });
   const [regRoleType, setRegRoleType] = useState<'student' | 'teacher'>('student');
 
   // Parent & Admin Login State
@@ -99,9 +108,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setLoginEmail(initialEmail);
       setResetEmail(initialEmail);
     }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlRef = sanitizeReferralCode(
+        params.get('ref') || params.get('referral') || localStorage.getItem('vc_pending_ref_code')
+      );
+      if (urlRef) {
+        setRegReferralCode(urlRef);
+      }
+    } catch {
+      // Ignore
+    }
     setError('');
     setSuccessMsg('');
   }, [defaultTab, initialEmail, isOpen]);
+
+  // Live validate referral code when entered or captured from URL
+  useEffect(() => {
+    const clean = sanitizeReferralCode(regReferralCode);
+    if (!clean) {
+      setReferralValidationInfo({ checked: false, valid: false });
+      return;
+    }
+
+    let cancelled = false;
+    referralService
+      .validateCode(clean)
+      .then((res) => {
+        if (cancelled) return;
+        setReferralValidationInfo({
+          checked: true,
+          valid: Boolean(res?.valid),
+          referrerName: res?.referrerName,
+          referrerUserId: res?.referrerUserId,
+          message: res?.message || res?.error,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReferralValidationInfo({ checked: false, valid: false });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [regReferralCode]);
 
   if (!isOpen) return null;
 
@@ -220,6 +272,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
 
+    // Validate optional referral code before creating account (prevents invalid referrals and self-referrals)
+    const normalizedRefCode = sanitizeReferralCode(regReferralCode);
+    let verifiedReferrerUserId: string | undefined;
+
+    if (normalizedRefCode) {
+      const refCheck = await referralService.validateCode(normalizedRefCode);
+      if (!refCheck?.valid) {
+        setIsLoading(false);
+        setError(
+          refCheck?.message ||
+            refCheck?.error ||
+            `Invalid referral code "${normalizedRefCode}". Please enter a valid student referral code (e.g. STUDY123) or leave the field blank.`
+        );
+        return;
+      }
+      verifiedReferrerUserId = refCheck.referrerUserId;
+
+      // Prevent self-referral by matching email or mobile against referrer
+      const referrerStudent = studentsList.find(
+        (s) =>
+          s.id === verifiedReferrerUserId ||
+          sanitizeReferralCode(s.referralCode) === normalizedRefCode
+      );
+      if (
+        referrerStudent &&
+        (referrerStudent.email.trim().toLowerCase() === cleanEmail ||
+          referrerStudent.mobile.replace(/\D/g, '').slice(-10) === cleanMobile)
+      ) {
+        setIsLoading(false);
+        setError('Self-referral is not allowed. You cannot use your own referral code.');
+        return;
+      }
+    }
+
     // 1. Create Firebase Email Auth User
     const fbReg = await registerFirebaseEmailUser(cleanEmail, regPassword);
     if (!fbReg.success && fbReg.error?.includes('already registered')) {
@@ -228,8 +314,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // 2. Register Student in AppContext (Automatically grants Lifetime Free Plan ₹0)
-    const normalizedRefCode = regReferralCode.trim().toUpperCase();
+    // 2. Register Student in AppContext (Automatically grants Lifetime Free Plan ₹0 & generates unique referralCode)
     const regResult = registerStudent(
       {
         name: regName.trim(),
@@ -241,6 +326,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         parentName: regParentName.trim() || 'Parent',
         parentConsent: true,
         referredByCode: normalizedRefCode || undefined,
+        referredByStudentId: verifiedReferrerUserId,
       },
       {
         verifiedFirebaseUid: fbReg.user?.uid,
@@ -256,36 +342,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // 3. Persist Profile & Lifetime Free Subscription to Firebase Firestore
+    // 3. Persist Profile & Permanent Unique Referral Code to Firebase Firestore
     if (regResult.student) {
       if (normalizedRefCode) {
         regResult.student.referredByCode = normalizedRefCode;
+        regResult.student.referredByStudentId = verifiedReferrerUserId;
       }
       await saveStudentProfileToFirestore(regResult.student);
 
       // 4. Register in Referral Hub & Track Referral Signup
       try {
-        await fetch('/api/referrals/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: regResult.student.id,
-            userType: regRoleType,
-            name: regResult.student.name,
-            email: regResult.student.email,
-            mobile: regResult.student.mobile,
-            schoolName: regResult.student.schoolName || regSchool.trim(),
-            referredByCode: normalizedRefCode || undefined,
-          }),
+        await referralService.registerAccount({
+          userId: regResult.student.id,
+          userName: regResult.student.name,
+          userRole: regRoleType === 'teacher' ? 'parent' : 'student',
+          className: regResult.student.classLevel,
+          schoolName: regResult.student.schoolName || regSchool.trim(),
+          city: regCity.trim() || 'Pune',
+          email: regResult.student.email,
+          mobile: regResult.student.mobile,
         });
         if (normalizedRefCode) {
-          await fetch('/api/referrals/track-signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              referralCode: normalizedRefCode,
-              newStudentId: regResult.student.id,
-            }),
+          await referralService.trackSignup({
+            newUserId: regResult.student.id,
+            newUserName: regResult.student.name,
+            newUserRole: 'student',
+            newUserClass: regResult.student.classLevel,
+            schoolName: regResult.student.schoolName || regSchool.trim(),
+            city: regCity.trim() || 'Pune',
+            email: regResult.student.email,
+            mobile: regResult.student.mobile,
+            referralCodeUsed: normalizedRefCode,
           });
         }
         localStorage.removeItem('vc_pending_ref_code');
@@ -584,21 +671,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </form>
               )}
 
-              {/* Quick Sample Account Switcher */}
+              {/* Quick Sample Account Switcher (3 Distinct Student Accounts) */}
               <div className="mt-5 pt-4 border-t border-slate-100">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
-                  Quick Test Accounts
+                  Quick Test Accounts (3 Unique Referral Links)
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={async () => {
                       await loginAsSampleAccount('student1');
                       onClose();
                     }}
-                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer"
+                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
                   >
-                    🦁 Aarav (Class 5)
+                    🦁 Aarav (STUDY123)
                   </button>
                   <button
                     type="button"
@@ -606,9 +693,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       await loginAsSampleAccount('student2');
                       onClose();
                     }}
-                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer"
+                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
                   >
-                    🦋 Ananya (Class 7)
+                    🦄 Ananya (STUDY456)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await loginAsSampleAccount('student3');
+                      onClose();
+                    }}
+                    className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer"
+                  >
+                    🐯 Rohan (STUDY789)
                   </button>
                 </div>
               </div>
@@ -912,35 +1009,62 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               {/* 7. Role & Optional Referral Code */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
-                <div>
-                  <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
-                    Ambassador Role
-                  </label>
-                  <select
-                    value={regRoleType}
-                    onChange={(e) => setRegRoleType(e.target.value as 'student' | 'teacher')}
-                    className="w-full px-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-bold bg-white text-slate-800"
-                  >
-                    <option value="student">🎓 Student (Knowledge Ambassador)</option>
-                    <option value="teacher">🏆 Teacher (Educator Ambassador)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
-                    Referral Code (Optional)
-                  </label>
-                  <div className="relative">
-                    <Gift className="w-3.5 h-3.5 text-indigo-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={regReferralCode}
-                      onChange={(e) => setRegReferralCode(e.target.value.toUpperCase())}
-                      placeholder="e.g. CLSTD4829"
-                      className="w-full pl-8 pr-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-mono font-bold uppercase bg-white"
-                    />
+              <div className="space-y-2.5 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
+                      Ambassador Role
+                    </label>
+                    <select
+                      value={regRoleType}
+                      onChange={(e) => setRegRoleType(e.target.value as 'student' | 'teacher')}
+                      className="w-full px-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-bold bg-white text-slate-800"
+                    >
+                      <option value="student">🎓 Student (Knowledge Ambassador)</option>
+                      <option value="teacher">🏆 Teacher (Educator Ambassador)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
+                      Referral Code (Optional)
+                    </label>
+                    <div className="relative">
+                      <Gift className="w-3.5 h-3.5 text-indigo-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={regReferralCode}
+                        onChange={(e) => setRegReferralCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. STUDY123"
+                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-mono font-bold uppercase bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
+                {regReferralCode.trim() && referralValidationInfo.checked && (
+                  <div
+                    className={`px-3 py-2 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ${
+                      referralValidationInfo.valid
+                        ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300'
+                        : 'bg-rose-100/90 text-rose-800 border border-rose-300'
+                    }`}
+                  >
+                    {referralValidationInfo.valid ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>
+                          Referral Link Active: Referred by{' '}
+                          <strong>{referralValidationInfo.referrerName || 'Student Champion'}</strong> (Code:{' '}
+                          <span className="font-mono">{regReferralCode.trim().toUpperCase()}</span>)
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>{referralValidationInfo.message || 'Invalid referral code.'}</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button

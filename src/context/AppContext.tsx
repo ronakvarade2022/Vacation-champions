@@ -45,8 +45,14 @@ import {
   saveSubscriptionToFirestore,
   saveTransactionToFirestore,
   fetchStudentSubscriptionFromFirestore,
-  computePaidPlanExpiryIsoDate
+  computePaidPlanExpiryIsoDate,
+  ensureStudentReferralCodeInFirestore
 } from '../services/firebase';
+import {
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  sanitizeReferralCode
+} from '../utils/referralCoding';
 import { 
   ScholarshipClass, 
   ScholarshipLanguage, 
@@ -112,7 +118,7 @@ interface AppContextType {
   
   // 3-Role Authentication & Session Guarding
   switchRole: (targetRole: UserRole) => { allowed: boolean; message?: string };
-  loginAsSampleAccount: (accountKey: 'student1' | 'student2' | 'parent1' | 'admin') => Promise<{ success: boolean; message: string }>;
+  loginAsSampleAccount: (accountKey: 'student1' | 'student2' | 'student3' | 'parent1' | 'admin') => Promise<{ success: boolean; message: string }>;
   loginAsParent: (email: string, password?: string) => Promise<{ success: boolean; message: string; parent?: ParentProfile }>;
   loginAsAdmin: (email: string, password?: string) => Promise<{ success: boolean; message: string; adminEmail?: string }>;
   
@@ -244,6 +250,8 @@ const INITIAL_STUDENT: StudentProfile = {
   classChangeLogs: [],
   isPhoneVerified: true,
   isEmailVerified: true,
+  referralCode: 'STUDY123',
+  referralLink: 'https://mystudyzone.in/register?ref=STUDY123',
   linkedParentId: 'uid_parent_rajesh_987654',
   attendanceRecords: [
     { id: 'att-1', studentId: 'uid_aarav_c4_987654', date: '2026-05-01', status: 'PRESENT', minutesLogged: 45 },
@@ -331,6 +339,8 @@ const SECOND_STUDENT: StudentProfile = {
   classChangeLogs: [],
   isPhoneVerified: true,
   isEmailVerified: true,
+  referralCode: 'STUDY456',
+  referralLink: 'https://mystudyzone.in/register?ref=STUDY456',
   linkedParentId: 'uid_parent_sunita_982201',
   attendanceRecords: [
     { id: 'att-6', studentId: 'uid_ananya_c6_982201', date: '2026-05-01', status: 'PRESENT', minutesLogged: 60 },
@@ -389,6 +399,42 @@ const SECOND_STUDENT: StudentProfile = {
       paidAt: '2026-05-02T11:20:00.000Z'
     }
   ]
+};
+
+const THIRD_STUDENT: StudentProfile = {
+  id: 'uid_rohan_c7_983301',
+  name: 'Rohan Kulkarni',
+  parentName: 'Vikram Kulkarni',
+  parentEmail: 'vikram.kulkarni@example.com',
+  mobile: '9833012345',
+  email: 'rohan.kulkarni@example.com',
+  classLevel: 'Class 7',
+  schoolName: 'Symbiosis School, Nashik',
+  parentConsent: true,
+  registeredAt: '2026-05-03T09:00:00.000Z',
+  points: 760,
+  coins: 210,
+  level: 2,
+  streakDays: 5,
+  lastActiveDate: new Date().toISOString(),
+  badges: ['badge-first-quiz', 'badge-streak-3'],
+  plan: 'free',
+  avatar: '🐯',
+  attemptedQuestionIds: [],
+  attemptedPuzzleIds: [],
+  completedStoryIds: ['ENG-02'],
+  classChangeLogs: [],
+  isPhoneVerified: true,
+  isEmailVerified: true,
+  referralCode: 'STUDY789',
+  referralLink: 'https://mystudyzone.in/register?ref=STUDY789',
+  attendanceRecords: [
+    { id: 'att-11', studentId: 'uid_rohan_c7_983301', date: '2026-05-03', status: 'PRESENT', minutesLogged: 55 },
+    { id: 'att-12', studentId: 'uid_rohan_c7_983301', date: '2026-05-04', status: 'PRESENT', minutesLogged: 60 },
+    { id: 'att-13', studentId: 'uid_rohan_c7_983301', date: '2026-05-05', status: 'PRESENT', minutesLogged: 65 }
+  ],
+  assignments: [],
+  feeRecords: []
 };
 
 // Registered parents with securely linked children only
@@ -500,11 +546,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed: StudentProfile[] = JSON.parse(saved);
-        // Ensure all pre-existing student profiles are preserved and have default verified status and school records
-        return parsed.map(s => {
-          const matchInitial = s.id === INITIAL_STUDENT.id ? INITIAL_STUDENT : s.id === SECOND_STUDENT.id ? SECOND_STUDENT : null;
+        const usedCodes = new Set<string>();
+        const hydrated: StudentProfile[] = parsed.map(s => {
+          const matchInitial =
+            s.id === INITIAL_STUDENT.id
+              ? INITIAL_STUDENT
+              : s.id === SECOND_STUDENT.id
+              ? SECOND_STUDENT
+              : s.id === THIRD_STUDENT.id
+              ? THIRD_STUDENT
+              : null;
+          const existingCode = sanitizeReferralCode(s.referralCode) || sanitizeReferralCode(matchInitial?.referralCode);
+          const uniqueCode =
+            existingCode && !usedCodes.has(existingCode)
+              ? existingCode
+              : generateUniqueStudentReferralCode(s.id, s.name, usedCodes);
+          usedCodes.add(uniqueCode);
           return {
             ...s,
+            referralCode: uniqueCode,
+            referralLink: buildStudentReferralLink(uniqueCode),
             isPhoneVerified: s.isPhoneVerified ?? true,
             isEmailVerified: s.isEmailVerified ?? true,
             attendanceRecords: s.attendanceRecords || matchInitial?.attendanceRecords || [],
@@ -513,11 +574,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             linkedParentId: s.linkedParentId || matchInitial?.linkedParentId
           };
         });
+        // Ensure THIRD_STUDENT is present in the list for 3-student verification
+        if (!hydrated.some(s => s.id === THIRD_STUDENT.id)) {
+          hydrated.push(THIRD_STUDENT);
+        }
+        return hydrated;
       } catch (e) {
         console.error('Error reading students list:', e);
       }
     }
-    return [INITIAL_STUDENT, SECOND_STUDENT];
+    return [INITIAL_STUDENT, SECOND_STUDENT, THIRD_STUDENT];
   });
 
   const [currentStudent, setCurrentStudent] = useState<StudentProfile | null>(() => {
@@ -526,7 +592,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return null;
     }
     const saved = localStorage.getItem('vc_current_student');
-    return saved ? JSON.parse(saved) : INITIAL_STUDENT;
+    if (saved) {
+      try {
+        const parsed: StudentProfile = JSON.parse(saved);
+        const code =
+          sanitizeReferralCode(parsed.referralCode) ||
+          generateUniqueStudentReferralCode(parsed.id, parsed.name);
+        return {
+          ...parsed,
+          referralCode: code,
+          referralLink: buildStudentReferralLink(code)
+        };
+      } catch {
+        return INITIAL_STUDENT;
+      }
+    }
+    return INITIAL_STUDENT;
   });
 
   const safeSetLocalStorage = (key: string, value: string) => {
@@ -747,6 +828,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     });
 
+    // Also ensure the student's permanent unique referralCode and referralLink are synced in Firestore
+    ensureStudentReferralCodeInFirestore(
+      activeId,
+      currentStudent?.name,
+      currentStudent?.referralCode
+    ).then((ensured) => {
+      if (cancelled || !ensured.referralCode) return;
+      setCurrentStudent((prev) => {
+        if (!prev || prev.id !== activeId) return prev;
+        if (
+          prev.referralCode === ensured.referralCode &&
+          prev.referralLink === ensured.referralLink
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          referralCode: ensured.referralCode,
+          referralLink: ensured.referralLink,
+        };
+      });
+      setStudentsList((prevList) =>
+        prevList.map((s) =>
+          s.id === activeId
+            ? {
+                ...s,
+                referralCode: ensured.referralCode,
+                referralLink: ensured.referralLink,
+              }
+            : s
+        )
+      );
+    });
+
     return () => {
       cancelled = true;
     };
@@ -806,6 +921,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newUid = options?.verifiedFirebaseUid || `uid_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
     const nowIso = new Date().toISOString();
 
+    // Generate permanent, collision-free referral code and referral link for this student
+    const existingCodes = studentsList.map(s => s.referralCode || '').filter(Boolean);
+    const uniqueReferralCode = generateUniqueStudentReferralCode(newUid, data.name, existingCodes);
+    const uniqueReferralLink = buildStudentReferralLink(uniqueReferralCode);
+
+    // Validate referredByCode (prevent self-referral and link to referrer student ID if found)
+    const rawReferredBy = sanitizeReferralCode(data.referredByCode);
+    const validReferrer = rawReferredBy && rawReferredBy !== uniqueReferralCode
+      ? studentsList.find(s => sanitizeReferralCode(s.referralCode) === rawReferredBy)
+      : undefined;
+    const finalReferredByCode =
+      rawReferredBy && rawReferredBy !== uniqueReferralCode ? rawReferredBy : undefined;
+
     const newStudent: StudentProfile = {
       ...data,
       id: newUid,
@@ -815,6 +943,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isEmailVerified: emailOwnershipVerified,
       mobile: cleanMobile,
       email: cleanEmail,
+      referralCode: uniqueReferralCode,
+      referralLink: uniqueReferralLink,
+      referredByCode: finalReferredByCode,
+      referredByStudentId: validReferrer?.id || data.referredByStudentId,
       registeredAt: nowIso,
       points: 100, // 100 Welcome Bonus points
       coins: 50,
@@ -849,13 +981,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification(
       'Account Registered & Activated! 🎓✨',
-      `Welcome ${newStudent.name}! Your account in ${newStudent.classLevel} is ready. (Phone Status: Registered — Not OTP-Verified).`,
+      `Welcome ${newStudent.name}! Your unique referral code is ${uniqueReferralCode} (${uniqueReferralLink}).`,
       'achievement'
     );
 
     return {
       success: true,
-      message: `Account registered successfully for ${newStudent.name} in ${newStudent.classLevel}!`,
+      message: `Account registered successfully for ${newStudent.name} in ${newStudent.classLevel}! Your unique referral code is ${uniqueReferralCode}.`,
       student: newStudent
     };
   };
@@ -1018,7 +1150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // One-click sample account loader for testing requirements
-  const loginAsSampleAccount = async (accountKey: 'student1' | 'student2' | 'parent1' | 'admin'): Promise<{ success: boolean; message: string }> => {
+  const loginAsSampleAccount = async (accountKey: 'student1' | 'student2' | 'student3' | 'parent1' | 'admin'): Promise<{ success: boolean; message: string }> => {
     localStorage.removeItem('vc_is_logged_out');
     if (accountKey === 'student1') {
       const stu = studentsList.find(s => s.id === INITIAL_STUDENT.id) || INITIAL_STUDENT;
@@ -1032,7 +1164,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isVerified: true
       });
       setActiveRole('student');
-      return { success: true, message: `Signed in as Student 1: ${stu.name} (${stu.classLevel}). Access restricted strictly to student's own records.` };
+      return { success: true, message: `Signed in as Student 1: ${stu.name} (${stu.classLevel}) — Referral Link: mystudyzone.in/register?ref=${stu.referralCode || 'STUDY123'}` };
     } else if (accountKey === 'student2') {
       const stu = studentsList.find(s => s.id === SECOND_STUDENT.id) || SECOND_STUDENT;
       setCurrentStudent(stu);
@@ -1045,7 +1177,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isVerified: true
       });
       setActiveRole('student');
-      return { success: true, message: `Signed in as Student 2: ${stu.name} (${stu.classLevel}). Access restricted strictly to student's own records.` };
+      return { success: true, message: `Signed in as Student 2: ${stu.name} (${stu.classLevel}) — Referral Link: mystudyzone.in/register?ref=${stu.referralCode || 'STUDY456'}` };
+    } else if (accountKey === 'student3') {
+      const stu = studentsList.find(s => s.id === THIRD_STUDENT.id) || THIRD_STUDENT;
+      setCurrentStudent(stu);
+      setCurrentUser({
+        uid: stu.id,
+        email: stu.email,
+        displayName: stu.name,
+        role: 'student',
+        studentId: stu.id,
+        isVerified: true
+      });
+      setActiveRole('student');
+      return { success: true, message: `Signed in as Student 3: ${stu.name} (${stu.classLevel}) — Referral Link: mystudyzone.in/register?ref=${stu.referralCode || 'STUDY789'}` };
     } else if (accountKey === 'parent1') {
       const parent = parentsList.find(p => p.id === 'uid_parent_rajesh_987654') || INITIAL_PARENTS[0];
       const linkedChild = studentsList.find(s => parent.linkedStudentIds.includes(s.id)) || INITIAL_STUDENT;

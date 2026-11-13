@@ -9,8 +9,13 @@ import type {
   AmbassadorCategory
 } from '../types/referral.ts';
 import { serverDb } from '../../firebase/index.ts';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import { dispatchRazorpayXPayout, getResolvedRazorpayXCredentials } from './razorpayxPayoutService.ts';
+import {
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  sanitizeReferralCode,
+} from '../utils/referralCoding.ts';
 
 export const STUDENT_DEFAULT_MILESTONES: ReferralMilestone[] = [
   {
@@ -109,29 +114,99 @@ export const referralConfig: ReferralSystemConfig = {
   fraudDetectionStrict: true
 };
 
-// Generates an attractive, branded, unique referral code
+// Generates a unique, permanent referral code per student UID (never shared across students)
 export function generateReferralCode(userType: ReferralUserType, name: string, userId: string): string {
-  const prefix = userType === 'teacher' ? 'VC-TCH' : 'VC-STU';
-  const cleanName = name
-    .replace(/[^a-zA-Z]/g, '')
-    .toUpperCase()
-    .slice(0, 6) || 'CHAMP';
-  const suffix = (userId.replace(/[^0-9]/g, '').slice(-3)) || Math.floor(100 + Math.random() * 900).toString();
-  return `${prefix}-${cleanName}${suffix}`;
+  if (userType === 'teacher') {
+    const cleanName = name
+      .replace(/[^a-zA-Z]/g, '')
+      .toUpperCase()
+      .slice(0, 6) || 'TEACH';
+    const suffix = (userId.replace(/[^0-9]/g, '').slice(-3)) || Math.floor(100 + Math.random() * 900).toString();
+    return `VC-TCH-${cleanName}${suffix}`;
+  }
+  return generateUniqueStudentReferralCode(userId, name, referralCodeIndex.keys());
 }
 
 /**
- * Persists an account record directly to Firestore: /referrals/{userId}
+ * Normalizes a ReferralAccount so it satisfies both server ReferralAccount and client ReferralAccountRecord interfaces
+ */
+export function normalizeReferralAccountForClient(account: ReferralAccount & Record<string, any>) {
+  const code =
+    sanitizeReferralCode(account.referralCode) ||
+    generateUniqueStudentReferralCode(account.userId, account.name, referralCodeIndex.keys());
+  const link = buildStudentReferralLink(code);
+  const paidCount = Number(account.stats?.paidReferralsCount ?? account.successfulReferrals ?? 0);
+  const totalSignups = Number(account.stats?.totalSignedUp ?? account.totalSignups ?? 0);
+  const totalClicks = Number(account.stats?.totalClicks ?? account.totalInvitesSent ?? 0);
+  const availBal = Number(account.wallet?.availableBalance ?? account.availableWalletBalance ?? 0);
+  const pendBal = Number(account.wallet?.pendingBalance ?? account.pendingWithdrawalAmount ?? 0);
+  const totEarned = Number(account.wallet?.totalEarned ?? account.totalEarnings ?? 0);
+  const totWithdrawn = Number(account.wallet?.totalWithdrawn ?? account.withdrawnAmount ?? 0);
+
+  let tier: 'None' | 'Bronze' | 'Silver' | 'Gold' | 'Diamond' = 'None';
+  if (paidCount >= 50 || account.ambassadorCategory === 'diamond_ambassador') tier = 'Diamond';
+  else if (paidCount >= 25) tier = 'Gold';
+  else if (paidCount >= 10) tier = 'Silver';
+  else if (paidCount >= 5) tier = 'Bronze';
+
+  return {
+    ...account,
+    userId: account.userId,
+    name: account.name || account.userName || 'Student Champion',
+    userName: account.userName || account.name || 'Student Champion',
+    userRole: account.userRole || (account.userType === 'teacher' ? 'parent' : 'student'),
+    className: account.className || 'Class 5',
+    schoolName: account.schoolName || '',
+    city: account.city || 'Maharashtra',
+    email: account.email || '',
+    mobile: account.mobile || '',
+    referralCode: code,
+    referralLink: link,
+    totalInvitesSent: totalClicks,
+    totalSignups,
+    successfulReferrals: paidCount,
+    pendingReferrals: Math.max(0, totalSignups - paidCount),
+    totalEarnings: totEarned,
+    availableWalletBalance: availBal,
+    withdrawnAmount: totWithdrawn,
+    pendingWithdrawalAmount: pendBal,
+    freeMonthsEarned: paidCount >= 25 ? 3 : paidCount >= 10 ? 1 : 0,
+    totalXPBonus: paidCount * 200,
+    currentTier: tier,
+    unlockedRewards: (account.milestones || []).filter((m: any) => m.unlocked).map((m: any) => m.title),
+  };
+}
+
+/**
+ * Persists an account record directly to Firestore: /referrals/{userId} AND /students/{userId}
  */
 export async function saveAccountToFirestore(account: ReferralAccount): Promise<void> {
+  const normalized = normalizeReferralAccountForClient(account);
   try {
     const docRef = doc(serverDb, 'referrals', account.userId);
     await setDoc(docRef, {
-      ...account,
+      ...normalized,
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
     console.warn(`[Firestore Sync Notice] referrals/${account.userId}:`, (err as Error)?.message || err);
+  }
+
+  if (account.userType === 'student') {
+    try {
+      const stuRef = doc(serverDb, 'students', account.userId);
+      await setDoc(
+        stuRef,
+        {
+          id: account.userId,
+          referralCode: normalized.referralCode,
+          referralLink: normalized.referralLink,
+        },
+        { merge: true }
+      );
+    } catch {
+      // Non-fatal
+    }
   }
 }
 
@@ -165,112 +240,258 @@ export async function savePayoutToFirestore(payout: PayoutRequest): Promise<void
   }
 }
 
-// Get or initialize a referral profile with Firestore check
+// Get or initialize a referral profile with Firestore check (preserves permanent referralCode)
 export async function getOrCreateReferralAccount(
   userId: string,
   userType: ReferralUserType = 'student',
   name = 'Student',
   email = '',
   mobile = '',
-  schoolName = ''
+  schoolName = '',
+  preferredReferralCode?: string
 ): Promise<ReferralAccount> {
+  const cleanUserId = String(userId || '').trim();
+
   // 1. Check in-memory cache
-  const cached = referralAccounts.get(userId);
+  const cached = referralAccounts.get(cleanUserId);
   if (cached) {
-    if (name && cached.name === 'Student') cached.name = name;
+    if (name && name !== 'Student' && name !== 'Champion' && cached.name === 'Student Champion') {
+      cached.name = name;
+    }
     if (email && !cached.email) cached.email = email;
     if (mobile && !cached.mobile) cached.mobile = mobile;
-    return cached;
+    if (cached.referralCode) {
+      referralCodeIndex.set(cached.referralCode.toUpperCase(), cleanUserId);
+    }
+    return normalizeReferralAccountForClient(cached);
   }
 
-  // 2. Check Firestore /referrals/{userId}
+  // 2. Check Firestore /referrals/{userId} and /students/{userId}
+  let storedStudentData: Record<string, any> | null = null;
   try {
-    const docRef = doc(serverDb, 'referrals', userId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data() as ReferralAccount;
-      referralAccounts.set(userId, data);
-      if (data.referralCode) {
-        referralCodeIndex.set(data.referralCode.toUpperCase(), userId);
-      }
-      return data;
+    const [refSnap, stuSnap] = await Promise.all([
+      getDoc(doc(serverDb, 'referrals', cleanUserId)).catch(() => null),
+      getDoc(doc(serverDb, 'students', cleanUserId)).catch(() => null),
+    ]);
+
+    if (stuSnap && stuSnap.exists()) {
+      storedStudentData = stuSnap.data();
+    }
+
+    if (refSnap && refSnap.exists()) {
+      const data = refSnap.data() as ReferralAccount & Record<string, any>;
+      const existingCode =
+        sanitizeReferralCode(data.referralCode) ||
+        sanitizeReferralCode(storedStudentData?.referralCode) ||
+        generateReferralCode(userType, data.name || data.userName || name, cleanUserId);
+
+      const hydrated: ReferralAccount = normalizeReferralAccountForClient({
+        ...data,
+        id: data.id || `ref_acc_${cleanUserId}`,
+        userId: cleanUserId,
+        userType: data.userType || userType,
+        name: data.name || data.userName || storedStudentData?.name || name || 'Student Champion',
+        email: data.email || storedStudentData?.email || email || '',
+        mobile: data.mobile || storedStudentData?.mobile || mobile || '',
+        referralCode: existingCode,
+        ambassadorCategory: data.ambassadorCategory || 'knowledge_ambassador',
+        verificationStatus: data.verificationStatus || 'NOT_APPLICABLE',
+        wallet: data.wallet || {
+          availableBalance: Number(data.availableWalletBalance || 0),
+          pendingBalance: Number(data.pendingWithdrawalAmount || 0),
+          totalEarned: Number(data.totalEarnings || 0),
+          totalWithdrawn: Number(data.withdrawnAmount || 0),
+          currency: 'INR',
+        },
+        stats: data.stats || {
+          totalClicks: Number(data.totalInvitesSent || 0),
+          totalSignedUp: Number(data.totalSignups || 0),
+          paidReferralsCount: Number(data.successfulReferrals || 0),
+          plan49Referrals: 0,
+          plan99Referrals: Number(data.successfulReferrals || 0),
+        },
+        milestones: Array.isArray(data.milestones)
+          ? data.milestones
+          : STUDENT_DEFAULT_MILESTONES.map((m) => ({ ...m })),
+        createdAt: data.createdAt || storedStudentData?.registeredAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || new Date().toISOString(),
+      });
+
+      referralAccounts.set(cleanUserId, hydrated);
+      referralCodeIndex.set(existingCode.toUpperCase(), cleanUserId);
+      return hydrated;
     }
   } catch (err) {
-    console.log(`[Firestore Account Lookup Notice] for ${userId}:`, (err as Error)?.message || err);
+    console.log(`[Firestore Account Lookup Notice] for ${cleanUserId}:`, (err as Error)?.message || err);
   }
 
-  // 3. Create fresh account
-  const code = generateReferralCode(userType, name, userId);
-  const now = new Date().toISOString();
+  // 3. Determine unique permanent code (use stored student doc code if present, else generate unique code)
+  const storedCodeFromStudent = sanitizeReferralCode(storedStudentData?.referralCode);
+  const cleanPreferred = sanitizeReferralCode(preferredReferralCode);
+  let code =
+    storedCodeFromStudent ||
+    (cleanPreferred && !referralCodeIndex.has(cleanPreferred) ? cleanPreferred : '') ||
+    generateReferralCode(userType, storedStudentData?.name || name, cleanUserId);
 
+  // Guarantee uniqueness across students
+  const existingOwner = referralCodeIndex.get(code.toUpperCase());
+  if (existingOwner && existingOwner !== cleanUserId) {
+    code = generateUniqueStudentReferralCode(cleanUserId, name, referralCodeIndex.keys());
+  }
+
+  const now = new Date().toISOString();
   let category: AmbassadorCategory = 'knowledge_ambassador';
   if (userType === 'teacher') category = 'educator_excellence';
 
-  const milestonesClone: ReferralMilestone[] = (userType === 'teacher' ? TEACHER_DEFAULT_MILESTONES : STUDENT_DEFAULT_MILESTONES).map(m => ({ ...m }));
+  const milestonesClone: ReferralMilestone[] = (
+    userType === 'teacher' ? TEACHER_DEFAULT_MILESTONES : STUDENT_DEFAULT_MILESTONES
+  ).map((m) => ({ ...m }));
 
-  const newAccount: ReferralAccount = {
-    id: `ref_acc_${userId}`,
-    userId,
+  const newAccount: ReferralAccount = normalizeReferralAccountForClient({
+    id: `ref_acc_${cleanUserId}`,
+    userId: cleanUserId,
     userType,
-    name: name || 'Student Champion',
-    email,
-    mobile,
+    name: storedStudentData?.name || (name && name !== 'Champion' ? name : 'Student Champion'),
+    email: storedStudentData?.email || email,
+    mobile: storedStudentData?.mobile || mobile,
     referralCode: code,
     ambassadorCategory: category,
-    schoolName: schoolName || (userType === 'teacher' ? 'Vidya Mandir School' : undefined),
+    schoolName: schoolName || storedStudentData?.schoolName || (userType === 'teacher' ? 'Vidya Mandir School' : undefined),
     verificationStatus: userType === 'teacher' ? 'PENDING' : 'NOT_APPLICABLE',
     wallet: {
       availableBalance: 0,
       pendingBalance: 0,
       totalEarned: 0,
       totalWithdrawn: 0,
-      currency: 'INR'
+      currency: 'INR',
     },
     stats: {
       totalClicks: 0,
       totalSignedUp: 0,
       paidReferralsCount: 0,
       plan49Referrals: 0,
-      plan99Referrals: 0
+      plan99Referrals: 0,
     },
     milestones: milestonesClone,
-    createdAt: now,
-    updatedAt: now
-  };
+    createdAt: storedStudentData?.registeredAt || now,
+    updatedAt: now,
+  });
 
-  referralAccounts.set(userId, newAccount);
-  referralCodeIndex.set(code.toUpperCase(), userId);
+  referralAccounts.set(cleanUserId, newAccount);
+  referralCodeIndex.set(code.toUpperCase(), cleanUserId);
 
-  // Sync to Firestore
+  // Sync permanently to Firestore (/referrals/{userId} and /students/{userId})
   await saveAccountToFirestore(newAccount);
   return newAccount;
 }
 
-// Track referral code signup during student registration (increments totalSignedUp)
-export function trackReferralSignup(referralCode: string, newStudentId: string) {
-  const cleanCode = String(referralCode || '').trim().toUpperCase();
-  if (!cleanCode) return { tracked: false, reason: 'Empty referral code.' };
+// Track referral code signup during student registration (records who referred the new student & prevents self/invalid referrals)
+export async function trackReferralSignup(
+  referralCode: string,
+  newStudentId: string,
+  newStudentName = 'Student',
+  newStudentClass = 'Class 5',
+  newStudentMobile = ''
+) {
+  const cleanCode = sanitizeReferralCode(referralCode);
+  const cleanNewId = String(newStudentId || '').trim();
+  if (!cleanCode) return { tracked: false, reason: 'Empty or invalid referral code.' };
 
-  const referrerUserId = referralCodeIndex.get(cleanCode);
-  if (!referrerUserId || referrerUserId === newStudentId) {
+  // Ensure the new student's own referral account is initialized with their unique code
+  const newStudentAcc = await getOrCreateReferralAccount(cleanNewId, 'student', newStudentName);
+
+  // Prevent self-referral
+  if (cleanCode === newStudentAcc.referralCode.toUpperCase()) {
+    return { tracked: false, reason: 'Self-referral is prohibited. You cannot use your own referral code.' };
+  }
+
+  let referrerUserId = referralCodeIndex.get(cleanCode);
+  if (!referrerUserId) {
+    // Check Firestore for referrer
+    try {
+      const q = query(collection(serverDb, 'referrals'), where('referralCode', '==', cleanCode), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        referrerUserId = String(snap.docs[0].data().userId || snap.docs[0].id);
+        referralCodeIndex.set(cleanCode, referrerUserId);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  if (!referrerUserId || referrerUserId === cleanNewId) {
     return { tracked: false, reason: 'Invalid or self referral code.' };
   }
 
-  const referrer = referralAccounts.get(referrerUserId);
+  const referrer = await getOrCreateReferralAccount(referrerUserId);
   if (!referrer) {
     return { tracked: false, reason: 'Referrer account not found.' };
   }
 
-  referrer.stats.totalSignedUp += 1;
-  referrer.stats.totalClicks += 1;
-  referrer.updatedAt = new Date().toISOString();
-  saveAccountToFirestore(referrer).catch(() => {});
+  // Prevent duplicate signup attribution for the same newStudentId
+  const alreadySignedUp = referralTransactions.some(
+    (t) => t.buyerStudentId === cleanNewId && t.referrerId === referrer.userId
+  );
+  if (!alreadySignedUp) {
+    referrer.stats.totalSignedUp += 1;
+    referrer.stats.totalClicks += 1;
+    referrer.updatedAt = new Date().toISOString();
+
+    (newStudentAcc as any).referredByCode = cleanCode;
+    (newStudentAcc as any).referredByUserId = referrer.userId;
+    referralAccounts.set(cleanNewId, newStudentAcc);
+
+    const signupTx: ReferralTransaction = {
+      id: `ref_signup_${cleanNewId}`,
+      referralCode: cleanCode,
+      referrerId: referrer.userId,
+      referrerName: referrer.name,
+      referrerType: referrer.userType,
+      buyerStudentId: cleanNewId,
+      buyerStudentName: newStudentName,
+      buyerPlan: 'premium',
+      planAmount: 0,
+      referrerReward: 0,
+      buyerReward: 0,
+      orderId: '',
+      paymentId: '',
+      status: 'PENDING',
+      description: `${newStudentName} (${newStudentClass}) registered using referral link ?ref=${cleanCode}. Cashback unlocks after ₹99 Premium upgrade.`,
+      createdAt: new Date().toISOString(),
+    };
+    referralTransactions.unshift(signupTx);
+    await Promise.all([
+      saveAccountToFirestore(referrer),
+      saveTransactionToFirestore(signupTx),
+      setDoc(
+        doc(serverDb, 'students', cleanNewId),
+        {
+          id: cleanNewId,
+          referredByCode: cleanCode,
+          referredByStudentId: referrer.userId,
+        },
+        { merge: true }
+      ).catch(() => {}),
+      setDoc(
+        doc(serverDb, 'referrals', cleanNewId),
+        {
+          userId: cleanNewId,
+          referredByCode: cleanCode,
+          referredByUserId: referrer.userId,
+        },
+        { merge: true }
+      ).catch(() => {}),
+    ]);
+  }
 
   return {
     tracked: true,
     referrerId: referrer.userId,
+    referrerUserId: referrer.userId,
     referrerName: referrer.name,
-    referralCode: referrer.referralCode
+    referralCode: referrer.referralCode,
+    message: `Referred by ${referrer.name} (${referrer.referralCode})`,
   };
 }
 
@@ -450,13 +671,17 @@ export async function reverseReferralOnRefund(paymentId: string, reason = 'Custo
   return true;
 }
 
-// Validates a referral code prior to checkout
-export function validateReferralCode(code: string, currentUserId?: string) {
-  if (!code || !code.trim()) {
-    return { valid: false, error: 'Please enter a referral code.' };
+// Validates a referral code prior to registration or checkout
+export async function validateReferralCode(code: string, currentUserId?: string) {
+  const cleanCode = sanitizeReferralCode(code);
+  if (!cleanCode) {
+    return {
+      valid: false,
+      error: 'Please enter a valid referral code.',
+      message: 'Please enter a valid referral code.',
+    };
   }
 
-  const cleanCode = code.trim().toUpperCase();
   let referrerUserId = referralCodeIndex.get(cleanCode);
 
   if (!referrerUserId) {
@@ -469,28 +694,74 @@ export function validateReferralCode(code: string, currentUserId?: string) {
     }
   }
 
+  // Also check Firestore if not in memory
   if (!referrerUserId) {
-    return { valid: false, error: 'Invalid referral code. Please check and try again.' };
+    try {
+      const q = query(collection(serverDb, 'referrals'), where('referralCode', '==', cleanCode), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0].data();
+        referrerUserId = String(d.userId || snap.docs[0].id);
+        referralCodeIndex.set(cleanCode, referrerUserId);
+      } else {
+        const sq = query(collection(serverDb, 'students'), where('referralCode', '==', cleanCode), limit(1));
+        const sSnap = await getDocs(sq);
+        if (!sSnap.empty) {
+          const sd = sSnap.docs[0].data();
+          referrerUserId = String(sd.id || sSnap.docs[0].id);
+          referralCodeIndex.set(cleanCode, referrerUserId);
+        }
+      }
+    } catch {
+      // Ignore offline error
+    }
   }
 
-  const referrer = referralAccounts.get(referrerUserId);
+  if (!referrerUserId) {
+    return {
+      valid: false,
+      error: 'Invalid referral code. Please check and try again.',
+      message: 'Invalid referral code. Please check and try again.',
+    };
+  }
+
+  if (currentUserId && referrerUserId === currentUserId) {
+    return {
+      valid: false,
+      error: 'You cannot use your own referral code (Self-referral prohibited).',
+      message: 'Self-referral is not allowed. You cannot use your own referral code.',
+    };
+  }
+
+  const referrer = await getOrCreateReferralAccount(referrerUserId);
   if (!referrer) {
-    return { valid: false, error: 'Referrer profile not found.' };
+    return {
+      valid: false,
+      error: 'Referrer profile not found.',
+      message: 'Referrer profile not found.',
+    };
   }
 
   if (currentUserId && referrer.userId === currentUserId) {
-    return { valid: false, error: 'You cannot use your own referral code (Self-referral prohibited).' };
+    return {
+      valid: false,
+      error: 'You cannot use your own referral code (Self-referral prohibited).',
+      message: 'Self-referral is not allowed. You cannot use your own referral code.',
+    };
   }
 
   return {
     valid: true,
     code: cleanCode,
+    referralCode: cleanCode,
+    referrerUserId: referrer.userId,
     referrerName: referrer.name,
+    referrerClass: (referrer as any).className || 'Student',
     ambassadorCategory: referrer.ambassadorCategory,
     userType: referrer.userType,
-    plan49Cashback: referralConfig.plan49BuyerReward,
+    plan49Cashback: 0,
     plan99Cashback: referralConfig.plan99BuyerReward,
-    message: `Valid code from ${referrer.name}! You will receive ₹${referralConfig.plan49BuyerReward} (Basic) or ₹${referralConfig.plan99BuyerReward} (Premium) wallet cashback on enrollment.`
+    message: `Valid code from ${referrer.name}! ₹${referralConfig.plan99ReferrerReward} referral cashback applies on verified ₹99 Premium subscription.`,
   };
 }
 
@@ -805,21 +1076,23 @@ export function getAdminReferralStats() {
   };
 }
 
-// Seed realistic educational sample ambassador data for instant testing
+// Seed realistic educational sample ambassador data for instant testing across 3 distinct student accounts
 export function seedSampleReferralData() {
   if (referralAccounts.size > 0) return;
 
-  console.log('[Referral System] Seeding verified sample student & teacher ambassadors...');
+  console.log('[Referral System] Seeding verified sample student ambassadors with unique STUDY codes...');
 
-  // 1. Student Ambassador (Aarav Sharma - Knowledge Ambassador)
-  const aarav: ReferralAccount = {
-    id: 'ref_acc_student1',
-    userId: 'student1',
+  // 1. Student 1 (Aarav Sharma -> STUDY123)
+  const aarav: ReferralAccount = normalizeReferralAccountForClient({
+    id: 'ref_acc_uid_aarav_c4_987654',
+    userId: 'uid_aarav_c4_987654',
     userType: 'student',
     name: 'Aarav Sharma',
+    className: 'Class 4',
     email: 'aarav.sharma@example.com',
     mobile: '9876543210',
-    referralCode: 'VC-STU-AARAV4',
+    referralCode: 'STUDY123',
+    referralLink: buildStudentReferralLink('STUDY123'),
     ambassadorCategory: 'knowledge_ambassador',
     verificationStatus: 'NOT_APPLICABLE',
     wallet: {
@@ -833,8 +1106,8 @@ export function seedSampleReferralData() {
       totalClicks: 48,
       totalSignedUp: 16,
       paidReferralsCount: 12,
-      plan49Referrals: 7,
-      plan99Referrals: 5
+      plan49Referrals: 0,
+      plan99Referrals: 12
     },
     milestones: STUDENT_DEFAULT_MILESTONES.map((m, i) => ({
       ...m,
@@ -843,19 +1116,23 @@ export function seedSampleReferralData() {
     })),
     createdAt: '2026-05-01T00:00:00.000Z',
     updatedAt: '2026-05-05T14:30:00.000Z'
-  };
-  referralAccounts.set('student1', aarav);
-  referralCodeIndex.set('VC-STU-AARAV4', 'student1');
+  });
+  referralAccounts.set('uid_aarav_c4_987654', aarav);
+  referralAccounts.set('student1', { ...aarav, userId: 'student1' });
+  referralCodeIndex.set('STUDY123', 'uid_aarav_c4_987654');
+  referralCodeIndex.set('VC-STU-AARAV4', 'uid_aarav_c4_987654');
 
-  // 2. Student Ambassador (Ananya Deshmukh)
-  const ananya: ReferralAccount = {
-    id: 'ref_acc_student2',
-    userId: 'student2',
+  // 2. Student 2 (Ananya Deshmukh -> STUDY456)
+  const ananya: ReferralAccount = normalizeReferralAccountForClient({
+    id: 'ref_acc_uid_ananya_c6_982201',
+    userId: 'uid_ananya_c6_982201',
     userType: 'student',
     name: 'Ananya Deshmukh',
+    className: 'Class 6',
     email: 'ananya.deshmukh@example.com',
-    mobile: '9823012345',
-    referralCode: 'VC-STU-ANANYA6',
+    mobile: '9822012345',
+    referralCode: 'STUDY456',
+    referralLink: buildStudentReferralLink('STUDY456'),
     ambassadorCategory: 'knowledge_ambassador',
     verificationStatus: 'NOT_APPLICABLE',
     wallet: {
@@ -869,8 +1146,8 @@ export function seedSampleReferralData() {
       totalClicks: 32,
       totalSignedUp: 11,
       paidReferralsCount: 8,
-      plan49Referrals: 5,
-      plan99Referrals: 3
+      plan49Referrals: 0,
+      plan99Referrals: 8
     },
     milestones: STUDENT_DEFAULT_MILESTONES.map((m, i) => ({
       ...m,
@@ -879,56 +1156,61 @@ export function seedSampleReferralData() {
     })),
     createdAt: '2026-05-01T00:00:00.000Z',
     updatedAt: '2026-05-03T11:20:00.000Z'
-  };
-  referralAccounts.set('student2', ananya);
-  referralCodeIndex.set('VC-STU-ANANYA6', 'student2');
+  });
+  referralAccounts.set('uid_ananya_c6_982201', ananya);
+  referralAccounts.set('student2', { ...ananya, userId: 'student2' });
+  referralCodeIndex.set('STUDY456', 'uid_ananya_c6_982201');
+  referralCodeIndex.set('VC-STU-ANANYA6', 'uid_ananya_c6_982201');
 
-  // 3. Top Performer (Master Ronak - Diamond Ambassador)
-  const ronak: ReferralAccount = {
-    id: 'ref_acc_student_ronak',
-    userId: 'student_ronak',
+  // 3. Student 3 (Rohan Kulkarni -> STUDY789)
+  const rohan: ReferralAccount = normalizeReferralAccountForClient({
+    id: 'ref_acc_uid_rohan_c7_983301',
+    userId: 'uid_rohan_c7_983301',
     userType: 'student',
-    name: 'Ronak Varade',
-    email: 'champion@mystudyzone.in',
-    mobile: '9820011223',
-    referralCode: 'VC-STU-RONAK9',
-    ambassadorCategory: 'diamond_ambassador',
+    name: 'Rohan Kulkarni',
+    className: 'Class 7',
+    email: 'rohan.kulkarni@example.com',
+    mobile: '9833012345',
+    referralCode: 'STUDY789',
+    referralLink: buildStudentReferralLink('STUDY789'),
+    ambassadorCategory: 'knowledge_ambassador',
     verificationStatus: 'NOT_APPLICABLE',
     wallet: {
-      availableBalance: 280,
+      availableBalance: 25,
       pendingBalance: 0,
-      totalEarned: 280,
+      totalEarned: 25,
       totalWithdrawn: 0,
       currency: 'INR'
     },
     stats: {
-      totalClicks: 240,
-      totalSignedUp: 88,
-      paidReferralsCount: 56,
+      totalClicks: 19,
+      totalSignedUp: 7,
+      paidReferralsCount: 5,
       plan49Referrals: 0,
-      plan99Referrals: 56
+      plan99Referrals: 5
     },
-    milestones: STUDENT_DEFAULT_MILESTONES.map(m => ({
+    milestones: STUDENT_DEFAULT_MILESTONES.map((m, i) => ({
       ...m,
-      unlocked: true,
-      unlockedAt: '2026-05-04T12:00:00.000Z'
+      unlocked: i === 0,
+      unlockedAt: i === 0 ? '2026-05-04T09:15:00.000Z' : undefined
     })),
     createdAt: '2026-05-01T00:00:00.000Z',
-    updatedAt: '2026-05-04T12:00:00.000Z'
-  };
-  referralAccounts.set('student_ronak', ronak);
-  referralCodeIndex.set('VC-STU-RONAK9', 'student_ronak');
+    updatedAt: '2026-05-04T09:15:00.000Z'
+  });
+  referralAccounts.set('uid_rohan_c7_983301', rohan);
+  referralAccounts.set('student3', { ...rohan, userId: 'student3' });
+  referralCodeIndex.set('STUDY789', 'uid_rohan_c7_983301');
 
   // Seed sample transactions with ₹5 reward structure on ₹99 Premium Plan
   referralTransactions.push(
     {
       id: 'ref_tx_seed_1',
-      referralCode: 'VC-STU-RONAK9',
-      referrerId: 'student_ronak',
-      referrerName: 'Ronak Varade',
+      referralCode: 'STUDY123',
+      referrerId: 'uid_aarav_c4_987654',
+      referrerName: 'Aarav Sharma',
       referrerType: 'student',
       buyerStudentId: 'sample_b1',
-      buyerStudentName: 'Rohan Patil',
+      buyerStudentName: 'Siddharth Joshi',
       buyerPlan: 'premium',
       planAmount: 99,
       referrerReward: 5,
@@ -936,14 +1218,14 @@ export function seedSampleReferralData() {
       orderId: 'order_seed_991',
       paymentId: 'pay_seed_991',
       status: 'CREDITED',
-      description: 'Earned ₹5 from Rohan Patil\'s PREMIUM (₹99) enrollment.',
+      description: 'Earned ₹5 from Siddharth Joshi\'s PREMIUM (₹99) enrollment.',
       createdAt: '2026-05-05T14:30:00.000Z'
     },
     {
       id: 'ref_tx_seed_2',
-      referralCode: 'VC-STU-AARAV4',
-      referrerId: 'student1',
-      referrerName: 'Aarav Sharma',
+      referralCode: 'STUDY456',
+      referrerId: 'uid_ananya_c6_982201',
+      referrerName: 'Ananya Deshmukh',
       referrerType: 'student',
       buyerStudentId: 'sample_b2',
       buyerStudentName: 'Aditya Kale',
@@ -959,7 +1241,14 @@ export function seedSampleReferralData() {
     }
   );
 
-  console.log('[Referral System] Sample data successfully initialized.');
+  // Sync the 3 distinct student referral accounts to Firestore on boot
+  Promise.all([
+    saveAccountToFirestore(aarav),
+    saveAccountToFirestore(ananya),
+    saveAccountToFirestore(rohan),
+  ]).catch(() => {});
+
+  console.log('[Referral System] Sample data successfully initialized (STUDY123, STUDY456, STUDY789).');
 }
 
 // Run seed on initialization

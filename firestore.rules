@@ -168,20 +168,32 @@ service cloud.firestore {
 
     // 6. Collection: /referrals/{userId}
     match /referrals/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow write: if isOwner(userId) || isAdmin();
+      allow read: if isValidId(userId) || isOwner(userId) || isAdmin();
+      allow create: if isAdmin() || (
+        isValidId(userId) &&
+        incoming().userId == userId &&
+        incoming().referralCode is string &&
+        incoming().referralCode.size() >= 4 &&
+        incoming().referralCode.size() <= 32
+      );
+      allow update: if isAdmin() || (
+        (isValidId(userId) || isOwner(userId)) &&
+        incoming().userId == existing().userId &&
+        incoming().referralCode == existing().referralCode
+      );
+      allow delete: if isAdmin();
     }
 
     // 7. Collection: /referral_transactions/{txId}
     match /referral_transactions/{txId} {
-      allow read: if isSignedIn() && (resource.data.referrerId == request.auth.uid || resource.data.buyerStudentId == request.auth.uid || isAdmin());
+      allow read: if isValidId(txId) || (isSignedIn() && (resource.data.referrerId == request.auth.uid || resource.data.buyerStudentId == request.auth.uid || isAdmin()));
       allow write: if isAdmin();
     }
 
     // 8. Collection: /payout_requests/{payoutId}
     match /payout_requests/{payoutId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow read: if isValidId(payoutId) || (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
+      allow create: if isValidId(payoutId) && incoming().userId is string && incoming().amount is number && incoming().amount > 0;
       allow update, delete: if isAdmin();
     }
 

@@ -33,6 +33,12 @@ import {
   AmbassadorCategory 
 } from '../types/referral';
 import { TeacherCertificateModal } from './TeacherCertificateModal';
+import {
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  buildStudentReferralDisplayLink,
+  sanitizeReferralCode,
+} from '../utils/referralCoding';
 
 interface ReferralHubViewProps {
   currentUserId?: string;
@@ -129,31 +135,64 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
     loadData();
   }, [activeTab, currentUserId]);
 
+  const uniqueStudentCode =
+    sanitizeReferralCode(account?.referralCode) ||
+    generateUniqueStudentReferralCode(currentUserId, userName);
+
   const handleCopyCode = () => {
-    if (!account) return;
-    navigator.clipboard.writeText(account.referralCode);
+    navigator.clipboard.writeText(uniqueStudentCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const getShareUrl = () => {
-    if (!account) return window.location.origin;
-    return `${window.location.origin}/?ref=${encodeURIComponent(account.referralCode)}`;
+    return buildStudentReferralLink(uniqueStudentCode);
+  };
+
+  const getDisplayShareUrl = () => {
+    return buildStudentReferralDisplayLink(uniqueStudentCode);
   };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(getShareUrl());
     setCopiedLink(true);
+    referralService.recordInviteClick(currentUserId).catch(() => {});
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleWhatsAppShare = () => {
-    if (!account) return;
-    const isTeacher = account.userType === 'teacher';
+  const handleShareLink = async () => {
+    const shareUrl = getShareUrl();
+    const isTeacher = account?.userType === 'teacher';
     const text = isTeacher
-      ? `🏆 *Special Invitation from Educator ${account.name}!*\n\nEmpower your child with *Vacation Champions* - complete with daily quizzes, 45+ audio stories, 50 Shivaji Maharaj chapters, and modern AI Learning Academy.\n\nUse my Educator Referral Code: *${account.referralCode}* on the ₹99 Premium Plan to earn ₹5 referral cashback!\n\n👉 Join here: ${getShareUrl()}`
-      : `🎓 *Learn • Share • Grow • Earn with Vacation Champions!*\n\nHey! I'm learning on Vacation Champions with fun quizzes, story adventures, and AI Academy.\n\nUse my Referral Code *${account.referralCode}* when subscribing to the ₹99 Premium Plan for ₹5 instant cashback!\n\n👉 Join now: ${getShareUrl()}`;
+      ? `🏆 Special Invitation from Educator ${account?.name || userName}! Join Vacation Champions using my Educator Referral Link: ${shareUrl} (Code: ${uniqueStudentCode})`
+      : `🎓 Join me on Vacation Champions! Register using my personal referral link: ${shareUrl} (Code: ${uniqueStudentCode}) and unlock ₹5 cashback on the ₹99 Premium Plan!`;
 
+    referralService.recordInviteClick(currentUserId).catch(() => {});
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Vacation Champions Referral Invite',
+          text,
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // Fallback to WhatsApp share
+      }
+    }
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleWhatsAppShare = () => {
+    const isTeacher = account?.userType === 'teacher';
+    const shareUrl = getShareUrl();
+    const text = isTeacher
+      ? `🏆 *Special Invitation from Educator ${account?.name || userName}!*\n\nEmpower your child with *Vacation Champions* - complete with daily quizzes, 45+ audio stories, 50 Shivaji Maharaj chapters, and modern AI Learning Academy.\n\nUse my Educator Referral Code: *${uniqueStudentCode}* on the ₹99 Premium Plan to earn ₹5 referral cashback!\n\n👉 Join here: ${shareUrl}`
+      : `🎓 *Learn • Share • Grow • Earn with Vacation Champions!*\n\nHey! I'm learning on Vacation Champions with fun quizzes, story adventures, and AI Academy.\n\nUse my Referral Code *${uniqueStudentCode}* when subscribing to the ₹99 Premium Plan for ₹5 instant cashback!\n\n👉 Join now: ${shareUrl}`;
+
+    referralService.recordInviteClick(currentUserId).catch(() => {});
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
@@ -583,9 +622,11 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
                 {/* Big Referral Code Display */}
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border-2 border-dashed border-orange-400 mb-4">
                   <div>
-                    <div className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">Active Code</div>
+                    <div className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">
+                      Permanent Student Referral Code (UID: {currentUserId})
+                    </div>
                     <div className="text-2xl sm:text-3xl font-mono font-black text-gray-900 tracking-wider">
-                      {account?.referralCode || 'VC-STU-CHAMP'}
+                      {uniqueStudentCode}
                     </div>
                   </div>
                   <button
@@ -598,34 +639,55 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
                 </div>
 
                 {/* Direct Tracking Link */}
-                <div className="flex items-center space-x-2 p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-600 mb-6">
-                  <span className="truncate flex-1 font-mono text-[11px]">{getShareUrl()}</span>
-                  <button
-                    onClick={handleCopyLink}
-                    className="p-1.5 text-gray-500 hover:text-orange-600 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
-                    title="Copy Link"
-                  >
-                    {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                  </button>
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-700 mb-6 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                      Your Unique Referral Link
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Permanent &amp; Verified
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="truncate flex-1 font-mono font-bold text-xs text-indigo-950" title={getShareUrl()}>
+                      {getDisplayShareUrl()}
+                    </span>
+                    <button
+                      onClick={handleCopyLink}
+                      className="px-2.5 py-1 text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                      title="Copy Link"
+                    >
+                      {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Action Buttons: WhatsApp and Link Sharing */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-gray-100">
+              {/* Action Buttons: Copy Link, Share Link, and WhatsApp */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-4 border-t border-gray-100">
                 <button
-                  onClick={handleWhatsAppShare}
-                  className="flex items-center justify-center space-x-2 px-4 py-3 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-sm rounded-xl shadow-md transition-all cursor-pointer"
+                  onClick={handleCopyLink}
+                  className="flex items-center justify-center space-x-1.5 px-4 py-3 bg-gray-900 hover:bg-black text-white font-bold text-xs sm:text-sm rounded-xl shadow transition-all cursor-pointer"
                 >
-                  <Send className="w-4 h-4 fill-white" />
-                  <span>Share on WhatsApp</span>
+                  {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
                 </button>
 
                 <button
-                  onClick={handleCopyLink}
-                  className="flex items-center justify-center space-x-2 px-4 py-3 bg-gray-900 hover:bg-black text-white font-bold text-sm rounded-xl shadow transition-all cursor-pointer"
+                  onClick={handleShareLink}
+                  className="flex items-center justify-center space-x-1.5 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  <Copy className="w-4 h-4" />
-                  <span>{copiedLink ? 'Link Copied!' : 'Copy Direct Link'}</span>
+                  <Share2 className="w-4 h-4" />
+                  <span>Share Link</span>
+                </button>
+
+                <button
+                  onClick={handleWhatsAppShare}
+                  className="flex items-center justify-center space-x-1.5 px-4 py-3 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <Send className="w-4 h-4 fill-white" />
+                  <span>WhatsApp</span>
                 </button>
               </div>
             </div>

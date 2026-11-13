@@ -70,7 +70,10 @@ export interface StudentProfile {
   firebaseUid?: string;
   passwordHash?: string;
   // 3-Role Access Portal & School Governance extensions
+  referralCode?: string;
+  referralLink?: string;
   referredByCode?: string;
+  referredByStudentId?: string;
   linkedParentId?: string;
   attendanceRecords?: AttendanceRecord[];
   assignments?: AssignmentItem[];

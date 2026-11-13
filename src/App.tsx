@@ -66,24 +66,34 @@ const AppContent: React.FC = () => {
   const [isMembershipOpen, setIsMembershipOpen] = useState<boolean>(false);
   const [membershipInitialPlan, setMembershipInitialPlan] = useState<'basic' | 'premium'>('premium');
 
-  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...)
+  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=STUDY123)
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const mode = params.get('mode');
       const oobCode = params.get('oobCode');
       const emailParam = params.get('email');
+      const refParam = (params.get('ref') || params.get('referral') || '').trim().toUpperCase();
+      const pathname = window.location.pathname.toLowerCase();
+
+      if (refParam && refParam !== 'VC-STU-CHAMP') {
+        localStorage.setItem('vc_pending_ref_code', refParam);
+      }
 
       if (mode === 'resetPassword' && oobCode) {
         setResetOobCode(oobCode);
         setIsResetModalOpen(true);
+      } else if (pathname.startsWith('/register') || refParam) {
+        setAuthDefaultTab('register');
+        setIsAuthOpen(true);
+        setIsAuthModalOpen(true);
       } else if (emailParam) {
         setAuthInitialEmail(emailParam);
       }
     } catch {
       // Ignore URL parsing errors
     }
-  }, []);
+  }, [setIsAuthModalOpen]);
 
   const clearResetQueryParams = () => {
     try {

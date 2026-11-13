@@ -988,6 +988,307 @@ export async function handler(event) {
     });
   }
 
+  // 9. REFERRAL SYSTEM ENDPOINTS FOR PUBLISHED MYSTUDYZONE.IN (/api/referrals/*)
+  function generateUniqueNetlifyReferralCode(studentId) {
+    const cleanId = String(studentId || '').trim();
+    const reserved = {
+      student1: 'STUDY123',
+      uid_aarav_c4_987654: 'STUDY123',
+      student2: 'STUDY456',
+      uid_ananya_c6_982201: 'STUDY456',
+      student3: 'STUDY789',
+      uid_rohan_c7_983301: 'STUDY789'
+    };
+    if (reserved[cleanId]) return reserved[cleanId];
+
+    const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let h1 = 2166136261;
+    let h2 = 16777619;
+    const seed = cleanId || `stu_${Date.now()}`;
+    for (let i = 0; i < seed.length; i++) {
+      const ch = seed.charCodeAt(i);
+      h1 ^= ch;
+      h1 = Math.imul(h1, 16777619);
+      h2 ^= ch + i * 31;
+      h2 = Math.imul(h2, 1099511628211 & 0xffffffff);
+    }
+    const digitsPart = String((Math.abs(h1) % 900) + 100);
+    let alphaPart = '';
+    let temp = Math.abs(h2);
+    for (let i = 0; i < 3; i++) {
+      alphaPart += alphabet[temp % alphabet.length];
+      temp = Math.floor(temp / alphabet.length) ^ (Math.abs(h1) >> (i * 3));
+    }
+    return `STUDY${digitsPart}${alphaPart}`;
+  }
+
+  async function resolveStudentReferralAccountNetlify(userId, fallbackName = 'Student Champion') {
+    const cleanId = String(userId || '').trim();
+    const [refDoc, stuDoc] = await Promise.all([
+      getFirestoreDocument('referrals', cleanId),
+      getFirestoreDocument('students', cleanId)
+    ]);
+
+    const rawCode = String(refDoc?.referralCode || stuDoc?.referralCode || '')
+      .trim()
+      .toUpperCase();
+    const validExistingCode =
+      rawCode && rawCode !== 'VC-STU-CHAMP' && rawCode !== 'DEFAULT' ? rawCode : '';
+    const referralCode = validExistingCode || generateUniqueNetlifyReferralCode(cleanId);
+    const referralLink = `https://mystudyzone.in/register?ref=${encodeURIComponent(referralCode)}`;
+    const userName = String(refDoc?.userName || refDoc?.name || stuDoc?.name || fallbackName);
+    const className = String(refDoc?.className || stuDoc?.classLevel || 'Class 5');
+
+    const account = {
+      id: `ref_acc_${cleanId}`,
+      userId: cleanId,
+      name: userName,
+      userName,
+      userRole: 'student',
+      className,
+      schoolName: String(refDoc?.schoolName || stuDoc?.schoolName || ''),
+      city: String(refDoc?.city || 'Maharashtra'),
+      email: String(refDoc?.email || stuDoc?.email || ''),
+      mobile: String(refDoc?.mobile || stuDoc?.mobile || ''),
+      referralCode,
+      referralLink,
+      referredByCode: refDoc?.referredByCode || stuDoc?.referredByCode || '',
+      referredByUserId: refDoc?.referredByUserId || stuDoc?.referredByStudentId || '',
+      totalInvitesSent: Number(refDoc?.totalInvitesSent || 0),
+      totalSignups: Number(refDoc?.totalSignups || 0),
+      successfulReferrals: Number(refDoc?.successfulReferrals || 0),
+      pendingReferrals: Number(refDoc?.pendingReferrals || 0),
+      totalEarnings: Number(refDoc?.totalEarnings || 0),
+      availableWalletBalance: Number(refDoc?.availableWalletBalance || 0),
+      withdrawnAmount: Number(refDoc?.withdrawnAmount || 0),
+      pendingWithdrawalAmount: Number(refDoc?.pendingWithdrawalAmount || 0),
+      freeMonthsEarned: Number(refDoc?.freeMonthsEarned || 0),
+      totalXPBonus: Number(refDoc?.totalXPBonus || 0),
+      currentTier: String(refDoc?.currentTier || 'None'),
+      unlockedRewards: [],
+      createdAt: String(refDoc?.createdAt || stuDoc?.registeredAt || new Date().toISOString()),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (!validExistingCode || !refDoc) {
+      await Promise.all([
+        patchFirestoreDocument('referrals', cleanId, account),
+        patchFirestoreDocument('students', cleanId, {
+          id: cleanId,
+          referralCode,
+          referralLink
+        })
+      ]);
+    }
+
+    return account;
+  }
+
+  // 9.1 GET /api/referrals/account/:userId
+  if (method === 'GET' && normalizedPath.startsWith('/referrals/account/')) {
+    const userId = decodeURIComponent(normalizedPath.replace('/referrals/account/', '').split('?')[0]);
+    const account = await resolveStudentReferralAccountNetlify(userId);
+    return jsonResponse(200, {
+      success: true,
+      account,
+      transactions: [],
+      payouts: [],
+      payoutRequests: []
+    });
+  }
+
+  // 9.2 POST /api/referrals/register
+  if (method === 'POST' && normalizedPath === '/referrals/register') {
+    const body = JSON.parse(event.body || '{}');
+    const userId = String(body.userId || '').trim();
+    if (!userId) {
+      return jsonResponse(400, { success: false, error: 'User ID required.' });
+    }
+    const account = await resolveStudentReferralAccountNetlify(
+      userId,
+      body.userName || body.name || 'Student Champion'
+    );
+    return jsonResponse(200, {
+      success: true,
+      account
+    });
+  }
+
+  // 9.3 POST /api/referrals/validate-code
+  if (method === 'POST' && normalizedPath === '/referrals/validate-code') {
+    const body = JSON.parse(event.body || '{}');
+    const cleanCode = String(body.referralCode || body.code || '')
+      .trim()
+      .toUpperCase();
+    const currentUserId = String(body.currentUserId || '').trim();
+
+    if (!cleanCode || cleanCode === 'VC-STU-CHAMP') {
+      return jsonResponse(200, {
+        valid: false,
+        message: 'Please enter a valid referral code.'
+      });
+    }
+
+    const builtIn = {
+      STUDY123: { id: 'student1', name: 'Aarav Sharma', classLevel: 'Class 5' },
+      STUDY456: { id: 'student2', name: 'Ananya Patil', classLevel: 'Class 3' },
+      STUDY789: { id: 'student3', name: 'Rohan Deshmukh', classLevel: 'Class 7' }
+    };
+
+    if (builtIn[cleanCode]) {
+      const match = builtIn[cleanCode];
+      if (currentUserId && currentUserId === match.id) {
+        return jsonResponse(200, {
+          valid: false,
+          message: 'Self-referral is not allowed. You cannot use your own referral code.'
+        });
+      }
+      return jsonResponse(200, {
+        valid: true,
+        code: cleanCode,
+        referralCode: cleanCode,
+        referrerUserId: match.id,
+        referrerName: match.name,
+        referrerClass: match.classLevel,
+        plan99Cashback: 5,
+        message: `Valid code! Referred by ${match.name} (${match.classLevel}).`
+      });
+    }
+
+    // Query Firestore for matching referralCode
+    try {
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents:runQuery`;
+      const qRes = await fetch(queryUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: 'referrals' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'referralCode' },
+                op: 'EQUAL',
+                value: { stringValue: cleanCode }
+              }
+            },
+            limit: 1
+          }
+        })
+      });
+      const qData = await qRes.json().catch(() => []);
+      const docFound = Array.isArray(qData) && qData[0]?.document?.fields;
+      if (docFound) {
+        const ownerId = docFound.userId?.stringValue || '';
+        const ownerName = docFound.userName?.stringValue || docFound.name?.stringValue || 'Student Champion';
+        const ownerClass = docFound.className?.stringValue || 'Student';
+        if (currentUserId && ownerId === currentUserId) {
+          return jsonResponse(200, {
+            valid: false,
+            message: 'Self-referral is not allowed. You cannot use your own referral code.'
+          });
+        }
+        return jsonResponse(200, {
+          valid: true,
+          code: cleanCode,
+          referralCode: cleanCode,
+          referrerUserId: ownerId,
+          referrerName: ownerName,
+          referrerClass: ownerClass,
+          plan99Cashback: 5,
+          message: `Valid code! Referred by ${ownerName}.`
+        });
+      }
+    } catch {
+      // Ignore query error
+    }
+
+    return jsonResponse(200, {
+      valid: false,
+      message: 'Invalid referral code. Please check the code and try again.'
+    });
+  }
+
+  // 9.4 POST /api/referrals/track-signup
+  if (method === 'POST' && normalizedPath === '/referrals/track-signup') {
+    const body = JSON.parse(event.body || '{}');
+    const newUserId = String(body.newUserId || body.newStudentId || '').trim();
+    const newUserName = String(body.newUserName || 'Student Champion');
+    const referralCodeUsed = String(body.referralCodeUsed || body.referralCode || '')
+      .trim()
+      .toUpperCase();
+
+    if (!newUserId) {
+      return jsonResponse(400, { success: false, error: 'newUserId is required.' });
+    }
+
+    const newAcc = await resolveStudentReferralAccountNetlify(newUserId, newUserName);
+    if (referralCodeUsed && referralCodeUsed !== newAcc.referralCode) {
+      await Promise.all([
+        patchFirestoreDocument('students', newUserId, {
+          id: newUserId,
+          referredByCode: referralCodeUsed
+        }),
+        patchFirestoreDocument('referrals', newUserId, {
+          userId: newUserId,
+          referredByCode: referralCodeUsed
+        })
+      ]);
+    }
+
+    return jsonResponse(200, {
+      success: true,
+      tracked: Boolean(referralCodeUsed),
+      account: newAcc
+    });
+  }
+
+  // 9.5 POST /api/referrals/invite-click
+  if (method === 'POST' && normalizedPath === '/referrals/invite-click') {
+    return jsonResponse(200, { success: true });
+  }
+
+  // 9.6 GET /api/referrals/leaderboard
+  if (method === 'GET' && normalizedPath === '/referrals/leaderboard') {
+    return jsonResponse(200, {
+      success: true,
+      leaderboard: [
+        {
+          rank: 1,
+          userId: 'student1',
+          userName: 'Aarav Sharma',
+          className: 'Class 5',
+          schoolName: 'Vacation Champions Academy',
+          city: 'Pune',
+          successfulReferrals: 12,
+          totalEarnings: 85,
+          currentTier: 'Silver'
+        },
+        {
+          rank: 2,
+          userId: 'student2',
+          userName: 'Ananya Patil',
+          className: 'Class 3',
+          schoolName: 'Vacation Champions Academy',
+          city: 'Mumbai',
+          successfulReferrals: 8,
+          totalEarnings: 55,
+          currentTier: 'Bronze'
+        },
+        {
+          rank: 3,
+          userId: 'student3',
+          userName: 'Rohan Deshmukh',
+          className: 'Class 7',
+          schoolName: 'Vacation Champions Academy',
+          city: 'Nagpur',
+          successfulReferrals: 5,
+          totalEarnings: 25,
+          currentTier: 'Bronze'
+        }
+      ]
+    });
+  }
+
   return jsonResponse(404, {
     success: false,
     error: `API route not found: ${method} ${rawPath}`

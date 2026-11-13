@@ -32,11 +32,19 @@ import {
   RefreshCw,
   Gift,
   Compass,
-  Brain
+  Brain,
+  Copy,
+  Share2,
+  Check
 } from 'lucide-react';
 import { QuizLevel, SubjectLevelProgress } from '../types';
 import { StudentMasteryChart } from './StudentMasteryChart';
 import { getStudentPlanInfo, canAccessSubject, canAccessFeature } from '../utils/subscriptionAccess';
+import {
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  buildStudentReferralDisplayLink
+} from '../utils/referralCoding';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
@@ -72,8 +80,43 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     getSubjectLevelProgress 
   } = useApp();
   const [selectedSubjectForLevels, setSelectedSubjectForLevels] = useState<SubjectName | null>(null);
+  const [copiedDashRefLink, setCopiedDashRefLink] = useState(false);
 
   if (!currentStudent) return null;
+
+  const studentReferralCode = currentStudent.referralCode || generateUniqueStudentReferralCode(currentStudent.id, currentStudent.name);
+  const studentReferralLink = currentStudent.referralLink || buildStudentReferralLink(studentReferralCode);
+  const studentReferralDisplayLink = buildStudentReferralDisplayLink(studentReferralCode);
+
+  const handleCopyDashboardRefLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(studentReferralLink);
+      setCopiedDashRefLink(true);
+      setTimeout(() => setCopiedDashRefLink(false), 2500);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleShareDashboardRefLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareText = `Join Vacation Champions (${currentStudent.classLevel}) using my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Vacation Champions Referral Link',
+          text: shareText,
+          url: studentReferralLink
+        });
+        return;
+      } catch {
+        // Fallback
+      }
+    }
+    await handleCopyDashboardRefLink(e);
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank', 'noopener,noreferrer');
+  };
 
   // Calculate statistics
   const studentAttempts = allAttempts.filter(a => a.studentId === currentStudent.id);
@@ -991,30 +1034,73 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       {/* 🎓 LEARN • SHARE • GROW • EARN: AMBASSADOR & REFERRALS PROMINENT CARD */}
       <div 
         onClick={() => onNavigateTab('referrals')}
-        className="group relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-7 sm:p-8 shadow-xl hover:shadow-2xl transition-all cursor-pointer border-2 border-amber-300/40"
+        className="group relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-7 sm:p-8 shadow-xl hover:shadow-2xl transition-all cursor-pointer border-2 border-amber-300/40 space-y-5"
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-3xl">🎁</span>
               <span className="text-xs font-extrabold uppercase bg-white text-orange-950 px-3 py-1 rounded-full shadow-xs">
-                KNOWLEDGE AMBASSADOR PROGRAM
+                STUDENT REFERRAL &amp; WALLET PROGRAM
               </span>
               <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full text-amber-100">
-                EARN ₹5 OR ₹10 CASH PER FRIEND
+                EARN ₹5 CASHBACK PER ₹99 REFERRAL
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-display font-extrabold tracking-tight">
               LEARN • SHARE • GROW • EARN
             </h2>
             <p className="text-amber-100 text-xs sm:text-sm leading-relaxed font-medium">
-              &quot;Learn More, Share Knowledge, Grow Together and Earn Exciting Rewards!&quot; Invite classmates & friends to Vacation Champions. Unlock the Diamond Ambassador Crown and withdraw earnings instantly to UPI or Bank!
+              Share your unique personal referral link with classmates! Earn ₹5 verified cashback in your wallet for every friend who registers and activates the ₹99 Premium Plan.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider bg-white text-orange-900 px-5 py-3 rounded-2xl shadow-md group-hover:scale-105 transition-all self-start md:self-auto">
-            <span>Open Ambassador Hub</span>
+          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider bg-white text-orange-900 px-5 py-3 rounded-2xl shadow-md group-hover:scale-105 transition-all self-start md:self-auto shrink-0">
+            <span>Open Referral Wallet</span>
             <ArrowRight className="w-4 h-4 text-orange-600" />
+          </div>
+        </div>
+
+        {/* Student's Unique Referral Code & Link Bar with Copy Link & Share Link */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="bg-black/25 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-default"
+        >
+          <div className="space-y-0.5 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-200">
+                {currentStudent.name}&apos;s Unique Code:
+              </span>
+              <span className="px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 font-mono font-black text-xs">
+                {studentReferralCode}
+              </span>
+              <span className="text-[11px] text-amber-100/80 font-mono truncate">
+                ({studentReferralDisplayLink})
+              </span>
+            </div>
+            <p className="text-xs font-mono font-bold text-white truncate select-all">
+              {studentReferralLink}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyDashboardRefLink}
+              className="px-4 py-2 rounded-xl bg-white hover:bg-amber-50 text-orange-950 font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            >
+              {copiedDashRefLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-orange-700" />}
+              <span>{copiedDashRefLink ? 'Copied!' : 'Copy Link'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleShareDashboardRefLink}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share Link</span>
+            </button>
           </div>
         </div>
       </div>

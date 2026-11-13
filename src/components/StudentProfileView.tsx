@@ -27,9 +27,18 @@ import {
   Scale,
   AlertTriangle,
   Info,
-  Bot
+  Bot,
+  Copy,
+  Share2,
+  Gift,
+  Link as LinkIcon
 } from 'lucide-react';
 import { getStudentPlanInfo } from '../utils/subscriptionAccess';
+import {
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  buildStudentReferralDisplayLink
+} from '../utils/referralCoding';
 
 interface StudentProfileViewProps {
   onOpenMembership: (plan?: 'basic' | 'premium') => void;
@@ -50,8 +59,53 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     allAttempts,
     savedDrawings
   } = useApp();
+  const [copiedRefLink, setCopiedRefLink] = useState(false);
+  const [copiedRefCode, setCopiedRefCode] = useState(false);
 
   if (!currentStudent) return null;
+
+  const studentReferralCode = currentStudent.referralCode || generateUniqueStudentReferralCode(currentStudent.id, currentStudent.name);
+  const studentReferralLink = currentStudent.referralLink || buildStudentReferralLink(studentReferralCode);
+  const studentReferralDisplayLink = buildStudentReferralDisplayLink(studentReferralCode);
+
+  const handleCopyProfileRefLink = async () => {
+    try {
+      await navigator.clipboard.writeText(studentReferralLink);
+      setCopiedRefLink(true);
+      setTimeout(() => setCopiedRefLink(false), 2500);
+    } catch {
+      // Fallback copy
+    }
+  };
+
+  const handleCopyProfileRefCode = async () => {
+    try {
+      await navigator.clipboard.writeText(studentReferralCode);
+      setCopiedRefCode(true);
+      setTimeout(() => setCopiedRefCode(false), 2500);
+    } catch {
+      // Fallback copy
+    }
+  };
+
+  const handleShareProfileRefLink = async () => {
+    const shareText = `Join Vacation Champions (${currentStudent.classLevel}) with my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Vacation Champions Student Referral',
+          text: shareText,
+          url: studentReferralLink
+        });
+        return;
+      } catch {
+        // Fallback to clipboard + WhatsApp
+      }
+    }
+    await handleCopyProfileRefLink();
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const studentAttempts = allAttempts.filter(a => a.studentId === currentStudent.id);
   const drawingsCount = savedDrawings.filter(d => d.studentId === currentStudent.id).length;
@@ -140,6 +194,129 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 ? 'Extend Premium (₹99 – 90 Days)'
                 : 'Upgrade to Premium (₹99)'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* PERMANENT STUDENT REFERRAL CODE & LINK SECTION */}
+      <div className="bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 rounded-3xl p-6 sm:p-7 text-white border-2 border-emerald-400/40 shadow-lg space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 rounded-full bg-emerald-400 text-slate-950 font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5" />
+                <span>Unique Student Referral Link</span>
+              </span>
+              <span className="px-3 py-1 rounded-full bg-white/10 text-emerald-200 font-bold text-[11px] border border-white/15">
+                ₹5 Cashback per Verified ₹99 Premium Referral
+              </span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-display font-extrabold tracking-tight text-white pt-1">
+              {currentStudent.name}&apos;s Permanent Referral Code &amp; Link
+            </h2>
+            <p className="text-xs text-emerald-100/80 font-medium">
+              Saved permanently in Firebase Firestore against UID <span className="font-mono font-bold text-white">{currentStudent.id}</span>. Remains unchanged across every login.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('referrals')}
+            className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all flex items-center gap-1.5 self-start md:self-auto cursor-pointer shrink-0 shadow-md"
+          >
+            <span>Open Referral Wallet</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch">
+          {/* Unique Referral Code Box */}
+          <div className="md:col-span-4 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 flex flex-col justify-between gap-2">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 block">
+                Your Unique Referral Code
+              </span>
+              <p className="text-2xl font-mono font-black tracking-widest text-white mt-1">
+                {studentReferralCode}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyProfileRefCode}
+              className="w-full py-2 px-3 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              {copiedRefCode ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedRefCode ? 'Code Copied!' : 'Copy Code'}</span>
+            </button>
+          </div>
+
+          {/* Unique Referral Link Box + Copy Link & Share Link Buttons */}
+          <div className="md:col-span-8 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1">
+                  <LinkIcon className="w-3 h-3" />
+                  <span>Your Unique Registration Referral Link</span>
+                </span>
+                <span className="text-[10px] font-bold text-emerald-200 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-400/30">
+                  Live on mystudyzone.in
+                </span>
+              </div>
+              <p className="font-mono font-bold text-xs sm:text-sm text-amber-300 break-all mt-1.5 select-all">
+                {studentReferralDisplayLink}
+              </p>
+              <p className="text-[11px] text-white/60 font-mono truncate mt-0.5">
+                {studentReferralLink}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={handleCopyProfileRefLink}
+                className="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                {copiedRefLink ? <CheckCircle2 className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedRefLink ? 'Link Copied!' : 'Copy Link'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareProfileRefLink}
+                className="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl bg-white hover:bg-amber-50 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <Share2 className="w-4 h-4 text-emerald-700" />
+                <span>Share Link</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 3-Student Verification Switcher to test Student 1, Student 2, Student 3 unique links */}
+        <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+          <span className="text-emerald-200 font-bold text-[11px]">
+            Verify 3 Distinct Student Accounts &amp; Unique Referral Links:
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {studentsList.slice(0, 3).map((stu, idx) => {
+              const code = stu.referralCode || generateUniqueStudentReferralCode(stu.id, stu.name);
+              const isActive = stu.id === currentStudent.id;
+              return (
+                <button
+                  key={stu.id}
+                  type="button"
+                  onClick={() => quickSwitchStudent(stu.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950 shadow-xs font-black'
+                      : 'bg-white/10 hover:bg-white/20 text-white border border-white/15'
+                  }`}
+                >
+                  <span>{stu.avatar}</span>
+                  <span>Student {idx + 1}: {stu.name.split(' ')[0]} ({code})</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
