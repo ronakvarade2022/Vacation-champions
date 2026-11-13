@@ -8,8 +8,11 @@ import type {
   ReferralUserType,
   AmbassadorCategory
 } from '../types/referral.ts';
-import { serverDb } from '../../firebase/index.ts';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
+import {
+  serverGetDoc,
+  serverSetDoc,
+  serverQueryEqualsLimit1
+} from '../../firebase/admin.ts';
 import { dispatchRazorpayXPayout, getResolvedRazorpayXCredentials } from './razorpayxPayoutService.ts';
 import {
   generateUniqueStudentReferralCode,
@@ -183,20 +186,24 @@ export function normalizeReferralAccountForClient(account: ReferralAccount & Rec
 export async function saveAccountToFirestore(account: ReferralAccount): Promise<void> {
   const normalized = normalizeReferralAccountForClient(account);
   try {
-    const docRef = doc(serverDb, 'referrals', account.userId);
-    await setDoc(docRef, {
-      ...normalized,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await serverSetDoc(
+      'referrals',
+      account.userId,
+      {
+        ...normalized,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
   } catch (err) {
     console.warn(`[Firestore Sync Notice] referrals/${account.userId}:`, (err as Error)?.message || err);
   }
 
   if (account.userType === 'student') {
     try {
-      const stuRef = doc(serverDb, 'students', account.userId);
-      await setDoc(
-        stuRef,
+      await serverSetDoc(
+        'students',
+        account.userId,
         {
           id: account.userId,
           referralCode: normalized.referralCode,
@@ -215,11 +222,15 @@ export async function saveAccountToFirestore(account: ReferralAccount): Promise<
  */
 export async function saveTransactionToFirestore(tx: ReferralTransaction): Promise<void> {
   try {
-    const docRef = doc(serverDb, 'referral_transactions', tx.id);
-    await setDoc(docRef, {
-      ...tx,
-      savedAt: new Date().toISOString()
-    }, { merge: true });
+    await serverSetDoc(
+      'referral_transactions',
+      tx.id,
+      {
+        ...tx,
+        savedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
   } catch (err) {
     console.warn(`[Firestore Sync Notice] referral_transactions/${tx.id}:`, (err as Error)?.message || err);
   }
@@ -230,11 +241,15 @@ export async function saveTransactionToFirestore(tx: ReferralTransaction): Promi
  */
 export async function savePayoutToFirestore(payout: PayoutRequest): Promise<void> {
   try {
-    const docRef = doc(serverDb, 'payout_requests', payout.id);
-    await setDoc(docRef, {
-      ...payout,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await serverSetDoc(
+      'payout_requests',
+      payout.id,
+      {
+        ...payout,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
   } catch (err) {
     console.warn(`[Firestore Sync Notice] payout_requests/${payout.id}:`, (err as Error)?.message || err);
   }
@@ -266,20 +281,20 @@ export async function getOrCreateReferralAccount(
     return normalizeReferralAccountForClient(cached);
   }
 
-  // 2. Check Firestore /referrals/{userId} and /students/{userId}
+  // 2. Check Firestore /referrals/{userId} and /students/{userId} via Firebase Admin SDK
   let storedStudentData: Record<string, any> | null = null;
   try {
-    const [refSnap, stuSnap] = await Promise.all([
-      getDoc(doc(serverDb, 'referrals', cleanUserId)).catch(() => null),
-      getDoc(doc(serverDb, 'students', cleanUserId)).catch(() => null),
+    const [refData, stuData] = await Promise.all([
+      serverGetDoc('referrals', cleanUserId).catch(() => null),
+      serverGetDoc('students', cleanUserId).catch(() => null),
     ]);
 
-    if (stuSnap && stuSnap.exists()) {
-      storedStudentData = stuSnap.data();
+    if (stuData) {
+      storedStudentData = stuData;
     }
 
-    if (refSnap && refSnap.exists()) {
-      const data = refSnap.data() as ReferralAccount & Record<string, any>;
+    if (refData) {
+      const data = refData as ReferralAccount & Record<string, any>;
       const existingCode =
         sanitizeReferralCode(data.referralCode) ||
         sanitizeReferralCode(storedStudentData?.referralCode) ||
@@ -407,12 +422,11 @@ export async function trackReferralSignup(
 
   let referrerUserId = referralCodeIndex.get(cleanCode);
   if (!referrerUserId) {
-    // Check Firestore for referrer
+    // Check Firestore for referrer via Admin SDK
     try {
-      const q = query(collection(serverDb, 'referrals'), where('referralCode', '==', cleanCode), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        referrerUserId = String(snap.docs[0].data().userId || snap.docs[0].id);
+      const match = await serverQueryEqualsLimit1('referrals', 'referralCode', cleanCode);
+      if (match) {
+        referrerUserId = String(match.data.userId || match.id);
         referralCodeIndex.set(cleanCode, referrerUserId);
       }
     } catch {
@@ -464,8 +478,9 @@ export async function trackReferralSignup(
     await Promise.all([
       saveAccountToFirestore(referrer),
       saveTransactionToFirestore(signupTx),
-      setDoc(
-        doc(serverDb, 'students', cleanNewId),
+      serverSetDoc(
+        'students',
+        cleanNewId,
         {
           id: cleanNewId,
           referredByCode: cleanCode,
@@ -473,8 +488,9 @@ export async function trackReferralSignup(
         },
         { merge: true }
       ).catch(() => {}),
-      setDoc(
-        doc(serverDb, 'referrals', cleanNewId),
+      serverSetDoc(
+        'referrals',
+        cleanNewId,
         {
           userId: cleanNewId,
           referredByCode: cleanCode,
@@ -694,21 +710,17 @@ export async function validateReferralCode(code: string, currentUserId?: string)
     }
   }
 
-  // Also check Firestore if not in memory
+  // Also check Firestore via Admin SDK if not in memory
   if (!referrerUserId) {
     try {
-      const q = query(collection(serverDb, 'referrals'), where('referralCode', '==', cleanCode), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const d = snap.docs[0].data();
-        referrerUserId = String(d.userId || snap.docs[0].id);
+      const refMatch = await serverQueryEqualsLimit1('referrals', 'referralCode', cleanCode);
+      if (refMatch) {
+        referrerUserId = String(refMatch.data.userId || refMatch.id);
         referralCodeIndex.set(cleanCode, referrerUserId);
       } else {
-        const sq = query(collection(serverDb, 'students'), where('referralCode', '==', cleanCode), limit(1));
-        const sSnap = await getDocs(sq);
-        if (!sSnap.empty) {
-          const sd = sSnap.docs[0].data();
-          referrerUserId = String(sd.id || sSnap.docs[0].id);
+        const stuMatch = await serverQueryEqualsLimit1('students', 'referralCode', cleanCode);
+        if (stuMatch) {
+          referrerUserId = String(stuMatch.data.id || stuMatch.id);
           referralCodeIndex.set(cleanCode, referrerUserId);
         }
       }

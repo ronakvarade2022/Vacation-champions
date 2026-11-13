@@ -1,31 +1,17 @@
 import crypto from 'crypto';
-import fs from 'fs';
 import type { Request, Response } from 'express';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getResolvedRazorpayCredentials,
   sanitizeEnvValue,
   isPlaceholderValue
 } from '../firebase/index.ts';
+import { serverGetDoc, serverSetDoc } from '../firebase/admin.ts';
 import { verifyAndConfirmCapturedPayment } from '../src/server/razorpayPaymentStatusService.ts';
 import {
   computeSubscriptionActivationDates,
   evaluateSubscriptionValidity,
   PAID_SUBSCRIPTION_VALIDITY_DAYS
 } from '../src/utils/subscriptionDateUtils.ts';
-
-const firebaseConfig = JSON.parse(
-  fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')
-);
-
-// Initialize Firebase & Firestore connection to the project's provisioned database
-const firebaseApp =
-  getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export const firestoreDb = getFirestore(
-  firebaseApp,
-  firebaseConfig.firestoreDatabaseId
-);
 
 export interface WebhookVerificationResult {
   valid: boolean;
@@ -49,12 +35,10 @@ export function verifyWebhookSignature(
 
   const candidateSecrets: string[] = [];
   if (rawWebhookSecret && !isPlaceholderValue(rawWebhookSecret)) {
+    // When RAZORPAY_WEBHOOK_SECRET is configured, strictly verify using only the webhook secret
     candidateSecrets.push(rawWebhookSecret);
-  }
-  if (creds.webhookSecret && !candidateSecrets.includes(creds.webhookSecret)) {
-    candidateSecrets.push(creds.webhookSecret);
-  }
-  if (creds.keySecret && !candidateSecrets.includes(creds.keySecret)) {
+  } else if (creds.keySecret) {
+    // Only fall back to API keySecret if RAZORPAY_WEBHOOK_SECRET is unset
     candidateSecrets.push(creds.keySecret);
   }
 
@@ -150,9 +134,15 @@ export async function processPaymentCapturedEvent(params: {
   const amountInr = 99;
   let method = String(paymentEntity?.method || 'RAZORPAY').toUpperCase();
 
+  if (amountPaise > 0 && amountPaise < 9900) {
+    throw new Error(
+      `Webhook payment amount (${amountPaise} paise) is below the ₹99 (9900 paise) Premium Plan price.`
+    );
+  }
+
   // Confirm live payment capture status with Razorpay API using RAZORPAY_KEY_SECRET
   const creds = getResolvedRazorpayCredentials();
-  if (creds.isConfigured && !paymentId.startsWith('pay_vc_')) {
+  if (creds.isConfigured) {
     const apiCaptureCheck = await verifyAndConfirmCapturedPayment({
       paymentId,
       orderId: paymentEntity?.order_id || orderEntity?.id || '',
@@ -179,10 +169,8 @@ export async function processPaymentCapturedEvent(params: {
     );
   }
 
-  // 1. Retrieve existing user document from Firestore (/students/{studentId})
-  const studentRef = doc(firestoreDb, 'students', studentId);
-  const existingSnap = await getDoc(studentRef);
-  const existingData = existingSnap.exists() ? existingSnap.data() : null;
+  // 1. Retrieve existing user document from Firestore (/students/{studentId}) via Firebase Admin SDK
+  const existingData = await serverGetDoc('students', studentId).catch(() => null);
 
   const studentName = String(
     notes.studentName || existingData?.name || 'Student'
@@ -235,9 +223,10 @@ export async function processPaymentCapturedEvent(params: {
   const daysRemaining = activation.daysRemaining;
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
-  // 3. Update the user's Firestore document with the new subscription status and 365-day expiry date
-  await setDoc(
-    studentRef,
+  // 3. Update the user's Firestore document with the new subscription status and 365-day expiry date via Firebase Admin SDK
+  await serverSetDoc(
+    'students',
+    studentId,
     {
       id: studentId,
       plan: planId,
@@ -257,15 +246,15 @@ export async function processPaymentCapturedEvent(params: {
     { merge: true }
   );
 
-  // 4. Record the verified payment transaction in Firestore (/transactions/tx_{paymentId})
+  // 4. Record the verified payment transaction in Firestore (/transactions/tx_{paymentId}) via Firebase Admin SDK
   const safePaymentId = paymentId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const txDocId = safePaymentId.startsWith('tx_')
     ? safePaymentId
     : `tx_${safePaymentId}`;
-  const txRef = doc(firestoreDb, 'transactions', txDocId);
 
-  await setDoc(
-    txRef,
+  await serverSetDoc(
+    'transactions',
+    txDocId,
     {
       id: txDocId,
       receiptNumber,

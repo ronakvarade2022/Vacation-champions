@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import Razorpay from 'razorpay';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
+import { serverGetDoc, serverSetDoc } from './admin.ts';
 import {
   computeSubscriptionActivationDates,
   evaluateSubscriptionValidity,
@@ -13,7 +14,7 @@ const firebaseConfig = JSON.parse(
   fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')
 );
 
-// Initialize Firebase & Firestore for backend / webhook operations
+// Client-fallback Firestore handle (used only by legacy callers when Admin SDK creds are absent locally)
 const firebaseServerApp =
   getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const serverDb = getFirestore(
@@ -25,6 +26,7 @@ export interface ResolvedRazorpayCredentials {
   keyId: string;
   keySecret: string;
   webhookSecret: string;
+  hasExplicitWebhookSecret: boolean;
   isConfigured: boolean;
   isLive: boolean;
   wasSwappedInEnv: boolean;
@@ -92,6 +94,7 @@ export function getResolvedRazorpayCredentials(): ResolvedRazorpayCredentials {
     keyId: hasValidKeyId ? keyId : '',
     keySecret: hasValidSecret ? keySecret : '',
     webhookSecret: cleanWebhookSecret || (hasValidSecret ? keySecret : ''),
+    hasExplicitWebhookSecret: Boolean(cleanWebhookSecret),
     isConfigured,
     isLive,
     wasSwappedInEnv
@@ -467,16 +470,17 @@ export function verifyRazorpayWebhookSignature(
   }
 
   const creds = getResolvedRazorpayCredentials();
-  const CandidateSecrets: string[] = [];
-  if (creds.webhookSecret) CandidateSecrets.push(creds.webhookSecret);
-  if (creds.keySecret && !CandidateSecrets.includes(creds.keySecret)) {
-    CandidateSecrets.push(creds.keySecret);
+  const candidateSecrets: string[] = [];
+  if (creds.hasExplicitWebhookSecret && creds.webhookSecret) {
+    candidateSecrets.push(creds.webhookSecret);
+  } else if (creds.keySecret) {
+    candidateSecrets.push(creds.keySecret);
   }
 
-  if (CandidateSecrets.length === 0) {
+  if (candidateSecrets.length === 0) {
     return {
       valid: false,
-      reason: 'Webhook secret and API secret are not configured on server.'
+      reason: 'RAZORPAY_WEBHOOK_SECRET is not configured on the server.'
     };
   }
 
@@ -485,7 +489,7 @@ export function verifyRazorpayWebhookSignature(
     : Buffer.from(String(rawBody), 'utf8');
   const providedSigBuffer = Buffer.from(signatureHeader.trim(), 'utf8');
 
-  for (const secret of CandidateSecrets) {
+  for (const secret of candidateSecrets) {
     const expectedHex = crypto
       .createHmac('sha256', secret)
       .update(bodyBuffer)
@@ -555,12 +559,10 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   let alreadyProcessed = false;
 
   const safeStudentId = String(studentId).trim();
-  const studentRef = doc(serverDb, 'students', safeStudentId);
 
   try {
-    const existingSnap = await getDoc(studentRef);
-    if (existingSnap.exists()) {
-      const existingData = existingSnap.data();
+    const existingData = await serverGetDoc('students', safeStudentId);
+    if (existingData) {
       existingPlan = existingData?.plan;
       // Idempotency check: if this exact paymentId already updated Firestore, return existing expiry
       if (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId) {
@@ -607,9 +609,10 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
   try {
-    // 1. Update Student Profile Document in Firestore (/students/{studentId})
-    await setDoc(
-      studentRef,
+    // 1. Update Student Profile Document in Firestore (/students/{studentId}) via Firebase Admin SDK
+    await serverSetDoc(
+      'students',
+      safeStudentId,
       {
         id: safeStudentId,
         plan: normalizedPlan, // 'premium' (Premium ₹99)
@@ -629,15 +632,15 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
       { merge: true }
     );
 
-    // 2. Save Verified Transaction Document in Firestore (/transactions/tx_{paymentId})
+    // 2. Save Verified Transaction Document in Firestore (/transactions/tx_{paymentId}) via Firebase Admin SDK
     const safePaymentId = String(paymentId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const txDocId = safePaymentId.startsWith('tx_')
       ? safePaymentId
       : `tx_${safePaymentId}`;
-    const txRef = doc(serverDb, 'transactions', txDocId);
 
-    await setDoc(
-      txRef,
+    await serverSetDoc(
+      'transactions',
+      txDocId,
       {
         id: txDocId,
         receiptNumber,

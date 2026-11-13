@@ -23,15 +23,19 @@ import {
   referralTransactions,
   payoutRequests
 } from './src/server/referralStore.ts';
-import { doc, getDoc } from 'firebase/firestore';
 import {
-  serverDb,
+  getFirebaseAdminStatus,
+  isFirebaseAdminConfigured,
+  serverGetDoc,
+  verifyAdminRequest,
+  verifyBearerIdToken
+} from './firebase/admin.ts';
+import {
   getResolvedRazorpayCredentials,
   createRazorpayClient,
   createRazorpayOrderBackend,
   createRazorpayQrCodeBackend,
   checkRazorpayQrCodeStatusBackend,
-  verifyRazorpayWebhookSignature,
   updateStudentSubscriptionInFirestoreBackend
 } from './firebase/index.ts';
 import {
@@ -342,12 +346,18 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       });
     }
 
-    // Check duplicate payment ID or duplicate order ID (strict idempotency protection)
+    // Check duplicate payment ID or duplicate order ID (strict idempotency + anti-replay protection)
     if (processedPaymentIds.has(razorpay_payment_id) || processedOrderIds.has(razorpay_order_id)) {
-      console.warn(`[Razorpay] Duplicate payment verification blocked for Payment: ${razorpay_payment_id} / Order: ${razorpay_order_id}`);
       const existing = transactionLedger.find(
         t => t.paymentId === razorpay_payment_id || t.orderId === razorpay_order_id
       );
+      if (existing && existing.studentId && existing.studentId !== String(studentId).trim()) {
+        return res.status(403).json({
+          success: false,
+          error: 'This payment/order belongs to another student account.'
+        });
+      }
+      console.warn(`[Razorpay] Duplicate payment verification blocked for Payment: ${razorpay_payment_id} / Order: ${razorpay_order_id}`);
       const existingSub = serverStudentSubscriptions.get(String(studentId));
       const existingValidity = evaluateSubscriptionValidity(
         'premium',
@@ -438,6 +448,17 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
         error:
           captureStatus.error ||
           `Payment ${razorpay_payment_id} was not confirmed as captured by Razorpay API. Subscription was not activated.`
+      });
+    }
+
+    // Cross-student replay protection using Razorpay payment/order notes
+    const notesStudentId = String(
+      captureStatus.notes?.studentId || captureStatus.notes?.userId || ''
+    ).trim();
+    if (notesStudentId && notesStudentId !== String(studentId).trim()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Payment belongs to a different student account. Cross-student activation rejected.'
       });
     }
 
@@ -833,17 +854,15 @@ app.get('/api/razorpay/payment-status/:paymentId', async (req: Request, res: Res
       autoCaptureIfAuthorized: true
     });
 
-    if (!paymentId.startsWith('pay_vc_')) {
-      try {
-        const rawPayment = await fetchRazorpayPaymentById(paymentId);
-        return res.json({
-          success: statusResult.confirmed,
-          ...statusResult,
-          razorpayStatus: rawPayment.status
-        });
-      } catch {
-        // Return statusResult directly if raw fetch encountered an error
-      }
+    try {
+      const rawPayment = await fetchRazorpayPaymentById(paymentId);
+      return res.json({
+        success: statusResult.confirmed,
+        ...statusResult,
+        razorpayStatus: rawPayment.status
+      });
+    } catch {
+      // Return statusResult directly if raw fetch encountered an error
     }
 
     return res.json({
@@ -859,8 +878,16 @@ app.get('/api/razorpay/payment-status/:paymentId', async (req: Request, res: Res
   }
 });
 
-// 5. Admin Payments Ledger API
-app.get('/api/payments', (_req: Request, res: Response) => {
+// 5. Admin Payments Ledger API (Protected by Verified Admin Auth)
+app.get('/api/payments', async (req: Request, res: Response) => {
+  const adminCheck = await verifyAdminRequest(req.headers);
+  if (!adminCheck.authorized) {
+    return res.status(adminCheck.statusCode).json({
+      success: false,
+      error: adminCheck.error || 'Administrator authentication required.'
+    });
+  }
+
   res.json({
     success: true,
     totalCount: transactionLedger.length,
@@ -871,11 +898,16 @@ app.get('/api/payments', (_req: Request, res: Response) => {
 // 6. Server Health Check
 app.get('/api/health', (_req: Request, res: Response) => {
   const creds = getResolvedRazorpayCredentials();
+  const adminStatus = getFirebaseAdminStatus();
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     razorpayConfigured: creds.isConfigured,
-    razorpayMode: creds.isLive ? 'LIVE' : 'TEST'
+    razorpayMode: creds.isLive ? 'LIVE' : 'TEST',
+    webhookSecretConfigured: creds.hasExplicitWebhookSecret,
+    firebaseAdminConfigured: adminStatus.configured,
+    firebaseAdminSource: adminStatus.source,
+    firestoreDatabaseId: adminStatus.databaseId
   });
 });
 
@@ -1175,9 +1207,16 @@ app.post('/api/referrals/teacher-verify', async (req: Request, res: Response) =>
   }
 });
 
-// 7.7 Admin Overview & Statistics
-app.get('/api/referrals/admin/stats', (_req: Request, res: Response) => {
+// 7.7 Admin Overview & Statistics (Protected)
+app.get('/api/referrals/admin/stats', async (req: Request, res: Response) => {
   try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode).json({
+        success: false,
+        error: adminCheck.error || 'Administrator authentication required.'
+      });
+    }
     const stats = getAdminReferralStats();
     return res.json({ success: true, stats });
   } catch (error: any) {
@@ -1185,9 +1224,16 @@ app.get('/api/referrals/admin/stats', (_req: Request, res: Response) => {
   }
 });
 
-// 7.8 Admin: Verify or Reject Teacher
+// 7.8 Admin: Verify or Reject Teacher (Protected)
 app.post('/api/referrals/admin/verify-teacher', async (req: Request, res: Response) => {
   try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode).json({
+        success: false,
+        message: adminCheck.error || 'Administrator authentication required.'
+      });
+    }
     const { userId, status, notes } = req.body;
     if (!userId || (status !== 'VERIFIED' && status !== 'REJECTED')) {
       return res.status(400).json({ success: false, message: 'Valid userId and status (VERIFIED/REJECTED) required.' });
@@ -1200,9 +1246,16 @@ app.post('/api/referrals/admin/verify-teacher', async (req: Request, res: Respon
   }
 });
 
-// 7.9 Admin: Process Payout Action (Approve / Reject)
+// 7.9 Admin: Process Payout Action (Approve / Reject) (Protected)
 app.post('/api/referrals/admin/payout-action', async (req: Request, res: Response) => {
   try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode).json({
+        success: false,
+        message: adminCheck.error || 'Administrator authentication required.'
+      });
+    }
     const { payoutId, action, transactionRef, notes } = req.body;
     if (!payoutId || (action !== 'APPROVE' && action !== 'REJECT')) {
       return res.status(400).json({ success: false, message: 'Valid payoutId and action (APPROVE/REJECT) required.' });
@@ -1247,9 +1300,16 @@ app.post('/api/razorpayx/webhook', async (req: Request, res: Response) => {
   }
 });
 
-// 7.10 Admin: Update Referral Configuration
-app.post('/api/referrals/admin/update-config', (req: Request, res: Response) => {
+// 7.10 Admin: Update Referral Configuration (Protected)
+app.post('/api/referrals/admin/update-config', async (req: Request, res: Response) => {
   try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode).json({
+        success: false,
+        error: adminCheck.error || 'Administrator authentication required.'
+      });
+    }
     const updates = req.body;
     if (typeof updates.programEnabled === 'boolean') referralConfig.programEnabled = updates.programEnabled;
     if (typeof updates.budgetCap === 'number') referralConfig.budgetCap = updates.budgetCap;
@@ -1274,6 +1334,7 @@ interface ServerStudentSubscription {
   selectedClass?: string;
   activatedClassLevel?: string | null;
   accountRole?: 'student' | 'teacher';
+  hasStoredProfile?: boolean;
   isLifetimeFree: boolean;
   planPurchasedAt?: string;
   planExpiresAt?: string | null;
@@ -1282,6 +1343,24 @@ interface ServerStudentSubscription {
 }
 
 const serverStudentSubscriptions = new Map<string, ServerStudentSubscription>();
+
+const SERVER_FREE_ALLOWED_SUBJECTS = new Set([
+  'English',
+  'Mathematics',
+  'Mathematics – Algebra',
+  'Mathematics – Geometry'
+]);
+
+const SERVER_FREE_ALLOWED_FEATURES = new Set([
+  'dashboard',
+  'profile',
+  'demo',
+  'puzzles',
+  'sudoku',
+  'quizzes',
+  'worksheets',
+  'referrals'
+]);
 
 function parseServerWorksheetClass(worksheetId: string): string | null {
   const m = /^WS-C(\d{1,2})-/i.exec(String(worksheetId || '').trim());
@@ -1306,6 +1385,7 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
       selectedClass: existing?.selectedClass || 'Class 1',
       activatedClassLevel: null,
       accountRole: existing?.accountRole || 'student',
+      hasStoredProfile: Boolean(existing?.hasStoredProfile),
       isLifetimeFree: true,
       planExpiresAt: null,
       updatedAt: existing?.updatedAt || new Date().toISOString()
@@ -1327,6 +1407,7 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
         selectedClass: existing.selectedClass || existing.activatedClassLevel || 'Class 1',
         activatedClassLevel: null,
         accountRole: existing.accountRole || 'student',
+        hasStoredProfile: Boolean(existing.hasStoredProfile),
         isLifetimeFree: true,
         planExpiresAt: null,
         updatedAt: new Date().toISOString()
@@ -1346,11 +1427,10 @@ async function evaluateServerSubscriptionFromStore(
     return evaluateServerSubscription(cleanId);
   }
 
-  if (cleanId) {
+  if (cleanId && cleanId !== 'guest' && !cleanId.startsWith('demo_')) {
     try {
-      const snap = await getDoc(doc(serverDb, 'students', cleanId));
-      if (snap.exists()) {
-        const data = snap.data() as Record<string, any>;
+      const data = await serverGetDoc('students', cleanId);
+      if (data) {
         const rawPlan = data?.plan;
         if (rawPlan === 'premium' || rawPlan === 'basic') {
           const validity = evaluateSubscriptionValidity(
@@ -1365,6 +1445,7 @@ async function evaluateServerSubscriptionFromStore(
               selectedClass: String(data?.classLevel || 'Class 1'),
               activatedClassLevel: String(data?.activatedClassLevel || data?.classLevel || 'Class 1'),
               accountRole: data?.accountRole === 'teacher' ? 'teacher' : 'student',
+              hasStoredProfile: true,
               isLifetimeFree: false,
               planPurchasedAt: data?.planPurchasedAt || validity.purchaseDateIst || undefined,
               planExpiresAt: data?.planExpiresAt || validity.expiryDateIst || null,
@@ -1375,16 +1456,19 @@ async function evaluateServerSubscriptionFromStore(
             return hydrated;
           }
         }
-        return {
+        const freeHydrated: ServerStudentSubscription = {
           studentId: cleanId,
           plan: 'free',
           selectedClass: String(data?.classLevel || 'Class 1'),
           activatedClassLevel: null,
           accountRole: data?.accountRole === 'teacher' ? 'teacher' : 'student',
+          hasStoredProfile: true,
           isLifetimeFree: true,
           planExpiresAt: null,
           updatedAt: new Date().toISOString()
         };
+        serverStudentSubscriptions.set(cleanId, freeHydrated);
+        return freeHydrated;
       }
     } catch {
       // Fall back safely to free tier if Firestore lookup is unavailable
@@ -1394,7 +1478,7 @@ async function evaluateServerSubscriptionFromStore(
   return evaluateServerSubscription(cleanId);
 }
 
-// 8.1 Sync student/teacher subscription (only allows paid plan if backed by verified paymentId)
+// 8.1 Sync student/teacher subscription (paid plans strictly require verified payment proof)
 app.post('/api/subscription/sync', async (req: Request, res: Response) => {
   try {
     const {
@@ -1406,13 +1490,44 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       planPurchasedAt,
       planExpiresAt,
       paymentId
-    } = req.body;
-    if (!studentId) {
+    } = req.body || {};
+    const cleanStudentId = String(studentId || '').trim();
+    if (!cleanStudentId) {
       return res.status(400).json({ success: false, error: 'studentId is required.' });
     }
 
-    const resolvedClass = String(activatedClassLevel || selectedClass || 'Class 4');
-    const resolvedRole = accountRole === 'teacher' ? 'teacher' : 'student';
+    // Verify Bearer token identity if provided
+    if (req.headers.authorization && isFirebaseAdminConfigured()) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid || !tokenCheck.uid) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          error: tokenCheck.error || 'Invalid authentication token.'
+        });
+      }
+      const existingStudent = await serverGetDoc('students', cleanStudentId).catch(() => null);
+      const matchesOwner =
+        tokenCheck.uid === cleanStudentId ||
+        existingStudent?.firebaseUid === tokenCheck.uid;
+      if (!matchesOwner) {
+        const adminCheck = await verifyAdminRequest(req.headers);
+        if (!adminCheck.authorized) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: Token does not match target student account.'
+          });
+        }
+      }
+    }
+
+    const storedStudent = await serverGetDoc('students', cleanStudentId).catch(() => null);
+    const resolvedClass = String(
+      storedStudent?.classLevel || activatedClassLevel || selectedClass || 'Class 4'
+    );
+    const resolvedRole =
+      storedStudent?.accountRole === 'teacher' || accountRole === 'teacher'
+        ? 'teacher'
+        : 'student';
 
     if (plan === 'basic' || plan === 'premium') {
       const cleanPaymentId = String(paymentId || '').trim();
@@ -1420,7 +1535,9 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
         !cleanPaymentId ||
         cleanPaymentId.startsWith('pay_sim_') ||
         cleanPaymentId.startsWith('demo_') ||
-        cleanPaymentId === 'simulated';
+        cleanPaymentId === 'simulated' ||
+        cleanPaymentId.length < 6;
+
       if (isSyntheticPayment) {
         return res.status(403).json({
           success: false,
@@ -1428,37 +1545,97 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
         });
       }
 
+      // Verify payment proof against server ledger, Firestore /transactions, or live Razorpay API
+      let paymentVerified = processedPaymentIds.has(cleanPaymentId);
+      if (!paymentVerified) {
+        const ledgerMatch = transactionLedger.find(
+          (t) =>
+            t.paymentId === cleanPaymentId &&
+            t.status === 'SUCCESS' &&
+            t.studentId === cleanStudentId
+        );
+        if (ledgerMatch) {
+          paymentVerified = true;
+        }
+      }
+
+      if (!paymentVerified) {
+        const safePaymentId = cleanPaymentId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const txDocId = safePaymentId.startsWith('tx_')
+          ? safePaymentId
+          : `tx_${safePaymentId}`;
+        const txDoc = await serverGetDoc('transactions', txDocId).catch(() => null);
+        if (
+          txDoc &&
+          txDoc.status === 'SUCCESS' &&
+          (!txDoc.studentId || txDoc.studentId === cleanStudentId)
+        ) {
+          paymentVerified = true;
+          processedPaymentIds.add(cleanPaymentId);
+        }
+      }
+
+      if (!paymentVerified && storedStudent?.lastPaymentId === cleanPaymentId && storedStudent?.plan === 'premium') {
+        paymentVerified = true;
+      }
+
+      if (!paymentVerified && getResolvedRazorpayCredentials().isConfigured) {
+        const apiCheck = await verifyAndConfirmCapturedPayment({
+          paymentId: cleanPaymentId,
+          expectedPlanId: 'premium',
+          autoCaptureIfAuthorized: false
+        });
+        const notesSid = String(apiCheck.notes?.studentId || '').trim();
+        if (apiCheck.confirmed && (!notesSid || notesSid === cleanStudentId)) {
+          paymentVerified = true;
+          processedPaymentIds.add(cleanPaymentId);
+        }
+      }
+
+      if (!paymentVerified) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unverified paymentId. Premium subscription sync rejected.'
+        });
+      }
+
       const fallbackDates = computeSubscriptionActivationDates({
-        verificationTimestamp: planPurchasedAt || new Date()
+        verificationTimestamp: storedStudent?.planPurchasedAt || planPurchasedAt || new Date()
       });
       const record: ServerStudentSubscription = {
-        studentId: String(studentId),
+        studentId: cleanStudentId,
         plan: 'premium',
         selectedClass: resolvedClass,
         activatedClassLevel: resolvedClass,
         accountRole: resolvedRole,
+        hasStoredProfile:
+          Boolean(storedStudent) ||
+          (cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')),
         isLifetimeFree: false,
-        planPurchasedAt: planPurchasedAt || fallbackDates.purchasedDateIst,
-        planExpiresAt: planExpiresAt || fallbackDates.expiryDateIst,
+        planPurchasedAt: storedStudent?.planPurchasedAt || planPurchasedAt || fallbackDates.purchasedDateIst,
+        planExpiresAt: storedStudent?.planExpiresAt || planExpiresAt || fallbackDates.expiryDateIst,
         paymentId: cleanPaymentId,
         updatedAt: new Date().toISOString()
       };
-      serverStudentSubscriptions.set(String(studentId), record);
+      serverStudentSubscriptions.set(cleanStudentId, record);
       return res.json({ success: true, subscription: record });
     }
 
     // Default / Free Lifetime Plan
     const freeRecord: ServerStudentSubscription = {
-      studentId: String(studentId),
+      studentId: cleanStudentId,
       plan: 'free',
       selectedClass: resolvedClass,
       activatedClassLevel: null,
       accountRole: resolvedRole,
+      hasStoredProfile:
+        Boolean(storedStudent) ||
+        (cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')),
       isLifetimeFree: true,
       planExpiresAt: null,
       updatedAt: new Date().toISOString()
     };
-    serverStudentSubscriptions.set(String(studentId), freeRecord);
+    serverStudentSubscriptions.set(cleanStudentId, freeRecord);
     return res.json({ success: true, subscription: freeRecord });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
@@ -1481,9 +1658,9 @@ app.get('/api/subscription/status/:studentId', async (req: Request, res: Respons
         priceInr: 0,
         validity: 'Lifetime (Never Expires)',
         selectedClass: userClass,
-        allowedSubjects: ['English', 'Mathematics'],
+        allowedSubjects: Array.from(SERVER_FREE_ALLOWED_SUBJECTS),
         allowedWorksheets: demoIds,
-        allowedFeatures: ['dashboard', 'profile', 'demo', 'puzzles', 'sudoku', 'quizzes', 'worksheets']
+        allowedFeatures: Array.from(SERVER_FREE_ALLOWED_FEATURES)
       },
       premium: {
         id: 'premium',
@@ -1506,9 +1683,17 @@ const SERVER_WORKSHEET_UPGRADE_MSG =
 app.post('/api/subscription/verify-access', async (req: Request, res: Response) => {
   const { studentId, feature, subject, worksheetId, selectedClass } = req.body || {};
   const sub = await evaluateServerSubscriptionFromStore(String(studentId || ''));
-  const userClass = String(selectedClass || sub.selectedClass || sub.activatedClassLevel || 'Class 1').trim();
+  // Security: Once a student/teacher has a registered class in the store/Firestore, lock userClass to it
+  const userClass = String(
+    (sub.hasStoredProfile ? sub.selectedClass : selectedClass) ||
+      sub.selectedClass ||
+      sub.activatedClassLevel ||
+      'Class 1'
+  ).trim();
   const effectivePlan: 'free' | 'premium' =
     sub.plan === 'premium' || sub.plan === 'basic' ? 'premium' : 'free';
+  const isPremiumForClass =
+    effectivePlan === 'premium' && (!sub.activatedClassLevel || sub.activatedClassLevel === userClass);
 
   if (worksheetId) {
     const cleanWsId = String(worksheetId).trim();
@@ -1516,7 +1701,7 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
     const isSameClass = wsClass === userClass;
     const demoIds = new Set(getServerFreeDemoIdsForClass(userClass));
     const isDemo = isSameClass && demoIds.has(cleanWsId);
-    const allowed = isSameClass && (effectivePlan === 'premium' || isDemo);
+    const allowed = isSameClass && (isPremiumForClass || isDemo);
     const upgradeMsg = !isSameClass
       ? `Class-Wise Restriction: Your account is registered for ${userClass} only. Worksheets for ${wsClass} are locked.`
       : SERVER_WORKSHEET_UPGRADE_MSG;
@@ -1536,8 +1721,8 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
   }
 
   if (subject) {
-    const allowedOnFree = subject === 'English' || subject === 'Mathematics';
-    const allowed = effectivePlan === 'premium' || allowedOnFree;
+    const allowedOnFree = SERVER_FREE_ALLOWED_SUBJECTS.has(String(subject));
+    const allowed = isPremiumForClass || allowedOnFree;
     return res.json({
       success: true,
       allowed,
@@ -1551,8 +1736,11 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
   }
 
   if (feature) {
-    const freeFeatures = new Set(['dashboard', 'profile', 'demo', 'puzzles', 'sudoku', 'quizzes', 'worksheets']);
-    const allowed = effectivePlan === 'premium' || freeFeatures.has(feature);
+    const cleanFeature = String(feature);
+    const allowed =
+      effectivePlan === 'premium' ||
+      SERVER_FREE_ALLOWED_FEATURES.has(cleanFeature) ||
+      sub.accountRole === 'teacher';
     const requiredPlan: 'free' | 'premium' = allowed ? effectivePlan : 'premium';
 
     return res.json({
@@ -1576,7 +1764,11 @@ app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response)
   const queryClass = req.query.selectedClass ? String(req.query.selectedClass).trim() : '';
   const sub = await evaluateServerSubscriptionFromStore(studentId);
   const isPremium = sub.plan === 'premium' || sub.plan === 'basic';
-  const userClass = queryClass || sub.selectedClass || sub.activatedClassLevel || 'Class 1';
+  const userClass =
+    (sub.hasStoredProfile ? sub.selectedClass : queryClass) ||
+    sub.selectedClass ||
+    sub.activatedClassLevel ||
+    'Class 1';
   const demoIds = getServerFreeDemoIdsForClass(userClass);
 
   return res.json({
@@ -1610,16 +1802,23 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
   }
 
   const sub = await evaluateServerSubscriptionFromStore(cleanStudentId);
+  // Security: Stored student profile class takes strict priority over client-provided selectedClass
   const userClass = String(
-    selectedClass || sub.selectedClass || sub.activatedClassLevel || parseServerWorksheetClass(cleanWorksheetId) || 'Class 1'
+    (sub.hasStoredProfile ? sub.selectedClass : selectedClass) ||
+      sub.selectedClass ||
+      sub.activatedClassLevel ||
+      parseServerWorksheetClass(cleanWorksheetId) ||
+      'Class 1'
   ).trim();
   const wsClass = parseServerWorksheetClass(cleanWorksheetId) || userClass;
   const isSameClass = wsClass === userClass;
 
   const isPremium = sub.plan === 'premium' || sub.plan === 'basic';
+  const isPremiumForClass =
+    isPremium && (!sub.activatedClassLevel || sub.activatedClassLevel === userClass);
   const demoIds = new Set(getServerFreeDemoIdsForClass(userClass));
   const isDemo = isSameClass && demoIds.has(cleanWorksheetId);
-  const allowed = isSameClass && (isPremium || isDemo);
+  const allowed = isSameClass && (isPremiumForClass || isDemo);
 
   const upgradeMsg = !isSameClass
     ? `Class-Wise Restriction: Your account is registered for ${userClass} only. Worksheets for ${wsClass} are locked.`

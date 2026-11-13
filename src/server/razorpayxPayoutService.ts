@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { serverDb } from '../../firebase/index.ts';
-import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { serverGetDoc, serverSetDoc } from '../../firebase/admin.ts';
 
 dotenv.config();
 
@@ -331,29 +330,41 @@ export async function processRazorpayXPayoutWebhookEvent(event: any): Promise<{ 
   const amountRupees = Math.round(amountPaise / 100);
 
   const payoutDocId = referenceId || `payout_rzp_${rzpPayoutId}`;
-  const payoutRef = doc(serverDb, 'payout_requests', payoutDocId);
-  const userRef = userId ? doc(serverDb, 'referrals', userId) : null;
 
   if (eventType === 'payout.processed') {
-    await updateDoc(payoutRef, {
-      status: 'COMPLETED',
-      razorpayxPayoutId: rzpPayoutId,
-      transactionReference: payoutEntity.utr || rzpPayoutId,
-      processedAt: new Date().toISOString(),
-      adminNotes: 'Automated RazorpayX payout confirmed successfully via webhook.'
-    }).catch(err => console.warn('[Webhook Firestore Update Notice]:', err));
+    await serverSetDoc(
+      'payout_requests',
+      payoutDocId,
+      {
+        status: 'COMPLETED',
+        razorpayxPayoutId: rzpPayoutId,
+        transactionReference: payoutEntity.utr || rzpPayoutId,
+        processedAt: new Date().toISOString(),
+        adminNotes: 'Automated RazorpayX payout confirmed successfully via webhook.'
+      },
+      { merge: true }
+    ).catch(err => console.warn('[Webhook Firestore Update Notice]:', err));
 
-    if (userRef) {
-      const snap = await getDoc(userRef).catch(() => null);
-      if (snap && snap.exists()) {
-        const udata = snap.data();
+    if (userId) {
+      const udata = await serverGetDoc('referrals', userId).catch(() => null);
+      if (udata) {
         const pending = Math.max(0, (udata.wallet?.pendingBalance || 0) - amountRupees);
         const withdrawn = (udata.wallet?.totalWithdrawn || 0) + amountRupees;
-        await updateDoc(userRef, {
-          'wallet.pendingBalance': pending,
-          'wallet.totalWithdrawn': withdrawn,
-          updatedAt: new Date().toISOString()
-        }).catch(err => console.warn('[Webhook Wallet Update Notice]:', err));
+        await serverSetDoc(
+          'referrals',
+          userId,
+          {
+            wallet: {
+              ...(udata.wallet || {}),
+              pendingBalance: pending,
+              totalWithdrawn: withdrawn
+            },
+            withdrawnAmount: withdrawn,
+            pendingWithdrawalAmount: pending,
+            updatedAt: new Date().toISOString()
+          },
+          { merge: true }
+        ).catch(err => console.warn('[Webhook Wallet Update Notice]:', err));
       }
     }
 
@@ -362,25 +373,39 @@ export async function processRazorpayXPayoutWebhookEvent(event: any): Promise<{ 
 
   if (eventType === 'payout.failed' || eventType === 'payout.reversed') {
     const failureReason = payoutEntity.failure_reason || eventType;
-    await updateDoc(payoutRef, {
-      status: 'FAILED',
-      razorpayxPayoutId: rzpPayoutId,
-      processedAt: new Date().toISOString(),
-      adminNotes: `RazorpayX payout failed: ${failureReason}. Funds automatically restored to wallet.`
-    }).catch(err => console.warn('[Webhook Firestore Update Notice]:', err));
+    await serverSetDoc(
+      'payout_requests',
+      payoutDocId,
+      {
+        status: 'FAILED',
+        razorpayxPayoutId: rzpPayoutId,
+        processedAt: new Date().toISOString(),
+        adminNotes: `RazorpayX payout failed: ${failureReason}. Funds automatically restored to wallet.`
+      },
+      { merge: true }
+    ).catch(err => console.warn('[Webhook Firestore Update Notice]:', err));
 
     // Automatically restore funds to available wallet balance
-    if (userRef) {
-      const snap = await getDoc(userRef).catch(() => null);
-      if (snap && snap.exists()) {
-        const udata = snap.data();
+    if (userId) {
+      const udata = await serverGetDoc('referrals', userId).catch(() => null);
+      if (udata) {
         const pending = Math.max(0, (udata.wallet?.pendingBalance || 0) - amountRupees);
         const available = (udata.wallet?.availableBalance || 0) + amountRupees;
-        await updateDoc(userRef, {
-          'wallet.pendingBalance': pending,
-          'wallet.availableBalance': available,
-          updatedAt: new Date().toISOString()
-        }).catch(err => console.warn('[Webhook Balance Restore Notice]:', err));
+        await serverSetDoc(
+          'referrals',
+          userId,
+          {
+            wallet: {
+              ...(udata.wallet || {}),
+              pendingBalance: pending,
+              availableBalance: available
+            },
+            availableWalletBalance: available,
+            pendingWithdrawalAmount: pending,
+            updatedAt: new Date().toISOString()
+          },
+          { merge: true }
+        ).catch(err => console.warn('[Webhook Balance Restore Notice]:', err));
       }
     }
 

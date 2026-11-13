@@ -1,15 +1,85 @@
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import {
+  initializeApp as initializeAdminApp,
+  getApps as getAdminApps,
+  cert as adminCert
+} from 'firebase-admin/app';
+import { getFirestore as getAdminFirestoreSdk } from 'firebase-admin/firestore';
+import { getAuth as getAdminAuthSdk } from 'firebase-admin/auth';
 
 dotenv.config();
 
 const FIREBASE_PROJECT_ID = 'gen-lang-client-0860728359';
 const FIRESTORE_DATABASE_ID =
   'ai-studio-vacationchampion-cedf2d74-0d25-42f6-8aaa-1a9e2fb4514d';
+const AUTHORIZED_ADMIN_EMAIL = 'ronakvarade2022@gmail.com';
 
 const processedPaymentIds = new Set();
 const processedOrderIds = new Set();
 const transactionLedger = [];
+
+let cachedNetlifyAdmin = null;
+function getNetlifyFirebaseAdmin() {
+  if (cachedNetlifyAdmin) return cachedNetlifyAdmin;
+  try {
+    const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    const rawEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+    let serviceAccount = null;
+
+    if (rawJson && String(rawJson).trim()) {
+      const cleaned = String(rawJson).trim().replace(/^["']+|["']+$/g, '').trim();
+      const jsonStr = cleaned.startsWith('{')
+        ? cleaned
+        : Buffer.from(cleaned, 'base64').toString('utf8');
+      const parsed = JSON.parse(jsonStr);
+      if (parsed?.client_email && parsed?.private_key) {
+        serviceAccount = {
+          projectId: parsed.project_id || FIREBASE_PROJECT_ID,
+          clientEmail: parsed.client_email,
+          privateKey: String(parsed.private_key).replace(/\\n/g, '\n')
+        };
+      }
+    } else if (rawEmail && rawKey) {
+      serviceAccount = {
+        projectId: process.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID,
+        clientEmail: String(rawEmail).trim().replace(/^["']+|["']+$/g, ''),
+        privateKey: String(rawKey).trim().replace(/^["']+|["']+$/g, '').replace(/\\n/g, '\n')
+      };
+    }
+
+    if (!serviceAccount) {
+      cachedNetlifyAdmin = { db: null, auth: null, configured: false };
+      return cachedNetlifyAdmin;
+    }
+
+    const appName = 'mystudyzone-netlify-admin';
+    const existing = getAdminApps().find((a) => a.name === appName);
+    const adminApp =
+      existing ||
+      initializeAdminApp(
+        {
+          credential: adminCert(serviceAccount),
+          projectId: serviceAccount.projectId || FIREBASE_PROJECT_ID
+        },
+        appName
+      );
+    const db = getAdminFirestoreSdk(adminApp, FIRESTORE_DATABASE_ID);
+    try {
+      db.settings({ ignoreUndefinedProperties: true });
+    } catch {
+      // Ignore if already configured
+    }
+    const auth = getAdminAuthSdk(adminApp);
+    cachedNetlifyAdmin = { db, auth, configured: true };
+    return cachedNetlifyAdmin;
+  } catch (err) {
+    console.warn('[Netlify Firebase Admin Notice]:', err?.message || err);
+    cachedNetlifyAdmin = { db: null, auth: null, configured: false };
+    return cachedNetlifyAdmin;
+  }
+}
 
 const PAID_SUBSCRIPTION_VALIDITY_DAYS = 365;
 const IST_OFFSET_MS = 330 * 60 * 1000;
@@ -111,6 +181,7 @@ function getResolvedRazorpayCredentials() {
     keyId: hasValidKeyId ? keyId : '',
     keySecret: hasValidSecret ? keySecret : '',
     webhookSecret: cleanWebhookSecret || (hasValidSecret ? keySecret : ''),
+    hasExplicitWebhookSecret: Boolean(cleanWebhookSecret),
     isConfigured,
     isLive
   };
@@ -144,7 +215,14 @@ function toFirestoreValue(val) {
 
 async function patchFirestoreDocument(collectionName, docId, fieldsObj) {
   try {
-    const safeDocId = encodeURIComponent(String(docId).trim());
+    const cleanId = String(docId).trim();
+    const { db } = getNetlifyFirebaseAdmin();
+    if (db) {
+      await db.collection(collectionName).doc(cleanId).set(fieldsObj, { merge: true });
+      return;
+    }
+
+    const safeDocId = encodeURIComponent(cleanId);
     const fieldKeys = Object.keys(fieldsObj);
     const updateMask = fieldKeys
       .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
@@ -168,7 +246,14 @@ async function patchFirestoreDocument(collectionName, docId, fieldsObj) {
 
 async function getFirestoreDocument(collectionName, docId) {
   try {
-    const safeDocId = encodeURIComponent(String(docId).trim());
+    const cleanId = String(docId).trim();
+    const { db } = getNetlifyFirebaseAdmin();
+    if (db) {
+      const snap = await db.collection(collectionName).doc(cleanId).get();
+      return snap.exists ? snap.data() : null;
+    }
+
+    const safeDocId = encodeURIComponent(cleanId);
     const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents/${collectionName}/${safeDocId}`;
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -257,7 +342,8 @@ async function verifyAndCaptureRazorpayPayment(creds, paymentId, expectedAmountP
     confirmed: true,
     status: 'captured',
     method,
-    amount
+    amount,
+    notes: paymentData.notes || {}
   };
 }
 
@@ -725,6 +811,16 @@ export async function handler(event) {
         });
       }
 
+      const notesSid = String(
+        captureCheck.notes?.studentId || captureCheck.notes?.userId || ''
+      ).trim();
+      if (notesSid && notesSid !== String(studentId).trim()) {
+        return jsonResponse(403, {
+          success: false,
+          error: 'Payment belongs to a different student account. Cross-student activation rejected.'
+        });
+      }
+
       // Compute exact 365-day expiry date in IST
       const now = new Date();
       const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
@@ -889,7 +985,11 @@ export async function handler(event) {
         });
       }
 
-      const secrets = [creds.webhookSecret, creds.keySecret].filter(Boolean);
+      const secrets = creds.hasExplicitWebhookSecret && creds.webhookSecret
+        ? [creds.webhookSecret]
+        : creds.keySecret
+        ? [creds.keySecret]
+        : [];
       let validSig = false;
       for (const sec of secrets) {
         const expected = crypto
@@ -984,11 +1084,48 @@ export async function handler(event) {
   if (method === 'POST' && normalizedPath === '/subscription/sync') {
     try {
       const body = JSON.parse(event.body || '{}');
+      const cleanStudentId = String(body.studentId || '').trim();
+      const requestedPlan = body.plan || 'free';
+      const cleanPaymentId = String(body.paymentId || '').trim();
+
+      if (!cleanStudentId) {
+        return jsonResponse(400, { success: false, error: 'studentId is required.' });
+      }
+
+      if (requestedPlan === 'basic' || requestedPlan === 'premium') {
+        const isSynthetic =
+          !cleanPaymentId ||
+          cleanPaymentId.startsWith('pay_sim_') ||
+          cleanPaymentId.startsWith('demo_') ||
+          cleanPaymentId === 'simulated' ||
+          cleanPaymentId.length < 6;
+        if (isSynthetic) {
+          return jsonResponse(403, {
+            success: false,
+            error: 'Paid Premium Plan requires a verified paymentId.'
+          });
+        }
+
+        let verified = processedPaymentIds.has(cleanPaymentId);
+        if (!verified) {
+          const txDoc = await getFirestoreDocument('transactions', `tx_${cleanPaymentId}`);
+          if (txDoc && txDoc.status === 'SUCCESS' && (!txDoc.studentId || txDoc.studentId === cleanStudentId)) {
+            verified = true;
+          }
+        }
+        if (!verified) {
+          return jsonResponse(403, {
+            success: false,
+            error: 'Unverified paymentId. Premium subscription sync rejected.'
+          });
+        }
+      }
+
       return jsonResponse(200, {
         success: true,
         subscription: {
-          studentId: body.studentId,
-          plan: body.plan || 'free',
+          studentId: cleanStudentId,
+          plan: requestedPlan === 'premium' || requestedPlan === 'basic' ? 'premium' : 'free',
           planPurchasedAt: body.planPurchasedAt,
           planExpiresAt: body.planExpiresAt,
           status: 'ACTIVE',
@@ -1016,8 +1153,25 @@ export async function handler(event) {
     });
   }
 
-  // 8. GET /api/payments/history
+  // 8. GET /api/payments/history (Protected by Verified Admin Auth)
   if (method === 'GET' && normalizedPath === '/payments/history') {
+    const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+    const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+    if (!authHeader.startsWith('Bearer ')) {
+      return jsonResponse(401, { success: false, error: 'Administrator authentication required.' });
+    }
+    if (!adminAuth) {
+      return jsonResponse(503, { success: false, error: 'Firebase Admin Auth is not configured.' });
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim(), true);
+      if (decoded.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL || !decoded.email_verified) {
+        return jsonResponse(403, { success: false, error: 'Verified administrator access required.' });
+      }
+    } catch {
+      return jsonResponse(401, { success: false, error: 'Invalid or expired authentication token.' });
+    }
+
     return jsonResponse(200, {
       success: true,
       transactions: transactionLedger

@@ -1897,7 +1897,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const computedDates = computePaidPlanExpiryIsoDate(student.planExpiresAt);
-    const resolvedExpiresAt = customExpiryDate || computedDates.expiresAt;
+    const resolvedPurchasedAt = txWithClass.membershipStartDate || computedDates.purchasedAt;
+    const resolvedExpiresAt =
+      customExpiryDate || txWithClass.membershipExpiryDate || computedDates.expiresAt;
 
     const updatedBadges = [...student.badges];
     if (txWithClass.planId === 'premium' && !updatedBadges.includes('badge-champion-premium')) {
@@ -1908,7 +1910,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...student,
       plan: txWithClass.planId,
       activatedClassLevel: student.classLevel,
-      planPurchasedAt: computedDates.purchasedAt,
+      planPurchasedAt: resolvedPurchasedAt,
       planExpiresAt: resolvedExpiresAt,
       points: student.points + (txWithClass.planId === 'premium' ? 250 : 100),
       badges: updatedBadges
@@ -1931,18 +1933,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       amountInr: txWithClass.amount
     }).catch(() => {});
 
-    fetch('/api/subscription/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        studentId: updatedStudent.id,
-        plan: txWithClass.planId,
-        selectedClass: updatedStudent.classLevel,
-        planPurchasedAt: updatedStudent.planPurchasedAt,
-        planExpiresAt: updatedStudent.planExpiresAt,
-        paymentId: txWithClass.paymentId
-      })
-    }).catch(() => {});
+    (async () => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch {
+        // Proceed without token if offline
+      }
+      await fetch('/api/subscription/sync', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          studentId: updatedStudent.id,
+          plan: txWithClass.planId,
+          selectedClass: updatedStudent.classLevel,
+          planPurchasedAt: updatedStudent.planPurchasedAt,
+          planExpiresAt: updatedStudent.planExpiresAt,
+          paymentId: txWithClass.paymentId
+        })
+      });
+    })().catch(() => {});
 
     addNotification(
       'Membership Activated! 👑',

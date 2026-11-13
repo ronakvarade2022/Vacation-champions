@@ -16,10 +16,24 @@ import {
   limit,
 } from 'firebase/firestore';
 import {
+  auth,
   db,
   ensureStudentReferralCodeInFirestore,
   findReferrerByCodeInFirestore,
 } from './firebase';
+
+async function getBearerAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  } catch {
+    // Non-fatal if user is offline or signed out
+  }
+  return headers;
+}
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -758,7 +772,8 @@ export const referralService = {
   },
 
   async getAdminStats(): Promise<AdminStatsResponse> {
-    const res = await fetch('/api/referrals/admin/stats');
+    const headers = await getBearerAuthHeaders();
+    const res = await fetch('/api/referrals/admin/stats', { headers });
     return res.json();
   },
 
@@ -767,9 +782,10 @@ export const referralService = {
     status: 'VERIFIED' | 'REJECTED',
     notes?: string
   ) {
+    const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
     const res = await fetch('/api/referrals/admin/verify-teacher', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ userId, status, notes }),
     });
     return res.json();
@@ -781,18 +797,20 @@ export const referralService = {
     transactionRef?: string,
     notes?: string
   ) {
+    const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
     const res = await fetch('/api/referrals/admin/payout-action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ payoutId, action, transactionRef, notes }),
     });
     return res.json();
   },
 
   async updateConfig(updates: Partial<ReferralSystemConfig>) {
+    const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
     const res = await fetch('/api/referrals/admin/update-config', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(updates),
     });
     return res.json();

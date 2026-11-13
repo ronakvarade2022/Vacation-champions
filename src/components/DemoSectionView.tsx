@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Sparkles, BookOpen, Brain, Shield, TrendingUp,
   CheckCircle2, Lock, Crown, Play, Pause, RotateCcw, Volume2, Palette,
-  Trophy, HelpCircle, Check, X, RefreshCw, Eraser, ArrowRight,
+  Trophy, HelpCircle, Check, X, RefreshCw, Eraser,
   GraduationCap, FileText, BarChart3, UserPlus, LogIn
 } from 'lucide-react';
 import { speechService } from '../services/speechService';
@@ -13,6 +13,7 @@ import {
   getSubjectMeta
 } from '../data/classCurriculumConfig';
 import { getFreeDemoWorksheets, OnlineWorksheet } from '../data/worksheetsData';
+import { getDemoQuestionsForClass } from '../data/demoQuestionsData';
 import { formatStandardOrdinal } from '../utils/subscriptionAccess';
 
 interface DemoSectionViewProps {
@@ -31,65 +32,6 @@ type InteractiveDemoTab =
   | 'live-drawing'
   | 'live-champions';
 
-interface DemoQuestion {
-  id: string;
-  subject: 'Mathematics' | 'English' | 'Science' | 'Marathi';
-  question: string;
-  options: string[];
-  correctIndex: number;
-  explanation: string;
-}
-
-const DEMO_QUIZ_QUESTIONS: DemoQuestion[] = [
-  {
-    id: 'dq-1',
-    subject: 'Mathematics',
-    question: 'If a train travels 180 km in 3 hours at a constant speed, how far will it travel in 5 hours?',
-    options: ['250 km', '300 km', '320 km', '360 km'],
-    correctIndex: 1,
-    explanation: 'Speed = 180 km ÷ 3 hours = 60 km/h. In 5 hours, distance = 60 × 5 = 300 km.'
-  },
-  {
-    id: 'dq-2',
-    subject: 'Mathematics',
-    question: 'What is the perimeter of a rectangle with length 14 cm and breadth 9 cm?',
-    options: ['23 cm', '46 cm', '126 cm', '38 cm'],
-    correctIndex: 1,
-    explanation: 'Perimeter of a rectangle = 2 × (length + breadth) = 2 × (14 + 9) = 2 × 23 = 46 cm.'
-  },
-  {
-    id: 'dq-3',
-    subject: 'English',
-    question: 'Choose the correct synonym for the word "COURAGEOUS":',
-    options: ['Timid', 'Valiant', 'Careless', 'exhausted'],
-    correctIndex: 1,
-    explanation: '"Valiant" means possessing or showing courage or determination, making it the synonym of courageous.'
-  },
-  {
-    id: 'dq-4',
-    subject: 'English',
-    question: 'Identify the figure of speech in: "The classroom was a buzzing beehive before the exam."',
-    options: ['Simile', 'Metaphor', 'Personification', 'Hyperbole'],
-    correctIndex: 1,
-    explanation: 'It directly compares the classroom to a buzzing beehive without using "like" or "as", which is a Metaphor.'
-  },
-  {
-    id: 'dq-5',
-    subject: 'Science',
-    question: 'Which gas do green plants absorb from the atmosphere during photosynthesis?',
-    options: ['Oxygen', 'Nitrogen', 'Carbon Dioxide', 'Hydrogen'],
-    correctIndex: 2,
-    explanation: 'Green plants absorb Carbon Dioxide (CO₂) and water in the presence of sunlight and chlorophyll to make glucose and release Oxygen.'
-  },
-  {
-    id: 'dq-6',
-    subject: 'Marathi',
-    question: '"छत्रपती शिवाजी महाराजांनी स्वराज्याची पहिली शपथ कुठे घेतली?"',
-    options: ['रायगड', 'रायरेश्वराचे मंदिर', 'प्रतापगड', 'शिवनेरी'],
-    correctIndex: 1,
-    explanation: 'छत्रपती शिवाजी महाराजांनी वयाच्या १६ व्या वर्षी आपल्या सवंगड्यांसह रायरेश्वराच्या मंदिरात हिंदवी स्वराज्याची पहिली शपथ घेतली.'
-  }
-];
 
 const DEMO_STORIES = [
   {
@@ -203,7 +145,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
   const [activeTab, setActiveTab] = useState<InteractiveDemoTab>('overview');
 
   // --- 0. Visitor Class Preview (Standards 1st to 10th) & Sample Worksheets ---
-  const [selectedDemoClass, setSelectedDemoClass] = useState<ClassLevel>('Class 5');
+  const [selectedDemoClass, setSelectedDemoClass] = useState<ClassLevel>('Class 1');
   const [activeDemoWorksheet, setActiveDemoWorksheet] = useState<OnlineWorksheet | null>(null);
   const [wsAnswers, setWsAnswers] = useState<Record<string, number>>({});
   const [wsSubmitted, setWsSubmitted] = useState(false);
@@ -217,24 +159,39 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
     [selectedDemoClass]
   );
 
+  // --- 1. Live Class-Specific Demo Quiz State (Strictly 2 Unique Questions per Class) ---
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+
+  const classDemoQuestions = useMemo(
+    () => getDemoQuestionsForClass(selectedDemoClass),
+    [selectedDemoClass]
+  );
+
+  const answeredInClassCount = classDemoQuestions.filter(
+    q => quizAnswers[q.id] !== undefined
+  ).length;
+
+  const submittedDemoScore = useMemo(() => {
+    if (!quizSubmitted) return 0;
+    return classDemoQuestions.reduce((acc, q) => {
+      return acc + (quizAnswers[q.id] === q.correctIndex ? 1 : 0);
+    }, 0);
+  }, [classDemoQuestions, quizAnswers, quizSubmitted]);
+
   const handleSelectDemoClass = (cls: ClassLevel) => {
     setSelectedDemoClass(cls);
     setActiveDemoWorksheet(null);
     setWsAnswers({});
     setWsSubmitted(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
   };
 
-  // --- 1. Live Quiz State (Isolated Demo State) ---
-  const [selectedQuizSubject, setSelectedQuizSubject] = useState<'All' | 'Mathematics' | 'English' | 'Science' | 'Marathi'>('All');
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [quizScore, setQuizScore] = useState(0);
-  const [answeredCount, setAnsweredCount] = useState(0);
-
-  const filteredQuestions = selectedQuizSubject === 'All'
-    ? DEMO_QUIZ_QUESTIONS
-    : DEMO_QUIZ_QUESTIONS.filter(q => q.subject === selectedQuizSubject);
-  const currentQuestion = filteredQuestions[quizIndex % filteredQuestions.length] || DEMO_QUIZ_QUESTIONS[0];
+  const handleResetDemoQuiz = () => {
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+  };
 
   // --- 2. Live Sudoku & Brain Puzzle State ---
   const [sudokuGrid, setSudokuGrid] = useState<(number | null)[][]>(
@@ -767,30 +724,31 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
       )}
 
       {/* =====================================================================
-          INTERACTIVE TAB 1: LIVE SUBJECT QUIZ PLAYER
+          INTERACTIVE TAB 1: CLASS-WISE SAMPLE SUBJECT QUIZ (STRICTLY 2 QUESTIONS/CLASS)
          ===================================================================== */}
       {activeTab === 'live-quiz' && (
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-lg mb-10 animate-in fade-in duration-200">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-100">
             <div>
               <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
-                Interactive Demo Quiz • Isolated Session
+                Interactive Demo Quiz • {selectedDemoClass} (2 Questions)
               </span>
               <h2 className="text-2xl font-black text-slate-900 mt-2">
-                Test Live Subject-Wise Questions
+                Standard {formatStandardOrdinal(selectedDemoClass)} — Sample Demo Quiz
               </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Answer both questions below and submit to check the correct answers and explanations.
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <div className="bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-2xl text-emerald-800 font-black text-sm">
-                Demo Score: {quizScore} / {answeredCount}
+                {quizSubmitted
+                  ? `Score: ${submittedDemoScore} / ${classDemoQuestions.length}`
+                  : `Selected: ${answeredInClassCount} / ${classDemoQuestions.length}`}
               </div>
               <button
-                onClick={() => {
-                  setQuizIndex(0);
-                  setSelectedAnswer(null);
-                  setQuizScore(0);
-                  setAnsweredCount(0);
-                }}
+                type="button"
+                onClick={handleResetDemoQuiz}
                 className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Reset Demo Quiz
@@ -798,101 +756,177 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
             </div>
           </div>
 
-          {/* Subject Filter */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {(['All', 'Mathematics', 'English', 'Science', 'Marathi'] as const).map(sub => (
-              <button
-                key={sub}
-                onClick={() => {
-                  setSelectedQuizSubject(sub);
-                  setQuizIndex(0);
-                  setSelectedAnswer(null);
-                }}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                  selectedQuizSubject === sub
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {sub}
-              </button>
-            ))}
-          </div>
-
-          {/* Active Question Card */}
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
-                Subject: {currentQuestion.subject}
-              </span>
-              <span className="text-xs font-bold text-slate-500">
-                Question {(quizIndex % filteredQuestions.length) + 1} of {filteredQuestions.length}
-              </span>
-            </div>
-
-            <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-5">
-              {currentQuestion.question}
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {currentQuestion.options.map((opt, idx) => {
-                const isSelected = selectedAnswer === idx;
-                const isCorrect = idx === currentQuestion.correctIndex;
-                let btnStyle = 'bg-white border-slate-200 text-slate-800 hover:border-indigo-400';
-
-                if (selectedAnswer !== null) {
-                  if (isCorrect) {
-                    btnStyle = 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500/20';
-                  } else if (isSelected && !isCorrect) {
-                    btnStyle = 'bg-rose-50 border-rose-500 text-rose-900';
-                  } else {
-                    btnStyle = 'bg-white border-slate-200 text-slate-400 opacity-75';
-                  }
-                }
-
+          {/* Class Selector Inside Quiz Tab */}
+          <div className="mb-6">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+              Select Class to View Its 2 Demo Questions:
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_10_CLASSES_META.map((clsMeta) => {
+                const isSelected = selectedDemoClass === clsMeta.classLevel;
                 return (
                   <button
-                    key={idx}
-                    disabled={selectedAnswer !== null}
-                    onClick={() => {
-                      setSelectedAnswer(idx);
-                      setAnsweredCount(prev => prev + 1);
-                      if (idx === currentQuestion.correctIndex) {
-                        setQuizScore(prev => prev + 1);
-                      }
-                    }}
-                    className={`p-4 rounded-xl border-2 text-left font-bold transition-all flex items-center justify-between cursor-pointer ${btnStyle}`}
+                    key={clsMeta.classLevel}
+                    type="button"
+                    onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
                   >
-                    <span>{opt}</span>
-                    {selectedAnswer !== null && isCorrect && (
-                      <Check className="w-5 h-5 text-emerald-600 shrink-0" />
-                    )}
-                    {selectedAnswer !== null && isSelected && !isCorrect && (
-                      <X className="w-5 h-5 text-rose-600 shrink-0" />
-                    )}
+                    {clsMeta.shortLabel}
                   </button>
                 );
               })}
             </div>
+          </div>
 
-            {selectedAnswer !== null && (
-              <div className="mt-5 p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-950 animate-in fade-in duration-200">
-                <p className="text-xs font-black uppercase tracking-wider text-indigo-700 mb-1">
-                  {selectedAnswer === currentQuestion.correctIndex ? '✅ Correct Answer!' : '💡 Step-by-Step Explanation:'}
-                </p>
-                <p className="text-sm font-medium">{currentQuestion.explanation}</p>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={() => {
-                      setSelectedAnswer(null);
-                      setQuizIndex(prev => prev + 1);
-                    }}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-                  >
-                    Next Demo Question <ArrowRight className="w-4 h-4" />
-                  </button>
+          {/* Strictly 2 Unique Questions for Selected Class */}
+          <div className="space-y-5 mb-6">
+            {classDemoQuestions.map((q, qIdx) => {
+              const chosen = quizAnswers[q.id];
+              const isUserCorrect = chosen === q.correctIndex;
+              const optionLabels = ['A', 'B', 'C', 'D'] as const;
+
+              return (
+                <div
+                  key={q.id}
+                  className="bg-slate-50 rounded-2xl p-5 sm:p-6 border border-slate-200"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
+                        Subject: {q.subject}
+                      </span>
+                      <span className="text-xs font-bold text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                        {q.topic}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500">
+                      Question {qIdx + 1} of {classDemoQuestions.length}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 mb-4">
+                    {qIdx + 1}. {q.question}
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {q.options.map((opt, optIdx) => {
+                      const isSelected = chosen === optIdx;
+                      const isCorrectOpt = optIdx === q.correctIndex;
+                      let btnStyle =
+                        'bg-white border-slate-200 text-slate-800 hover:border-indigo-400';
+
+                      if (quizSubmitted) {
+                        if (isCorrectOpt) {
+                          btnStyle =
+                            'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20';
+                        } else if (isSelected && !isCorrectOpt) {
+                          btnStyle = 'bg-rose-50 border-rose-500 text-rose-900';
+                        } else {
+                          btnStyle = 'bg-white border-slate-200 text-slate-400 opacity-80';
+                        }
+                      } else if (isSelected) {
+                        btnStyle =
+                          'bg-indigo-50 border-indigo-600 text-indigo-950 ring-2 ring-indigo-500/20';
+                      }
+
+                      return (
+                        <button
+                          key={optIdx}
+                          type="button"
+                          disabled={quizSubmitted}
+                          onClick={() =>
+                            setQuizAnswers(prev => ({ ...prev, [q.id]: optIdx }))
+                          }
+                          className={`p-3.5 rounded-xl border-2 text-left font-bold text-sm transition-all flex items-center justify-between gap-2 cursor-pointer ${btnStyle}`}
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <span
+                              className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                                quizSubmitted && isCorrectOpt
+                                  ? 'bg-emerald-600 text-white'
+                                  : quizSubmitted && isSelected && !isCorrectOpt
+                                  ? 'bg-rose-600 text-white'
+                                  : isSelected
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {optionLabels[optIdx]}
+                            </span>
+                            <span>{opt}</span>
+                          </span>
+                          {quizSubmitted && isCorrectOpt && (
+                            <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+                          )}
+                          {quizSubmitted && isSelected && !isCorrectOpt && (
+                            <X className="w-5 h-5 text-rose-600 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {quizSubmitted && (
+                    <div
+                      className={`mt-4 p-4 rounded-xl border animate-in fade-in duration-200 ${
+                        isUserCorrect
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                          : 'bg-amber-50 border-amber-200 text-amber-950'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <p className="text-xs font-black uppercase tracking-wider">
+                          {isUserCorrect
+                            ? '✓ Correct Answer!'
+                            : '✗ Incorrect Choice'}
+                        </p>
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-lg bg-white border border-current/20">
+                          Correct Answer: {optionLabels[q.correctIndex]}.{' '}
+                          {q.options[q.correctIndex]}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium mt-1">{q.explanation}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
+              );
+            })}
+          </div>
+
+          {/* Submit / Try Again Footer */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-600">
+              {quizSubmitted
+                ? `Completed Standard ${formatStandardOrdinal(selectedDemoClass)} Demo Quiz: You scored ${submittedDemoScore} out of ${classDemoQuestions.length}.`
+                : answeredInClassCount < classDemoQuestions.length
+                ? `Please select an option for both questions (${answeredInClassCount}/${classDemoQuestions.length} selected) to submit.`
+                : 'Both questions answered! Click Submit Demo Answers to view correct answers.'}
+            </p>
+            {!quizSubmitted ? (
+              <button
+                type="button"
+                disabled={answeredInClassCount < classDemoQuestions.length}
+                onClick={() => setQuizSubmitted(true)}
+                className={`px-6 py-3 rounded-xl font-black text-xs flex items-center gap-2 transition-all ${
+                  answeredInClassCount < classDemoQuestions.length
+                    ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md cursor-pointer'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" /> Submit Demo Answers
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResetDemoQuiz}
+                className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center gap-2 shadow-md cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" /> Try {selectedDemoClass} Quiz Again
+              </button>
             )}
           </div>
         </div>
@@ -1400,7 +1434,11 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                   </div>
                   <div className="p-2 rounded-xl bg-white border border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 block">Demo Score</span>
-                    <span className="text-xs font-black text-emerald-700">{quizScore} / {answeredCount || 0}</span>
+                    <span className="text-xs font-black text-emerald-700">
+                      {quizSubmitted
+                        ? `${submittedDemoScore} / ${classDemoQuestions.length}`
+                        : `${answeredInClassCount} / ${classDemoQuestions.length}`}
+                    </span>
                   </div>
                   <div className="p-2 rounded-xl bg-white border border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 block">Free Worksheets</span>
@@ -1419,8 +1457,12 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                   <BookOpen className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-slate-900">2. Demo Subject Quizzes</h2>
-                  <p className="text-xs text-slate-500">Click any quiz below to launch live questions</p>
+                  <h2 className="text-lg font-black text-slate-900">
+                    2. Demo Subject Quizzes ({formatStandardOrdinal(selectedDemoClass)})
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    2 unique questions tailored for {selectedDemoClass}
+                  </p>
                 </div>
               </div>
               <button
@@ -1431,29 +1473,27 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
               </button>
             </div>
             <div className="space-y-3">
-              {[
-                { subject: 'Mathematics' as const, title: 'Mathematics — Fractions & Speed', level: 'Intermediate • Interactive', score: 'Play Now' },
-                { subject: 'Science' as const, title: 'General Science — Living World', level: 'Beginner • Interactive', score: 'Play Now' },
-              ].map((qz, i) => (
+              {classDemoQuestions.map((dq, i) => (
                 <div
-                  key={i}
-                  onClick={() => {
-                    setSelectedQuizSubject(qz.subject);
-                    setQuizIndex(0);
-                    setSelectedAnswer(null);
-                    setActiveTab('live-quiz');
-                  }}
+                  key={dq.id}
+                  onClick={() => setActiveTab('live-quiz')}
                   className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-emerald-500 flex items-center justify-between cursor-pointer transition-all"
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800 text-sm">{qz.title}</span>
-                      <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">LIVE DEMO</span>
+                      <span className="font-bold text-slate-800 text-sm">
+                        {dq.subject} — {dq.topic}
+                      </span>
+                      <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
+                        {selectedDemoClass}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{qz.level}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Question {i + 1} of {classDemoQuestions.length} • 4 MCQ Options
+                    </p>
                   </div>
-                  <span className="text-xs font-black bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl flex items-center gap-1">
-                    <Play className="w-3.5 h-3.5 fill-current" /> {qz.score}
+                  <span className="text-xs font-black bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl flex items-center gap-1 shrink-0">
+                    <Play className="w-3.5 h-3.5 fill-current" /> Play Now
                   </span>
                 </div>
               ))}

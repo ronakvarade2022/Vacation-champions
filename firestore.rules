@@ -144,7 +144,9 @@ service cloud.firestore {
           incoming().name is string &&
           incoming().email is string &&
           incoming().classLevel is string &&
-          (!('plan' in incoming()) || incoming().plan == 'free')
+          (!('plan' in incoming()) || incoming().plan == 'free') &&
+          (!('lastPaymentId' in incoming()) || incoming().lastPaymentId == null) &&
+          (!('planExpiresAt' in incoming()) || incoming().planExpiresAt == null)
         )
       );
       allow update: if isValidId(studentId) && isValidStudentProfile(incoming()) && (
@@ -153,15 +155,14 @@ service cloud.firestore {
           (isOwner(studentId) || (isSignedIn() && existing().firebaseUid == request.auth.uid)) &&
           incoming().id == existing().id &&
           (!('registeredAt' in existing()) || incoming().registeredAt == existing().registeredAt) &&
-          (
-            incoming().plan == existing().plan ||
-            (
-              incoming().plan in ['basic', 'premium'] &&
-              incoming().lastPaymentId is string &&
-              incoming().lastPaymentId.size() >= 6 &&
-              incoming().lastPaymentId.size() <= 100
-            )
-          )
+          incoming().get('classLevel', null) == existing().get('classLevel', null) &&
+          incoming().plan == existing().plan &&
+          incoming().get('subscriptionTier', null) == existing().get('subscriptionTier', null) &&
+          incoming().get('activatedClassLevel', null) == existing().get('activatedClassLevel', null) &&
+          incoming().get('planPurchasedAt', null) == existing().get('planPurchasedAt', null) &&
+          incoming().get('planExpiresAt', null) == existing().get('planExpiresAt', null) &&
+          incoming().get('lastPaymentId', null) == existing().get('lastPaymentId', null) &&
+          incoming().get('lastOrderId', null) == existing().get('lastOrderId', null)
         )
       );
       allow delete: if isAdmin();
@@ -241,10 +242,8 @@ service cloud.firestore {
           isParentOf(resource.data.studentId)
         )
       );
-      allow create: if isValidId(transactionId) && isValidTransaction(incoming()) && (
-        isAdmin() ||
-        (isSignedIn() && incoming().studentId == request.auth.uid)
-      );
+      // Only verified server backend (Firebase Admin SDK) or Admin can write payment records
+      allow create: if isValidId(transactionId) && isValidTransaction(incoming()) && isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
