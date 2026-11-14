@@ -1,4 +1,6 @@
-import { ClassLevel, SubjectName, QuizLevel } from '../types';
+import { ClassLevel, EducationBoard, SubjectName, QuizLevel } from '../types';
+import { CBSE_CURRICULUM_BY_CLASS } from './boards/cbseCurriculumConfig';
+import { ICSE_CURRICULUM_BY_CLASS } from './boards/icseCurriculumConfig';
 
 export interface SubjectMetaItem {
   name: SubjectName;
@@ -411,6 +413,84 @@ export const ADDITIONAL_CLASS_SUBJECTS: SubjectMetaItem[] = [
     hindiName: 'गणित भाग २ – ज्यामिति (Geometry)',
     description: 'Maharashtra SSC Math Part 2: Similarity, Pythagoras Theorem, Circles, Coordinate Geometry, Trigonometry & Mensuration',
     chapters: ['Similarity & Pythagoras Theorem', 'Circle, Tangents & Arcs', 'Coordinate Geometry & Slope', 'Trigonometry & 3D Mensuration']
+  },
+  // Additional Subjects for CBSE (NCERT) & ICSE (CISCE) Boards
+  {
+    name: 'Social Science',
+    icon: '🌐',
+    bgGradient: 'from-indigo-500 to-purple-700',
+    shortCode: 'SOC',
+    category: 'social',
+    marathiName: 'सामाजिक विज्ञान (CBSE NCERT)',
+    hindiName: 'सामाजिक विज्ञान (History, Geography, Civics & Economics)',
+    description: 'CBSE Integrated Social Science: History, Geography, Democratic Politics (Civics) & Economics',
+    chapters: ['Exploring Society & Civilisations', 'Geography: Earth, Resources & Monsoon', 'Democratic Politics & Constitutional Design', 'Sectors of Economy, Money & Credit']
+  },
+  {
+    name: 'History & Civics',
+    icon: '🏛️',
+    bgGradient: 'from-amber-700 to-red-800',
+    shortCode: 'HISCV',
+    category: 'social',
+    marathiName: 'इतिहास व नागरिकशास्त्र (ICSE)',
+    hindiName: 'इतिहास एवं नागरिक शास्त्र (ICSE)',
+    description: 'CISCE ICSE History & Civics: Ancient/Medieval/Modern Indian History, World Wars, UN & Union Parliament',
+    chapters: ['Harappan Civilisation, Revolt of 1857 & Nationalism', 'Gandhian Era & Independence (1919–1947)', 'World Wars & The United Nations', 'Union Parliament, Executive & Supreme Court']
+  },
+  {
+    name: 'Computer Studies',
+    icon: '🖱️',
+    bgGradient: 'from-cyan-600 to-teal-700',
+    shortCode: 'CMPST',
+    category: 'skill',
+    marathiName: 'संगणक अभ्यास (ICSE Primary/Middle)',
+    hindiName: 'कंप्यूटर अध्ययन (ICSE)',
+    description: 'ICSE Computer Studies (Std 1–8): Hardware, Memory, Number Systems, HTML5, Spreadsheets & Coding',
+    chapters: ['Hardware, Memory & Operating Systems', 'Number Systems (Binary/Hex) & Cyber Safety', 'HTML5, Spreadsheets & Databases', 'Algorithms, Flowcharts & BlueJ Java Intro']
+  },
+  {
+    name: 'Computer Applications',
+    icon: '☕',
+    bgGradient: 'from-sky-600 to-indigo-800',
+    shortCode: 'CMPAP',
+    category: 'skill',
+    marathiName: 'संगणक उपयोजन (ICSE Java OOP)',
+    hindiName: 'कंप्यूटर एप्लीकेशन (Java OOP)',
+    description: 'ICSE Class 9 & 10 Group III Computer Applications: Java Object-Oriented Programming, Loops, Strings & Arrays',
+    chapters: ['OOP Concepts, Data Types & Operators in Java', 'Conditionals, Loops & Mathematical Library Methods', 'Classes, Constructors & Function Overloading', 'Strings, Wrapper Classes & 1D/2D Arrays']
+  },
+  {
+    name: 'Economics',
+    icon: '📊',
+    bgGradient: 'from-emerald-600 to-teal-800',
+    shortCode: 'ECON',
+    category: 'social',
+    marathiName: 'अर्थशास्त्र (Economics)',
+    hindiName: 'अर्थशास्त्र (Economics)',
+    description: 'Microeconomics, Factors of Production, Sectors of Indian Economy, Banking, Poverty & Consumer Awareness',
+    chapters: ['Basic Concepts & Factors of Production', 'Demand, Supply & Market Structures', 'Money, Banking, Inflation & RBI Policy', 'Indian Economy, Food Security & Sustainable Growth']
+  },
+  {
+    name: 'Commercial Studies',
+    icon: '💼',
+    bgGradient: 'from-amber-600 to-orange-700',
+    shortCode: 'COMM',
+    category: 'social',
+    marathiName: 'वाणिज्य अभ्यास (ICSE Commercial Studies)',
+    hindiName: 'वाणिज्यिक अध्ययन (ICSE)',
+    description: 'ICSE Group II/III Commercial Studies: Stakeholders, Marketing, Final Accounts (Trading/P&L), Budgeting & Logistics',
+    chapters: ['Stakeholders, E-Commerce & Marketing', 'Capital/Revenue Expenditure & Final Accounts', 'Budgeting, Banking & Insurance Instruments', 'Logistics, Industrial Relations & Consumer Protection']
+  },
+  {
+    name: 'Sanskrit',
+    icon: '📜',
+    bgGradient: 'from-yellow-600 to-amber-700',
+    shortCode: 'SKT',
+    category: 'language',
+    marathiName: 'संस्कृत (CBSE Deepakam / Ruchira)',
+    hindiName: 'संस्कृत (रुचिरा / शेमुषी / दीपकम्)',
+    description: 'CBSE Sanskrit Grammar & Literature: वर्णमाला, शब्द-रूप, धातु-रूप (लकार), संधि, समास एवं सुभाषितानि',
+    chapters: ['संस्कृत वर्णमाला व माहेश्वर सूत्र परिचयः', 'लकार व शब्द रूपाणि (अकारांत/आकारांत)', 'संधि, उपसर्ग एवं प्रत्यय अभ्यासः', 'सुभाषितानि, समास व अनुवाद कौशलम्']
   }
 ];
 
@@ -419,7 +499,10 @@ export const ALL_SUBJECTS_CATALOG: SubjectMetaItem[] = [
   ...ADDITIONAL_CLASS_SUBJECTS
 ];
 
-export function getSubjectMeta(subject: SubjectName): SubjectMetaItem & {
+export function getSubjectMeta(
+  subject: SubjectName,
+  board: EducationBoard = 'Maharashtra'
+): SubjectMetaItem & {
   gradient: string;
   marathiTitle: string;
   chaptersSummary: string;
@@ -436,22 +519,76 @@ export function getSubjectMeta(subject: SubjectName): SubjectMetaItem & {
       description: 'Comprehensive syllabus practice across 4 difficulty levels.',
       chapters: ['Chapter 1: Foundation', 'Chapter 2: Application', 'Chapter 3: Analysis', 'Chapter 4: Mastery']
     };
+
+  let localizedTitle = found.marathiName;
+  if (board === 'CBSE') {
+    localizedTitle = `${found.hindiName} • CBSE NCERT`;
+  } else if (board === 'ICSE') {
+    localizedTitle = `${found.name} • CISCE ICSE`;
+  }
+
   return {
     ...found,
     gradient: found.bgGradient,
-    marathiTitle: found.marathiName,
+    marathiTitle: localizedTitle,
     chaptersSummary: found.description
   };
 }
 
+export function getClassCurriculumMeta(
+  classLevel: ClassLevel,
+  board: EducationBoard = 'Maharashtra'
+): ClassMetaItem {
+  const base = ALL_10_CLASSES_META.find(c => c.classLevel === classLevel) || ALL_10_CLASSES_META[0];
+  if (board === 'CBSE') {
+    const info = CBSE_CURRICULUM_BY_CLASS[classLevel];
+    return {
+      ...base,
+      boardStage: info?.boardStage || `CBSE (NCERT) • ${classLevel}`,
+      syllabusDescription: info?.syllabusDescription || base.syllabusDescription
+    };
+  }
+  if (board === 'ICSE') {
+    const info = ICSE_CURRICULUM_BY_CLASS[classLevel];
+    return {
+      ...base,
+      boardStage: info?.boardStage || `ICSE (CISCE) • ${classLevel}`,
+      syllabusDescription: info?.syllabusDescription || base.syllabusDescription
+    };
+  }
+  return base;
+}
+
+export function getChaptersForBoardClassSubject(
+  board: EducationBoard,
+  classLevel: ClassLevel,
+  subject: SubjectName
+): string[] {
+  if (board === 'CBSE') {
+    const boardChapters = CBSE_CURRICULUM_BY_CLASS[classLevel]?.chaptersBySubject?.[subject];
+    if (boardChapters && boardChapters.length > 0) return boardChapters;
+  } else if (board === 'ICSE') {
+    const boardChapters = ICSE_CURRICULUM_BY_CLASS[classLevel]?.chaptersBySubject?.[subject];
+    if (boardChapters && boardChapters.length > 0) return boardChapters;
+  }
+  return getSubjectMeta(subject, board).chapters;
+}
+
 /**
- * Returns the exact ordered SubjectName[] list for any Class (Class 1 to Class 10):
- * - Class 1: Highlighted Class 1 subjects (Mathematics, English, Marathi, Hindi, Environmental Studies, General Knowledge, Drawing and Creative Activities) + all other existing subjects.
- * - Classes 2 to 8: Preserves the exact 14 existing subjects.
- * - Class 9: Maharashtra State Board Class 9 subjects (Mathematics, English, Marathi, Hindi, Physics, Chemistry, Biology, History, Political Science, Geography, Information Technology, Environmental Education, Physical Education) + remaining existing subjects.
- * - Class 10: Maharashtra SSC Class 10 subjects (Mathematics – Algebra, Mathematics – Geometry, English, Marathi, Hindi, Physics, Chemistry, Biology, History, Political Science, Geography, Information Technology, Environmental Education, Physical Education) + remaining existing subjects.
+ * Returns the exact ordered SubjectName[] list for any Board & Class (Class 1 to Class 10).
+ * Preserves Maharashtra State Board lists 100% intact.
  */
-export function getSubjectsForClass(classLevel: ClassLevel): SubjectName[] {
+export function getSubjectsForClass(
+  classLevel: ClassLevel,
+  board: EducationBoard = 'Maharashtra'
+): SubjectName[] {
+  if (board === 'CBSE') {
+    return CBSE_CURRICULUM_BY_CLASS[classLevel]?.subjects || CORE_14_SUBJECTS.map(s => s.name);
+  }
+  if (board === 'ICSE') {
+    return ICSE_CURRICULUM_BY_CLASS[classLevel]?.subjects || CORE_14_SUBJECTS.map(s => s.name);
+  }
+
   if (classLevel === 'Class 1') {
     return [
       'Mathematics',

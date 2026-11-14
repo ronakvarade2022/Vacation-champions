@@ -1,8 +1,9 @@
 import { ClassLevel, SubjectName, QuizQuestion } from '../types';
 
-// Normalizes text by removing punctuation, lowercasing, and stripping common filler words
+// Normalizes text by stripping bracket prefixes, removing punctuation, and lowercasing
 export function normalizeQuestionText(text: string): string {
-  return text
+  return String(text || '')
+    .replace(/^(\s*\[[^\]]+\]\s*)+/g, '')
     .toLowerCase()
     .replace(/[^\w\s\u0900-\u097F]/g, ' ') // Preserves English and Devanagari (Hindi/Marathi) letters
     .replace(/\s+/g, ' ')
@@ -977,6 +978,34 @@ export const SUBJECT_TOPIC_MAP: Record<SubjectName, { topics: string[]; sampleKe
   'Mathematics – Geometry': {
     topics: ['Similarity of Triangles', 'Pythagoras Theorem', 'Circle & Tangents', 'Coordinate Geometry & Trigonometry', 'Mensuration'],
     sampleKeywords: ['triangle', 'tangent', 'hypotenuse', 'trigonometry', 'coordinate']
+  },
+  'Social Science': {
+    topics: ['Ancient Civilisations', 'Our Environment', 'Democratic Politics', 'Indian Economy & Federalism'],
+    sampleKeywords: ['constitution', 'resources', 'federalism', 'monsoon', 'democracy']
+  },
+  'History & Civics': {
+    topics: ['Revolt of 1857', 'Gandhian Movements', 'World Wars & UN', 'Union Parliament & Judiciary'],
+    sampleKeywords: ['parliament', 'independence', 'constitution', 'president', 'movement']
+  },
+  'Computer Studies': {
+    topics: ['Hardware & Memory', 'Number Systems', 'HTML5 & Spreadsheets', 'Flowcharts & BlueJ Intro'],
+    sampleKeywords: ['binary', 'byte', 'memory', 'html', 'spreadsheet']
+  },
+  'Computer Applications': {
+    topics: ['OOP Encapsulation', 'Constructors & Overloading', 'Strings & Math Methods', 'Single/2D Arrays'],
+    sampleKeywords: ['java', 'class', 'constructor', 'array', 'string']
+  },
+  'Economics': {
+    topics: ['Factors of Production', 'Demand & Supply', 'Money & Banking', 'Sectors of Economy'],
+    sampleKeywords: ['demand', 'supply', 'entrepreneur', 'rbi', 'inflation']
+  },
+  'Commercial Studies': {
+    topics: ['Stakeholders & Marketing', 'Final Accounts', 'Budgeting & E-Commerce', 'Consumer Protection'],
+    sampleKeywords: ['capital', 'revenue', 'balance sheet', 'stakeholder', 'marketing']
+  },
+  'Sanskrit': {
+    topics: ['संस्कृत वर्णमाला', 'लट्/लृट् लकार', 'शब्द रूपाणि', 'संधि व सुभाषितानि'],
+    sampleKeywords: ['लकार', 'विभक्ति', 'संधि', 'धातु', 'सुभाषित']
   }
 };
 

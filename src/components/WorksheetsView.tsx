@@ -21,13 +21,14 @@ import {
   X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel, SubjectName } from '../types';
+import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import {
   ALL_10_CLASSES,
   ALL_10_CLASSES_META,
   getSubjectsForClass,
   getSubjectMeta
 } from '../data/classCurriculumConfig';
+import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import {
   OnlineWorksheet,
   WORKSHEET_FORMAT_LABELS,
@@ -38,7 +39,8 @@ import {
 } from '../data/worksheetsData';
 import {
   canAccessWorksheet,
-  getClassSubscriptionInfo,
+  getBoardClassSubscriptionInfo,
+  getBoardShortLabel,
   getPremiumActivatedBannerMessage,
   formatStandardOrdinal,
   WORKSHEET_PREMIUM_UPGRADE_MESSAGE,
@@ -48,7 +50,7 @@ import {
 interface WorksheetsViewProps {
   initialClassLevel?: ClassLevel;
   initialSubject?: SubjectName;
-  onUnlockClick?: (targetClass?: ClassLevel) => void;
+  onUnlockClick?: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
 export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
@@ -56,9 +58,11 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   initialSubject,
   onUnlockClick
 }) => {
-  const { currentStudent, submitWorksheetAttempt, switchActiveClass } = useApp();
+  const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass } = useApp();
 
+  const userRegisteredBoard: EducationBoard = activeBoard;
   const userRegisteredClass: ClassLevel = currentStudent?.classLevel || initialClassLevel || 'Class 4';
+  const [selectedBoard, setSelectedBoard] = useState<EducationBoard>(userRegisteredBoard);
   const [selectedClass, setSelectedClass] = useState<ClassLevel>(userRegisteredClass);
   const [selectedSubject, setSelectedSubject] = useState<SubjectName | 'ALL'>(
     initialSubject || 'ALL'
@@ -71,36 +75,43 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
 
   const selectedClassInfo = useMemo(
-    () => getClassSubscriptionInfo(currentStudent, selectedClass),
-    [currentStudent, selectedClass]
+    () => getBoardClassSubscriptionInfo(currentStudent, selectedBoard, selectedClass),
+    [currentStudent, selectedBoard, selectedClass]
   );
   const isPremiumStudent = selectedClassInfo.isPaidActive;
   const freeDemoWorksheetIds = useMemo(
-    () => getFreeDemoWorksheetIdsForClass(selectedClass),
-    [selectedClass]
+    () => getFreeDemoWorksheetIdsForClass(selectedClass, selectedBoard),
+    [selectedClass, selectedBoard]
   );
   const freeDemoWorksheets = useMemo(
-    () => getFreeDemoWorksheets(selectedClass),
-    [selectedClass]
+    () => getFreeDemoWorksheets(selectedClass, selectedBoard),
+    [selectedClass, selectedBoard]
   );
 
-  // Keep selectedClass synced to user's permanently registered class when account changes
+  // Keep selectedBoard & selectedClass synced to user's active workspace when account/workspace changes
   useEffect(() => {
+    setSelectedBoard(activeBoard);
     if (currentStudent?.classLevel) {
       setSelectedClass(currentStudent.classLevel);
     }
-  }, [currentStudent?.id, currentStudent?.classLevel]);
+  }, [currentStudent?.id, currentStudent?.classLevel, activeBoard]);
 
   // Security guard: if activeWorksheet is ever set to a locked worksheet (e.g. account switch or state tampering), close immediately
   useEffect(() => {
     if (activeWorksheet) {
-      const check = canAccessWorksheet(currentStudent, activeWorksheet.id, activeWorksheet.classLevel);
+      const check = canAccessWorksheet(
+        currentStudent,
+        activeWorksheet.id,
+        activeWorksheet.classLevel,
+        undefined,
+        activeWorksheet.board || selectedBoard
+      );
       if (!check.allowed) {
         setLockedModalWorksheet(activeWorksheet);
         setActiveWorksheet(null);
       }
     }
-  }, [activeWorksheet, currentStudent]);
+  }, [activeWorksheet, currentStudent, selectedBoard]);
 
   // Strict Anti-Print & Anti-Download Keyboard Shortcut Protection (for BOTH Free and Premium users, Students and Teachers)
   useEffect(() => {
@@ -119,8 +130,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, []);
 
-  // Ensure selectedSubject is valid for the selectedClass
-  const classSubjects = useMemo(() => getSubjectsForClass(selectedClass), [selectedClass]);
+  // Ensure selectedSubject is valid for the selectedBoard & selectedClass
+  const classSubjects = useMemo(() => getSubjectsForClass(selectedClass, selectedBoard), [selectedClass, selectedBoard]);
 
   const effectiveSubject: SubjectName | 'ALL' = useMemo(() => {
     if (selectedSubject === 'ALL') return 'ALL';
@@ -129,10 +140,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
   const worksheetsList = useMemo(() => {
     if (effectiveSubject === 'ALL') {
-      return getAllWorksheetsForClass(selectedClass);
+      return getAllWorksheetsForClass(selectedClass, selectedBoard);
     }
-    return getWorksheetsForClassAndSubject(selectedClass, effectiveSubject);
-  }, [selectedClass, effectiveSubject]);
+    return getWorksheetsForClassAndSubject(selectedClass, effectiveSubject, selectedBoard);
+  }, [selectedClass, effectiveSubject, selectedBoard]);
 
   const completedWorksheetIds = useMemo(
     () => new Set(currentStudent?.completedWorksheetIds || []),
@@ -155,7 +166,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   }, [currentStudent?.worksheetAttempts]);
 
   const handleStartWorksheet = async (ws: OnlineWorksheet) => {
-    const access = canAccessWorksheet(currentStudent, ws.id, ws.classLevel);
+    const wsBoard = ws.board || selectedBoard;
+    const access = canAccessWorksheet(currentStudent, ws.id, ws.classLevel, undefined, wsBoard);
     if (!access.allowed) {
       setLockedModalWorksheet(ws);
       return;
@@ -170,6 +182,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           studentId: currentStudent?.id || 'guest',
           worksheetId: ws.id,
           clientPlan: isPremiumStudent ? 'premium' : 'free',
+          selectedBoard: wsBoard,
           selectedClass: ws.classLevel
         })
       });
@@ -196,7 +209,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
   const handleSubmitWorksheet = () => {
     if (!activeWorksheet) return;
-    const access = canAccessWorksheet(currentStudent, activeWorksheet.id, activeWorksheet.classLevel);
+    const wsBoard = activeWorksheet.board || selectedBoard;
+    const access = canAccessWorksheet(currentStudent, activeWorksheet.id, activeWorksheet.classLevel, undefined, wsBoard);
     if (!access.allowed) {
       setLockedModalWorksheet(activeWorksheet);
       setActiveWorksheet(null);
@@ -215,6 +229,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
     submitWorksheetAttempt({
       worksheetId: activeWorksheet.id,
+      board: wsBoard,
       classLevel: activeWorksheet.classLevel,
       subject: activeWorksheet.subject,
       worksheetTitle: activeWorksheet.title,
@@ -226,11 +241,12 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleTriggerUpgrade = (explicitClass?: ClassLevel) => {
+  const handleTriggerUpgrade = (explicitClass?: ClassLevel, explicitBoard?: EducationBoard) => {
     const targetCls = explicitClass || lockedModalWorksheet?.classLevel || selectedClass;
+    const targetBrd = explicitBoard || lockedModalWorksheet?.board || selectedBoard;
     setLockedModalWorksheet(null);
     if (onUnlockClick) {
-      onUnlockClick(targetCls);
+      onUnlockClick(targetCls, targetBrd);
     }
   };
 
@@ -243,18 +259,28 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   }, [activeWorksheet, selectedAnswers]);
 
   const ownClassWorksheetsSummary = useMemo(() => {
-    const ownClassTotal = getAllWorksheetsForClass(selectedClass).length;
+    const ownClassTotal = getAllWorksheetsForClass(selectedClass, selectedBoard).length;
     const freeDemoCount = selectedClassInfo.isFreeBase ? freeDemoWorksheetIds.length : 0;
     return {
       ownClassTotal,
       freeDemoCount,
       lockedInOwnClassCount: Math.max(0, ownClassTotal - freeDemoCount)
     };
-  }, [selectedClass, selectedClassInfo.isFreeBase, freeDemoWorksheetIds]);
+  }, [selectedClass, selectedBoard, selectedClassInfo.isFreeBase, freeDemoWorksheetIds]);
 
-  // If solving a specific worksheet (strictly verified unlocked or demo worksheet for user's registered class)
-  if (activeWorksheet && canAccessWorksheet(currentStudent, activeWorksheet.id, activeWorksheet.classLevel).allowed) {
-    const subjMeta = getSubjectMeta(activeWorksheet.subject);
+  // If solving a specific worksheet (strictly verified unlocked or demo worksheet for user's registered board & class)
+  if (
+    activeWorksheet &&
+    canAccessWorksheet(
+      currentStudent,
+      activeWorksheet.id,
+      activeWorksheet.classLevel,
+      undefined,
+      activeWorksheet.board || selectedBoard
+    ).allowed
+  ) {
+    const wsActiveBoard = activeWorksheet.board || selectedBoard;
+    const subjMeta = getSubjectMeta(activeWorksheet.subject, wsActiveBoard);
     const answeredCount = Object.keys(selectedAnswers).length;
     const totalQuestions = activeWorksheet.questions.length;
     const percentage = Math.round((currentObtainedMarks / activeWorksheet.totalMarks) * 100);
@@ -328,6 +354,9 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 font-extrabold text-xs uppercase tracking-wider">
                     MyStudyZone • Online Interactive Worksheet
                   </span>
+                  <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-900 font-extrabold text-xs">
+                    {getBoardShortLabel(wsActiveBoard)}
+                  </span>
                   <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 font-extrabold text-xs">
                     {activeWorksheet.classLevel}
                   </span>
@@ -356,9 +385,12 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             </div>
 
             {/* Student Info Strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs sm:text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs sm:text-sm">
               <div>
                 Student Name: <span className="font-bold text-slate-900">{currentStudent?.name || 'Student'}</span>
+              </div>
+              <div>
+                Board: <span className="font-bold text-slate-900">{getBoardShortLabel(wsActiveBoard)}</span>
               </div>
               <div>
                 Class: <span className="font-bold text-slate-900">{activeWorksheet.classLevel}</span>
@@ -544,13 +576,14 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     );
   }
 
-  // Main Worksheets Browser View (Standards 1st to 10th & All Subjects)
+  // Main Worksheets Browser View (All 3 Boards • Standards 1st to 10th & All Subjects)
   const selectedClassMeta = ALL_10_CLASSES_META.find(c => c.classLevel === selectedClass);
-  const classAllWorksheets = getAllWorksheetsForClass(selectedClass);
+  const classAllWorksheets = getAllWorksheetsForClass(selectedClass, selectedBoard);
   const classCompletedCount = classAllWorksheets.filter(w => completedWorksheetIds.has(w.id)).length;
   const classTotalWorksheets = classAllWorksheets.length;
   const selectedStandardOrdinal = formatStandardOrdinal(selectedClass);
-  const premiumActivatedBannerText = getPremiumActivatedBannerMessage(selectedClass);
+  const selectedBoardLabel = getBoardShortLabel(selectedBoard);
+  const premiumActivatedBannerText = getPremiumActivatedBannerMessage(selectedClass, selectedBoard);
 
   return (
     <>
@@ -576,7 +609,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
                   <FileText className="w-3.5 h-3.5" />
                   <span>
-                    {currentStudent?.accountRole === 'teacher' ? 'Teacher Portal' : 'Student Portal'} • Standard {selectedStandardOrdinal} ({selectedClass})
+                    {currentStudent?.accountRole === 'teacher' ? 'Teacher Portal' : 'Student Portal'} • {selectedBoardLabel} • Standard {selectedStandardOrdinal} ({selectedClass})
                   </span>
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-indigo-100 text-xs font-bold">
@@ -585,10 +618,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 </span>
               </div>
               <h1 className="text-2xl sm:text-4xl font-display font-black tracking-tight">
-                Class-Wise &amp; Subject-Wise Online Worksheets
+                Board &amp; Class-Wise Online Worksheets
               </h1>
               <p className="text-indigo-100 text-sm sm:text-base font-medium leading-relaxed">
-                Complete interactive worksheets directly inside MyStudyZone for <strong>Standard {selectedStandardOrdinal} ({selectedClass})</strong> — covering MCQs, Fill in the Blanks, Match the Following, True/False, Short &amp; Long Answers, Mathematics Exercises, Grammar Practice, Science Activities, and Logical Reasoning with instant online evaluation!
+                Complete interactive worksheets directly inside MyStudyZone for <strong>{selectedBoardLabel} • Standard {selectedStandardOrdinal} ({selectedClass})</strong> — covering MCQs, Fill in the Blanks, Match the Following, True/False, Short &amp; Long Answers, Mathematics Exercises, Grammar Practice, Science Activities, and Logical Reasoning with instant online evaluation!
               </p>
             </div>
 
@@ -596,7 +629,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 sm:p-5 shrink-0 min-w-[270px] space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs font-bold uppercase tracking-wider text-indigo-200">
-                  {selectedClass} Status
+                  {selectedBoardLabel} • {selectedClass} Status
                 </div>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase ${
@@ -636,10 +669,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               </div>
               <div className="text-[11px] text-indigo-200 font-medium">
                 {selectedClassInfo.isPaidActive
-                  ? `All ${ownClassWorksheetsSummary.ownClassTotal} Worksheets Unlocked for Standard ${selectedStandardOrdinal}`
+                  ? `All ${ownClassWorksheetsSummary.ownClassTotal} Worksheets Unlocked for ${selectedBoardLabel} Std ${selectedStandardOrdinal}`
                   : selectedClassInfo.isFreeBase
-                  ? `2 Free Demo Worksheets Unlocked • ${ownClassWorksheetsSummary.lockedInOwnClassCount} Locked in ${selectedClass}`
-                  : `All ${ownClassWorksheetsSummary.ownClassTotal} Worksheets Locked in ${selectedClass} (Activate ₹99)`}
+                  ? `2 Free Demo Worksheets Unlocked • ${ownClassWorksheetsSummary.lockedInOwnClassCount} Locked in ${selectedBoardLabel} ${selectedClass}`
+                  : `All ${ownClassWorksheetsSummary.ownClassTotal} Worksheets Locked in ${selectedBoardLabel} ${selectedClass} (Activate ₹99)`}
               </div>
             </div>
           </div>
@@ -660,7 +693,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           </div>
         )}
 
-        {/* PER-CLASS STATUS BANNER: PAID ACTIVE vs EXPIRED vs LOCKED ADDITIONAL CLASS vs FREE BASE DEMO */}
+        {/* PER-BOARD & PER-CLASS STATUS BANNER: PAID ACTIVE vs EXPIRED vs LOCKED vs FREE BASE DEMO */}
         {selectedClassInfo.isPaidActive ? (
           <div className="rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center gap-3.5">
@@ -670,19 +703,19 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-black uppercase tracking-wider text-emerald-800">
-                    ₹99 Class-Wise Premium Active • {currentStudent?.name} ({selectedClass})
+                    ₹99 Board &amp; Class Premium Active • {currentStudent?.name} ({selectedBoardLabel} • {selectedClass})
                   </span>
                 </div>
                 <p className="text-sm sm:text-base font-display font-black text-slate-900">
                   {premiumActivatedBannerText}
                 </p>
                 <p className="text-xs font-bold text-slate-600">
-                  All {ownClassWorksheetsSummary.ownClassTotal} worksheets across all {getSubjectsForClass(selectedClass).length} subjects for Standard {selectedStandardOrdinal} ({selectedClass}) are unlocked • {selectedClassInfo.daysRemainingDisplay}.
+                  All {ownClassWorksheetsSummary.ownClassTotal} worksheets across all {getSubjectsForClass(selectedClass, selectedBoard).length} subjects for {selectedBoardLabel} Standard {selectedStandardOrdinal} ({selectedClass}) are unlocked • {selectedClassInfo.daysRemainingDisplay}.
                 </p>
               </div>
             </div>
             <span className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-xs shrink-0 self-start sm:self-auto">
-              Standard {selectedStandardOrdinal} Unlocked
+              {selectedBoardLabel} Std {selectedStandardOrdinal} Unlocked
             </span>
           </div>
         ) : selectedClassInfo.isExpired ? (
@@ -690,22 +723,22 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             <div className="space-y-2 max-w-3xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-600 text-white font-black text-xs uppercase tracking-wider shadow-xs">
                 <Lock className="w-3.5 h-3.5" />
-                <span>Subscription Expired – Standard {selectedStandardOrdinal} ({selectedClass})</span>
+                <span>Subscription Expired – {selectedBoardLabel} • Standard {selectedStandardOrdinal} ({selectedClass})</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-display font-black text-slate-900">
-                Renew {selectedClass} Worksheets &amp; Subjects – Only ₹99 (365 Days)
+                Renew {selectedBoardLabel} {selectedClass} Worksheets &amp; Subjects – Only ₹99 (365 Days)
               </h2>
               <p className="text-xs sm:text-sm text-slate-700 font-medium leading-relaxed">
-                Your 365-day paid subscription for <strong>{selectedClass}</strong> has expired ({selectedClassInfo.expiryDisplay}). Other active classes on your account remain untouched. Renew <strong>{selectedClass}</strong> for ₹99 to regain instant access to all {ownClassWorksheetsSummary.ownClassTotal} worksheets!
+                Your 365-day paid subscription for <strong>{selectedBoardLabel} • {selectedClass}</strong> has expired ({selectedClassInfo.expiryDisplay}). Other active boards or classes on your account remain untouched. Renew <strong>{selectedBoardLabel} {selectedClass}</strong> for ₹99 to regain instant access to all {ownClassWorksheetsSummary.ownClassTotal} worksheets!
               </p>
             </div>
             <button
               type="button"
-              onClick={() => handleTriggerUpgrade(selectedClass)}
+              onClick={() => handleTriggerUpgrade(selectedClass, selectedBoard)}
               className="inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 text-white font-black text-sm shadow-lg transition-all cursor-pointer shrink-0"
             >
               <Crown className="w-5 h-5" />
-              <span>Renew {selectedClass} – ₹99</span>
+              <span>Renew {selectedBoardLabel} {selectedClass} – ₹99</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -714,22 +747,22 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             <div className="space-y-2 max-w-3xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xs">
                 <Lock className="w-3.5 h-3.5" />
-                <span>Class {selectedClass} Locked • Additional Class Activation</span>
+                <span>{selectedBoardLabel} • {selectedClass} Locked • Independent Subscription</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-display font-black text-white">
-                Unlock All {ownClassWorksheetsSummary.ownClassTotal} Worksheets for Standard {selectedStandardOrdinal} ({selectedClass}) – ₹99
+                Unlock All {ownClassWorksheetsSummary.ownClassTotal} Worksheets for {selectedBoardLabel} • Standard {selectedStandardOrdinal} ({selectedClass}) – ₹99
               </h2>
               <p className="text-xs sm:text-sm text-indigo-100 font-medium leading-relaxed">
-                You are previewing <strong>{selectedClass}</strong> using your existing account. Free demo access applies only to your base class; activate <strong>{selectedClass}</strong> for <strong>₹99 (365 Days / 1 Year)</strong> to unlock every worksheet, quiz, and subject in <strong>{selectedClass}</strong> without creating a new account!
+                You are previewing <strong>{selectedBoardLabel} ({selectedClass})</strong> using your existing account. Free demo access applies only to your base registered board &amp; class; activate <strong>{selectedBoardLabel} {selectedClass}</strong> for <strong>₹99 (365 Days / 1 Year)</strong> to unlock every worksheet, quiz, study guide, and subject for this board &amp; class without creating a new account!
               </p>
             </div>
             <button
               type="button"
-              onClick={() => handleTriggerUpgrade(selectedClass)}
+              onClick={() => handleTriggerUpgrade(selectedClass, selectedBoard)}
               className="inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:from-amber-500 hover:to-orange-500 text-slate-950 font-black text-sm shadow-lg transition-all cursor-pointer shrink-0"
             >
               <Crown className="w-5 h-5" />
-              <span>Activate {selectedClass} – ₹99</span>
+              <span>Activate {selectedBoardLabel} {selectedClass} – ₹99</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -739,23 +772,23 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               <div className="space-y-2 max-w-3xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500 text-white font-black text-xs uppercase tracking-wider shadow-xs">
                   <Lock className="w-3.5 h-3.5" />
-                  <span>Free Demo Access – Standard {selectedStandardOrdinal} ({selectedClass})</span>
+                  <span>Free Demo Access – {selectedBoardLabel} • Standard {selectedStandardOrdinal} ({selectedClass})</span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-display font-black text-slate-900">
                   {WORKSHEET_CLASS_LOCK_MESSAGE}
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-700 font-medium leading-relaxed">
-                  On the Free Plan for your base class, you can access <strong>only 2 Demo Worksheets</strong> (<strong>1 English Worksheet</strong> and <strong>1 Mathematics Worksheet</strong> for <strong>Standard {selectedStandardOrdinal}</strong>). Upgrade to the <strong>₹99 Premium Plan</strong> to unlock all <strong>{ownClassWorksheetsSummary.ownClassTotal} worksheets</strong> across all subjects for <strong>Standard {selectedStandardOrdinal} ({selectedClass})</strong>!
+                  On the Free Plan for your base board &amp; class, you can access <strong>only 2 Demo Worksheets</strong> (<strong>1 English Worksheet</strong> and <strong>1 Mathematics Worksheet</strong> for <strong>{selectedBoardLabel} Standard {selectedStandardOrdinal}</strong>). Upgrade to the <strong>₹99 Premium Plan</strong> to unlock all <strong>{ownClassWorksheetsSummary.ownClassTotal} worksheets</strong> across all subjects for <strong>{selectedBoardLabel} {selectedClass}</strong>!
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => handleTriggerUpgrade(selectedClass)}
+                onClick={() => handleTriggerUpgrade(selectedClass, selectedBoard)}
                 className="inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:via-orange-600 hover:to-rose-600 text-white font-black text-sm shadow-lg shadow-orange-500/20 transition-all cursor-pointer shrink-0"
               >
                 <Crown className="w-5 h-5" />
-                <span>Upgrade {selectedClass} – ₹99</span>
+                <span>Upgrade {selectedBoardLabel} {selectedClass} – ₹99</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -766,7 +799,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-emerald-600" />
                   <h3 className="text-sm sm:text-base font-display font-extrabold text-slate-900">
-                    Your 2 Free Demo Worksheets for Standard {selectedStandardOrdinal} (Accessible Without Payment)
+                    Your 2 Free Demo Worksheets for {selectedBoardLabel} Standard {selectedStandardOrdinal} (Accessible Without Payment)
                   </h3>
                 </div>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
@@ -776,7 +809,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {freeDemoWorksheets.map((demoWs, idx) => {
-                  const demoMeta = getSubjectMeta(demoWs.subject);
+                  const demoMeta = getSubjectMeta(demoWs.subject, demoWs.board || selectedBoard);
                   const isDemoCompleted = completedWorksheetIds.has(demoWs.id);
                   return (
                     <div
@@ -818,24 +851,61 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           </div>
         )}
 
-        {/* Class 1st to 10th Selector Bar (Multi-Class Switching & ₹99 Per-Class Unlock) */}
+        {/* Board & Class 1st to 10th Selector Bar (Multi-Board + Multi-Class Switching & ₹99 Per-Pair Unlock) */}
         <div className="bg-white rounded-3xl border border-amber-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+          {/* 3 Education Board Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                Education Board:
+              </span>
+              {BOARD_META_LIST.map((bm) => {
+                const isBoardSelected = selectedBoard === bm.id;
+                return (
+                  <button
+                    key={bm.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBoard(bm.id);
+                      setSelectedSubject('ALL');
+                      const bClsInfo = getBoardClassSubscriptionInfo(currentStudent, bm.id, selectedClass);
+                      if (bClsInfo.isAccessible) {
+                        void switchActiveBoardAndClass(bm.id, selectedClass);
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border-2 ${
+                      isBoardSelected
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                        : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span>{bm.icon}</span>
+                    <span>{bm.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
+              Active Workspace: {getBoardShortLabel(activeBoard)} • {userRegisteredClass}
+            </span>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-indigo-600" />
               <h2 className="text-lg font-display font-extrabold text-slate-900">
-                1. Standard 1st to Standard 10th (Class-Wise Subscriptions)
+                1. {selectedBoardLabel} • Standard 1st to Standard 10th (₹99 Per Board &amp; Class)
               </h2>
             </div>
-            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
-              Active Workspace: {userRegisteredClass} • Tap any class to switch or activate (₹99)
+            <span className="text-xs font-semibold text-slate-500">
+              Tap any class to switch or activate for ₹99
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
             {ALL_10_CLASSES.map(cls => {
               const isSelected = cls === selectedClass;
-              const cInfo = getClassSubscriptionInfo(currentStudent, cls);
+              const cInfo = getBoardClassSubscriptionInfo(currentStudent, selectedBoard, cls);
               return (
                 <button
                   key={cls}
@@ -843,8 +913,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   onClick={() => {
                     setSelectedClass(cls);
                     setSelectedSubject('ALL');
-                    if (cInfo.isAccessible && cls !== userRegisteredClass) {
-                      void switchActiveClass(cls);
+                    if (cInfo.isAccessible) {
+                      void switchActiveBoardAndClass(selectedBoard, cls);
                     }
                   }}
                   className={`relative px-3 py-2.5 rounded-2xl font-extrabold text-xs transition-all cursor-pointer border-2 flex flex-col items-center justify-center gap-0.5 ${
@@ -909,32 +979,33 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 <Lock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <div className="text-xs sm:text-sm font-black text-slate-950">
-                    🔒 Standard {selectedStandardOrdinal} ({selectedClass}) {selectedClassInfo.isExpired ? 'Subscription Expired' : 'Worksheets Locked'}
+                    🔒 {selectedBoardLabel} • Standard {selectedStandardOrdinal} ({selectedClass}) {selectedClassInfo.isExpired ? 'Subscription Expired' : 'Worksheets Locked'}
                   </div>
                   <p className="text-xs font-semibold text-slate-700">
                     {selectedClassInfo.isExpired
-                      ? `Your paid subscription for ${selectedClass} expired (${selectedClassInfo.expiryDisplay}). Renew ${selectedClass} for ₹99 (365 Days) on your existing account!`
-                      : `Activate ${selectedClass} for ₹99 (365 Days / 1 Year) on your existing account to unlock all ${classTotalWorksheets} worksheets and subjects for ${selectedClass}.`}
+                      ? `Your paid subscription for ${selectedBoardLabel} ${selectedClass} expired (${selectedClassInfo.expiryDisplay}). Renew ${selectedBoardLabel} ${selectedClass} for ₹99 (365 Days) on your existing account!`
+                      : `Activate ${selectedBoardLabel} ${selectedClass} for ₹99 (365 Days / 1 Year) on your existing account to unlock all ${classTotalWorksheets} worksheets and subjects for ${selectedBoardLabel} ${selectedClass}.`}
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => handleTriggerUpgrade(selectedClass)}
+                  onClick={() => handleTriggerUpgrade(selectedClass, selectedBoard)}
                   className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs cursor-pointer shadow-xs"
                 >
-                  {selectedClassInfo.isExpired ? `Renew ${selectedClass} – ₹99` : `Activate ${selectedClass} – ₹99`}
+                  {selectedClassInfo.isExpired ? `Renew ${selectedBoardLabel} ${selectedClass} – ₹99` : `Activate ${selectedBoardLabel} ${selectedClass} – ₹99`}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
+                    setSelectedBoard(activeBoard);
                     setSelectedClass(userRegisteredClass);
                     setSelectedSubject('ALL');
                   }}
                   className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs cursor-pointer shadow-xs"
                 >
-                  Return to {userRegisteredClass}
+                  Return to {getBoardShortLabel(activeBoard)} • {userRegisteredClass}
                 </button>
               </div>
             </div>
@@ -947,12 +1018,12 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-amber-600" />
               <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
-                2. Filter by Subject ({selectedClass} • {selectedClassMeta?.marathiLabel})
+                2. Filter by Subject ({selectedBoardLabel} • {selectedClass} • {selectedClassMeta?.marathiLabel})
               </h2>
             </div>
             <span className="text-xs font-semibold text-slate-500">
               {selectedClass === 'Class 9' || selectedClass === 'Class 10'
-                ? 'Includes separate Physics, Chemistry & Biology worksheets'
+                ? 'Board-specific syllabus worksheets'
                 : '2 Multi-Format Worksheets per Subject'}
             </span>
           </div>
@@ -970,7 +1041,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               All Subjects ({classTotalWorksheets} Worksheets)
             </button>
             {classSubjects.map(subj => {
-              const meta = getSubjectMeta(subj);
+              const meta = getSubjectMeta(subj, selectedBoard);
               const isSelected = effectiveSubject === subj;
               return (
                 <button
@@ -994,10 +1065,11 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
         {/* Worksheets Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {worksheetsList.map(ws => {
-            const subjMeta = getSubjectMeta(ws.subject);
+            const wsBoard = ws.board || selectedBoard;
+            const subjMeta = getSubjectMeta(ws.subject, wsBoard);
             const isCompleted = completedWorksheetIds.has(ws.id);
             const lastAttempt = attemptMap.get(ws.id);
-            const access = canAccessWorksheet(currentStudent, ws.id, ws.classLevel);
+            const access = canAccessWorksheet(currentStudent, ws.id, ws.classLevel, undefined, wsBoard);
             const isLocked = !access.allowed;
             const isFreeDemo = access.isDemo;
             const isOtherClass = Boolean(access.isOtherClassLocked);
@@ -1026,6 +1098,9 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                       </span>
                       <div>
                         <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 font-extrabold text-[11px]">
+                            {getBoardShortLabel(wsBoard)}
+                          </span>
                           <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-900 font-extrabold text-[11px]">
                             {ws.classLevel}
                           </span>
@@ -1155,11 +1230,13 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
         </div>
       </div>
 
-      {/* LOCKED WORKSHEET CLASS-WISE ACTIVATION / RENEWAL MODAL */}
+      {/* LOCKED WORKSHEET BOARD & CLASS-WISE ACTIVATION / RENEWAL MODAL */}
       {lockedModalWorksheet && (() => {
-        const modalClsInfo = getClassSubscriptionInfo(currentStudent, lockedModalWorksheet.classLevel);
+        const modalBoard = lockedModalWorksheet.board || selectedBoard;
+        const modalBoardLabel = getBoardShortLabel(modalBoard);
+        const modalClsInfo = getBoardClassSubscriptionInfo(currentStudent, modalBoard, lockedModalWorksheet.classLevel);
         const modalOrd = formatStandardOrdinal(lockedModalWorksheet.classLevel);
-        const modalTotal = getAllWorksheetsForClass(lockedModalWorksheet.classLevel).length;
+        const modalTotal = getAllWorksheetsForClass(lockedModalWorksheet.classLevel, modalBoard).length;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
             <div className="relative w-full max-w-lg rounded-3xl bg-white border-2 border-amber-300 shadow-2xl p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200">
@@ -1179,8 +1256,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 <div>
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[11px] uppercase tracking-wider">
                     {modalClsInfo.isExpired
-                      ? `🔒 ${lockedModalWorksheet.classLevel} Subscription Expired`
-                      : `🔒 ${lockedModalWorksheet.classLevel} Worksheet Locked`}
+                      ? `🔒 ${modalBoardLabel} • ${lockedModalWorksheet.classLevel} Subscription Expired`
+                      : `🔒 ${modalBoardLabel} • ${lockedModalWorksheet.classLevel} Worksheet Locked`}
                   </span>
                   <h3 className="text-lg sm:text-xl font-display font-black text-slate-900 mt-0.5">
                     {lockedModalWorksheet.title}
@@ -1191,26 +1268,26 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               <div className="rounded-2xl bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 border-2 border-amber-300 p-5 space-y-2">
                 <p className="text-base sm:text-lg font-display font-black text-slate-900 leading-snug">
                   {modalClsInfo.isExpired
-                    ? `Renew ${lockedModalWorksheet.classLevel} Subscription – Only ₹99 (365 Days)`
-                    : `Activate Standard ${modalOrd} (${lockedModalWorksheet.classLevel}) – Only ₹99!`}
+                    ? `Renew ${modalBoardLabel} ${lockedModalWorksheet.classLevel} – Only ₹99 (365 Days)`
+                    : `Activate ${modalBoardLabel} • Standard ${modalOrd} (${lockedModalWorksheet.classLevel}) – Only ₹99!`}
                 </p>
                 <p className="text-xs sm:text-sm text-slate-700 font-medium leading-relaxed">
                   {modalClsInfo.isExpired
-                    ? `Your previous subscription for ${lockedModalWorksheet.classLevel} expired (${modalClsInfo.expiryDisplay}). Renew ${lockedModalWorksheet.classLevel} for ₹99 to unlock all ${modalTotal} worksheets and all subjects for 365 Days!`
+                    ? `Your previous subscription for ${modalBoardLabel} ${lockedModalWorksheet.classLevel} expired (${modalClsInfo.expiryDisplay}). Renew for ₹99 to unlock all ${modalTotal} worksheets and all subjects for 365 Days!`
                     : modalClsInfo.isFreeBase
-                    ? `${WORKSHEET_PREMIUM_UPGRADE_MESSAGE} Free users have access to only 2 Demo Worksheets in their base class. Upgrade ${lockedModalWorksheet.classLevel} to the ₹99 Premium Plan to unlock all ${modalTotal} worksheets and all subjects!`
-                    : `Activate ${lockedModalWorksheet.classLevel} on your existing account for ₹99 (365 Days / 1 Year) to unlock all ${modalTotal} interactive worksheets, 4-level quizzes, and subjects for ${lockedModalWorksheet.classLevel} — no separate account needed!`}
+                    ? `${WORKSHEET_PREMIUM_UPGRADE_MESSAGE} Free users have access to only 2 Demo Worksheets in their base board & class. Upgrade ${modalBoardLabel} ${lockedModalWorksheet.classLevel} to the ₹99 Premium Plan to unlock all ${modalTotal} worksheets and all subjects!`
+                    : `Activate ${modalBoardLabel} ${lockedModalWorksheet.classLevel} on your existing account for ₹99 (365 Days / 1 Year) to unlock all ${modalTotal} interactive worksheets, 4-level quizzes, study materials, and subjects — no separate account needed!`}
                 </p>
               </div>
 
               <div className="space-y-2 text-xs font-bold text-slate-700">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Unlock all {modalTotal} interactive worksheets for Standard {modalOrd} ({lockedModalWorksheet.classLevel})</span>
+                  <span>Unlock all {modalTotal} interactive worksheets for {modalBoardLabel} Std {modalOrd} ({lockedModalWorksheet.classLevel})</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Unlock all subjects &amp; 4-level quizzes for Standard {modalOrd} (365 Days IST)</span>
+                  <span>Unlock all subjects, study notes &amp; 4-level quizzes for {modalBoardLabel} Std {modalOrd} (365 Days IST)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1221,27 +1298,28 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => handleTriggerUpgrade(lockedModalWorksheet.classLevel)}
+                  onClick={() => handleTriggerUpgrade(lockedModalWorksheet.classLevel, modalBoard)}
                   className="w-full sm:flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:via-orange-600 hover:to-rose-600 text-white font-black text-sm shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
                 >
                   <Crown className="w-4 h-4" />
                   <span>
                     {modalClsInfo.isExpired
-                      ? `Renew ${lockedModalWorksheet.classLevel} – ₹99`
-                      : `Activate ${lockedModalWorksheet.classLevel} – ₹99`}
+                      ? `Renew ${modalBoardLabel} ${lockedModalWorksheet.classLevel} – ₹99`
+                      : `Activate ${modalBoardLabel} ${lockedModalWorksheet.classLevel} – ₹99`}
                   </span>
                 </button>
-                {lockedModalWorksheet.classLevel !== userRegisteredClass && (
+                {(lockedModalWorksheet.classLevel !== userRegisteredClass || modalBoard !== activeBoard) && (
                   <button
                     type="button"
                     onClick={() => {
                       setLockedModalWorksheet(null);
+                      setSelectedBoard(activeBoard);
                       setSelectedClass(userRegisteredClass);
                       setSelectedSubject('ALL');
                     }}
                     className="w-full sm:w-auto px-4 py-3.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-extrabold text-xs transition-all cursor-pointer"
                   >
-                    Go to {userRegisteredClass}
+                    Go to {getBoardShortLabel(activeBoard)} {userRegisteredClass}
                   </button>
                 )}
                 <button

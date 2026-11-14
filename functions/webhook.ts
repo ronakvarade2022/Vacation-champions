@@ -4,6 +4,7 @@ import {
   getResolvedRazorpayCredentials,
   sanitizeEnvValue,
   isPlaceholderValue,
+  normalizeBackendBoard,
   normalizeBackendClassLevel,
   updateStudentSubscriptionInFirestoreBackend
 } from '../firebase/index.ts';
@@ -75,7 +76,9 @@ export interface CapturedPaymentSubscriptionResult {
   alreadyProcessed: boolean;
   studentId: string;
   studentName: string;
+  selectedBoard: 'Maharashtra' | 'CBSE' | 'ICSE';
   selectedClass: string;
+  boardClassKey: string;
   planId: 'basic' | 'premium';
   subscriptionTier: 'standard' | 'premium';
   planLabel: string;
@@ -88,6 +91,7 @@ export interface CapturedPaymentSubscriptionResult {
   daysRemaining: number;
   receiptNumber: string;
   activatedClasses: string[];
+  activatedClassKeys: string[];
   classSubscriptions: Record<string, any>;
 }
 
@@ -175,6 +179,9 @@ export async function processPaymentCapturedEvent(params: {
   const mobile = String(
     notes.mobile || paymentEntity?.contact || existingData?.mobile || ''
   ).trim();
+  const selectedBoard = normalizeBackendBoard(
+    notes.selectedBoard || notes.board || existingData?.board || 'Maharashtra'
+  );
   const selectedClass =
     normalizeBackendClassLevel(notes.selectedClass || notes.classLevel) ||
     normalizeBackendClassLevel(existingData?.classLevel) ||
@@ -185,6 +192,7 @@ export async function processPaymentCapturedEvent(params: {
     studentName,
     email,
     mobile,
+    selectedBoard,
     selectedClass,
     planId,
     paymentId,
@@ -199,7 +207,9 @@ export async function processPaymentCapturedEvent(params: {
     alreadyProcessed: activation.alreadyProcessed,
     studentId,
     studentName,
+    selectedBoard: activation.selectedBoard,
     selectedClass: activation.selectedClass,
+    boardClassKey: activation.boardClassKey,
     planId: activation.plan,
     subscriptionTier: activation.subscriptionTier,
     planLabel: activation.planLabel,
@@ -212,6 +222,7 @@ export async function processPaymentCapturedEvent(params: {
     daysRemaining: activation.daysRemaining,
     receiptNumber: activation.receiptNumber,
     activatedClasses: activation.activatedClasses || [activation.selectedClass],
+    activatedClassKeys: activation.activatedClassKeys || [activation.boardClassKey],
     classSubscriptions: activation.classSubscriptions || {}
   };
 }
@@ -266,7 +277,9 @@ export async function handleRazorpayWebhook(req: Request, res: Response) {
         status: 'ok',
         event: eventType,
         studentId: result.studentId,
+        selectedBoard: result.selectedBoard,
         selectedClass: result.selectedClass,
+        boardClassKey: result.boardClassKey,
         plan: result.planId,
         subscriptionTier: result.subscriptionTier,
         planExpiresAt: result.expiryDateIso,

@@ -1,4 +1,6 @@
-import { ClassLevel } from '../types';
+import { ClassLevel, EducationBoard } from '../types';
+import { CBSE_DEMO_QUESTIONS_BY_CLASS } from './boards/cbseDemoData';
+import { ICSE_DEMO_QUESTIONS_BY_CLASS } from './boards/icseDemoData';
 
 export type DemoQuestionSubject =
   | 'Mathematics'
@@ -9,6 +11,7 @@ export type DemoQuestionSubject =
 export interface ClassDemoQuestion {
   id: string;
   classLevel: ClassLevel;
+  board?: EducationBoard;
   subject: DemoQuestionSubject;
   topic: string;
   question: string;
@@ -309,10 +312,27 @@ export const DEMO_QUESTIONS_BY_CLASS: Record<
 };
 
 /**
- * Returns strictly the 2 unique demo questions assigned to the selected class.
+ * Returns strictly the 2 unique demo questions assigned to the selected class (Maharashtra default).
  */
 export function getDemoQuestionsForClass(
   classLevel: ClassLevel
 ): readonly [ClassDemoQuestion, ClassDemoQuestion] {
+  return DEMO_QUESTIONS_BY_CLASS[classLevel];
+}
+
+/**
+ * Returns strictly the 2 unique demo questions assigned to the selected (board, classLevel).
+ * Preserves Maharashtra State Board questions unchanged.
+ */
+export function getDemoQuestionsForBoardAndClass(
+  board: EducationBoard = 'Maharashtra',
+  classLevel: ClassLevel = 'Class 1'
+): readonly [ClassDemoQuestion, ClassDemoQuestion] {
+  if (board === 'CBSE') {
+    return CBSE_DEMO_QUESTIONS_BY_CLASS[classLevel] || DEMO_QUESTIONS_BY_CLASS[classLevel];
+  }
+  if (board === 'ICSE') {
+    return ICSE_DEMO_QUESTIONS_BY_CLASS[classLevel] || DEMO_QUESTIONS_BY_CLASS[classLevel];
+  }
   return DEMO_QUESTIONS_BY_CLASS[classLevel];
 }

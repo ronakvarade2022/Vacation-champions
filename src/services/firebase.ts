@@ -19,7 +19,7 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, arrayUnion, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { ClassLevel, ClassSubscriptionRecord, StudentProfile } from '../types';
+import { BoardClassKey, ClassLevel, ClassSubscriptionRecord, EducationBoard, StudentProfile } from '../types';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -30,7 +30,10 @@ import {
   PAID_SUBSCRIPTION_VALIDITY_DAYS,
 } from '../utils/subscriptionDateUtils';
 import {
+  buildBoardClassKey,
+  normalizeBoardValue,
   normalizeClassLevelValue,
+  parseBoardClassKey,
 } from '../utils/subscriptionAccess';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -550,9 +553,15 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     let existingCode = sanitizeReferralCode(student.referralCode);
     let existingReferredByCode = sanitizeReferralCode(student.referredByCode);
     let existingReferredByStudentId = student.referredByStudentId || undefined;
+    let existingPrimaryBoard: EducationBoard | undefined = student.primaryBoard
+      ? normalizeBoardValue(student.primaryBoard)
+      : undefined;
     let existingPrimaryClass: ClassLevel | undefined = normalizeClassLevelValue(student.primaryClassLevel) || undefined;
-    let existingClassSubscriptions: Partial<Record<ClassLevel, ClassSubscriptionRecord>> = {};
+    let existingClassSubscriptions: Partial<Record<string, ClassSubscriptionRecord>> = {};
     let existingActivatedClasses: ClassLevel[] = [];
+    let existingActivatedClassKeys: BoardClassKey[] = [];
+
+    let refDocExists = false;
 
     try {
       const [stuSnap, refSnap] = await Promise.all([
@@ -560,7 +569,8 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
         getDoc(referralRef).catch(() => null),
       ]);
       const stuData = stuSnap && stuSnap.exists() ? stuSnap.data() : null;
-      const refData = refSnap && refSnap.exists() ? refSnap.data() : null;
+      refDocExists = Boolean(refSnap && refSnap.exists());
+      const refData = refDocExists && refSnap ? refSnap.data() : null;
 
       const storedCode =
         sanitizeReferralCode(stuData?.referralCode) ||
@@ -580,6 +590,9 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
           refData?.referredByUserId ||
           undefined;
       }
+      if (!existingPrimaryBoard && (stuData?.primaryBoard || stuData?.board)) {
+        existingPrimaryBoard = normalizeBoardValue(stuData.primaryBoard || stuData.board);
+      }
       if (!existingPrimaryClass && stuData?.primaryClassLevel) {
         existingPrimaryClass = normalizeClassLevelValue(stuData.primaryClassLevel) || undefined;
       } else if (!existingPrimaryClass && stuData?.classLevel) {
@@ -593,6 +606,14 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
           .map((c: string) => normalizeClassLevelValue(c))
           .filter(Boolean) as ClassLevel[];
       }
+      if (Array.isArray(stuData?.activatedClassKeys)) {
+        existingActivatedClassKeys = stuData.activatedClassKeys
+          .map((k: string) => {
+            const p = parseBoardClassKey(k);
+            return p ? buildBoardClassKey(p.board, p.classLevel) : null;
+          })
+          .filter(Boolean) as BoardClassKey[];
+      }
     } catch {
       // Offline or first write — proceed with deterministic code
     }
@@ -601,29 +622,45 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       existingCode || generateUniqueStudentReferralCode(student.id, student.name);
     const permanentReferralLink = buildStudentReferralLink(permanentReferralCode);
 
-    const mergedClassSubscriptions: Partial<Record<ClassLevel, ClassSubscriptionRecord>> = {
+    const mergedClassSubscriptions: Partial<Record<string, ClassSubscriptionRecord>> = {
       ...existingClassSubscriptions,
       ...(student.classSubscriptions || {}),
     };
     const activePaidClasses = new Set<ClassLevel>(existingActivatedClasses);
+    const activePaidClassKeys = new Set<BoardClassKey>(existingActivatedClassKeys);
     for (const clsItem of student.activatedClasses || []) {
       const norm = normalizeClassLevelValue(clsItem);
       if (norm) activePaidClasses.add(norm);
     }
+    for (const kItem of student.activatedClassKeys || []) {
+      const p = parseBoardClassKey(kItem);
+      if (p) activePaidClassKeys.add(buildBoardClassKey(p.board, p.classLevel));
+    }
     for (const [k, rec] of Object.entries(mergedClassSubscriptions)) {
-      const cls = normalizeClassLevelValue(rec?.classLevel || k);
+      const parsed = parseBoardClassKey(k);
+      const cls = normalizeClassLevelValue(rec?.classLevel || parsed?.classLevel);
+      const recBoard = rec?.board
+        ? normalizeBoardValue(rec.board)
+        : k.includes('__')
+          ? parsed?.board || 'Maharashtra'
+          : 'Maharashtra';
       if (cls && rec && (rec.plan === 'premium' || rec.plan === 'basic') && rec.status === 'ACTIVE') {
-        activePaidClasses.add(cls);
+        activePaidClassKeys.add(buildBoardClassKey(recBoard, cls));
+        if (recBoard === 'Maharashtra') activePaidClasses.add(cls);
       }
     }
 
     const activePlan =
-      student.plan === 'basic' || student.plan === 'premium' || activePaidClasses.size > 0
+      student.plan === 'basic' || student.plan === 'premium' || activePaidClassKeys.size > 0 || activePaidClasses.size > 0
         ? 'premium'
         : 'free';
     const isPaid = activePlan === 'premium';
     const fallbackDates = isPaid ? computePaidPlanExpiryIsoDate() : null;
 
+    const resolvedBoard = normalizeBoardValue(student.board || 'Maharashtra');
+    const resolvedPrimaryBoard =
+      existingPrimaryBoard ||
+      normalizeBoardValue(student.primaryBoard || resolvedBoard);
     const resolvedPrimaryClass =
       existingPrimaryClass ||
       normalizeClassLevelValue(student.primaryClassLevel) ||
@@ -636,12 +673,15 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     const resolvedExpiresAt = isPaid
       ? student.planExpiresAt || fallbackDates?.expiresAt
       : undefined;
+    const resolvedActivatedBoard = isPaid
+      ? normalizeBoardValue(student.activatedBoard || resolvedBoard)
+      : undefined;
     const resolvedActivatedClass = isPaid
       ? student.activatedClassLevel || Array.from(activePaidClasses)[0] || student.classLevel
       : undefined;
 
     const planLabel = isPaid
-      ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year) (${resolvedActivatedClass || student.classLevel})`
+      ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year) (${resolvedActivatedBoard || resolvedBoard} • ${resolvedActivatedClass || student.classLevel})`
       : 'FREE PLAN – ₹0 – Lifetime';
 
     // Strip any passwordHash field and clean undefined values before Firestore setDoc
@@ -649,12 +689,16 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     const cleanData = JSON.parse(
       JSON.stringify({
         ...safeStudentFields,
+        board: resolvedBoard,
         accountRole: student.accountRole || 'student',
+        primaryBoard: resolvedPrimaryBoard,
         primaryClassLevel: resolvedPrimaryClass,
         activatedClasses: Array.from(activePaidClasses),
+        activatedClassKeys: Array.from(activePaidClassKeys),
         classSubscriptions: mergedClassSubscriptions,
         plan: activePlan,
         planLabel,
+        activatedBoard: isPaid ? resolvedActivatedBoard : null,
         activatedClassLevel: isPaid ? resolvedActivatedClass : null,
         isLifetimeFree: activePlan === 'free',
         planPurchasedAt: resolvedPurchasedAt,
@@ -671,8 +715,7 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
 
     // Also ensure /referrals/{student.id} exists in Firestore with the exact same permanent referralCode
     try {
-      const refSnap = await getDoc(referralRef).catch(() => null);
-      if (!refSnap || !refSnap.exists()) {
+      if (!refDocExists) {
         await setDoc(
           referralRef,
           JSON.parse(
@@ -899,11 +942,12 @@ export async function findReferrerByCodeInFirestore(
   };
 }
 
-// 10. Persist Subscription Upgrade to Firestore (sets 1-year / 365-day expiration & class-wise activation for ₹99 Premium Plan)
+// 10. Persist Subscription Upgrade to Firestore (sets 1-year / 365-day expiration & board+class-wise activation)
 export async function saveSubscriptionToFirestore(
   studentId: string,
   subscriptionData: {
     plan: 'free' | 'basic' | 'premium';
+    selectedBoard?: EducationBoard | string;
     selectedClass?: string;
     planPurchasedAt?: string;
     planExpiresAt?: string;
@@ -916,6 +960,7 @@ export async function saveSubscriptionToFirestore(
   success: boolean;
   alreadyActivated?: boolean;
   plan: 'free' | 'basic' | 'premium';
+  activatedBoard?: EducationBoard;
   activatedClassLevel?: string | null;
   planPurchasedAt: string;
   planExpiresAt: string | null;
@@ -930,10 +975,11 @@ export async function saveSubscriptionToFirestore(
   const planExpiresAt = isPaid
     ? subscriptionData.planExpiresAt || computedDates.expiresAt
     : null;
+  const targetBoard = normalizeBoardValue(subscriptionData.selectedBoard || 'Maharashtra');
   const activatedClassLevel = isPaid ? subscriptionData.selectedClass || null : null;
-  const validityDays: number | 'Lifetime' = isPaid ? PAID_PLAN_VALIDITY_DAYS : 'Lifetime';
+  const validityDays: number | 'Lifetime' = isPaid ? PAID_SUBSCRIPTION_VALIDITY_DAYS : 'Lifetime';
   const planLabel = isPaid
-    ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year)${activatedClassLevel ? ` (${activatedClassLevel})` : ''}`
+    ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year)${activatedClassLevel ? ` (${targetBoard} • ${activatedClassLevel})` : ''}`
     : 'FREE PLAN – ₹0 – Lifetime';
   const amountInr =
     subscriptionData.amountInr ??
@@ -942,23 +988,26 @@ export async function saveSubscriptionToFirestore(
   try {
     const studentRef = doc(db, 'students', studentId);
     const targetClass = normalizeClassLevelValue(subscriptionData.selectedClass);
+    const targetCompositeKey = targetClass ? buildBoardClassKey(targetBoard, targetClass) : null;
     let existingData: any = null;
 
     try {
       const existingSnap = await getDoc(studentRef);
       if (existingSnap.exists()) {
         existingData = existingSnap.data();
-        const existingTargetClassRec =
-          targetClass && existingData?.classSubscriptions?.[targetClass];
+        const existingTargetRec =
+          (targetCompositeKey && existingData?.classSubscriptions?.[targetCompositeKey]) ||
+          (targetBoard === 'Maharashtra' && targetClass && existingData?.classSubscriptions?.[targetClass]);
         if (
           subscriptionData.paymentId &&
-          (existingTargetClassRec?.paymentId === subscriptionData.paymentId ||
+          (existingTargetRec?.paymentId === subscriptionData.paymentId ||
             (!targetClass && existingData?.lastPaymentId === subscriptionData.paymentId))
         ) {
           return {
             success: true,
             alreadyActivated: true,
             plan: subscriptionData.plan,
+            activatedBoard: targetBoard,
             activatedClassLevel: existingData?.activatedClassLevel || activatedClassLevel,
             planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
             planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
@@ -970,13 +1019,14 @@ export async function saveSubscriptionToFirestore(
       // Proceed with setDoc if read fails
     }
 
-    const existingClassMap: Partial<Record<ClassLevel, ClassSubscriptionRecord>> =
+    const existingClassMap: Partial<Record<string, ClassSubscriptionRecord>> =
       existingData?.classSubscriptions && typeof existingData.classSubscriptions === 'object'
         ? { ...existingData.classSubscriptions }
         : {};
 
-    if (isPaid && targetClass) {
-      existingClassMap[targetClass] = {
+    if (isPaid && targetClass && targetCompositeKey) {
+      existingClassMap[targetCompositeKey] = {
+        board: targetBoard,
         classLevel: targetClass,
         plan: subscriptionData.plan,
         status: 'ACTIVE',
@@ -985,28 +1035,46 @@ export async function saveSubscriptionToFirestore(
         paymentId: subscriptionData.paymentId || undefined,
         orderId: subscriptionData.orderId || undefined,
         amountInr,
-        validityDays: PAID_PLAN_VALIDITY_DAYS,
+        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
         updatedAt: new Date().toISOString(),
       };
     }
 
     const activatedSet = new Set<ClassLevel>();
+    const activatedKeySet = new Set<BoardClassKey>();
     if (Array.isArray(existingData?.activatedClasses)) {
       for (const cls of existingData.activatedClasses) {
         const norm = normalizeClassLevelValue(cls);
         if (norm) activatedSet.add(norm);
       }
     }
+    if (Array.isArray(existingData?.activatedClassKeys)) {
+      for (const k of existingData.activatedClassKeys) {
+        const p = parseBoardClassKey(k);
+        if (p) activatedKeySet.add(buildBoardClassKey(p.board, p.classLevel));
+      }
+    }
     for (const [k, rec] of Object.entries(existingClassMap)) {
-      const norm = normalizeClassLevelValue(rec?.classLevel || k);
+      const parsed = parseBoardClassKey(k);
+      const norm = normalizeClassLevelValue(rec?.classLevel || parsed?.classLevel);
+      const b = rec?.board
+        ? normalizeBoardValue(rec.board)
+        : k.includes('__')
+          ? parsed?.board || 'Maharashtra'
+          : 'Maharashtra';
       if (norm && rec && (rec.plan === 'premium' || rec.plan === 'basic') && rec.status === 'ACTIVE') {
-        activatedSet.add(norm);
+        activatedKeySet.add(buildBoardClassKey(b, norm));
+        if (b === 'Maharashtra') activatedSet.add(norm);
       }
     }
     if (isPaid && targetClass) {
-      activatedSet.add(targetClass);
+      activatedKeySet.add(buildBoardClassKey(targetBoard, targetClass));
+      if (targetBoard === 'Maharashtra') activatedSet.add(targetClass);
     }
 
+    const resolvedPrimaryBoard = normalizeBoardValue(
+      existingData?.primaryBoard || existingData?.board || targetBoard
+    );
     const resolvedPrimaryClass =
       normalizeClassLevelValue(existingData?.primaryClassLevel) ||
       normalizeClassLevelValue(existingData?.classLevel) ||
@@ -1018,10 +1086,14 @@ export async function saveSubscriptionToFirestore(
         id: studentId,
         plan: subscriptionData.plan,
         planLabel,
+        board: targetBoard,
         classLevel: targetClass || existingData?.classLevel || undefined,
+        primaryBoard: resolvedPrimaryBoard,
         primaryClassLevel: resolvedPrimaryClass,
+        activatedBoard: isPaid ? targetBoard : null,
         activatedClassLevel,
         activatedClasses: Array.from(activatedSet),
+        activatedClassKeys: Array.from(activatedKeySet),
         classSubscriptions: existingClassMap,
         isLifetimeFree: subscriptionData.plan === 'free',
         planPurchasedAt,
@@ -1038,6 +1110,7 @@ export async function saveSubscriptionToFirestore(
     return {
       success: true,
       plan: subscriptionData.plan,
+      activatedBoard: targetBoard,
       activatedClassLevel,
       planPurchasedAt,
       planExpiresAt,
@@ -1048,6 +1121,7 @@ export async function saveSubscriptionToFirestore(
     return {
       success: false,
       plan: subscriptionData.plan,
+      activatedBoard: targetBoard,
       activatedClassLevel,
       planPurchasedAt,
       planExpiresAt,
@@ -1065,6 +1139,7 @@ export async function saveTransactionToFirestore(transaction: {
   studentName: string;
   parentEmail?: string;
   parentMobile?: string;
+  selectedBoard?: EducationBoard | string;
   selectedClass?: string;
   planId: 'basic' | 'premium';
   planTitle: string;
@@ -1079,7 +1154,6 @@ export async function saveTransactionToFirestore(transaction: {
   membershipStartDate?: string;
   membershipExpiryDate?: string;
 }): Promise<{ success: boolean; id: string; error?: unknown }> {
-  // Deterministic document ID based on paymentId prevents duplicate transaction records
   const safePaymentId = (transaction.paymentId || transaction.id).replace(/[^a-zA-Z0-9_-]/g, '_');
   const deterministicTxId = safePaymentId.startsWith('tx_') ? safePaymentId : `tx_${safePaymentId}`;
 
@@ -1094,6 +1168,7 @@ export async function saveTransactionToFirestore(transaction: {
         studentName: String(transaction.studentName || 'Student').slice(0, 100),
         parentEmail: String(transaction.parentEmail || '').slice(0, 150),
         parentMobile: String(transaction.parentMobile || '').slice(0, 20),
+        selectedBoard: transaction.selectedBoard ? normalizeBoardValue(transaction.selectedBoard) : undefined,
         selectedClass: transaction.selectedClass || undefined,
         amount: Number(transaction.amount) || 99,
         currency: 'INR',
@@ -1113,11 +1188,15 @@ export async function saveTransactionToFirestore(transaction: {
 export async function fetchStudentSubscriptionFromFirestore(studentId: string): Promise<{
   found: boolean;
   plan?: 'free' | 'basic' | 'premium';
+  board?: EducationBoard;
   classLevel?: ClassLevel;
+  primaryBoard?: EducationBoard;
   primaryClassLevel?: ClassLevel;
+  activatedBoard?: EducationBoard | null;
   activatedClassLevel?: string | null;
   activatedClasses?: ClassLevel[];
-  classSubscriptions?: Partial<Record<ClassLevel, ClassSubscriptionRecord>>;
+  activatedClassKeys?: BoardClassKey[];
+  classSubscriptions?: Partial<Record<string, ClassSubscriptionRecord>>;
   planPurchasedAt?: string;
   planExpiresAt?: string | null;
 }> {
@@ -1131,19 +1210,31 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
     const rawPlan = data?.plan;
     const plan: 'free' | 'basic' | 'premium' =
       rawPlan === 'premium' || rawPlan === 'basic' ? rawPlan : 'free';
+    const resolvedBoard = normalizeBoardValue(data?.board || data?.primaryBoard || 'Maharashtra');
     return {
       found: true,
       plan,
+      board: resolvedBoard,
       classLevel: normalizeClassLevelValue(data?.classLevel) || undefined,
+      primaryBoard: normalizeBoardValue(data?.primaryBoard || resolvedBoard),
       primaryClassLevel:
         normalizeClassLevelValue(data?.primaryClassLevel) ||
         normalizeClassLevelValue(data?.classLevel) ||
         undefined,
+      activatedBoard: data?.activatedBoard ? normalizeBoardValue(data.activatedBoard) : null,
       activatedClassLevel: data?.activatedClassLevel || data?.classLevel || null,
       activatedClasses: Array.isArray(data?.activatedClasses)
         ? (data.activatedClasses
             .map((c: string) => normalizeClassLevelValue(c))
             .filter(Boolean) as ClassLevel[])
+        : [],
+      activatedClassKeys: Array.isArray(data?.activatedClassKeys)
+        ? (data.activatedClassKeys
+            .map((k: string) => {
+              const p = parseBoardClassKey(k);
+              return p ? buildBoardClassKey(p.board, p.classLevel) : null;
+            })
+            .filter(Boolean) as BoardClassKey[])
         : [],
       classSubscriptions:
         data?.classSubscriptions && typeof data.classSubscriptions === 'object'
@@ -1157,17 +1248,22 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
   }
 }
 
-// 10c. Persist verified switch between already-unlocked classes on a user account
+// 10c. Persist verified switch between already-unlocked (board, class) pairs on a user account
 export async function switchStudentActiveClassInFirestore(
   studentId: string,
-  targetClass: ClassLevel
+  targetClass: ClassLevel,
+  targetBoard?: EducationBoard
 ): Promise<{ success: boolean }> {
   if (!studentId) return { success: false };
   try {
-    await updateDoc(doc(db, 'students', studentId), {
+    const updatePayload: Record<string, any> = {
       classLevel: targetClass,
       lastActiveDate: new Date().toISOString(),
-    });
+    };
+    if (targetBoard) {
+      updatePayload.board = normalizeBoardValue(targetBoard);
+    }
+    await updateDoc(doc(db, 'students', studentId), updatePayload);
     return { success: true };
   } catch {
     return { success: false };
@@ -1201,7 +1297,12 @@ export async function fetchStudentProfileFromFirestore(
       if (directSnap && directSnap.exists()) {
         const data = directSnap.data() as StudentProfile;
         const { passwordHash: _ignored, ...safeProfile } = data;
-        return { ...safeProfile, id: data.id || cleanUid };
+        return {
+          ...safeProfile,
+          board: normalizeBoardValue(data.board || data.primaryBoard || 'Maharashtra'),
+          primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
+          id: data.id || cleanUid,
+        };
       }
 
       const byFirebaseUidQuery = query(
@@ -1214,7 +1315,12 @@ export async function fetchStudentProfileFromFirestore(
         const docSnap = byUidSnap.docs[0];
         const data = docSnap.data() as StudentProfile;
         const { passwordHash: _ignored, ...safeProfile } = data;
-        return { ...safeProfile, id: data.id || docSnap.id };
+        return {
+          ...safeProfile,
+          board: normalizeBoardValue(data.board || data.primaryBoard || 'Maharashtra'),
+          primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
+          id: data.id || docSnap.id,
+        };
       }
     }
 
@@ -1229,7 +1335,12 @@ export async function fetchStudentProfileFromFirestore(
         const docSnap = byEmailSnap.docs[0];
         const data = docSnap.data() as StudentProfile;
         const { passwordHash: _ignored, ...safeProfile } = data;
-        return { ...safeProfile, id: data.id || docSnap.id };
+        return {
+          ...safeProfile,
+          board: normalizeBoardValue(data.board || data.primaryBoard || 'Maharashtra'),
+          primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
+          id: data.id || docSnap.id,
+        };
       }
     }
   } catch (err) {

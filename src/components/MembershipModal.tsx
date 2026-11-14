@@ -11,36 +11,43 @@ import {
 } from '../services/paymentService';
 import {
   ALL_CLASS_LEVELS,
+  getBoardShortLabel,
   getClassSubscriptionInfo,
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage,
   formatStandardOrdinal
 } from '../utils/subscriptionAccess';
+import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import {
   X, CheckCircle2, ShieldCheck, Crown, Lock, CreditCard, Smartphone,
   AlertCircle, Sparkles, RefreshCw, Copy, Check, Loader2,
   QrCode, ArrowLeft, Timer, CheckCircle, Gift, GraduationCap
 } from 'lucide-react';
-import { ClassLevel, PaymentTransaction } from '../types';
+import { ClassLevel, EducationBoard, PaymentTransaction } from '../types';
 
 interface MembershipModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSelectedPlan?: 'basic' | 'premium';
   initialSelectedClass?: ClassLevel;
+  initialSelectedBoard?: EducationBoard;
   onRequestAuth?: (defaultTab?: 'login' | 'register') => void;
-  onSwitchActiveClass?: (cls: ClassLevel) => void;
+  onSwitchActiveClass?: (cls: ClassLevel, board?: EducationBoard) => void;
 }
 
 export const MembershipModal: React.FC<MembershipModalProps> = ({
   isOpen,
   onClose,
   initialSelectedClass,
+  initialSelectedBoard,
   onRequestAuth,
   onSwitchActiveClass,
 }) => {
   const { currentStudent, activateVerifiedMembership, switchActiveClass } = useApp();
 
+  const [targetBoard, setTargetBoard] = useState<EducationBoard>(
+    initialSelectedBoard || currentStudent?.board || 'Maharashtra'
+  );
   const [targetClass, setTargetClass] = useState<ClassLevel>(
     initialSelectedClass || currentStudent?.classLevel || 'Class 5'
   );
@@ -85,6 +92,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setTargetBoard(initialSelectedBoard || currentStudent?.board || 'Maharashtra');
       setTargetClass(initialSelectedClass || currentStudent?.classLevel || 'Class 5');
       setStep('select');
       setIsCreatingOrder(false);
@@ -130,7 +138,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [isOpen, initialSelectedClass, currentStudent?.classLevel, currentStudent?.referredByCode]);
+  }, [isOpen, initialSelectedClass, initialSelectedBoard, currentStudent?.board, currentStudent?.classLevel, currentStudent?.referredByCode]);
 
   // QR Code active countdown timer & auto-polling effect
   useEffect(() => {
@@ -159,12 +167,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             currentStudent,
             'premium',
             referralCodeInput.trim(),
-            targetClass
+            targetClass,
+            targetBoard
           );
           if (checkRes.paid && checkRes.status === 'PAID') {
             clearQrTimers();
             setQrStatus('PAID');
-            setQrStatusNotice(`Payment Verified! Activating ₹99 Premium subscription for ${targetClass}...`);
+            setQrStatusNotice(`Payment Verified! Activating ₹99 Premium subscription for ${getBoardShortLabel(targetBoard)} • ${targetClass}...`);
             if ((checkRes as any).referral?.credited) {
               setReferralCreditedNotice(
                 `₹5 Referral Cashback Credited! (Referrer: ${(checkRes as any).referral.referrerName})`
@@ -194,12 +203,12 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [step, qrData, currentStudent, referralCodeInput, targetClass]);
+  }, [step, qrData, currentStudent, referralCodeInput, targetClass, targetBoard]);
 
   if (!isOpen) return null;
 
-  const targetClassInfo = getClassSubscriptionInfo(currentStudent, targetClass);
-  const planInfo = getStudentPlanInfo(currentStudent, undefined, targetClass);
+  const targetClassInfo = getClassSubscriptionInfo(currentStudent, targetClass, undefined, targetBoard);
+  const planInfo = getStudentPlanInfo(currentStudent, undefined, targetClass, targetBoard);
 
   // Format countdown seconds into MM:SS
   const formatCountdown = (seconds: number) => {
@@ -231,10 +240,10 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = referralCodeInput.trim().toUpperCase();
 
     try {
-      // Ensure Razorpay script is loaded in parallel with ₹99 order creation for targetClass
+      // Ensure Razorpay script is loaded in parallel with ₹99 order creation for (targetBoard, targetClass)
       const [scriptReady, orderData] = await Promise.all([
         loadRazorpayScript(),
-        createRazorpayOrder(currentStudent, 'premium', activeRefCode, targetClass)
+        createRazorpayOrder(currentStudent, 'premium', activeRefCode, targetClass, targetBoard)
       ]);
 
       if (!scriptReady || typeof (window as any).Razorpay !== 'function') {
@@ -256,6 +265,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
         orderData,
         student: currentStudent,
         planId: 'premium',
+        selectedBoard: targetBoard,
         selectedClass: targetClass,
         referralCode: activeRefCode || undefined,
         onCheckoutOpened: () => {
@@ -334,11 +344,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = referralCodeInput.trim().toUpperCase();
 
     try {
-      const data = await createRazorpayQrCode(currentStudent, 'premium', activeRefCode, targetClass);
+      const data = await createRazorpayQrCode(currentStudent, 'premium', activeRefCode, targetClass, targetBoard);
       setQrData(data);
       setQrCountdown(data.expiresInSeconds || 600);
       setQrStatus('WAITING');
-      setQrStatusNotice(`Scan using Google Pay, PhonePe, Paytm or any UPI App to pay ₹99 for ${targetClass}.`);
+      setQrStatusNotice(`Scan using Google Pay, PhonePe, Paytm or any UPI App to pay ₹99 for ${getBoardShortLabel(targetBoard)} • ${targetClass}.`);
       setStep('qr_code');
       isCheckoutBusyRef.current = false;
       setIsCreatingOrder(false);
@@ -355,14 +365,15 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
   const handleManualCheckQrStatus = async () => {
     if (!qrData || !currentStudent || isCheckingQr) return;
     setIsCheckingQr(true);
-    setQrStatusNotice(`Checking ₹99 payment (${targetClass}) with Razorpay & Bank...`);
+    setQrStatusNotice(`Checking ₹99 payment (${getBoardShortLabel(targetBoard)} • ${targetClass}) with Razorpay & Bank...`);
     try {
       const checkRes = await checkRazorpayQrStatus(
         qrData.qrId,
         currentStudent,
         'premium',
         referralCodeInput.trim(),
-        targetClass
+        targetClass,
+        targetBoard
       );
       if (checkRes.paid && checkRes.status === 'PAID') {
         clearQrTimers();
@@ -474,24 +485,57 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
-          {/* Class 1 to 10 Subscription Selector Strip */}
+          {/* Board & Class 1 to 10 Subscription Selector Strip */}
           {currentStudent && step === 'select' && (
             <div className="mb-5 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <GraduationCap className="w-4 h-4 text-indigo-700" />
                   <span className="text-xs font-black uppercase tracking-wider text-indigo-950">
-                    Select Class to Activate, Switch, or Renew (Class 1 to Class 10)
+                    Select Board &amp; Class to Activate, Switch, or Renew (Maharashtra • CBSE • ICSE)
                   </span>
                 </div>
                 <span className="text-[11px] font-bold text-indigo-800">
-                  Selected: <strong>{targetClass}</strong> (₹99 / 365 Days per class)
+                  Selected: <strong>{getBoardShortLabel(targetBoard)} • {targetClass}</strong> (₹99 / 365 Days each)
                 </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {BOARD_META_LIST.map((bMeta) => {
+                  const isTargetB = targetBoard === bMeta.id;
+                  return (
+                    <button
+                      key={bMeta.id}
+                      type="button"
+                      onClick={() => setTargetBoard(bMeta.id)}
+                      className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                        isTargetB
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                          : 'bg-white text-slate-800 border-slate-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-black flex items-center gap-1.5">
+                          <span>{bMeta.icon}</span>
+                          <span>{getBoardShortLabel(bMeta.id)}</span>
+                        </span>
+                        {isTargetB && (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[10px] block truncate mt-0.5 ${isTargetB ? 'text-slate-300' : 'text-slate-500'}`}>
+                        {bMeta.affiliationLabel}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {ALL_CLASS_LEVELS.map((cls) => {
-                  const cInfo = getClassSubscriptionInfo(currentStudent, cls);
+                  const cInfo = getClassSubscriptionInfo(currentStudent, cls, undefined, targetBoard);
                   const isTarget = cls === targetClass;
                   return (
                     <button
@@ -532,7 +576,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                         {cInfo.isPaidActive
                           ? cInfo.daysRemainingDisplay
                           : cInfo.isFreeBase
-                          ? 'Free Base Class'
+                          ? 'Free Base'
                           : cInfo.isExpired
                           ? 'Renew ₹99'
                           : 'Locked • ₹99'}
@@ -553,10 +597,10 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <div>
                     <p className="text-xs font-bold text-slate-500">
                       {currentStudent.accountRole === 'teacher' ? 'Teacher' : 'Student'}:{' '}
-                      <strong className="text-slate-900">{currentStudent.name}</strong> (Target Class: Standard {formatStandardOrdinal(targetClass)} • {targetClass})
+                      <strong className="text-slate-900">{currentStudent.name}</strong> ({getBoardShortLabel(targetBoard)} • Standard {formatStandardOrdinal(targetClass)})
                     </p>
                     <p className="text-sm font-black text-indigo-950">
-                      Status for {targetClass}:{' '}
+                      Status for {getBoardShortLabel(targetBoard)} • {targetClass}:{' '}
                       <span className={targetClassInfo.isLocked && !targetClassInfo.isExpired ? 'text-amber-700' : targetClassInfo.isExpired ? 'text-rose-700' : 'text-emerald-700'}>
                         {targetClassInfo.status === 'LOCKED'
                           ? `LOCKED — Purchase ₹99 (365 Days) to Unlock`
@@ -572,17 +616,17 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {targetClassInfo.isAccessible && currentStudent.classLevel !== targetClass && (
+                  {targetClassInfo.isAccessible && (currentStudent.classLevel !== targetClass || (currentStudent.board || 'Maharashtra') !== targetBoard) && (
                     <button
                       type="button"
                       onClick={async () => {
-                        await switchActiveClass(targetClass);
-                        onSwitchActiveClass?.(targetClass);
+                        await switchActiveClass(targetClass, targetBoard);
+                        onSwitchActiveClass?.(targetClass, targetBoard);
                         resetModal();
                       }}
                       className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black cursor-pointer shadow-xs"
                     >
-                      Switch Workspace to {targetClass} →
+                      Switch to {getBoardShortLabel(targetBoard)} {targetClass} →
                     </button>
                   )}
                   <span
@@ -610,7 +654,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               {targetClassInfo.isPaidActive && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-black flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{getPremiumActivatedBannerMessage(targetClass)}</span>
+                  <span>{getPremiumActivatedBannerMessage(targetClass, targetBoard)}</span>
                 </div>
               )}
 
@@ -618,7 +662,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs font-bold flex items-center gap-2">
                   <Lock className="w-4 h-4 text-amber-700 shrink-0" />
                   <span>
-                    <strong>{targetClass}</strong> is an additional class and stays locked until your ₹99 payment is verified. Your existing active classes remain unaffected.
+                    <strong>{getBoardShortLabel(targetBoard)} • {targetClass}</strong> stays locked independently until its ₹99 payment is verified. Your existing active boards &amp; classes remain unaffected.
                   </span>
                 </div>
               )}
@@ -626,7 +670,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               {targetClassInfo.isExpired && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-bold text-rose-900">
-                    ⚠️ Your <strong>{targetClass}</strong> 365-day subscription expired ({targetClassInfo.expiryDisplay}). Renew {targetClass} below for ₹99 (365 Days) — your other active classes stay unaffected!
+                    ⚠️ Your <strong>{getBoardShortLabel(targetBoard)} • {targetClass}</strong> 365-day subscription expired ({targetClassInfo.expiryDisplay}). Renew below for ₹99 (365 Days) — your other active classes stay unaffected!
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -692,13 +736,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     </div>
 
                     <p className="text-xs font-bold text-slate-600 mb-3">
-                      Free demo access applies to your base registered class ({currentStudent?.primaryClassLevel || currentStudent?.classLevel || targetClass}):
+                      Free demo access applies to your base registered board &amp; class ({getBoardShortLabel(currentStudent?.primaryBoard || currentStudent?.board || targetBoard)} • {currentStudent?.primaryClassLevel || currentStudent?.classLevel || targetClass}):
                     </p>
 
                     <ul className="space-y-2.5 text-xs text-slate-700 font-bold mb-6">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>2 Free Demo Worksheets: 1 English &amp; 1 Mathematics (Base Class)</span>
+                        <span>2 Free Demo Worksheets: 1 English &amp; 1 Mathematics (Base Board &amp; Class)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -706,11 +750,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>English &amp; Mathematics Subject Quizzes (Base Class)</span>
+                        <span>English &amp; Mathematics Subject Quizzes &amp; Preview Study Notes</span>
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>All Other Worksheets for Standard {formatStandardOrdinal(targetClass)} Locked</span>
+                        <span>All Other Worksheets for {getBoardShortLabel(targetBoard)} Standard {formatStandardOrdinal(targetClass)} Locked</span>
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -718,16 +762,16 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       </li>
                       <li className="flex items-start gap-2 text-slate-400">
                         <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>Additional Classes (₹99 Each) Locked Until Paid Activation</span>
+                        <span>Other Boards (CBSE/ICSE/MH) &amp; Classes (₹99 Each) Locked Until Paid Activation</span>
                       </li>
                     </ul>
                   </div>
 
                   <div className="w-full py-3 rounded-2xl bg-emerald-100 text-emerald-900 font-black text-xs text-center border border-emerald-300">
                     {targetClassInfo.isFreeBase && !targetClassInfo.isPaidActive
-                      ? `✓ Active on Base Class (${targetClass})`
+                      ? `✓ Active on Base (${getBoardShortLabel(targetBoard)} • ${targetClass})`
                       : !targetClassInfo.isFreeBase
-                      ? `🔒 Not Included for ${targetClass} — Pay ₹99 to Unlock`
+                      ? `🔒 Not Included for ${getBoardShortLabel(targetBoard)} ${targetClass} — Pay ₹99`
                       : '✓ Base Plan Included Forever'}
                   </div>
                 </div>
@@ -735,36 +779,36 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 {/* PLAN 2: PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
                 <div className="p-6 rounded-3xl border-2 border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/60 shadow-xl flex flex-col justify-between relative transition-all">
                   <div className="absolute -top-3 right-4 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> STANDARD {formatStandardOrdinal(targetClass).toUpperCase()} UNLOCK
+                    <Sparkles className="w-3 h-3" /> {getBoardShortLabel(targetBoard).toUpperCase()} • STD {formatStandardOrdinal(targetClass).toUpperCase()} UNLOCK
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900">
-                        CLASS-WISE PREMIUM PLAN
+                        BOARD &amp; CLASS PREMIUM PLAN
                       </span>
                       <span className="text-xs font-bold text-amber-800">1 Year (365 Days) Validity</span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900">
-                      PREMIUM PLAN – ₹99 (Standard {formatStandardOrdinal(targetClass)})
+                      PREMIUM PLAN – ₹99 ({getBoardShortLabel(targetBoard)} • Std {formatStandardOrdinal(targetClass)})
                     </h3>
                     <div className="mt-2 mb-4 flex items-baseline gap-1">
                       <span className="text-4xl font-black text-amber-600">₹99</span>
-                      <span className="text-xs text-slate-500 font-bold">/ 1 Year (365 Days) • Standard {formatStandardOrdinal(targetClass)}</span>
+                      <span className="text-xs text-slate-500 font-bold">/ 1 Year (365 Days) • {getBoardShortLabel(targetBoard)} {targetClass}</span>
                     </div>
 
                     <p className="text-xs font-bold text-amber-900 mb-3">
-                      Unlock all worksheets &amp; subjects for Standard {formatStandardOrdinal(targetClass)} ({targetClass}):
+                      Unlock all worksheets, study materials &amp; subjects for {getBoardShortLabel(targetBoard)} Standard {formatStandardOrdinal(targetClass)}:
                     </p>
 
                     <ul className="space-y-2 text-xs text-slate-800 font-bold mb-5">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Unlock All Worksheets for Standard {formatStandardOrdinal(targetClass)} (All Subjects)</span>
+                        <span>Unlock All Worksheets &amp; Chapter Study Notes for {getBoardShortLabel(targetBoard)} Std {formatStandardOrdinal(targetClass)}</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <span>Unlock All Subjects Available for Standard {formatStandardOrdinal(targetClass)} (4 Levels)</span>
+                        <span>Unlock All {getBoardShortLabel(targetBoard)} Curriculum Subjects for {targetClass} (4 Levels)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -780,7 +824,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       </li>
                       <li className="flex items-start gap-2 text-indigo-800">
                         <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                        <span>Independent 365-Day Validity Linked to {targetClass} on Your Account</span>
+                        <span>Independent 365-Day Validity Linked to {getBoardShortLabel(targetBoard)} {targetClass} on Your Account</span>
                       </li>
                     </ul>
 
@@ -942,13 +986,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               <div className="p-6 rounded-3xl bg-gradient-to-b from-indigo-950 via-slate-900 to-indigo-950 text-white shadow-2xl text-center space-y-4 border border-indigo-800">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                    RAZORPAY DYNAMIC UPI QR CODE • {targetClass.toUpperCase()} (₹99)
+                    RAZORPAY DYNAMIC UPI QR CODE • {getBoardShortLabel(targetBoard).toUpperCase()} • {targetClass.toUpperCase()} (₹99)
                   </span>
                   <h3 className="text-xl font-black mt-0.5">
-                    Scan &amp; Pay ₹99 ({targetClass})
+                    Scan &amp; Pay ₹99 ({getBoardShortLabel(targetBoard)} • {targetClass})
                   </h3>
                   <p className="text-xs text-indigo-200 mt-0.5">
-                    Account: <strong>{currentStudent?.name}</strong> • Unlocking: <strong>{targetClass}</strong> (365 Days / 1 Year Access)
+                    Account: <strong>{currentStudent?.name}</strong> • Unlocking: <strong>{getBoardShortLabel(targetBoard)} {targetClass}</strong> (365 Days / 1 Year Access)
                   </p>
                 </div>
 
@@ -1102,7 +1146,10 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   Welcome to PREMIUM PLAN – ₹99! 👑
                 </h3>
                 <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 font-black text-xs sm:text-sm max-w-lg mx-auto">
-                  {getPremiumActivatedBannerMessage((lastTransaction.selectedClass as ClassLevel) || targetClass)}
+                  {getPremiumActivatedBannerMessage(
+                    (lastTransaction.selectedClass as ClassLevel) || targetClass,
+                    (lastTransaction.selectedBoard as EducationBoard) || targetBoard
+                  )}
                 </div>
                 {referralCreditedNotice && (
                   <p className="mt-2 inline-block px-3 py-1 rounded-xl bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300">
@@ -1129,9 +1176,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <span className="font-bold text-slate-800">{lastTransaction.studentName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Activated Class:</span>
+                  <span className="text-slate-400">Activated Board &amp; Class:</span>
                   <span className="font-extrabold text-emerald-700">
-                    Standard {formatStandardOrdinal((lastTransaction.selectedClass as ClassLevel) || targetClass)} ({(lastTransaction.selectedClass as ClassLevel) || targetClass})
+                    {getBoardShortLabel((lastTransaction.selectedBoard as EducationBoard) || targetBoard)} • Standard {formatStandardOrdinal((lastTransaction.selectedClass as ClassLevel) || targetClass)} ({(lastTransaction.selectedClass as ClassLevel) || targetClass})
                   </span>
                 </div>
                 <div className="flex justify-between">

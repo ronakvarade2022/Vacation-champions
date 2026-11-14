@@ -1,5 +1,7 @@
-import { ClassLevel, SubjectName } from '../types';
+import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { OnlineWorksheet, WorksheetItemFormat, WorksheetQuestionItem } from './worksheetsData';
+import { CBSE_DEMO_WORKSHEETS_BANK } from './boards/cbseDemoData';
+import { ICSE_DEMO_WORKSHEETS_BANK } from './boards/icseDemoData';
 
 export type DemoWorksheetSubject =
   | 'Mathematics'
@@ -7,7 +9,7 @@ export type DemoWorksheetSubject =
   | 'Science'
   | 'General Knowledge';
 
-interface DemoWorksheetSpec {
+export interface DemoWorksheetSpec {
   subject: DemoWorksheetSubject;
   displaySubject?: SubjectName;
   chapterName: string;
@@ -2025,16 +2027,27 @@ export const CLASS_DEMO_WORKSHEETS_BANK: Record<
 
 /**
  * Builds the 4 unique, class-specific, syllabus-calibrated Demo Worksheets
- * (Mathematics, English, Science, General Knowledge) for the selected Class (1st to 10th).
+ * (Mathematics, English, Science, General Knowledge) for the selected (Class, Board).
  */
-export function getClassDemoWorksheets(classLevel: ClassLevel = 'Class 1'): OnlineWorksheet[] {
+export function getClassDemoWorksheets(
+  classLevel: ClassLevel = 'Class 1',
+  board: EducationBoard = 'Maharashtra'
+): OnlineWorksheet[] {
   const cNum = parseInt(String(classLevel).replace('Class ', ''), 10) || 1;
-  const specs = CLASS_DEMO_WORKSHEETS_BANK[classLevel] || CLASS_DEMO_WORKSHEETS_BANK['Class 1'];
+  const bank =
+    board === 'CBSE'
+      ? CBSE_DEMO_WORKSHEETS_BANK
+      : board === 'ICSE'
+        ? ICSE_DEMO_WORKSHEETS_BANK
+        : CLASS_DEMO_WORKSHEETS_BANK;
+  const specs = bank[classLevel] || bank['Class 1'];
+  const boardCode = board === 'CBSE' ? 'CBSE-' : board === 'ICSE' ? 'ICSE-' : '';
+  const titlePrefix = board === 'Maharashtra' ? '' : `${board} `;
 
   return specs.map((spec) => {
     const effectiveSubject: SubjectName = spec.displaySubject || spec.subject;
     const subjKey = effectiveSubject.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-    const wsId = `WS-C${cNum}-${subjKey}-1`;
+    const wsId = `WS-${boardCode}C${cNum}-${subjKey}-1`;
 
     const questions: WorksheetQuestionItem[] = spec.questions.map((q, idx) => ({
       id: `${wsId}-Q${idx + 1}`,
@@ -2051,10 +2064,11 @@ export function getClassDemoWorksheets(classLevel: ClassLevel = 'Class 1'): Onli
 
     return {
       id: wsId,
+      board,
       classLevel,
       subject: effectiveSubject,
       worksheetNumber: 1,
-      title: `${classLevel} • ${spec.subject} – Worksheet #1`,
+      title: `${titlePrefix}${classLevel} • ${spec.subject} – Worksheet #1`,
       marathiSubtitle: spec.marathiSubtitle,
       chapterName: spec.chapterName,
       durationMinutes: 15,
@@ -2067,18 +2081,20 @@ export function getClassDemoWorksheets(classLevel: ClassLevel = 'Class 1'): Onli
 }
 
 /**
- * Returns the custom class-specific Q1..Q5 items for (classLevel, subject) Worksheet #1
- * so WorksheetsView and DemoSectionView share genuinely progressive questions per class.
+ * Returns the custom class-specific Q1..Q5 items for (classLevel, subject, board) Worksheet #1
+ * so WorksheetsView and DemoSectionView share genuinely progressive questions per class & board.
  */
 export function getClassSpecificWorksheetQuestions(
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  board: EducationBoard = 'Maharashtra'
 ): WorksheetQuestionItem[] | null {
-  const worksheets = getClassDemoWorksheets(classLevel);
+  const worksheets = getClassDemoWorksheets(classLevel, board);
   const match = worksheets.find(
     ws =>
       ws.subject === subject ||
-      (classLevel === 'Class 10' &&
+      (board === 'Maharashtra' &&
+        classLevel === 'Class 10' &&
         subject === 'Mathematics' &&
         ws.subject === 'Mathematics – Algebra')
   );

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel } from '../types';
+import { ClassLevel, EducationBoard } from '../types';
 import { 
   User, 
   Phone, 
@@ -35,10 +35,13 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import {
+  ALL_BOARDS,
   getStudentPlanInfo,
-  getClassSubscriptionInfo,
-  getActivatedClassesList,
+  getBoardClassSubscriptionInfo,
+  getActivatedBoardClassesList,
+  getPrimaryBaseBoard,
   getPrimaryBaseClass,
+  getBoardShortLabel,
 } from '../utils/subscriptionAccess';
 import {
   generateUniqueStudentReferralCode,
@@ -46,9 +49,10 @@ import {
   buildStudentReferralDisplayLink
 } from '../utils/referralCoding';
 import { ALL_10_CLASSES, ALL_10_CLASSES_META, getSubjectsForClass } from '../data/classCurriculumConfig';
+import { BOARD_META_LIST } from '../data/boards/boardMeta';
 
 interface StudentProfileViewProps {
-  onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel) => void;
+  onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
   onNavigateTab: (tab: string) => void;
 }
 
@@ -65,11 +69,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     logout,
     allAttempts,
     savedDrawings,
-    switchActiveClass
+    activeBoard,
+    switchActiveBoardAndClass
   } = useApp();
   const [copiedRefLink, setCopiedRefLink] = useState(false);
   const [copiedRefCode, setCopiedRefCode] = useState(false);
   const [promotionBannerMsg, setPromotionBannerMsg] = useState<string | null>(null);
+  const [ledgerBoard, setLedgerBoard] = useState<EducationBoard>(activeBoard);
 
   if (!currentStudent) return null;
 
@@ -119,7 +125,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const studentAttempts = allAttempts.filter(a => a.studentId === currentStudent.id);
   const drawingsCount = savedDrawings.filter(d => d.studentId === currentStudent.id).length;
   const storiesCount = currentStudent.completedStoryIds?.length || 0;
-  const planInfo = getStudentPlanInfo(currentStudent);
+  const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent.classLevel, activeBoard);
+  const activatedBoardClasses = getActivatedBoardClassesList(currentStudent);
+  const baseBoardLabel = getBoardShortLabel(getPrimaryBaseBoard(currentStudent));
+  const activeBoardLabel = getBoardShortLabel(activeBoard);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20 animate-in fade-in duration-200">
@@ -142,7 +151,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Learn, Practice, Explore and Achieve Excellence. • Account UID: <span className="font-mono font-bold text-slate-700">{currentStudent.id}</span> • Active Class: <strong className="text-slate-800">{currentStudent.classLevel}</strong> • Base Free Class: <strong className="text-indigo-700">{getPrimaryBaseClass(currentStudent)}</strong>
+              Learn, Practice, Explore and Achieve Excellence. • Account UID: <span className="font-mono font-bold text-slate-700">{currentStudent.id}</span> • Active: <strong className="text-slate-800">{activeBoardLabel} • {currentStudent.classLevel}</strong> • Base Free: <strong className="text-indigo-700">{baseBoardLabel} • {getPrimaryBaseClass(currentStudent)}</strong>
             </p>
           </div>
         </div>
@@ -161,11 +170,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                   {currentStudent.name}
                 </h2>
                 <span className="px-3 py-0.5 rounded-full bg-white/20 text-white font-extrabold text-xs border border-white/25">
-                  Active: {currentStudent.classLevel}
+                  Active: {activeBoardLabel} • {currentStudent.classLevel}
                 </span>
-                {getActivatedClassesList(currentStudent).length > 0 && (
+                {activatedBoardClasses.length > 0 && (
                   <span className="px-3 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-xs">
-                    {getActivatedClassesList(currentStudent).length} Paid Class{getActivatedClassesList(currentStudent).length === 1 ? '' : 'es'}
+                    {activatedBoardClasses.length} Paid Subscription{activatedBoardClasses.length === 1 ? '' : 's'}
                   </span>
                 )}
                 <span className="px-3 py-0.5 rounded-full bg-slate-950/75 text-amber-300 font-extrabold text-xs border border-amber-300/40 flex items-center gap-1">
@@ -202,40 +211,62 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 self-start sm:self-center shrink-0">
             <button
-              onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+              onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
               className="px-4 py-2.5 rounded-2xl bg-white text-amber-900 font-extrabold text-xs shadow-md hover:bg-amber-50 transition-all cursor-pointer"
             >
               {planInfo.isPaidPlanExpired
-                ? `Renew ${currentStudent.classLevel} (₹99)`
+                ? `Renew ${activeBoardLabel} ${currentStudent.classLevel} (₹99)`
                 : planInfo.effectivePlan === 'premium'
-                ? `Extend ${currentStudent.classLevel} (₹99)`
-                : `Upgrade ${currentStudent.classLevel} (₹99)`}
+                ? `Extend ${activeBoardLabel} ${currentStudent.classLevel} (₹99)`
+                : `Upgrade ${activeBoardLabel} ${currentStudent.classLevel} (₹99)`}
             </button>
           </div>
         </div>
       </div>
 
-      {/* CLASS-WISE SUBSCRIPTIONS & ACCESS SECTION (Multi-Class Account Support) */}
+      {/* BOARD & CLASS-WISE SUBSCRIPTIONS & ACCESS SECTION (Multi-Board + Multi-Class Account Support) */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-lg">🎓</span>
               <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
-                Class-Wise Subscriptions &amp; Access (Classes 1st to 10th)
+                Board &amp; Class-Wise Subscriptions (Maharashtra, CBSE, ICSE • Classes 1st to 10th)
               </h2>
             </div>
             <p className="text-xs text-slate-600 font-medium mt-0.5">
-              Your {currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'} account supports multiple class subscriptions on the same mobile &amp; email. Switch between unlocked classes or activate an additional class for <strong>₹99 (365 Days)</strong>.
+              Your {currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'} account supports independent ₹99 (365 Days) subscriptions across all 3 boards and 10 classes on your single mobile &amp; email.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => onOpenMembership('premium')}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel, ledgerBoard)}
             className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-extrabold self-start sm:self-center shrink-0 cursor-pointer shadow-xs"
           >
-            + Activate Another Class (₹99)
+            + Activate Board / Class (₹99)
           </button>
+        </div>
+
+        {/* 3 Education Board Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          {BOARD_META_LIST.map((bm) => {
+            const isBoardSelected = ledgerBoard === bm.id;
+            return (
+              <button
+                key={bm.id}
+                type="button"
+                onClick={() => setLedgerBoard(bm.id)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border-2 ${
+                  isBoardSelected
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                    : 'bg-slate-50 hover:bg-indigo-50 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span>{bm.icon}</span>
+                <span>{bm.shortLabel}</span>
+              </button>
+            );
+          })}
         </div>
 
         {promotionBannerMsg && (
@@ -248,21 +279,21 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
           {ALL_10_CLASSES.map((cls) => {
             const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
-            const isCurrent = currentStudent.classLevel === cls;
-            const cInfo = getClassSubscriptionInfo(currentStudent, cls);
+            const isCurrent = activeBoard === ledgerBoard && currentStudent.classLevel === cls;
+            const cInfo = getBoardClassSubscriptionInfo(currentStudent, ledgerBoard, cls);
             return (
               <button
-                key={cls}
+                key={`${ledgerBoard}-${cls}`}
                 type="button"
                 onClick={async () => {
                   if (cInfo.isAccessible) {
                     if (!isCurrent) {
-                      const res = await switchActiveClass(cls);
+                      const res = await switchActiveBoardAndClass(ledgerBoard, cls);
                       setPromotionBannerMsg(res.message);
                       setTimeout(() => setPromotionBannerMsg(null), 4500);
                     }
                   } else {
-                    onOpenMembership('premium', cls);
+                    onOpenMembership('premium', cls, ledgerBoard);
                   }
                 }}
                 className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
@@ -297,74 +328,83 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           })}
         </div>
 
-        {/* Per-Class Subscription Ledger (Active Paid, Expired & Base Free Classes) */}
+        {/* Cross-Board Subscription Ledger (Active Paid, Expired & Base Free across Maharashtra, CBSE & ICSE) */}
         <div className="pt-2 space-y-2">
           <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-            Your Class Subscription Statuses ({getSubjectsForClass(currentStudent.classLevel).length} Subjects in Active {currentStudent.classLevel})
+            All Your Board &amp; Class Subscriptions ({getSubjectsForClass(currentStudent.classLevel, activeBoard).length} Subjects in Active {activeBoardLabel} {currentStudent.classLevel})
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {ALL_10_CLASSES.map((cls) => getClassSubscriptionInfo(currentStudent, cls))
+            {ALL_BOARDS.flatMap((brd) =>
+              ALL_10_CLASSES.map((cls) => getBoardClassSubscriptionInfo(currentStudent, brd, cls))
+            )
               .filter((cInfo) => cInfo.isPaidActive || cInfo.isExpired || cInfo.isFreeBase)
-              .map((cInfo) => (
-                <div
-                  key={cInfo.classLevel}
-                  className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
-                    cInfo.isPaidActive
-                      ? 'bg-emerald-50/70 border-emerald-300'
-                      : cInfo.isExpired
-                      ? 'bg-rose-50/70 border-rose-300'
-                      : 'bg-indigo-50/60 border-indigo-200'
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-black text-slate-900">{cInfo.classLevel}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          cInfo.isPaidActive
-                            ? 'bg-emerald-600 text-white'
-                            : cInfo.isExpired
-                            ? 'bg-rose-600 text-white'
-                            : 'bg-indigo-600 text-white'
-                        }`}
-                      >
-                        {cInfo.isPaidActive ? 'Active Paid' : cInfo.isExpired ? 'Expired' : 'Free Base'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
-                      {cInfo.isPaidActive
-                        ? `Expires: ${cInfo.expiryDisplay} • ${cInfo.daysRemainingDisplay}`
+              .map((cInfo) => {
+                const brdLabel = getBoardShortLabel(cInfo.board);
+                const isThisActive = activeBoard === cInfo.board && currentStudent.classLevel === cInfo.classLevel;
+                return (
+                  <div
+                    key={cInfo.boardClassKey}
+                    className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
+                      cInfo.isPaidActive
+                        ? 'bg-emerald-50/70 border-emerald-300'
                         : cInfo.isExpired
-                        ? `${cInfo.expiryDisplay}`
-                        : 'Lifetime Free Demo (2 Worksheets, English & Math)'}
-                    </p>
+                        ? 'bg-rose-50/70 border-rose-300'
+                        : 'bg-indigo-50/60 border-indigo-200'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 font-black text-[10px]">
+                          {brdLabel}
+                        </span>
+                        <span className="font-black text-slate-900">{cInfo.classLevel}</span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            cInfo.isPaidActive
+                              ? 'bg-emerald-600 text-white'
+                              : cInfo.isExpired
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-indigo-600 text-white'
+                          }`}
+                        >
+                          {cInfo.isPaidActive ? 'Active Paid' : cInfo.isExpired ? 'Expired' : 'Free Base'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
+                        {cInfo.isPaidActive
+                          ? `Expires: ${cInfo.expiryDisplay} • ${cInfo.daysRemainingDisplay}`
+                          : cInfo.isExpired
+                          ? `${cInfo.expiryDisplay}`
+                          : 'Lifetime Free Demo (2 Worksheets, English & Math)'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {cInfo.isAccessible && !isThisActive && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await switchActiveBoardAndClass(cInfo.board, cInfo.classLevel);
+                            setPromotionBannerMsg(res.message);
+                            setTimeout(() => setPromotionBannerMsg(null), 4000);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 text-white font-bold text-[11px] cursor-pointer hover:bg-slate-800"
+                        >
+                          Switch
+                        </button>
+                      )}
+                      {(!cInfo.isPaidActive || cInfo.isExpired) && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenMembership('premium', cInfo.classLevel, cInfo.board)}
+                          className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer"
+                        >
+                          {cInfo.isExpired ? 'Renew ₹99' : 'Upgrade ₹99'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {cInfo.isAccessible && cInfo.classLevel !== currentStudent.classLevel && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const res = await switchActiveClass(cInfo.classLevel);
-                          setPromotionBannerMsg(res.message);
-                          setTimeout(() => setPromotionBannerMsg(null), 4000);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 text-white font-bold text-[11px] cursor-pointer hover:bg-slate-800"
-                      >
-                        Switch
-                      </button>
-                    )}
-                    {(!cInfo.isPaidActive || cInfo.isExpired) && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenMembership('premium', cInfo.classLevel)}
-                        className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer"
-                      >
-                        {cInfo.isExpired ? 'Renew ₹99' : 'Upgrade ₹99'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </div>
       </div>
@@ -527,7 +567,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           {/* 3. My Subscription / Plan Details */}
           <button
             type="button"
-            onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
             className="p-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-all text-left flex items-start gap-3 cursor-pointer group"
           >
             <div className="w-9 h-9 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center shrink-0">
@@ -737,7 +777,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
           <button
             type="button"
-            onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
             className="self-start sm:self-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
           >
             {planInfo.isPaidPlanExpired ? (
@@ -816,7 +856,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
           {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
           <div
-            onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
             className={`p-4 rounded-2xl border-2 flex flex-col justify-between cursor-pointer transition-all ${
               planInfo.effectivePlan === 'premium' ? 'border-amber-500 bg-amber-50/60' : 'border-amber-300 hover:border-amber-500 bg-amber-50/30'
             }`}
@@ -902,19 +942,19 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             </p>
           </div>
 
-          {/* Active & Base Enrolled Class */}
+          {/* Active & Base Enrolled Board & Class */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-slate-500 flex items-center gap-1.5">
                 <School className="w-3.5 h-3.5 text-slate-400" />
-                <span>Active Workspace Class</span>
+                <span>Active Workspace</span>
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-900">
-                Base: {getPrimaryBaseClass(currentStudent)}
+                Base: {baseBoardLabel} • {getPrimaryBaseClass(currentStudent)}
               </span>
             </div>
             <p className="font-bold text-sm text-slate-800">
-              {currentStudent.classLevel}
+              {activeBoardLabel} • {currentStudent.classLevel}
             </p>
           </div>
 

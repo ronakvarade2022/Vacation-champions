@@ -1248,6 +1248,8 @@ export const DrawingChampionsView: React.FC = () => {
                       <img
                         src={art.dataUrl}
                         alt={art.title}
+                        loading="lazy"
+                        decoding="async"
                         className="max-h-full max-w-full object-contain rounded-xl shadow-xs"
                       />
                       <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">

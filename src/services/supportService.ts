@@ -13,10 +13,18 @@ import {
   collection, 
   doc, 
   setDoc, 
-  getDoc, 
   getDocs, 
-  updateDoc 
+  updateDoc,
+  query,
+  orderBy,
+  limit,
+  where
 } from 'firebase/firestore';
+import {
+  ADMIN_CACHE_DEFAULT_TTL_MS,
+  cachedAdminFetch,
+  updateCachedAdminValue
+} from './adminCacheService';
 
 const STORAGE_KEYS = {
   TICKETS: 'vc_support_tickets_cache',
@@ -143,10 +151,11 @@ export async function createSupportTicket(data: {
     updatedAt: now
   };
 
-  // 1. Save to Local Cache
+  // 1. Save to Local Cache & memory TTL cache
   const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
   localList.unshift(newTicket);
   saveLocalData(STORAGE_KEYS.TICKETS, localList);
+  updateCachedAdminValue<SupportTicket[]>('admin:support_tickets', (prev) => [newTicket, ...prev]);
 
   // 2. Persist to Firestore if available
   try {
@@ -160,35 +169,73 @@ export async function createSupportTicket(data: {
   return newTicket;
 }
 
-export async function getSupportTickets(studentId?: string): Promise<SupportTicket[]> {
-  const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
-
-  try {
-    if (db) {
-      const snap = await getDocs(collection(db, 'support_tickets'));
-      if (!snap.empty) {
-        const firestoreList: SupportTicket[] = [];
-        snap.forEach(d => {
-          firestoreList.push(d.data() as SupportTicket);
-        });
-        // Merge with local list, deduplicating by ID
-        const map = new Map<string, SupportTicket>();
-        firestoreList.forEach(t => map.set(t.id, t));
-        localList.forEach(t => {
-          if (!map.has(t.id)) map.set(t.id, t);
-        });
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+export async function getSupportTickets(
+  studentId?: string,
+  forceRefresh: boolean = false
+): Promise<SupportTicket[]> {
+  if (studentId) {
+    const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
+    try {
+      if (db) {
+        const snap = await getDocs(
+          query(collection(db, 'support_tickets'), where('studentId', '==', studentId), limit(100))
         );
-        saveLocalData(STORAGE_KEYS.TICKETS, merged);
-        return studentId ? merged.filter(t => t.studentId === studentId) : merged;
+        if (!snap.empty) {
+          const firestoreList = snap.docs.map(d => d.data() as SupportTicket);
+          const map = new Map<string, SupportTicket>();
+          firestoreList.forEach(t => map.set(t.id, t));
+          localList.filter(t => t.studentId === studentId).forEach(t => {
+            if (!map.has(t.id)) map.set(t.id, t);
+          });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        }
       }
+    } catch {
+      // Fallback to local cache
     }
-  } catch (err) {
-    console.warn('[SupportService] Firestore read failed, using cached tickets:', err);
+    return localList.filter(t => t.studentId === studentId);
   }
 
-  return studentId ? localList.filter(t => t.studentId === studentId) : localList;
+  return cachedAdminFetch(
+    'admin:support_tickets',
+    async () => {
+      const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
+      try {
+        if (db) {
+          let snap;
+          try {
+            snap = await getDocs(
+              query(collection(db, 'support_tickets'), orderBy('createdAt', 'desc'), limit(250))
+            );
+          } catch {
+            snap = await getDocs(query(collection(db, 'support_tickets'), limit(250)));
+          }
+          if (!snap.empty) {
+            const firestoreList: SupportTicket[] = [];
+            snap.forEach(d => {
+              firestoreList.push(d.data() as SupportTicket);
+            });
+            const map = new Map<string, SupportTicket>();
+            firestoreList.forEach(t => map.set(t.id, t));
+            localList.forEach(t => {
+              if (!map.has(t.id)) map.set(t.id, t);
+            });
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            saveLocalData(STORAGE_KEYS.TICKETS, merged);
+            return merged;
+          }
+        }
+      } catch (err) {
+        console.warn('[SupportService] Firestore read failed, using cached tickets:', err);
+      }
+      return localList;
+    },
+    { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
+  );
 }
 
 export async function getSupportTicketByNumber(ticketNumber: string): Promise<SupportTicket | null> {
@@ -215,6 +262,19 @@ export async function updateSupportTicketStatus(
     }
     saveLocalData(STORAGE_KEYS.TICKETS, localList);
   }
+
+  updateCachedAdminValue<SupportTicket[]>('admin:support_tickets', (prev) =>
+    prev.map((t) =>
+      t.id === ticketId || t.ticketNumber === ticketId
+        ? {
+            ...t,
+            status,
+            updatedAt: now,
+            ...(adminResponse !== undefined ? { adminResponse } : {}),
+          }
+        : t
+    )
+  );
 
   try {
     if (db) {
@@ -262,6 +322,7 @@ export async function createGrievance(data: {
   const localList = getLocalData<GrievanceRecord>(STORAGE_KEYS.GRIEVANCES, []);
   localList.unshift(newGrievance);
   saveLocalData(STORAGE_KEYS.GRIEVANCES, localList);
+  updateCachedAdminValue<GrievanceRecord[]>('admin:grievances', (prev) => [newGrievance, ...prev]);
 
   try {
     if (db) {
@@ -274,34 +335,73 @@ export async function createGrievance(data: {
   return newGrievance;
 }
 
-export async function getGrievances(studentId?: string): Promise<GrievanceRecord[]> {
-  const localList = getLocalData<GrievanceRecord>(STORAGE_KEYS.GRIEVANCES, []);
-
-  try {
-    if (db) {
-      const snap = await getDocs(collection(db, 'grievances'));
-      if (!snap.empty) {
-        const firestoreList: GrievanceRecord[] = [];
-        snap.forEach(d => {
-          firestoreList.push(d.data() as GrievanceRecord);
-        });
-        const map = new Map<string, GrievanceRecord>();
-        firestoreList.forEach(g => map.set(g.id, g));
-        localList.forEach(g => {
-          if (!map.has(g.id)) map.set(g.id, g);
-        });
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+export async function getGrievances(
+  studentId?: string,
+  forceRefresh: boolean = false
+): Promise<GrievanceRecord[]> {
+  if (studentId) {
+    const localList = getLocalData<GrievanceRecord>(STORAGE_KEYS.GRIEVANCES, []);
+    try {
+      if (db) {
+        const snap = await getDocs(
+          query(collection(db, 'grievances'), where('studentId', '==', studentId), limit(100))
         );
-        saveLocalData(STORAGE_KEYS.GRIEVANCES, merged);
-        return studentId ? merged.filter(g => g.studentId === studentId) : merged;
+        if (!snap.empty) {
+          const firestoreList = snap.docs.map(d => d.data() as GrievanceRecord);
+          const map = new Map<string, GrievanceRecord>();
+          firestoreList.forEach(g => map.set(g.id, g));
+          localList.filter(g => g.studentId === studentId).forEach(g => {
+            if (!map.has(g.id)) map.set(g.id, g);
+          });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        }
       }
+    } catch {
+      // Fallback
     }
-  } catch (err) {
-    console.warn('[SupportService] Firestore read failed for grievances:', err);
+    return localList.filter(g => g.studentId === studentId);
   }
 
-  return studentId ? localList.filter(g => g.studentId === studentId) : localList;
+  return cachedAdminFetch(
+    'admin:grievances',
+    async () => {
+      const localList = getLocalData<GrievanceRecord>(STORAGE_KEYS.GRIEVANCES, []);
+      try {
+        if (db) {
+          let snap;
+          try {
+            snap = await getDocs(
+              query(collection(db, 'grievances'), orderBy('createdAt', 'desc'), limit(250))
+            );
+          } catch {
+            snap = await getDocs(query(collection(db, 'grievances'), limit(250)));
+          }
+          if (!snap.empty) {
+            const firestoreList: GrievanceRecord[] = [];
+            snap.forEach(d => {
+              firestoreList.push(d.data() as GrievanceRecord);
+            });
+            const map = new Map<string, GrievanceRecord>();
+            firestoreList.forEach(g => map.set(g.id, g));
+            localList.forEach(g => {
+              if (!map.has(g.id)) map.set(g.id, g);
+            });
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            saveLocalData(STORAGE_KEYS.GRIEVANCES, merged);
+            return merged;
+          }
+        }
+      } catch (err) {
+        console.warn('[SupportService] Firestore read failed for grievances:', err);
+      }
+      return localList;
+    },
+    { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
+  );
 }
 
 export async function getGrievanceByNumber(grievanceNumber: string): Promise<GrievanceRecord | null> {
@@ -329,6 +429,19 @@ export async function updateGrievanceStatus(
     saveLocalData(STORAGE_KEYS.GRIEVANCES, localList);
   }
 
+  updateCachedAdminValue<GrievanceRecord[]>('admin:grievances', (prev) =>
+    prev.map((g) =>
+      g.id === grievanceId || g.grievanceNumber === grievanceId
+        ? {
+            ...g,
+            status,
+            updatedAt: now,
+            ...(adminResolution !== undefined ? { adminResolution } : {}),
+          }
+        : g
+    )
+  );
+
   try {
     if (db) {
       const gRef = doc(db, 'grievances', grievanceId);
@@ -347,6 +460,7 @@ export async function updateGrievanceStatus(
 export async function createQuestionReport(data: {
   questionId: string;
   questionText: string;
+  board?: string;
   subject: string;
   classLevel: string;
   selectedAnswer?: string;
@@ -366,6 +480,7 @@ export async function createQuestionReport(data: {
     reportNumber,
     questionId: data.questionId,
     questionText: data.questionText,
+    board: data.board || 'Maharashtra',
     subject: data.subject,
     classLevel: data.classLevel,
     selectedAnswer: data.selectedAnswer,
@@ -382,6 +497,7 @@ export async function createQuestionReport(data: {
   const localList = getLocalData<QuestionReport>(STORAGE_KEYS.QUESTION_REPORTS, []);
   localList.unshift(newReport);
   saveLocalData(STORAGE_KEYS.QUESTION_REPORTS, localList);
+  updateCachedAdminValue<QuestionReport[]>('admin:question_reports', (prev) => [newReport, ...prev]);
 
   try {
     if (db) {
@@ -394,32 +510,43 @@ export async function createQuestionReport(data: {
   return newReport;
 }
 
-export async function getQuestionReports(): Promise<QuestionReport[]> {
-  const localList = getLocalData<QuestionReport>(STORAGE_KEYS.QUESTION_REPORTS, []);
-
-  try {
-    if (db) {
-      const snap = await getDocs(collection(db, 'question_reports'));
-      if (!snap.empty) {
-        const firestoreList: QuestionReport[] = [];
-        snap.forEach(d => firestoreList.push(d.data() as QuestionReport));
-        const map = new Map<string, QuestionReport>();
-        firestoreList.forEach(r => map.set(r.id, r));
-        localList.forEach(r => {
-          if (!map.has(r.id)) map.set(r.id, r);
-        });
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        saveLocalData(STORAGE_KEYS.QUESTION_REPORTS, merged);
-        return merged;
+export async function getQuestionReports(forceRefresh: boolean = false): Promise<QuestionReport[]> {
+  return cachedAdminFetch(
+    'admin:question_reports',
+    async () => {
+      const localList = getLocalData<QuestionReport>(STORAGE_KEYS.QUESTION_REPORTS, []);
+      try {
+        if (db) {
+          let snap;
+          try {
+            snap = await getDocs(
+              query(collection(db, 'question_reports'), orderBy('createdAt', 'desc'), limit(250))
+            );
+          } catch {
+            snap = await getDocs(query(collection(db, 'question_reports'), limit(250)));
+          }
+          if (!snap.empty) {
+            const firestoreList: QuestionReport[] = [];
+            snap.forEach(d => firestoreList.push(d.data() as QuestionReport));
+            const map = new Map<string, QuestionReport>();
+            firestoreList.forEach(r => map.set(r.id, r));
+            localList.forEach(r => {
+              if (!map.has(r.id)) map.set(r.id, r);
+            });
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            saveLocalData(STORAGE_KEYS.QUESTION_REPORTS, merged);
+            return merged;
+          }
+        }
+      } catch (err) {
+        console.warn('[SupportService] Failed to read question reports from Firestore:', err);
       }
-    }
-  } catch (err) {
-    console.warn('[SupportService] Failed to read question reports from Firestore:', err);
-  }
-
-  return localList;
+      return localList;
+    },
+    { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
+  );
 }
 
 export async function updateQuestionReportStatus(
@@ -435,6 +562,14 @@ export async function updateQuestionReportStatus(
     if (adminNotes !== undefined) localList[idx].adminNotes = adminNotes;
     saveLocalData(STORAGE_KEYS.QUESTION_REPORTS, localList);
   }
+
+  updateCachedAdminValue<QuestionReport[]>('admin:question_reports', (prev) =>
+    prev.map((r) =>
+      r.id === reportId || r.reportNumber === reportId
+        ? { ...r, status, ...(adminNotes !== undefined ? { adminNotes } : {}) }
+        : r
+    )
+  );
 
   try {
     if (db) {

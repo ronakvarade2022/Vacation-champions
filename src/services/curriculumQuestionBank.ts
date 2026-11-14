@@ -1,9 +1,11 @@
-import { ClassLevel, SubjectName, QuizLevel, QuizQuestion, QuestionType } from '../types';
+import { ClassLevel, EducationBoard, SubjectName, QuizLevel, QuizQuestion, QuestionType } from '../types';
 import { normalizeQuestionText } from './questionBankService';
 import { randomizeQuizQuestions } from './answerRandomizerService';
 import { getPart1SubjectQuestions, RawQuizSpec } from '../data/questions/subject40BankPart1';
 import { getPart2SubjectQuestions } from '../data/questions/subject40BankPart2';
 import { getPart3SubjectQuestions } from '../data/questions/subject40BankPart3';
+import { getCbseSubjectQuestions } from '../data/questions/cbseQuestionBank';
+import { getIcseSubjectQuestions } from '../data/questions/icseQuestionBank';
 import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConfig';
 
 export interface CurriculumBlueprint {
@@ -63,7 +65,14 @@ export const SUBJECT_CODES: Record<SubjectName, string> = {
   'Environmental Education': 'ENV',
   'Physical Education': 'PED',
   'Mathematics – Algebra': 'ALG',
-  'Mathematics – Geometry': 'GEOM'
+  'Mathematics – Geometry': 'GEOM',
+  'Social Science': 'SOC',
+  'History & Civics': 'HISCV',
+  'Computer Studies': 'CMPST',
+  'Computer Applications': 'CMPAP',
+  'Economics': 'ECON',
+  'Commercial Studies': 'COMM',
+  'Sanskrit': 'SKT'
 };
 
 const CLASS_STAGE_DESCRIPTORS: Record<ClassLevel, string> = {
@@ -124,14 +133,17 @@ function ensureStrict40UniqueQuestionsForClassSubject(
       // Preserve existing Classes 2-8 Mathematics dynamic numbers untouched; for shared templates across classes,
       // include the class-stage curriculum marker so every class (1 to 10) has distinct normalized question text.
       let candidateText = spec.text.trim();
-      if (!candidateText.startsWith(`[${stageLabel}`)) {
-        candidateText = `[${stageLabel} • ${subject} – ${spec.topic}] ${candidateText}`;
+      const lowerCand = candidateText.toLowerCase();
+      const hasClassTag = lowerCand.includes(classLevel.toLowerCase());
+      const hasSubjectTag = lowerCand.includes(subject.toLowerCase());
+      if (!hasClassTag || !hasSubjectTag) {
+        candidateText = `For Maharashtra ${stageLabel} (${subject} – ${spec.topic}): ${candidateText}`;
       }
 
       let norm = normalizeQuestionText(candidateText);
       if (seenHashesInSubject.has(norm)) {
         // Automatic duplicate replacement if a duplicate ever occurs within the 40 questions of a subject
-        candidateText = `[${stageLabel} • Level ${lvl} Q${i + 1} – ${spec.topic}] ${spec.text.trim()}`;
+        candidateText = `For Maharashtra ${stageLabel} Level ${lvl} Q${i + 1} (${subject} – ${spec.topic}): ${spec.text.trim()}`;
         norm = normalizeQuestionText(candidateText);
       }
 
@@ -148,25 +160,34 @@ function ensureStrict40UniqueQuestionsForClassSubject(
   return allLevelsSpecs[targetLevel];
 }
 
-// Master Generator that builds strictly 10 unique questions per (classLevel, subject, level)
-// Total per subject = 4 levels × 10 questions = 40 unique questions
+// Master Generator that builds strictly 10 unique questions per (board, classLevel, subject, level)
+// Preserves Maharashtra State Board IDs ('VC-C{N}-...') and specs 100% intact.
 export function getCurriculumQuestionsForLevel(
   classLevel: ClassLevel,
   subject: SubjectName,
-  level: QuizLevel
+  level: QuizLevel,
+  board: EducationBoard = 'Maharashtra'
 ): QuizQuestion[] {
   const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 4;
   const subjCode = SUBJECT_CODES[subject] || subject.substring(0, 3).toUpperCase();
   const difficulty = LEVEL_DIFFICULTIES[level];
+  const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
+  const boardIdPrefix = normalizedBoard === 'Maharashtra' ? '' : `${normalizedBoard}-`;
 
-  const specs: RawQuizSpec[] = ensureStrict40UniqueQuestionsForClassSubject(classLevel, subject, level);
+  const specs: RawQuizSpec[] =
+    normalizedBoard === 'CBSE'
+      ? getCbseSubjectQuestions(classLevel, subject, level)
+      : normalizedBoard === 'ICSE'
+        ? getIcseSubjectQuestions(classLevel, subject, level)
+        : ensureStrict40UniqueQuestionsForClassSubject(classLevel, subject, level);
 
   const questions: QuizQuestion[] = specs.slice(0, 10).map((spec, i) => {
     const qType = TEN_QUESTION_PATTERNS[i % TEN_QUESTION_PATTERNS.length];
-    const qId = `VC-C${cNum}-${subjCode}-L${level}-Q${i + 1}`;
+    const qId = `VC-${boardIdPrefix}C${cNum}-${subjCode}-L${level}-Q${i + 1}`;
 
     return {
       id: qId,
+      board: normalizedBoard,
       classLevel,
       subject,
       level,
@@ -187,22 +208,24 @@ export function getCurriculumQuestionsForLevel(
     };
   });
 
-  // Always randomize option positions across A, B, C, D for ALL levels (1, 2, 3, and 4)
-  // so the correct answer is never fixed at Option B or in a predictable pattern.
   return randomizeQuizQuestions(questions, true);
 }
 
-// Generates the entire full bank of questions across all 10 classes, class-applicable subjects, and 4 levels
-export function generateEntireCurriculumMasterBank(): QuizQuestion[] {
+// Generates the entire full bank of questions across specified boards (default all 3), all 10 classes, subjects, and 4 levels
+export function generateEntireCurriculumMasterBank(
+  boards: EducationBoard[] = ['Maharashtra', 'CBSE', 'ICSE']
+): QuizQuestion[] {
   const ALL_LEVELS: QuizLevel[] = [1, 2, 3, 4];
   const masterList: QuizQuestion[] = [];
 
-  for (const c of ALL_10_CLASSES) {
-    const subjectsForClass = getSubjectsForClass(c);
-    for (const s of subjectsForClass) {
-      for (const l of ALL_LEVELS) {
-        const levelQs = getCurriculumQuestionsForLevel(c, s, l);
-        masterList.push(...levelQs);
+  for (const board of boards) {
+    for (const c of ALL_10_CLASSES) {
+      const subjectsForClass = getSubjectsForClass(c, board);
+      for (const s of subjectsForClass) {
+        for (const l of ALL_LEVELS) {
+          const levelQs = getCurriculumQuestionsForLevel(c, s, l, board);
+          masterList.push(...levelQs);
+        }
       }
     }
   }

@@ -30,5 +30,24 @@ export default defineConfig(() => {
       ws: false as const,
       watch: null,
     },
+    build: {
+      chunkSizeWarningLimit: 900,
+      rolldownOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules')) {
+              if (id.includes('firebase')) return 'vendor-firebase';
+              if (id.includes('react') || id.includes('lucide-react')) return 'vendor-ui';
+              return 'vendor-misc';
+            }
+            if (id.includes('src/data/scholarshipData')) return 'data-scholarship';
+            if (id.includes('src/data/stories') || id.includes('src/data/shivajiStoriesData')) return 'data-stories';
+            if (id.includes('src/data/drawingsData')) return 'data-drawings';
+            if (id.includes('src/data/boards/') || id.includes('src/data/questionBank')) return 'data-questions';
+            return undefined;
+          },
+        },
+      },
+    },
   };
 });

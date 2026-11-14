@@ -81,6 +81,7 @@ export interface QuestionReport {
   reportNumber: string; // e.g. REP-VC-5501
   questionId: string;
   questionText: string;
+  board?: string;
   subject: string;
   classLevel: string;
   selectedAnswer?: string;

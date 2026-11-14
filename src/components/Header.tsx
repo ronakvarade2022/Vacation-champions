@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp, UserRole } from '../context/AppContext';
-import { ClassLevel } from '../types';
+import { ClassLevel, EducationBoard } from '../types';
 import { 
   Trophy, 
   Flame, 
@@ -40,9 +40,11 @@ import {
 } from 'lucide-react';
 
 import {
+  ALL_BOARDS,
   ALL_CLASS_LEVELS,
   canAccessFeature,
-  getAccessibleClassesList,
+  getAccessibleBoardClassesList,
+  getBoardShortLabel,
   getClassSubscriptionInfo,
   getStudentPlanInfo
 } from '../utils/subscriptionAccess';
@@ -51,7 +53,7 @@ interface HeaderProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onOpenAuth: (defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot') => void;
-  onOpenMembership: (targetClass?: ClassLevel) => void;
+  onOpenMembership: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -62,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { 
     activeRole, 
+    activeBoard,
     currentUser,
     switchRole,
     currentStudent, 
@@ -76,6 +79,11 @@ export const Header: React.FC<HeaderProps> = ({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClassSwitcher, setShowClassSwitcher] = useState(false);
+  const [switcherBoard, setSwitcherBoard] = useState<EducationBoard>(activeBoard);
+
+  useEffect(() => {
+    setSwitcherBoard(activeBoard);
+  }, [activeBoard, showClassSwitcher]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -105,8 +113,8 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser && (
               <span className="hidden md:inline bg-black/25 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-amber-100 border border-white/20">
                 {currentUser.role === 'admin' && '🛡️ Master Admin Portal'}
-                {currentUser.role === 'teacher' && '👩‍🏫 Teacher Portal: ' + currentUser.displayName + (currentStudent ? ` (${currentStudent.classLevel})` : '')}
-                {currentUser.role === 'student' && '🎓 Student Portal: ' + currentUser.displayName + (currentStudent ? ` (${currentStudent.classLevel})` : '')}
+                {currentUser.role === 'teacher' && '👩‍🏫 Teacher Portal: ' + currentUser.displayName + (currentStudent ? ` (${getBoardShortLabel(activeBoard)} • ${currentStudent.classLevel})` : '')}
+                {currentUser.role === 'student' && '🎓 Student Portal: ' + currentUser.displayName + (currentStudent ? ` (${getBoardShortLabel(activeBoard)} • ${currentStudent.classLevel})` : '')}
               </span>
             )}
           </div>
@@ -234,6 +242,18 @@ export const Header: React.FC<HeaderProps> = ({
                   <BookOpen className="w-3.5 h-3.5" />
                 </span>
                 <span>Worksheets</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('study-materials')}
+                className={`px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                  currentTab === 'study-materials' ? 'bg-white text-teal-950 shadow-xs ring-1 ring-teal-300' : 'text-slate-700 hover:text-teal-900'
+                }`}
+              >
+                <span className="w-5 h-5 rounded-md bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-3.5 h-3.5" />
+                </span>
+                <span>Study Notes</span>
               </button>
 
               <button
@@ -394,9 +414,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Section: Class Selector, Student/Teacher Badge & Actions */}
         <div className="flex items-center gap-3">
-          {/* Active Class & Multi-Class Switcher Badge (Switch Only Unlocked Classes • Locked Stay Locked) */}
+          {/* Active Board & Class Switcher Badge (Switch Only Unlocked Pairs • Locked Stay Locked) */}
           {isLearningRole && currentStudent && (() => {
-            const accessibleClasses = getAccessibleClassesList(currentStudent);
+            const accessiblePairs = getAccessibleBoardClassesList(currentStudent);
             return (
               <div className="relative">
                 <button
@@ -407,15 +427,15 @@ export const Header: React.FC<HeaderProps> = ({
                     setShowProfileDropdown(false);
                   }}
                   className="flex items-center gap-1.5 bg-amber-100/90 hover:bg-amber-200/80 border border-amber-300/90 px-2.5 py-1 rounded-xl shadow-2xs cursor-pointer transition-colors"
-                  title={`Active Class: ${currentStudent.classLevel} (${accessibleClasses.length} unlocked). Click to switch or add classes.`}
+                  title={`Active: ${getBoardShortLabel(activeBoard)} • ${currentStudent.classLevel} (${accessiblePairs.length} unlocked). Click to switch board/class or add ₹99 plan.`}
                 >
                   <GraduationCap className="w-3.5 h-3.5 text-amber-800" />
                   <span className="text-xs font-extrabold text-amber-950">
-                    {currentStudent.classLevel}
+                    {getBoardShortLabel(activeBoard)} • {currentStudent.classLevel}
                   </span>
-                  {accessibleClasses.length > 1 && (
+                  {accessiblePairs.length > 1 && (
                     <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-black hidden sm:inline">
-                      {accessibleClasses.length} Classes
+                      {accessiblePairs.length} Active
                     </span>
                   )}
                   <ChevronDown className="w-3 h-3 text-amber-800" />
@@ -427,11 +447,11 @@ export const Header: React.FC<HeaderProps> = ({
                       className="fixed inset-0 z-40"
                       onClick={() => setShowClassSwitcher(false)}
                     />
-                    <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-xs sm:w-72 mx-auto bg-white rounded-2xl shadow-2xl border-2 border-amber-300 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-sm sm:w-80 mx-auto bg-white rounded-2xl shadow-2xl border-2 border-amber-300 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
                       <div className="bg-amber-50 px-3.5 py-2.5 border-b border-amber-200 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-black text-amber-950">Class Subscriptions (1st–10th)</p>
-                          <p className="text-[10px] text-slate-600 font-medium">Switch unlocked classes or activate ₹99/yr</p>
+                          <p className="text-xs font-black text-amber-950">Board &amp; Class Switcher (1st–10th)</p>
+                          <p className="text-[10px] text-slate-600 font-medium">Switch unlocked board/class or activate ₹99/yr</p>
                         </div>
                         <button
                           type="button"
@@ -442,10 +462,32 @@ export const Header: React.FC<HeaderProps> = ({
                         </button>
                       </div>
 
+                      {/* Board Tabs inside Class Switcher */}
+                      <div className="grid grid-cols-3 gap-1 p-2 bg-slate-50 border-b border-slate-100">
+                        {ALL_BOARDS.map((b) => {
+                          const isSel = switcherBoard === b;
+                          return (
+                            <button
+                              key={b}
+                              type="button"
+                              onClick={() => setSwitcherBoard(b)}
+                              className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                                isSel
+                                  ? 'bg-slate-900 text-white shadow-xs'
+                                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-amber-50'
+                              }`}
+                            >
+                              {getBoardShortLabel(b)}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       <div className="p-2.5 grid grid-cols-2 gap-1.5 max-h-72 overflow-y-auto">
                         {ALL_CLASS_LEVELS.map((cls) => {
-                          const cInfo = getClassSubscriptionInfo(currentStudent, cls);
-                          const isCurrent = currentStudent.classLevel === cls;
+                          const cInfo = getClassSubscriptionInfo(currentStudent, cls, undefined, switcherBoard);
+                          const isCurrent =
+                            currentStudent.classLevel === cls && activeBoard === switcherBoard;
                           return (
                             <button
                               key={cls}
@@ -453,9 +495,9 @@ export const Header: React.FC<HeaderProps> = ({
                               onClick={async () => {
                                 setShowClassSwitcher(false);
                                 if (cInfo.isAccessible) {
-                                  await switchActiveClass(cls);
+                                  await switchActiveClass(cls, switcherBoard);
                                 } else {
-                                  onOpenMembership(cls);
+                                  onOpenMembership(cls, switcherBoard);
                                 }
                               }}
                               className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
@@ -495,11 +537,11 @@ export const Header: React.FC<HeaderProps> = ({
                           type="button"
                           onClick={() => {
                             setShowClassSwitcher(false);
-                            onOpenMembership();
+                            onOpenMembership(currentStudent.classLevel, switcherBoard);
                           }}
                           className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-[11px] cursor-pointer shadow-xs"
                         >
-                          + Activate / Renew Class Subscription (₹99)
+                          + Activate / Renew Board &amp; Class (₹99)
                         </button>
                       </div>
                     </div>
@@ -525,11 +567,11 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Membership Badge or Upgrade CTA (Authenticated Learners Only) */}
           {currentStudent && (() => {
-            const pInfo = getStudentPlanInfo(currentStudent);
+            const pInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent.classLevel, activeBoard);
             if (pInfo.effectivePlan === 'free') {
               return (
                 <button
-                  onClick={() => onOpenMembership(currentStudent.classLevel)}
+                  onClick={() => onOpenMembership(currentStudent.classLevel, activeBoard)}
                   className={`hidden sm:flex items-center gap-1.5 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs hover:shadow-md transition-all cursor-pointer ${
                     pInfo.isPaidPlanExpired
                       ? 'bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700'
@@ -552,7 +594,7 @@ export const Header: React.FC<HeaderProps> = ({
             }
             return (
               <div
-                onClick={() => onOpenMembership(currentStudent.classLevel)}
+                onClick={() => onOpenMembership(currentStudent.classLevel, activeBoard)}
                 className={`hidden sm:flex items-center gap-1.5 text-[11px] font-extrabold border px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${
                   pInfo.isExpiringToday
                     ? 'bg-amber-100 text-amber-950 border-amber-400 hover:bg-amber-200'
@@ -1151,6 +1193,18 @@ export const Header: React.FC<HeaderProps> = ({
                   <FileText className="w-3.5 h-3.5" />
                 </span>
                 <span>Worksheets (1st–10th)</span>
+              </button>
+
+              <button
+                onClick={() => { setCurrentTab('study-materials'); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-xl text-left font-bold flex items-center gap-2 border transition-all ${
+                  currentTab === 'study-materials' ? 'bg-teal-600 text-white border-teal-600 shadow-xs' : 'bg-white text-slate-700 border-teal-100 hover:bg-teal-50'
+                }`}
+              >
+                <span className="w-6 h-6 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-3.5 h-3.5" />
+                </span>
+                <span>Study Notes</span>
               </button>
 
               <button

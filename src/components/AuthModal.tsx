@@ -4,7 +4,7 @@ import {
   Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin, Smartphone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel } from '../types';
+import { ClassLevel, EducationBoard } from '../types';
 import {
   auth,
   registerFirebaseEmailUser,
@@ -12,7 +12,13 @@ import {
 } from '../services/firebase';
 import { referralService } from '../services/referralService';
 import { sanitizeReferralCode } from '../utils/referralCoding';
-import { formatStandardOrdinal, getClassSubscriptionInfo } from '../utils/subscriptionAccess';
+import {
+  buildBoardClassKey,
+  formatStandardOrdinal,
+  getBoardShortLabel,
+  getClassSubscriptionInfo
+} from '../utils/subscriptionAccess';
+import { BOARD_META_LIST } from '../data/boards/boardMeta';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -20,7 +26,7 @@ interface AuthModalProps {
   defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot';
   initialEmail?: string;
   onSuccess?: () => void;
-  onExistingAccountProceedToSubscription?: (targetClass: ClassLevel) => void;
+  onExistingAccountProceedToSubscription?: (targetClass: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
 const CLASS_LEVELS: ClassLevel[] = [
@@ -84,6 +90,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regClass, setRegClass] = useState<ClassLevel>('Class 5');
+  const [regBoard, setRegBoard] = useState<EducationBoard>('Maharashtra');
   const [regAvatar, setRegAvatar] = useState('🌟');
   const [regSchool, setRegSchool] = useState('');
   const [regCity, setRegCity] = useState('Pune');
@@ -111,14 +118,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Multi-Class Existing Account Recognition State (Same Mobile + Email -> Add Additional Class)
+  // Multi-Class & Multi-Board Existing Account Recognition State
   const [existingAccountMatch, setExistingAccountMatch] = useState<{
     email: string;
     mobile: string;
     studentName: string;
     accountRole: 'student' | 'teacher';
     activeClasses: ClassLevel[];
+    activeClassKeys: string[];
     existingClass?: ClassLevel;
+    existingBoard?: EducationBoard;
     alreadyUnlockedTargetClass: boolean;
   } | null>(null);
   const [existingAccountPassword, setExistingAccountPassword] = useState('');
@@ -154,7 +163,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setRecoveryMobile('');
   }, [defaultTab, initialEmail, isOpen]);
 
-  // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-class addition)
+  // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {
     if (!isOpen || tab !== 'register') return;
     const cleanEmail = regEmail.trim().toLowerCase();
@@ -166,17 +175,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     let cancelled = false;
     const timer = setTimeout(() => {
-      checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass)
+      checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass, regBoard)
         .then((res) => {
           if (cancelled) return;
           if (res.exists && res.matchedPair) {
+            const fallbackKeys = (res.activeClasses || (res.existingClass ? [res.existingClass] : [])).map((c) =>
+              buildBoardClassKey(res.existingBoard || 'Maharashtra', c)
+            );
             setExistingAccountMatch({
               email: cleanEmail,
               mobile: cleanMobile,
               studentName: res.existingStudentName || 'Registered User',
               accountRole: res.accountRole || 'student',
               activeClasses: res.activeClasses || (res.existingClass ? [res.existingClass] : []),
+              activeClassKeys: res.activeClassKeys || fallbackKeys,
               existingClass: res.existingClass,
+              existingBoard: res.existingBoard || 'Maharashtra',
               alreadyUnlockedTargetClass: Boolean(res.alreadyUnlockedTargetClass),
             });
             setError('');
@@ -193,7 +207,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isOpen, tab, regEmail, regMobile, regClass]);
+  }, [isOpen, tab, regEmail, regMobile, regClass, regBoard]);
 
   // Live validate referral code when entered or captured from URL
   useEffect(() => {
@@ -339,19 +353,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     // Check latest status after authentication (in case active classes synced from Firestore)
     const loggedStudent = 'student' in loginRes ? loginRes.student : 'teacher' in loginRes ? loginRes.teacher : undefined;
-    const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass);
+    const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass, undefined, regBoard);
 
     onSuccess?.();
     onClose();
 
     if (targetInfo.isAccessible) {
-      await switchActiveClass(regClass);
+      await switchActiveClass(regClass, regBoard);
     } else if (onExistingAccountProceedToSubscription) {
-      onExistingAccountProceedToSubscription(regClass);
+      onExistingAccountProceedToSubscription(regClass, regBoard);
     }
   };
 
-  // --- 3. Student & Teacher Class-Wise Registration (Supports New Accounts + Existing Account Class Addition) ---
+  // --- 3. Student & Teacher Class-Wise & Board-Wise Registration ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -372,18 +386,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     // Check if this Email + Mobile belongs to an existing account before blocking or creating duplicates
     setIsLoading(true);
-    const existingCheck = await checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass);
+    const existingCheck = await checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass, regBoard);
     setIsLoading(false);
 
     if (existingCheck.exists) {
       if (existingCheck.matchedPair) {
+        const fallbackKeys = (existingCheck.activeClasses || (existingCheck.existingClass ? [existingCheck.existingClass] : [])).map((c) =>
+          buildBoardClassKey(existingCheck.existingBoard || 'Maharashtra', c)
+        );
         const matchedState = {
           email: cleanEmail,
           mobile: cleanMobile,
           studentName: existingCheck.existingStudentName || 'Registered User',
           accountRole: existingCheck.accountRole || ('student' as const),
           activeClasses: existingCheck.activeClasses || (existingCheck.existingClass ? [existingCheck.existingClass] : []),
+          activeClassKeys: existingCheck.activeClassKeys || fallbackKeys,
           existingClass: existingCheck.existingClass,
+          existingBoard: existingCheck.existingBoard || 'Maharashtra',
           alreadyUnlockedTargetClass: Boolean(existingCheck.alreadyUnlockedTargetClass),
         };
         setExistingAccountMatch(matchedState);
@@ -399,24 +418,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setIsLoading(false);
           if (!loginRes.success) {
             setError(
-              `Existing account found for ${matchedState.studentName}! Enter your registered account password below to unlock ${regClass}. (${loginRes.message})`
+              `Existing account found for ${matchedState.studentName}! Enter your registered account password below to unlock ${getBoardShortLabel(regBoard)} ${regClass}. (${loginRes.message})`
             );
             return;
           }
           const loggedStudent = 'student' in loginRes ? loginRes.student : 'teacher' in loginRes ? loginRes.teacher : undefined;
-          const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass);
+          const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass, undefined, regBoard);
           onSuccess?.();
           onClose();
           if (targetInfo.isAccessible) {
-            await switchActiveClass(regClass);
+            await switchActiveClass(regClass, regBoard);
           } else {
-            onExistingAccountProceedToSubscription?.(regClass);
+            onExistingAccountProceedToSubscription?.(regClass, regBoard);
           }
           return;
         }
 
         setSuccessMsg(
-          `Existing account recognized (${matchedState.studentName})! Enter your account password below to continue to ${regClass} activation.`
+          `Existing account recognized (${matchedState.studentName})! Enter your account password below to continue to ${getBoardShortLabel(regBoard)} ${regClass} activation.`
         );
         return;
       }
@@ -489,12 +508,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // 2. Register Student or Teacher in AppContext (Permanently locks selected classLevel & generates unique referralCode)
+    // 2. Register Student or Teacher in AppContext (Sets selected board + classLevel & generates unique referralCode)
     const regResult = registerStudent(
       {
         name: regName.trim(),
         email: cleanEmail,
         mobile: cleanMobile,
+        board: regBoard,
         classLevel: regClass,
         accountRole: regRoleType,
         avatar: regAvatar || (regRoleType === 'teacher' ? '👩‍🏫' : '🌟'),
@@ -1270,7 +1290,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between">
-                    <span className="font-bold text-slate-700">Selected Class:</span>
+                    <span className="font-bold text-slate-700">Selected Board &amp; Class:</span>
                     <span
                       className={`font-black px-2.5 py-0.5 rounded-full text-[11px] ${
                         existingAccountMatch.alreadyUnlockedTargetClass
@@ -1278,7 +1298,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           : 'bg-amber-100 text-amber-900'
                       }`}
                     >
-                      {regClass} •{' '}
+                      {getBoardShortLabel(regBoard)} • {regClass} •{' '}
                       {existingAccountMatch.alreadyUnlockedTargetClass
                         ? 'Already Unlocked (Free Switch)'
                         : 'Locked • ₹99 (365 Days) on Payment'}
@@ -1317,8 +1337,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     {isLoading
                       ? 'Verifying Account...'
                       : existingAccountMatch.alreadyUnlockedTargetClass
-                      ? `Verify Password & Switch to ${regClass} →`
-                      : `Verify Password & Continue to Unlock ${regClass} (₹99) →`}
+                      ? `Verify Password & Switch to ${getBoardShortLabel(regBoard)} ${regClass} →`
+                      : `Verify Password & Continue to Unlock ${getBoardShortLabel(regBoard)} ${regClass} (₹99) →`}
                   </button>
                 </div>
               )}
@@ -1368,11 +1388,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {/* 5. Select Class from Class 1 to Class 10 (Both Dropdown + Selectable Cards) */}
+              {/* 5. Select Education Board & Class from Class 1 to Class 10 */}
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Select Education Board *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BOARD_META_LIST.map((bMeta) => {
+                      const isBoardSel = regBoard === bMeta.id;
+                      return (
+                        <button
+                          key={bMeta.id}
+                          type="button"
+                          onClick={() => setRegBoard(bMeta.id)}
+                          className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                            isBoardSel
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-indigo-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-base shrink-0">{bMeta.icon}</span>
+                            <span className="text-[11px] font-black truncate">{getBoardShortLabel(bMeta.id)}</span>
+                          </div>
+                          <span className={`text-[9px] block truncate mt-0.5 font-semibold ${isBoardSel ? 'text-indigo-100' : 'text-slate-500'}`}>
+                            Std 1–10
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Select Class (Class 1 to Class 10) *
+                    Select Class ({getBoardShortLabel(regBoard)} • Class 1 to Class 10) *
                   </label>
                   <span className="text-[10px] font-bold text-emerald-700">
                     {existingAccountMatch
@@ -1391,7 +1442,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   >
                     {CLASS_LEVELS.map((c) => (
                       <option key={c} value={c}>
-                        Standard {formatStandardOrdinal(c)} ({c})
+                        {getBoardShortLabel(regBoard)} • Standard {formatStandardOrdinal(c)} ({c})
                       </option>
                     ))}
                   </select>
@@ -1400,7 +1451,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="grid grid-cols-5 gap-1.5">
                   {CLASS_LEVELS.map((c) => {
                     const isSelected = regClass === c;
-                    const isAlreadyActive = existingAccountMatch?.activeClasses.includes(c);
+                    const compositeKey = buildBoardClassKey(regBoard, c);
+                    const isAlreadyActive = existingAccountMatch?.activeClassKeys.includes(compositeKey);
                     return (
                       <button
                         key={c}
@@ -1517,7 +1569,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 {isLoading
                   ? 'Creating Account...'
-                  : `Register ${regRoleType === 'teacher' ? 'Teacher' : 'Student'} Account for Standard ${formatStandardOrdinal(regClass)}`}
+                  : `Register ${regRoleType === 'teacher' ? 'Teacher' : 'Student'} (${getBoardShortLabel(regBoard)} • Standard ${formatStandardOrdinal(regClass)})`}
               </button>
             </form>
           )}

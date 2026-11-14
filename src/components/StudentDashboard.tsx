@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel, SubjectName } from '../types';
+import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { calculateLevel, ALL_BADGES } from '../data/badgesData';
 import { 
   Trophy, 
@@ -43,9 +43,11 @@ import {
   getStudentPlanInfo,
   canAccessSubject,
   canAccessFeature,
-  getClassSubscriptionInfo,
-  getActivatedClassesList,
+  getBoardClassSubscriptionInfo,
+  getActivatedBoardClassesList,
+  getBoardShortLabel
 } from '../utils/subscriptionAccess';
+import { BOARD_META_LIST, getEducationBoardMeta } from '../data/boards/boardMeta';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -62,7 +64,7 @@ import { FileText, GraduationCap } from 'lucide-react';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
-  onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel) => void;
+  onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -71,19 +73,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 }) => {
   const { 
     currentStudent, 
+    activeBoard,
     allAttempts, 
     allStories, 
     savedDrawings, 
     getSubjectLevelProgress,
-    switchActiveClass
+    switchActiveBoardAndClass
   } = useApp();
   const [selectedSubjectForLevels, setSelectedSubjectForLevels] = useState<SubjectName | null>(null);
   const [copiedDashRefLink, setCopiedDashRefLink] = useState(false);
+  const [selectedCurriculumBoard, setSelectedCurriculumBoard] = useState<EducationBoard>(activeBoard);
+
+  useEffect(() => {
+    setSelectedCurriculumBoard(activeBoard);
+  }, [activeBoard]);
 
   if (!currentStudent) return null;
 
-  const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel).map(name => {
-    const meta = getSubjectMeta(name);
+  const activeBoardMeta = getEducationBoardMeta(activeBoard);
+  const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel, activeBoard).map(name => {
+    const meta = getSubjectMeta(name, activeBoard);
     return {
       name,
       icon: meta.icon,
@@ -93,7 +102,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     };
   });
 
-  const classWorksheets = getAllWorksheetsForClass(currentStudent.classLevel);
+  const classWorksheets = getAllWorksheetsForClass(currentStudent.classLevel, activeBoard);
   const completedWorksheetsCount = classWorksheets.filter(w =>
     (currentStudent.completedWorksheetIds || []).includes(w.id)
   ).length;
@@ -165,9 +174,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-amber-100 flex items-center gap-1.5 border border-white/20">
                 <GraduationCap className="w-3.5 h-3.5 text-amber-200" />
                 <span>
-                  Active: {currentStudent.classLevel}
-                  {getActivatedClassesList(currentStudent).length > 0
-                    ? ` • ${getActivatedClassesList(currentStudent).length} Paid`
+                  Active: {getBoardShortLabel(activeBoard)} • {currentStudent.classLevel}
+                  {getActivatedBoardClassesList(currentStudent).length > 0
+                    ? ` • ${getActivatedBoardClassesList(currentStudent).length} Paid`
                     : ''}
                 </span>
               </span>
@@ -185,32 +194,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               Learn, Practice, Explore and Achieve Excellence.
             </p>
             <p className="text-amber-100 text-sm sm:text-base max-w-xl font-medium">
-              Classes 1st to 10th • Master all {activeClassSubjects.length} subjects for {currentStudent.classLevel} across 4 quiz levels (40 unique questions per subject), solve interactive Online Worksheets, prepare for 4th &amp; 7th scholarship exams, explore 45 audio stories, practice drawing, and track your progress!
+              {activeBoardMeta.shortLabel} • Classes 1st to 10th • Master all {activeClassSubjects.length} subjects for {currentStudent.classLevel} across 4 quiz levels, chapter Study Notes, interactive Online Worksheets, Scholarship prep, and 45 audio stories!
             </p>
           </div>
 
           {/* Quick Play CTA Card */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5">
             <button
               onClick={() => onNavigateTab('quizzes')}
-              className="px-5 py-3 rounded-2xl bg-white text-amber-900 font-extrabold text-sm shadow-md hover:bg-amber-50 transition-all flex items-center justify-center gap-2 cursor-pointer group"
+              className="px-4 py-3 rounded-2xl bg-white text-amber-900 font-extrabold text-sm shadow-md hover:bg-amber-50 transition-all flex items-center justify-center gap-2 cursor-pointer group"
             >
               <Play className="w-4 h-4 fill-amber-900 text-amber-900 group-hover:scale-110 transition-transform" />
-              <span>Start 10-Q Quiz</span>
+              <span>Start Quiz</span>
             </button>
             <button
               onClick={() => onNavigateTab('worksheets')}
-              className="px-5 py-3 rounded-2xl bg-indigo-900/60 hover:bg-indigo-900/80 backdrop-blur-md text-white font-extrabold text-sm border border-white/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="px-4 py-3 rounded-2xl bg-indigo-900/60 hover:bg-indigo-900/80 backdrop-blur-md text-white font-extrabold text-sm border border-white/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <FileText className="w-4 h-4" />
-              <span>Online Worksheets</span>
+              <span>Worksheets</span>
             </button>
             <button
-              onClick={() => onNavigateTab('stories')}
-              className="px-5 py-3 rounded-2xl bg-amber-900/40 hover:bg-amber-900/60 backdrop-blur-md text-white font-extrabold text-sm border border-white/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={() => onNavigateTab('study-materials')}
+              className="px-4 py-3 rounded-2xl bg-emerald-900/55 hover:bg-emerald-900/75 backdrop-blur-md text-white font-extrabold text-sm border border-white/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <BookOpen className="w-4 h-4" />
-              <span>Listen Stories</span>
+              <span>Study Notes</span>
             </button>
           </div>
         </div>
@@ -258,7 +267,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <span className="font-bold text-slate-900">{currentStudent.name}</span>
               <span className="text-slate-300">•</span>
               <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md font-bold text-[11px]">
-                {currentStudent.classLevel}
+                {getBoardShortLabel(activeBoard)} • {currentStudent.classLevel}
               </span>
               <span className="text-slate-300">•</span>
               <span className="font-mono text-slate-500 text-[11px]">
@@ -390,7 +399,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
       {/* SECTION 10: ATTRACTIVE DASHBOARD SUBSCRIPTION BANNER & 3 PLANS OVERVIEW (Mobile, Tablet & Desktop) */}
       {(() => {
-        const planInfo = getStudentPlanInfo(currentStudent);
+        const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent.classLevel, activeBoard);
         const statusLabel = planInfo.statusLabel;
         const planName = planInfo.planDisplayName;
         const paymentAmount = planInfo.priceLabel;
@@ -422,10 +431,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </div>
                   <p className="text-xs text-slate-600 font-medium mt-1">
                     {planInfo.isPaidPlanExpired
-                      ? `Your previous ${planInfo.expiredPlanName} has expired (${planInfo.expiryDisplay}). You are currently on FREE PLAN – ₹0 – Lifetime. Renew below for 365 Days (1 Year) access!`
+                      ? `Your previous ${planInfo.expiredPlanName} has expired (${planInfo.expiryDisplay}). Renew below for 365 Days (1 Year) access!`
                       : planInfo.effectivePlan === 'free'
-                      ? 'FREE PLAN – ₹0 – Lifetime active forever (Brain Puzzles, Sudoku, English & Maths). Upgrade to ₹99 Premium Plan (365 Days / 1 Year) anytime!'
-                      : `PREMIUM PLAN – ₹99 – 365 Days (1 Year) active • Purchased: ${planInfo.purchasedDisplay} • Expires: ${planInfo.expiryDisplay} • Remaining: ${planInfo.daysRemainingDisplay}`}
+                      ? `FREE PLAN – ₹0 – Lifetime active for ${getBoardShortLabel(activeBoard)} ${currentStudent.classLevel}. Upgrade to ₹99 Premium Plan (365 Days / 1 Year) anytime!`
+                      : `PREMIUM PLAN – ₹99 – 365 Days (1 Year) active for ${getBoardShortLabel(activeBoard)} ${currentStudent.classLevel} • Purchased: ${planInfo.purchasedDisplay} • Expires: ${planInfo.expiryDisplay} • Remaining: ${planInfo.daysRemainingDisplay}`}
                   </p>
                 </div>
               </div>
@@ -434,29 +443,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 {planInfo.isPaidPlanExpired ? (
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+                    onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Renew ₹99 Premium (365 Days)</span>
+                    <span>Renew {getBoardShortLabel(activeBoard)} {currentStudent.classLevel} (₹99)</span>
                   </button>
                 ) : planInfo.effectivePlan === 'free' ? (
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+                    onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
                     className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Upgrade {currentStudent.classLevel} to ₹99 Premium</span>
+                    <span>Upgrade {getBoardShortLabel(activeBoard)} {currentStudent.classLevel} (₹99)</span>
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+                    onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
                     className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Extend {currentStudent.classLevel} (₹99)</span>
+                    <span>Extend {getBoardShortLabel(activeBoard)} {currentStudent.classLevel} (₹99)</span>
                   </button>
                 )}
               </div>
@@ -549,7 +558,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
               {/* 2. PREMIUM PLAN – ₹99 – 365 Days (1 Year) */}
               <div
-                onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+                onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
                 className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all cursor-pointer ${
                   planInfo.effectivePlan === 'premium'
                     ? 'border-amber-500 bg-gradient-to-br from-amber-50 to-orange-50/70 shadow-md'
@@ -661,7 +670,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
         {/* Plan Status */}
         <div 
-          onClick={() => onOpenMembership('premium', currentStudent.classLevel)}
+          onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
           className="col-span-2 lg:col-span-1 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-300 shadow-xs flex items-center gap-3 cursor-pointer hover:border-amber-400 transition-colors"
         >
           <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center text-xl shrink-0">
@@ -670,17 +679,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="min-w-0">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Active Plan</p>
             <p className="text-xs sm:text-sm font-extrabold text-amber-900 truncate">
-              {getStudentPlanInfo(currentStudent).planDisplayName}
+              {getStudentPlanInfo(currentStudent, undefined, currentStudent.classLevel, activeBoard).planDisplayName}
             </p>
             <p className="text-[10px] font-bold text-emerald-700 truncate">
-              {getStudentPlanInfo(currentStudent).daysRemainingDisplay}
+              {getStudentPlanInfo(currentStudent, undefined, currentStudent.classLevel, activeBoard).daysRemainingDisplay}
             </p>
           </div>
         </div>
       </div>
 
       {/* ========================================================
-          ALL 10 CLASSES OVERVIEW & MULTI-CLASS SWITCHER (Classes 1st to 10th)
+          ALL 3 BOARDS × 10 CLASSES OVERVIEW & MULTI-BOARD SWITCHER
           ======================================================== */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200/90 shadow-md space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -691,37 +700,79 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-display font-black text-slate-900">
-                  Class-Wise Curriculum &amp; Subscriptions (Active: {currentStudent.classLevel})
+                  Board &amp; Class-Wise Subscriptions (Active: {getBoardShortLabel(activeBoard)} • {currentStudent.classLevel})
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-extrabold border border-emerald-300 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-emerald-700" />
                   <span>
-                    Multi-Class Ready ({getActivatedClassesList(currentStudent).length} Paid Class{getActivatedClassesList(currentStudent).length === 1 ? '' : 'es'})
+                    {getActivatedBoardClassesList(currentStudent).length} Paid Activation{getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 's'}
                   </span>
                 </span>
               </div>
               <p className="text-xs text-slate-600 font-medium mt-0.5">
-                Click any unlocked class below to switch your learning workspace, or tap any locked/expired class to activate it for <strong>₹99 (365 Days)</strong> on your same account!
+                Switch boards below (Maharashtra State Board, CBSE, ICSE). Click any unlocked class to switch workspace or activate any (Board, Class) independently for <strong>₹99 (365 Days)</strong>!
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => onOpenMembership('premium')}
+            onClick={() => onOpenMembership('premium', currentStudent.classLevel, selectedCurriculumBoard)}
             className="flex items-center gap-2 text-xs font-extrabold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-4 py-2.5 rounded-xl shadow-xs self-start md:self-center shrink-0 cursor-pointer transition-all"
           >
             <Crown className="w-3.5 h-3.5 text-amber-300" />
-            <span>Add / Activate Class (₹99)</span>
+            <span>Activate Board / Class (₹99)</span>
           </button>
+        </div>
+
+        {/* 3 Education Board Tabs */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {BOARD_META_LIST.map((bm) => {
+            const isTabBoard = selectedCurriculumBoard === bm.id;
+            const isCurrentWorkspaceBoard = activeBoard === bm.id;
+            const paidCountOnBoard = ALL_10_CLASSES.filter(
+              (c) => getBoardClassSubscriptionInfo(currentStudent, bm.id, c).isPaidActive
+            ).length;
+            return (
+              <button
+                key={bm.id}
+                type="button"
+                onClick={() => setSelectedCurriculumBoard(bm.id)}
+                className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                  isTabBoard
+                    ? `bg-gradient-to-r ${bm.gradient} text-white border-transparent shadow-sm`
+                    : 'bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl shrink-0">{bm.icon}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-black truncate">{bm.shortLabel}</div>
+                    <div className={`text-[10px] font-bold truncate ${isTabBoard ? 'text-white/85' : 'text-slate-500'}`}>
+                      {isCurrentWorkspaceBoard ? 'Currently Active Board' : bm.badgeText}
+                    </div>
+                  </div>
+                </div>
+                {paidCountOnBoard > 0 && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                      isTabBoard ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {paidCountOnBoard} Paid
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
           {ALL_10_CLASSES.map((cls) => {
             const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
-            const isSelected = currentStudent.classLevel === cls;
-            const cInfo = getClassSubscriptionInfo(currentStudent, cls);
-            const subjCount = getSubjectsForClass(cls).length;
+            const isSelected = activeBoard === selectedCurriculumBoard && currentStudent.classLevel === cls;
+            const cInfo = getBoardClassSubscriptionInfo(currentStudent, selectedCurriculumBoard, cls);
+            const subjCount = getSubjectsForClass(cls, selectedCurriculumBoard).length;
 
             let cardStyle = 'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200 hover:border-amber-300 cursor-pointer';
             if (isSelected) {
@@ -736,26 +787,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
             return (
               <button
-                key={cls}
+                key={`${selectedCurriculumBoard}_${cls}`}
                 type="button"
                 onClick={() => {
                   if (cInfo.isAccessible) {
-                    if (cls !== currentStudent.classLevel) {
-                      void switchActiveClass(cls);
+                    if (!isSelected) {
+                      void switchActiveBoardAndClass(selectedCurriculumBoard, cls);
                     }
                   } else {
-                    onOpenMembership('premium', cls);
+                    onOpenMembership('premium', cls, selectedCurriculumBoard);
                   }
                 }}
                 className={`p-3 rounded-2xl border text-center transition-all relative ${cardStyle}`}
                 title={
                   isSelected
-                    ? `Active Workspace: ${cls} (${cInfo.daysRemainingDisplay})`
+                    ? `Active Workspace: ${getBoardShortLabel(selectedCurriculumBoard)} • ${cls} (${cInfo.daysRemainingDisplay})`
                     : cInfo.isAccessible
-                    ? `Switch workspace to ${cls} (${cInfo.daysRemainingDisplay})`
+                    ? `Switch workspace to ${getBoardShortLabel(selectedCurriculumBoard)} • ${cls} (${cInfo.daysRemainingDisplay})`
                     : cInfo.isExpired
-                    ? `${cls} expired — Click to renew for ₹99 (365 Days)`
-                    : `Click to activate ${cls} for ₹99 (365 Days)`
+                    ? `${getBoardShortLabel(selectedCurriculumBoard)} ${cls} expired — Click to renew for ₹99 (365 Days)`
+                    : `Click to activate ${getBoardShortLabel(selectedCurriculumBoard)} • ${cls} for ₹99 (365 Days)`
                 }
               >
                 {isSelected ? (
@@ -781,7 +832,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 )}
                 <div className="text-xs sm:text-sm font-black">{cls}</div>
                 <div className={`text-[10px] font-bold mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>
-                  {meta?.marathiLabel}
+                  {selectedCurriculumBoard === 'Maharashtra' ? meta?.marathiLabel : getBoardShortLabel(selectedCurriculumBoard)}
                 </div>
                 <div className={`text-[9px] font-extrabold mt-1 px-1.5 py-0.5 rounded-md inline-block ${
                   isSelected ? 'bg-white/20 text-white' : 'bg-white/80 text-slate-700'
@@ -795,7 +846,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       </div>
 
       {/* ========================================================
-          CATEGORY A: ACADEMIC LEARNING ZONE (Class-Specific Subjects × 4 Levels = 40 Unique Questions/Subject)
+          CATEGORY A: ACADEMIC LEARNING ZONE (Board + Class-Specific Subjects × 4 Levels = 40 Unique Questions/Subject)
           ======================================================== */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -805,7 +856,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </span>
             <div>
               <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900">
-                ACADEMIC LEARNING ZONE • {currentStudent.classLevel} ({activeClassSubjects.length} Subjects)
+                ACADEMIC LEARNING ZONE • {getBoardShortLabel(activeBoard)} • {currentStudent.classLevel} ({activeClassSubjects.length} Subjects)
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
                 4 Levels per Subject (Level 1 – Basic, Level 2 – Intermediate, Level 3 – Advanced, Level 4 – Expert Challenge) • 40 Unique Questions Per Subject
@@ -814,6 +865,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => onNavigateTab('study-materials')}
+              className="text-xs font-extrabold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 px-3.5 py-2 rounded-xl border border-emerald-200 flex items-center gap-1.5 cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Chapter Study Notes</span>
+            </button>
             <button
               onClick={() => onNavigateTab('worksheets')}
               className="text-xs font-extrabold text-indigo-700 hover:text-indigo-900 bg-indigo-100/80 px-3.5 py-2 rounded-xl border border-indigo-200 flex items-center gap-1.5 cursor-pointer"
@@ -834,14 +892,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         {/* Class-Specific Subjects Grid with Visible 4-Level Indicators & Plan Lock Badges */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
           {activeClassSubjects.map((sub) => {
-            const subjectProgress = getSubjectLevelProgress(sub.name);
+            const subjectProgress = getSubjectLevelProgress(sub.name, currentStudent.classLevel, activeBoard);
             const subjectAttempts = studentAttempts.filter(a => a.subject === sub.name);
             const bestScore = subjectAttempts.length > 0 
               ? Math.max(...subjectAttempts.map(a => a.correctCount)) 
               : 0;
 
             const maxUnlocked = subjectProgress.maxUnlockedLevel;
-            const subjAccess = canAccessSubject(currentStudent, sub.name);
+            const subjAccess = canAccessSubject(currentStudent, sub.name, currentStudent.classLevel, undefined, activeBoard);
             const isSubLocked = !subjAccess.allowed;
 
             return (
@@ -1471,10 +1529,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       {selectedSubjectForLevels && (() => {
         const activeSubjData = activeClassSubjects.find(s => s.name === selectedSubjectForLevels) || {
           name: selectedSubjectForLevels,
-          icon: getSubjectMeta(selectedSubjectForLevels).icon,
-          bgGradient: getSubjectMeta(selectedSubjectForLevels).gradient
+          icon: getSubjectMeta(selectedSubjectForLevels, activeBoard).icon,
+          bgGradient: getSubjectMeta(selectedSubjectForLevels, activeBoard).gradient
         };
-        const subjProgress = getSubjectLevelProgress(selectedSubjectForLevels);
+        const subjProgress = getSubjectLevelProgress(selectedSubjectForLevels, currentStudent.classLevel, activeBoard);
         const maxUnlocked = subjProgress.maxUnlockedLevel;
 
         const LEVEL_META: { level: QuizLevel; title: string; subtitle: string; difficulty: string; diffBadge: string; description: string }[] = [

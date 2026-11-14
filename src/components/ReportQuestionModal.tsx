@@ -7,6 +7,7 @@ import {
   BookOpen, 
   ShieldAlert 
 } from 'lucide-react';
+import { EducationBoard } from '../types';
 import { QuestionIssueType } from '../types/support';
 import { createQuestionReport } from '../services/supportService';
 
@@ -15,6 +16,7 @@ interface ReportQuestionModalProps {
   onClose: () => void;
   questionId: string;
   questionText: string;
+  board?: EducationBoard;
   subject: string;
   classLevel: string;
   selectedAnswer?: string;
@@ -38,6 +40,7 @@ export const ReportQuestionModal: React.FC<ReportQuestionModalProps> = ({
   onClose,
   questionId,
   questionText,
+  board = 'Maharashtra',
   subject,
   classLevel,
   selectedAnswer,
@@ -65,6 +68,7 @@ export const ReportQuestionModal: React.FC<ReportQuestionModalProps> = ({
       const rep = await createQuestionReport({
         questionId,
         questionText,
+        board,
         subject,
         classLevel,
         selectedAnswer,
@@ -126,7 +130,7 @@ export const ReportQuestionModal: React.FC<ReportQuestionModalProps> = ({
                 Report Submitted! (Ref: {reportSuccess})
               </h4>
               <p className="text-slate-600 text-xs leading-relaxed">
-                Thank you for helping us maintain accuracy! Our subject teachers will review question <strong>#{questionId}</strong> against Maharashtra State Board textbooks and update the question bank.
+                Thank you for helping us maintain accuracy! Our subject teachers will review question <strong>#{questionId}</strong> against official {board} Board textbooks and update the question bank.
               </p>
               <button
                 type="button"
@@ -141,7 +145,7 @@ export const ReportQuestionModal: React.FC<ReportQuestionModalProps> = ({
               {/* Question Preview Box */}
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <span>{subject} • {classLevel}</span>
+                  <span>{board} • {subject} • {classLevel}</span>
                   <span className="font-mono">ID: {questionId}</span>
                 </div>
                 <p className="font-bold text-slate-900 leading-snug">

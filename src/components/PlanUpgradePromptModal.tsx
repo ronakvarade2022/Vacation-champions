@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lock, Crown, Check, X, Sparkles, Play } from 'lucide-react';
-import { StudentProfile } from '../types';
-import { getStudentPlanInfo } from '../utils/subscriptionAccess';
+import { ClassLevel, EducationBoard, StudentProfile } from '../types';
+import { getBoardShortLabel, getStudentPlanInfo } from '../utils/subscriptionAccess';
 
 interface PlanUpgradePromptModalProps {
   isOpen: boolean;
@@ -10,6 +10,8 @@ interface PlanUpgradePromptModalProps {
   upgradeMessage: string;
   requiredPlan: 'basic' | 'premium';
   currentStudent: StudentProfile | null;
+  targetClass?: ClassLevel;
+  targetBoard?: EducationBoard;
   onSelectUpgradePlan: (planId: 'basic' | 'premium') => void;
   onTryDemo?: () => void;
 }
@@ -21,12 +23,16 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
   upgradeMessage,
   requiredPlan,
   currentStudent,
+  targetClass,
+  targetBoard,
   onSelectUpgradePlan,
   onTryDemo
 }) => {
   if (!isOpen) return null;
 
-  const planInfo = getStudentPlanInfo(currentStudent);
+  const resolvedBoard = targetBoard || currentStudent?.board || 'Maharashtra';
+  const resolvedClass = targetClass || currentStudent?.classLevel || 'Class 1';
+  const planInfo = getStudentPlanInfo(currentStudent, undefined, resolvedClass, resolvedBoard);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-150">
@@ -64,7 +70,7 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
           <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
               <p className="text-xs font-extrabold text-amber-950">
-                Your Current Active Plan:{' '}
+                Status for <strong>{getBoardShortLabel(resolvedBoard)} • {resolvedClass}</strong>:{' '}
                 <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-950">
                   {planInfo.planDisplayName}
                 </span>{' '}
@@ -170,7 +176,7 @@ export const PlanUpgradePromptModal: React.FC<PlanUpgradePromptModalProps> = ({
                 <ul className="space-y-1.5 text-slate-800 font-medium">
                   <li className="flex items-center gap-1.5 font-bold text-orange-950">
                     <Check className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-                    <span>Everything in Free Plan + All 14 Subjects</span>
+                    <span>Everything in Free Plan + All {getBoardShortLabel(resolvedBoard)} Subjects ({resolvedClass})</span>
                   </li>
                   <li className="flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5 text-orange-600 shrink-0" />

@@ -50,8 +50,13 @@ import {
   createRazorpayQrCodeBackend,
   checkRazorpayQrCodeStatusBackend,
   updateStudentSubscriptionInFirestoreBackend,
+  VALID_BOARDS,
   VALID_CLASS_LEVELS,
-  normalizeBackendClassLevel
+  normalizeBackendBoard,
+  normalizeBackendClassLevel,
+  buildBackendBoardClassKey,
+  parseBackendBoardClassKey,
+  type BackendBoard
 } from './firebase/index.ts';
 import {
   verifyWebhookSignature,
@@ -85,6 +90,7 @@ interface ServerTransaction {
   studentName: string;
   parentEmail: string;
   parentMobile: string;
+  selectedBoard?: BackendBoard;
   selectedClass?: string;
   planId: 'basic' | 'premium';
   planTitle: string;
@@ -277,7 +283,19 @@ app.post('/api/razorpay/create-qr', async (req: Request, res: Response) => {
 app.get('/api/razorpay/qr-status/:qrId', async (req: Request, res: Response) => {
   try {
     const { qrId } = req.params;
-    const { studentId, planId, studentName, email, mobile, selectedClass, classLevel, referralCode } = req.query as Record<string, string>;
+    const {
+      studentId,
+      planId,
+      studentName,
+      email,
+      mobile,
+      selectedBoard,
+      board,
+      selectedClass,
+      classLevel,
+      referralCode
+    } = req.query as Record<string, string>;
+    const normalizedBoard = selectedBoard || board ? normalizeBackendBoard(selectedBoard || board) : undefined;
     const normalizedClass = normalizeBackendClassLevel(selectedClass || classLevel) || undefined;
 
     if (!qrId) {
@@ -291,6 +309,7 @@ app.get('/api/razorpay/qr-status/:qrId', async (req: Request, res: Response) => 
       studentName,
       email,
       mobile,
+      selectedBoard: normalizedBoard,
       selectedClass: normalizedClass,
       referralCode: referralCode ? String(referralCode).trim() : undefined
     });
@@ -301,14 +320,20 @@ app.get('/api/razorpay/qr-status/:qrId', async (req: Request, res: Response) => 
         await evaluateServerSubscriptionFromStore(String(studentId));
         const cached = serverStudentSubscriptions.get(String(studentId));
         if (cached && statusResult.membership) {
+          const paidBoard = normalizeBackendBoard(
+            (statusResult as any).selectedBoard || normalizedBoard || cached.selectedBoard
+          );
           const paidClass =
             normalizeBackendClassLevel((statusResult as any).selectedClass || normalizedClass) ||
             cached.selectedClass ||
             'Class 1';
+          const paidKey = buildBackendBoardClassKey(paidBoard, paidClass);
           const updatedMap = {
             ...(cached.classSubscriptions || {}),
-            [paidClass]: {
+            [paidKey]: {
+              board: paidBoard,
               classLevel: paidClass,
+              boardClassKey: paidKey,
               plan: 'premium' as const,
               status: 'ACTIVE' as const,
               purchasedAt: statusResult.membership.startDate,
@@ -320,21 +345,25 @@ app.get('/api/razorpay/qr-status/:qrId', async (req: Request, res: Response) => 
               updatedAt: new Date().toISOString()
             }
           };
-          const activeClasses = VALID_CLASS_LEVELS.filter((c) => Boolean(updatedMap[c]));
-          serverStudentSubscriptions.set(String(studentId), {
+          const updatedDraft: ServerStudentSubscription = {
             ...cached,
             plan: 'premium',
+            selectedBoard: paidBoard,
             selectedClass: paidClass,
+            primaryBoard: cached.primaryBoard || cached.selectedBoard || paidBoard,
             primaryClassLevel: cached.primaryClassLevel || cached.selectedClass || paidClass,
+            activatedBoard: paidBoard,
             activatedClassLevel: paidClass,
-            activatedClasses: activeClasses,
             classSubscriptions: updatedMap,
             isLifetimeFree: false,
             planPurchasedAt: statusResult.membership.startDate,
             planExpiresAt: statusResult.membership.expiryDate,
             paymentId: String(statusResult.paymentId || ''),
             updatedAt: new Date().toISOString()
-          });
+          };
+          updatedDraft.activatedClassKeys = getServerActivatedBoardClassKeys(updatedDraft);
+          updatedDraft.activatedClasses = getServerActivatedClasses(updatedDraft);
+          serverStudentSubscriptions.set(String(studentId), updatedDraft);
         }
       }
 
@@ -383,6 +412,8 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       studentName,
       email,
       mobile,
+      selectedBoard,
+      board,
       selectedClass,
       classLevel,
       method = 'UPI',
@@ -432,6 +463,7 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       return res.json({
         success: true,
         alreadyProcessed: true,
+        selectedBoard: existing?.selectedBoard || existingSub?.activatedBoard || existingSub?.selectedBoard || 'Maharashtra',
         selectedClass: existing?.selectedClass || existingSub?.activatedClassLevel,
         transaction: existing,
         membership: existing
@@ -439,6 +471,7 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
               membershipId: `mem_${existing.id}`,
               studentId: existing.studentId,
               studentName: existing.studentName,
+              selectedBoard: existing.selectedBoard || 'Maharashtra',
               selectedClass: existing.selectedClass,
               planId: existing.planId,
               planTitle: existing.planTitle,
@@ -534,6 +567,13 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
     }
 
     const existingServerSub = await evaluateServerSubscriptionFromStore(String(studentId));
+    const targetBoard = normalizeBackendBoard(
+      captureStatus.notes?.selectedBoard ||
+        captureStatus.notes?.board ||
+        selectedBoard ||
+        board ||
+        existingServerSub.selectedBoard
+    );
     const targetClass =
       normalizeBackendClassLevel(
         captureStatus.notes?.selectedClass ||
@@ -544,12 +584,13 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       existingServerSub.selectedClass ||
       'Class 1';
 
-    // Persist verified 365-day class-wise subscription and transaction directly to Firestore from backend
+    // Persist verified 365-day board+class subscription and transaction directly to Firestore from backend
     const backendActivation = await updateStudentSubscriptionInFirestoreBackend({
       studentId: String(studentId),
       studentName: String(studentName || 'Student'),
       email: String(email || ''),
       mobile: String(mobile || ''),
+      selectedBoard: targetBoard,
       selectedClass: targetClass,
       planId: planId as 'basic' | 'premium',
       paymentId: razorpay_payment_id,
@@ -565,7 +606,11 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
     const startDateIso = backendActivation.startDateIso;
     const expiryDateIso = backendActivation.expiryDateIso;
     const daysRemaining = backendActivation.daysRemaining;
+    const resolvedPaidBoard = backendActivation.selectedBoard || targetBoard;
     const resolvedPaidClass = backendActivation.selectedClass || targetClass;
+    const resolvedBoardClassKey =
+      backendActivation.boardClassKey ||
+      buildBackendBoardClassKey(resolvedPaidBoard, resolvedPaidClass);
 
     const transactionRecord: ServerTransaction = {
       id: `tx_${razorpay_payment_id}`,
@@ -574,9 +619,10 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       studentName: String(studentName || 'Student'),
       parentEmail: String(email || ''),
       parentMobile: String(mobile || ''),
+      selectedBoard: resolvedPaidBoard,
       selectedClass: resolvedPaidClass,
       planId: 'premium',
-      planTitle: `PREMIUM PLAN (${resolvedPaidClass}) – ₹99 – 365 Days (1 Year)`,
+      planTitle: `PREMIUM PLAN (${resolvedPaidBoard} • ${resolvedPaidClass}) – ₹99 – 365 Days (1 Year)`,
       amount: verifiedAmount,
       currency: 'INR',
       orderId: razorpay_order_id,
@@ -590,14 +636,23 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       membershipExpiryDate: expiryDateIso
     };
 
-    const membershipRecord: ServerMembership & { selectedClass?: string; activatedClasses?: string[] } = {
+    const membershipRecord: ServerMembership & {
+      selectedBoard?: BackendBoard;
+      selectedClass?: string;
+      boardClassKey?: string;
+      activatedClasses?: string[];
+      activatedClassKeys?: string[];
+    } = {
       membershipId: `mem_${razorpay_payment_id}`,
       studentId: String(studentId),
       studentName: String(studentName || 'Student'),
+      selectedBoard: resolvedPaidBoard,
       selectedClass: resolvedPaidClass,
+      boardClassKey: resolvedBoardClassKey,
       activatedClasses: backendActivation.activatedClasses,
+      activatedClassKeys: backendActivation.activatedClassKeys,
       planId: 'premium',
-      planTitle: `PREMIUM PLAN (${resolvedPaidClass}) – ₹99 – 365 Days (1 Year)`,
+      planTitle: `PREMIUM PLAN (${resolvedPaidBoard} • ${resolvedPaidClass}) – ₹99 – 365 Days (1 Year)`,
       amount: verifiedAmount,
       startDate: startDateIso,
       expiryDate: expiryDateIso,
@@ -611,15 +666,20 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
     processedOrderIds.add(razorpay_order_id);
     transactionLedger.unshift(transactionRecord);
 
-    // Update server-side multi-class subscription cache immediately
+    // Update server-side multi-board & multi-class subscription cache immediately
     serverStudentSubscriptions.set(String(studentId), {
       studentId: String(studentId),
       plan: 'premium',
+      selectedBoard: resolvedPaidBoard,
       selectedClass: resolvedPaidClass,
+      primaryBoard:
+        existingServerSub.primaryBoard || existingServerSub.selectedBoard || resolvedPaidBoard,
       primaryClassLevel:
         existingServerSub.primaryClassLevel || existingServerSub.selectedClass || resolvedPaidClass,
+      activatedBoard: resolvedPaidBoard,
       activatedClassLevel: resolvedPaidClass,
       activatedClasses: backendActivation.activatedClasses,
+      activatedClassKeys: backendActivation.activatedClassKeys,
       classSubscriptions: backendActivation.classSubscriptions,
       accountRole: existingServerSub.accountRole || 'student',
       hasStoredProfile: true,
@@ -630,7 +690,7 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
       updatedAt: new Date().toISOString()
     });
 
-    console.log(`[Payment Verified] Student: ${studentId} | Class: ${resolvedPaidClass} | Amount: ₹${verifiedAmount} | Valid till: ${membershipRecord.expiryDate}`);
+    console.log(`[Payment Verified] Student: ${studentId} | Board/Class: ${resolvedPaidBoard} / ${resolvedPaidClass} | Amount: ₹${verifiedAmount} | Valid till: ${membershipRecord.expiryDate}`);
 
     // Process Referral Cashback & Commission Attribution (Verified Paid Purchases only)
     let referralResult: any = null;
@@ -660,10 +720,13 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
 
     return res.json({
       success: true,
+      selectedBoard: resolvedPaidBoard,
       selectedClass: resolvedPaidClass,
+      boardClassKey: resolvedBoardClassKey,
       activatedClasses: backendActivation.activatedClasses,
+      activatedClassKeys: backendActivation.activatedClassKeys,
       classSubscriptions: backendActivation.classSubscriptions,
-      message: `Payment verified and ${resolvedPaidClass} subscription activated for 365 days.`,
+      message: `Payment verified and ${resolvedPaidBoard} (${resolvedPaidClass}) subscription activated for 365 days.`,
       transaction: transactionRecord,
       membership: membershipRecord,
       referral: referralResult
@@ -791,23 +854,29 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
       const subscriptionTier: 'premium' = 'premium';
       const verifiedAmount = 99;
 
+      const notesSelectedBoard = normalizeBackendBoard(
+        notes.selectedBoard || notes.board || 'Maharashtra'
+      );
       const notesSelectedClass = normalizeBackendClassLevel(
         notes.selectedClass || notes.classLevel
       );
 
       let firestoreUpdateResult: {
+        selectedBoard: BackendBoard;
         selectedClass: string;
+        boardClassKey: string;
         expiryDateIso: string;
         startDateIso: string;
         daysRemaining: number;
         receiptNumber: string;
         alreadyProcessed: boolean;
         activatedClasses: string[];
+        activatedClassKeys: string[];
         classSubscriptions: Record<string, any>;
       } | null = null;
 
       if (studentId) {
-        // Retrieve the user document from Firestore and update their class-wise 365-day subscription via functions/webhook.ts
+        // Retrieve the user document from Firestore and update their board+class 365-day subscription via functions/webhook.ts
         const captured = await processPaymentCapturedEvent({
           paymentEntity,
           orderEntity,
@@ -816,17 +885,24 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
         firestoreUpdateResult = captured;
 
         const existingCached = serverStudentSubscriptions.get(studentId);
-        // Synchronize in-memory server multi-class subscription cache
+        // Synchronize in-memory server multi-board & multi-class subscription cache
         serverStudentSubscriptions.set(studentId, {
           studentId,
           plan: planId,
+          selectedBoard: captured.selectedBoard,
           selectedClass: captured.selectedClass,
+          primaryBoard:
+            existingCached?.primaryBoard ||
+            existingCached?.selectedBoard ||
+            captured.selectedBoard,
           primaryClassLevel:
             existingCached?.primaryClassLevel ||
             existingCached?.selectedClass ||
             captured.selectedClass,
+          activatedBoard: captured.selectedBoard,
           activatedClassLevel: captured.selectedClass,
           activatedClasses: captured.activatedClasses,
+          activatedClassKeys: captured.activatedClassKeys,
           classSubscriptions: captured.classSubscriptions,
           accountRole: existingCached?.accountRole || 'student',
           hasStoredProfile: true,
@@ -857,6 +933,8 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
         const receiptNumber =
           firestoreUpdateResult?.receiptNumber ||
           `REC-VC-${Date.now().toString().slice(-6)}`;
+        const resolvedBoard =
+          firestoreUpdateResult?.selectedBoard || notesSelectedBoard;
         const resolvedClass =
           firestoreUpdateResult?.selectedClass || notesSelectedClass || 'Class 1';
 
@@ -867,9 +945,10 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
           studentName,
           parentEmail: email,
           parentMobile: mobile,
+          selectedBoard: resolvedBoard,
           selectedClass: resolvedClass,
           planId,
-          planTitle: `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`,
+          planTitle: `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹99 – 365 Days (1 Year)`,
           amount: verifiedAmount,
           currency: 'INR',
           orderId,
@@ -902,15 +981,18 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
       }
 
       console.log(
-        `[Razorpay Webhook payment.captured] Student: ${studentId || 'N/A'} | Class: ${firestoreUpdateResult?.selectedClass || notesSelectedClass || 'N/A'} | Tier: ${subscriptionTier} (${planId}) | Expiry: ${firestoreUpdateResult?.expiryDateIso || '365 Days'}`
+        `[Razorpay Webhook payment.captured] Student: ${studentId || 'N/A'} | Board/Class: ${firestoreUpdateResult?.selectedBoard || notesSelectedBoard} / ${firestoreUpdateResult?.selectedClass || notesSelectedClass || 'N/A'} | Tier: ${subscriptionTier} (${planId}) | Expiry: ${firestoreUpdateResult?.expiryDateIso || '365 Days'}`
       );
 
       return res.status(200).json({
         status: 'ok',
         event: eventType,
         studentId: studentId || null,
+        selectedBoard: firestoreUpdateResult?.selectedBoard || notesSelectedBoard,
         selectedClass: firestoreUpdateResult?.selectedClass || notesSelectedClass || null,
+        boardClassKey: firestoreUpdateResult?.boardClassKey || null,
         activatedClasses: firestoreUpdateResult?.activatedClasses || [],
+        activatedClassKeys: firestoreUpdateResult?.activatedClassKeys || [],
         plan: planId,
         subscriptionTier,
         planExpiresAt: firestoreUpdateResult?.expiryDateIso || null,
@@ -1433,10 +1515,12 @@ app.post('/api/referrals/admin/update-config', async (req: Request, res: Respons
 });
 
 // =========================================================================
-// 8. TWO-TIER CLASS-WISE SUBSCRIPTION ENFORCEMENT API (FREE LIFETIME / ₹99 PREMIUM)
+// 8. TWO-TIER BOARD + CLASS SUBSCRIPTION ENFORCEMENT API (FREE LIFETIME / ₹99 PREMIUM)
 // =========================================================================
 interface ServerClassSubscriptionEntry {
+  board?: BackendBoard;
   classLevel: string;
+  boardClassKey?: string;
   plan: 'free' | 'basic' | 'premium';
   status: 'ACTIVE' | 'EXPIRED' | 'LOCKED';
   purchasedAt?: string;
@@ -1451,10 +1535,14 @@ interface ServerClassSubscriptionEntry {
 interface ServerStudentSubscription {
   studentId: string;
   plan: 'free' | 'basic' | 'premium';
+  selectedBoard?: BackendBoard;
   selectedClass?: string;
+  primaryBoard?: BackendBoard;
   primaryClassLevel?: string;
+  activatedBoard?: BackendBoard | null;
   activatedClassLevel?: string | null;
   activatedClasses?: string[];
+  activatedClassKeys?: string[];
   classSubscriptions?: Record<string, ServerClassSubscriptionEntry>;
   accountRole?: 'student' | 'teacher';
   hasStoredProfile?: boolean;
@@ -1482,19 +1570,50 @@ const SERVER_FREE_ALLOWED_FEATURES = new Set([
   'sudoku',
   'quizzes',
   'worksheets',
+  'study-material',
   'referrals'
 ]);
 
-function parseServerWorksheetClass(worksheetId: string): string | null {
-  const m = /^WS-C(\d{1,2})-/i.exec(String(worksheetId || '').trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 10);
-  if (n >= 1 && n <= 10) return `Class ${n}`;
+function parseServerWorksheetBoardAndClass(worksheetId: string): {
+  board: BackendBoard;
+  classLevel: string;
+} | null {
+  const trimmed = String(worksheetId || '').trim();
+  const boardMatch = /^WS-(CBSE|ICSE)-C(\d{1,2})-/i.exec(trimmed);
+  if (boardMatch) {
+    const n = parseInt(boardMatch[2], 10);
+    if (n >= 1 && n <= 10) {
+      return {
+        board: boardMatch[1].toUpperCase() === 'CBSE' ? 'CBSE' : 'ICSE',
+        classLevel: `Class ${n}`
+      };
+    }
+  }
+  const mhMatch = /^WS-C(\d{1,2})-/i.exec(trimmed);
+  if (mhMatch) {
+    const n = parseInt(mhMatch[1], 10);
+    if (n >= 1 && n <= 10) {
+      return {
+        board: 'Maharashtra',
+        classLevel: `Class ${n}`
+      };
+    }
+  }
   return null;
 }
 
-function getServerFreeDemoIdsForClass(classLevel: string = 'Class 1'): string[] {
+function getServerFreeDemoIdsForClass(
+  classLevel: string = 'Class 1',
+  board: string = 'Maharashtra'
+): string[] {
   const cNum = parseInt(String(classLevel).replace('Class ', ''), 10) || 1;
+  const resolvedBoard = normalizeBackendBoard(board);
+  if (resolvedBoard === 'CBSE') {
+    return [`WS-CBSE-C${cNum}-ENGLISH-1`, `WS-CBSE-C${cNum}-MATHEMATICS-1`];
+  }
+  if (resolvedBoard === 'ICSE') {
+    return [`WS-ICSE-C${cNum}-ENGLISH-1`, `WS-ICSE-C${cNum}-MATHEMATICS-1`];
+  }
   const mathKey = cNum === 10 ? 'MATHEMATICSALGEBRA' : 'MATHEMATICS';
   return [`WS-C${cNum}-ENGLISH-1`, `WS-C${cNum}-${mathKey}-1`];
 }
@@ -1508,14 +1627,22 @@ function extractServerClassSubscriptionsMap(
   if (raw.classSubscriptions && typeof raw.classSubscriptions === 'object') {
     for (const [k, entry] of Object.entries(raw.classSubscriptions)) {
       if (!entry || typeof entry !== 'object') continue;
-      const cls = normalizeBackendClassLevel((entry as any).classLevel || k);
+      const parsedFromKey = parseBackendBoardClassKey(k);
+      const board = normalizeBackendBoard(
+        (entry as any).board || parsedFromKey?.board || raw.primaryBoard || raw.board || 'Maharashtra'
+      );
+      const cls =
+        normalizeBackendClassLevel((entry as any).classLevel || parsedFromKey?.classLevel || k);
       if (!cls) continue;
+      const compositeKey = buildBackendBoardClassKey(board, cls);
       const plan =
         (entry as any).plan === 'basic' || (entry as any).plan === 'premium'
           ? (entry as any).plan
           : 'free';
-      result[cls] = {
+      result[compositeKey] = {
+        board,
         classLevel: cls,
+        boardClassKey: compositeKey,
         plan,
         status: (entry as any).status || 'LOCKED',
         purchasedAt: (entry as any).purchasedAt,
@@ -1531,14 +1658,18 @@ function extractServerClassSubscriptionsMap(
 
   // Backward compatibility: legacy single-class paid profile
   if (raw.plan && raw.plan !== 'free') {
+    const legacyBoard = normalizeBackendBoard(raw.activatedBoard || raw.board || raw.primaryBoard || 'Maharashtra');
     const legacyClass =
       normalizeBackendClassLevel(raw.activatedClassLevel) ||
       normalizeBackendClassLevel(raw.classLevel) ||
       normalizeBackendClassLevel(raw.selectedClass) ||
       'Class 1';
-    if (!result[legacyClass]) {
-      result[legacyClass] = {
+    const legacyKey = buildBackendBoardClassKey(legacyBoard, legacyClass);
+    if (!result[legacyKey]) {
+      result[legacyKey] = {
+        board: legacyBoard,
         classLevel: legacyClass,
+        boardClassKey: legacyKey,
         plan: raw.plan === 'basic' ? 'basic' : 'premium',
         status: 'ACTIVE',
         purchasedAt: raw.planPurchasedAt,
@@ -1554,11 +1685,14 @@ function extractServerClassSubscriptionsMap(
   return result;
 }
 
-function getServerClassStatus(
+function getServerBoardClassStatus(
   sub: ServerStudentSubscription,
-  targetClass: string
+  targetBoard: string | undefined | null,
+  targetClass: string | undefined | null
 ): {
+  board: BackendBoard;
   classLevel: string;
+  boardClassKey: string;
   status: 'ACTIVE_PAID' | 'ACTIVE_FREE' | 'EXPIRED' | 'LOCKED';
   isPaidActive: boolean;
   isFreeBase: boolean;
@@ -1567,13 +1701,20 @@ function getServerClassStatus(
   expiresAt?: string | null;
   purchasedAt?: string;
 } {
+  const normalizedBoard = normalizeBackendBoard(targetBoard || sub.selectedBoard || sub.primaryBoard || 'Maharashtra');
   const normalizedTarget = normalizeBackendClassLevel(targetClass) || 'Class 1';
+  const boardClassKey = buildBackendBoardClassKey(normalizedBoard, normalizedTarget);
   const rawMap = extractServerClassSubscriptionsMap(sub);
-  const entry = rawMap[normalizedTarget];
+  const entry = rawMap[boardClassKey];
+  const baseFreeBoard = normalizeBackendBoard(
+    sub.primaryBoard || sub.selectedBoard || 'Maharashtra'
+  );
   const baseFreeClass =
     normalizeBackendClassLevel(sub.primaryClassLevel) ||
     normalizeBackendClassLevel(sub.selectedClass) ||
     'Class 1';
+  const isBaseFreePair =
+    normalizedBoard === baseFreeBoard && normalizedTarget === baseFreeClass;
 
   if (entry && (entry.plan === 'premium' || entry.plan === 'basic')) {
     const validity = evaluateSubscriptionValidity(
@@ -1583,10 +1724,12 @@ function getServerClassStatus(
     );
     if (validity.isExpired) {
       return {
+        board: normalizedBoard,
         classLevel: normalizedTarget,
+        boardClassKey,
         status: 'EXPIRED',
         isPaidActive: false,
-        isFreeBase: normalizedTarget === baseFreeClass,
+        isFreeBase: isBaseFreePair,
         isExpired: true,
         isAccessible: false,
         purchasedAt: entry.purchasedAt,
@@ -1594,10 +1737,12 @@ function getServerClassStatus(
       };
     }
     return {
+      board: normalizedBoard,
       classLevel: normalizedTarget,
+      boardClassKey,
       status: 'ACTIVE_PAID',
       isPaidActive: true,
-      isFreeBase: normalizedTarget === baseFreeClass,
+      isFreeBase: isBaseFreePair,
       isExpired: false,
       isAccessible: true,
       purchasedAt: validity.purchaseDateIst || entry.purchasedAt,
@@ -1605,9 +1750,11 @@ function getServerClassStatus(
     };
   }
 
-  if (normalizedTarget === baseFreeClass) {
+  if (isBaseFreePair) {
     return {
+      board: normalizedBoard,
       classLevel: normalizedTarget,
+      boardClassKey,
       status: 'ACTIVE_FREE',
       isPaidActive: false,
       isFreeBase: true,
@@ -1618,7 +1765,9 @@ function getServerClassStatus(
   }
 
   return {
+    board: normalizedBoard,
     classLevel: normalizedTarget,
+    boardClassKey,
     status: 'LOCKED',
     isPaidActive: false,
     isFreeBase: false,
@@ -1628,10 +1777,37 @@ function getServerClassStatus(
   };
 }
 
-function getServerActivatedClasses(sub: ServerStudentSubscription): string[] {
-  return VALID_CLASS_LEVELS.filter(
-    (cls) => getServerClassStatus(sub, cls).status === 'ACTIVE_PAID'
-  );
+function getServerActivatedBoardClassKeys(sub: ServerStudentSubscription): string[] {
+  const keys: string[] = [];
+  for (const board of VALID_BOARDS) {
+    for (const cls of VALID_CLASS_LEVELS) {
+      if (getServerBoardClassStatus(sub, board, cls).status === 'ACTIVE_PAID') {
+        keys.push(buildBackendBoardClassKey(board, cls));
+      }
+    }
+  }
+  return keys;
+}
+
+function getServerActivatedClasses(
+  sub: ServerStudentSubscription,
+  boardFilter?: string | null
+): string[] {
+  if (boardFilter) {
+    const targetBoard = normalizeBackendBoard(boardFilter);
+    return VALID_CLASS_LEVELS.filter(
+      (cls) => getServerBoardClassStatus(sub, targetBoard, cls).status === 'ACTIVE_PAID'
+    );
+  }
+  const activeSet = new Set<string>();
+  for (const board of VALID_BOARDS) {
+    for (const cls of VALID_CLASS_LEVELS) {
+      if (getServerBoardClassStatus(sub, board, cls).status === 'ACTIVE_PAID') {
+        activeSet.add(cls);
+      }
+    }
+  }
+  return VALID_CLASS_LEVELS.filter((c) => activeSet.has(c));
 }
 
 function evaluateServerSubscription(studentId: string): ServerStudentSubscription {
@@ -1640,10 +1816,14 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
     return {
       studentId,
       plan: 'free',
+      selectedBoard: 'Maharashtra',
       selectedClass: 'Class 1',
+      primaryBoard: 'Maharashtra',
       primaryClassLevel: 'Class 1',
+      activatedBoard: null,
       activatedClassLevel: null,
       activatedClasses: [],
+      activatedClassKeys: [],
       classSubscriptions: {},
       accountRole: 'student',
       hasStoredProfile: false,
@@ -1654,39 +1834,56 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
   }
 
   const classMap = extractServerClassSubscriptionsMap(existing);
+  const selectedBoard = normalizeBackendBoard(existing.selectedBoard || existing.primaryBoard || 'Maharashtra');
   const selected = normalizeBackendClassLevel(existing.selectedClass) || 'Class 1';
+  const primaryBoard = normalizeBackendBoard(existing.primaryBoard || selectedBoard);
   const primary =
     normalizeBackendClassLevel(existing.primaryClassLevel) || selected;
 
   const refreshedSub: ServerStudentSubscription = {
     ...existing,
+    selectedBoard,
     selectedClass: selected,
+    primaryBoard,
     primaryClassLevel: primary,
     classSubscriptions: classMap
   };
 
+  const activePaidKeys = getServerActivatedBoardClassKeys(refreshedSub);
   const activePaidClasses = getServerActivatedClasses(refreshedSub);
-  const selectedInfo = getServerClassStatus(refreshedSub, selected);
+  const selectedInfo = getServerBoardClassStatus(refreshedSub, selectedBoard, selected);
 
   if (selectedInfo.isPaidActive) {
     return {
       ...refreshedSub,
       plan: 'premium',
+      activatedBoard: selectedBoard,
       activatedClassLevel: selected,
       activatedClasses: activePaidClasses,
+      activatedClassKeys: activePaidKeys,
       isLifetimeFree: false,
       planPurchasedAt: selectedInfo.purchasedAt,
       planExpiresAt: selectedInfo.expiresAt || null
     };
   }
 
-  if (activePaidClasses.length > 0) {
-    const firstActiveInfo = getServerClassStatus(refreshedSub, activePaidClasses[0]);
+  if (activePaidKeys.length > 0) {
+    const parsedFirst = parseBackendBoardClassKey(activePaidKeys[0]) || {
+      board: 'Maharashtra' as BackendBoard,
+      classLevel: 'Class 1'
+    };
+    const firstActiveInfo = getServerBoardClassStatus(
+      refreshedSub,
+      parsedFirst.board,
+      parsedFirst.classLevel
+    );
     return {
       ...refreshedSub,
       plan: 'premium',
-      activatedClassLevel: activePaidClasses[0],
+      activatedBoard: parsedFirst.board,
+      activatedClassLevel: parsedFirst.classLevel,
       activatedClasses: activePaidClasses,
+      activatedClassKeys: activePaidKeys,
       isLifetimeFree: false,
       planPurchasedAt: firstActiveInfo.purchasedAt,
       planExpiresAt: firstActiveInfo.expiresAt || null
@@ -1696,8 +1893,10 @@ function evaluateServerSubscription(studentId: string): ServerStudentSubscriptio
   return {
     ...refreshedSub,
     plan: 'free',
+    activatedBoard: null,
     activatedClassLevel: null,
     activatedClasses: [],
+    activatedClassKeys: [],
     isLifetimeFree: true,
     planExpiresAt: null,
     updatedAt: new Date().toISOString()
@@ -1718,6 +1917,8 @@ async function evaluateServerSubscriptionFromStore(
       const data = await serverGetDoc('students', cleanId);
       if (data) {
         const classMap = extractServerClassSubscriptionsMap(data);
+        const primaryBoard = normalizeBackendBoard(data.primaryBoard || data.board || 'Maharashtra');
+        const selectedBoard = normalizeBackendBoard(data.board || primaryBoard);
         const primary =
           normalizeBackendClassLevel(data.primaryClassLevel) ||
           normalizeBackendClassLevel(data.classLevel) ||
@@ -1728,8 +1929,11 @@ async function evaluateServerSubscriptionFromStore(
         const baseRecord: ServerStudentSubscription = {
           studentId: cleanId,
           plan: data.plan === 'premium' || data.plan === 'basic' ? 'premium' : 'free',
+          selectedBoard,
           selectedClass: selected,
+          primaryBoard,
           primaryClassLevel: primary,
+          activatedBoard: data.activatedBoard ? normalizeBackendBoard(data.activatedBoard) : null,
           activatedClassLevel:
             normalizeBackendClassLevel(data.activatedClassLevel) || null,
           classSubscriptions: classMap,
@@ -1782,20 +1986,24 @@ app.post('/api/auth/check-existing-account', async (req: Request, res: Response)
         success: true,
         exists: false,
         matchedPair: false,
-        activeClasses: []
+        activeClasses: [],
+        activeClassKeys: []
       });
     }
 
     if (emailMatch && mobileMatch && emailMatch.id === mobileMatch.id) {
       const sub = await evaluateServerSubscriptionFromStore(emailMatch.id);
       const activeClasses = getServerActivatedClasses(sub);
+      const activeClassKeys = getServerActivatedBoardClassKeys(sub);
       return res.json({
         success: true,
         exists: true,
         matchedPair: true,
         accountRole: emailMatch.data.accountRole === 'teacher' ? 'teacher' : 'student',
+        primaryBoard: sub.primaryBoard || sub.selectedBoard || 'Maharashtra',
         primaryClassLevel: sub.primaryClassLevel || sub.selectedClass || 'Class 1',
         activeClasses,
+        activeClassKeys,
         message: 'Existing account matched by mobile & email.'
       });
     }
@@ -1813,6 +2021,7 @@ app.post('/api/auth/check-existing-account', async (req: Request, res: Response)
       matchedPair: false,
       mismatchField,
       activeClasses: [],
+      activeClassKeys: [],
       message:
         mismatchField === 'email'
           ? 'This email address is already linked to a different mobile number. Please enter your exact registered email and mobile number together.'
@@ -2141,7 +2350,10 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
     const {
       studentId,
       plan,
+      selectedBoard,
+      board,
       selectedClass,
+      activatedBoard,
       activatedClassLevel,
       accountRole,
       planPurchasedAt,
@@ -2153,8 +2365,15 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'studentId is required.' });
     }
 
-    // Verify Bearer token identity if provided
-    if (req.headers.authorization && isFirebaseAdminConfigured()) {
+    // Require verified Firebase Bearer token on non-guest sync requests when Admin SDK is configured
+    const isGuestOrDemo = cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+    if (isFirebaseAdminConfigured() && !isGuestOrDemo) {
+      if (!req.headers.authorization) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication Bearer token required for subscription synchronization.'
+        });
+      }
       const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
       if (!tokenCheck.valid || !tokenCheck.uid) {
         return res.status(tokenCheck.statusCode).json({
@@ -2181,11 +2400,25 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
     const existingServerSub = serverStudentSubscriptions.get(cleanStudentId);
     const existingMap = extractServerClassSubscriptionsMap(storedStudent || existingServerSub);
 
+    const requestedTargetBoard = normalizeBackendBoard(
+      selectedBoard ||
+        board ||
+        activatedBoard ||
+        storedStudent?.board ||
+        existingServerSub?.selectedBoard ||
+        'Maharashtra'
+    );
     const requestedTargetClass =
       normalizeBackendClassLevel(selectedClass || activatedClassLevel) ||
       normalizeBackendClassLevel(storedStudent?.classLevel) ||
       existingServerSub?.selectedClass ||
       'Class 1';
+    const primaryBoard = normalizeBackendBoard(
+      storedStudent?.primaryBoard ||
+        existingServerSub?.primaryBoard ||
+        storedStudent?.board ||
+        requestedTargetBoard
+    );
     const primaryClassLevel =
       normalizeBackendClassLevel(storedStudent?.primaryClassLevel) ||
       normalizeBackendClassLevel(existingServerSub?.primaryClassLevel) ||
@@ -2213,6 +2446,7 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       }
 
       // Verify payment proof against server ledger, Firestore /transactions, or live Razorpay API
+      let verifiedBoardFromProof: BackendBoard | null = null;
       let verifiedClassFromProof: string | null = null;
       let paymentVerified = processedPaymentIds.has(cleanPaymentId);
       const ledgerMatch = transactionLedger.find(
@@ -2223,6 +2457,9 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       );
       if (ledgerMatch) {
         paymentVerified = true;
+        verifiedBoardFromProof = ledgerMatch.selectedBoard
+          ? normalizeBackendBoard(ledgerMatch.selectedBoard)
+          : null;
         verifiedClassFromProof = normalizeBackendClassLevel(ledgerMatch.selectedClass);
       }
 
@@ -2239,6 +2476,9 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
         ) {
           paymentVerified = true;
           processedPaymentIds.add(cleanPaymentId);
+          if (txDoc.selectedBoard || txDoc.board) {
+            verifiedBoardFromProof = normalizeBackendBoard(txDoc.selectedBoard || txDoc.board);
+          }
           verifiedClassFromProof =
             normalizeBackendClassLevel(txDoc.selectedClass || txDoc.classLevel) ||
             verifiedClassFromProof;
@@ -2263,6 +2503,11 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
         if (apiCheck.confirmed && (!notesSid || notesSid === cleanStudentId)) {
           paymentVerified = true;
           processedPaymentIds.add(cleanPaymentId);
+          if (apiCheck.notes?.selectedBoard || apiCheck.notes?.board) {
+            verifiedBoardFromProof = normalizeBackendBoard(
+              apiCheck.notes?.selectedBoard || apiCheck.notes?.board
+            );
+          }
           verifiedClassFromProof =
             normalizeBackendClassLevel(
               apiCheck.notes?.selectedClass || apiCheck.notes?.classLevel
@@ -2277,8 +2522,10 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
         });
       }
 
+      const targetPaidBoard = verifiedBoardFromProof || requestedTargetBoard;
       const targetPaidClass = verifiedClassFromProof || requestedTargetClass;
-      const existingEntry = existingMap[targetPaidClass];
+      const targetCompositeKey = buildBackendBoardClassKey(targetPaidBoard, targetPaidClass);
+      const existingEntry = existingMap[targetCompositeKey];
       const fallbackDates = computeSubscriptionActivationDates({
         verificationTimestamp:
           existingEntry?.purchasedAt || planPurchasedAt || new Date(),
@@ -2293,8 +2540,10 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
 
       const updatedMap: Record<string, ServerClassSubscriptionEntry> = {
         ...existingMap,
-        [targetPaidClass]: {
+        [targetCompositeKey]: {
+          board: targetPaidBoard,
           classLevel: targetPaidClass,
+          boardClassKey: targetCompositeKey,
           plan: 'premium',
           status: 'ACTIVE',
           purchasedAt: resolvedStart,
@@ -2309,8 +2558,11 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       const draftSub: ServerStudentSubscription = {
         studentId: cleanStudentId,
         plan: 'premium',
+        selectedBoard: targetPaidBoard,
         selectedClass: targetPaidClass,
+        primaryBoard,
         primaryClassLevel,
+        activatedBoard: targetPaidBoard,
         activatedClassLevel: targetPaidClass,
         classSubscriptions: updatedMap,
         accountRole: resolvedRole,
@@ -2323,30 +2575,42 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
         paymentId: cleanPaymentId,
         updatedAt: new Date().toISOString()
       };
+      draftSub.activatedClassKeys = getServerActivatedBoardClassKeys(draftSub);
       draftSub.activatedClasses = getServerActivatedClasses(draftSub);
       serverStudentSubscriptions.set(cleanStudentId, draftSub);
       return res.json({ success: true, subscription: draftSub });
     }
 
-    // Default / Free Lifetime Plan (preserving any other paid classes in map if they exist)
-    const activeClasses = VALID_CLASS_LEVELS.filter((c) => {
-      const e = existingMap[c];
+    // Default / Free Lifetime Plan (preserving any other paid (board, class) pairs in map if they exist)
+    const activeKeys = Object.keys(existingMap).filter((k) => {
+      const e = existingMap[k];
       if (!e || e.plan === 'free') return false;
       return !evaluateSubscriptionValidity(e.plan, e.purchasedAt, e.expiresAt).isExpired;
     });
+    const firstParsed = activeKeys[0] ? parseBackendBoardClassKey(activeKeys[0]) : null;
     const freeRecord: ServerStudentSubscription = {
       studentId: cleanStudentId,
-      plan: activeClasses.length > 0 ? 'premium' : 'free',
+      plan: activeKeys.length > 0 ? 'premium' : 'free',
+      selectedBoard: requestedTargetBoard,
       selectedClass: requestedTargetClass,
+      primaryBoard,
       primaryClassLevel,
-      activatedClassLevel: activeClasses[0] || null,
-      activatedClasses: activeClasses,
+      activatedBoard: firstParsed?.board || null,
+      activatedClassLevel: firstParsed?.classLevel || null,
+      activatedClasses: Array.from(
+        new Set(
+          activeKeys
+            .map((k) => parseBackendBoardClassKey(k)?.classLevel)
+            .filter((c): c is string => Boolean(c))
+        )
+      ),
+      activatedClassKeys: activeKeys,
       classSubscriptions: existingMap,
       accountRole: resolvedRole,
       hasStoredProfile:
         Boolean(storedStudent) ||
         (cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')),
-      isLifetimeFree: activeClasses.length === 0,
+      isLifetimeFree: activeKeys.length === 0,
       planExpiresAt: null,
       updatedAt: new Date().toISOString()
     };
@@ -2357,7 +2621,7 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
   }
 });
 
-// 8.1b Switch active class among unlocked/activated classes ONLY (locks unpaid/expired classes)
+// 8.1b Switch active (board, class) among unlocked/activated (board, class) pairs ONLY (locks unpaid/expired pairs)
 app.post('/api/subscription/switch-class', async (req: Request, res: Response) => {
   try {
     const cleanStudentId = String(req.body?.studentId || '').trim();
@@ -2373,7 +2637,15 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
       });
     }
 
-    if (req.headers.authorization && isFirebaseAdminConfigured()) {
+    const isGuestOrDemo = cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+    if (isFirebaseAdminConfigured() && !isGuestOrDemo) {
+      if (!req.headers.authorization) {
+        return res.status(401).json({
+          success: false,
+          allowed: false,
+          error: 'Authentication Bearer token required to switch active class or board.'
+        });
+      }
       const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
       if (!tokenCheck.valid || !tokenCheck.uid) {
         return res.status(tokenCheck.statusCode).json({
@@ -2381,6 +2653,20 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
           allowed: false,
           error: tokenCheck.error || 'Invalid authentication token.'
         });
+      }
+      const existingStudent = await serverGetDoc('students', cleanStudentId).catch(() => null);
+      const matchesOwner =
+        tokenCheck.uid === cleanStudentId ||
+        existingStudent?.firebaseUid === tokenCheck.uid;
+      if (!matchesOwner) {
+        const adminCheck = await verifyAdminRequest(req.headers);
+        if (!adminCheck.authorized) {
+          return res.status(403).json({
+            success: false,
+            allowed: false,
+            error: 'Forbidden: Token does not match target student account.'
+          });
+        }
       }
     }
 
@@ -2395,7 +2681,10 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
     }
 
     const sub = await evaluateServerSubscriptionFromStore(cleanStudentId);
-    const classStatus = getServerClassStatus(sub, targetClass);
+    const targetBoard = normalizeBackendBoard(
+      req.body?.targetBoard || req.body?.selectedBoard || req.body?.board || sub.selectedBoard
+    );
+    const classStatus = getServerBoardClassStatus(sub, targetBoard, targetClass);
 
     if (!classStatus.isAccessible) {
       return res.status(403).json({
@@ -2404,18 +2693,22 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
         status: classStatus.status,
         needsPurchase: classStatus.status === 'LOCKED',
         needsRenewal: classStatus.status === 'EXPIRED',
+        targetBoard,
         targetClass,
+        boardClassKey: classStatus.boardClassKey,
         error:
           classStatus.status === 'EXPIRED'
-            ? `Your subscription for ${targetClass} has expired. Renew ${targetClass} for ₹99 (365 Days) to switch to ${targetClass}.`
-            : `${targetClass} is locked on your account. Activate ${targetClass} for ₹99 (365 Days) before switching.`
+            ? `Your subscription for ${targetBoard} • ${targetClass} has expired. Renew ${targetBoard} (${targetClass}) for ₹99 (365 Days) to switch.`
+            : `${targetBoard} • ${targetClass} is locked on your account. Activate ${targetBoard} (${targetClass}) for ₹99 (365 Days) before switching.`
       });
     }
 
     const updatedSub: ServerStudentSubscription = {
       ...sub,
+      selectedBoard: targetBoard,
       selectedClass: targetClass,
       plan: classStatus.isPaidActive ? 'premium' : 'free',
+      activatedBoard: classStatus.isPaidActive ? targetBoard : sub.activatedBoard,
       activatedClassLevel: classStatus.isPaidActive ? targetClass : sub.activatedClassLevel,
       planPurchasedAt: classStatus.purchasedAt || sub.planPurchasedAt,
       planExpiresAt: classStatus.expiresAt ?? sub.planExpiresAt,
@@ -2424,11 +2717,11 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
     serverStudentSubscriptions.set(cleanStudentId, updatedSub);
 
     try {
-      if (cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')) {
+      if (!isGuestOrDemo) {
         await serverSetDoc(
           'students',
           cleanStudentId,
-          { classLevel: targetClass },
+          { board: targetBoard, classLevel: targetClass },
           { merge: true }
         );
       }
@@ -2439,7 +2732,9 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
     return res.json({
       success: true,
       allowed: true,
+      selectedBoard: targetBoard,
       selectedClass: targetClass,
+      boardClassKey: classStatus.boardClassKey,
       status: classStatus.status,
       subscription: updatedSub
     });
@@ -2448,25 +2743,37 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
   }
 });
 
-// 8.2 Get student/teacher subscription status (multi-class aware)
+// 8.2 Get student/teacher subscription status (multi-board & multi-class aware)
 app.get('/api/subscription/status/:studentId', async (req: Request, res: Response) => {
   const studentId = String(req.params.studentId || '');
   const sub = await evaluateServerSubscriptionFromStore(studentId);
+  const queryBoard = req.query.board ? normalizeBackendBoard(String(req.query.board)) : null;
+  const userBoard = queryBoard || sub.selectedBoard || sub.primaryBoard || 'Maharashtra';
   const userClass = sub.selectedClass || sub.primaryClassLevel || 'Class 1';
-  const demoIds = getServerFreeDemoIdsForClass(userClass);
+  const demoIds = getServerFreeDemoIdsForClass(userClass, userBoard);
   const perClassStatus = Object.fromEntries(
-    VALID_CLASS_LEVELS.map((cls) => [cls, getServerClassStatus(sub, cls)])
+    VALID_CLASS_LEVELS.map((cls) => [cls, getServerBoardClassStatus(sub, userBoard, cls)])
+  );
+  const perBoardClassStatus = Object.fromEntries(
+    VALID_BOARDS.flatMap((b) =>
+      VALID_CLASS_LEVELS.map((cls) => [
+        buildBackendBoardClassKey(b, cls),
+        getServerBoardClassStatus(sub, b, cls)
+      ])
+    )
   );
   return res.json({
     success: true,
     subscription: sub,
     perClassStatus,
+    perBoardClassStatus,
     plans: {
       free: {
         id: 'free',
         name: 'Free Plan',
         priceInr: 0,
         validity: 'Lifetime (Never Expires)',
+        selectedBoard: sub.primaryBoard || userBoard,
         selectedClass: sub.primaryClassLevel || userClass,
         allowedSubjects: Array.from(SERVER_FREE_ALLOWED_SUBJECTS),
         allowedWorksheets: demoIds,
@@ -2476,11 +2783,13 @@ app.get('/api/subscription/status/:studentId', async (req: Request, res: Respons
         id: 'premium',
         name: 'Premium Plan',
         priceInr: 99,
-        validity: '1 Year (365 Days) Per Class',
+        validity: '1 Year (365 Days) Per Board & Class',
+        selectedBoard: userBoard,
         selectedClass: userClass,
-        activatedClasses: getServerActivatedClasses(sub),
-        allowedSubjects: 'ALL_SUBJECTS_FOR_SELECTED_CLASS',
-        allowedWorksheets: `ALL_WORKSHEETS_FOR_${userClass.toUpperCase().replace(/\s+/g, '_')}`,
+        activatedClasses: getServerActivatedClasses(sub, userBoard),
+        activatedClassKeys: getServerActivatedBoardClassKeys(sub),
+        allowedSubjects: 'ALL_SUBJECTS_FOR_SELECTED_BOARD_AND_CLASS',
+        allowedWorksheets: `ALL_WORKSHEETS_FOR_${userBoard.toUpperCase()}_${userClass.toUpperCase().replace(/\s+/g, '_')}`,
         allowedFeatures: 'ALL_FEATURES'
       }
     }
@@ -2488,13 +2797,20 @@ app.get('/api/subscription/status/:studentId', async (req: Request, res: Respons
 });
 
 const SERVER_WORKSHEET_UPGRADE_MSG =
-  'Unlock All Worksheets for Your Class – Only ₹99!';
+  'Unlock All Worksheets for Your Board & Class – Only ₹99!';
 
-// 8.3 Backend access verification for features, subjects, and worksheets (strictly multi-class & server-verified)
+// 8.3 Backend access verification for features, subjects, and worksheets (strictly board+class & server-verified)
 app.post('/api/subscription/verify-access', async (req: Request, res: Response) => {
-  const { studentId, feature, subject, worksheetId, selectedClass } = req.body || {};
+  const { studentId, feature, subject, worksheetId, selectedBoard, board, selectedClass } = req.body || {};
   const sub = await evaluateServerSubscriptionFromStore(String(studentId || ''));
+  const requestedBoard =
+    selectedBoard || board ? normalizeBackendBoard(selectedBoard || board) : null;
   const requestedClass = normalizeBackendClassLevel(selectedClass);
+  const userBoard =
+    (sub.hasStoredProfile ? sub.selectedBoard : requestedBoard) ||
+    sub.selectedBoard ||
+    sub.primaryBoard ||
+    'Maharashtra';
   const userClass =
     (sub.hasStoredProfile ? sub.selectedClass : requestedClass) ||
     sub.selectedClass ||
@@ -2503,10 +2819,12 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
 
   if (worksheetId) {
     const cleanWsId = String(worksheetId).trim();
-    const wsClass = parseServerWorksheetClass(cleanWsId) || requestedClass || userClass;
-    const wsClassStatus = getServerClassStatus(sub, wsClass);
-    const activePaidClasses = getServerActivatedClasses(sub);
-    const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass));
+    const parsedWs = parseServerWorksheetBoardAndClass(cleanWsId);
+    const wsBoard = parsedWs?.board || requestedBoard || userBoard;
+    const wsClass = parsedWs?.classLevel || requestedClass || userClass;
+    const wsClassStatus = getServerBoardClassStatus(sub, wsBoard, wsClass);
+    const activePaidKeys = getServerActivatedBoardClassKeys(sub);
+    const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass, wsBoard));
     const isDemo = demoIds.has(cleanWsId);
 
     let allowed = false;
@@ -2515,18 +2833,18 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
       allowed = true;
       upgradeMsg = '';
     } else if (wsClassStatus.status === 'EXPIRED') {
-      if (wsClassStatus.isFreeBase && activePaidClasses.length === 0 && isDemo) {
+      if (wsClassStatus.isFreeBase && activePaidKeys.length === 0 && isDemo) {
         allowed = true;
         upgradeMsg = '';
       } else {
         allowed = false;
-        upgradeMsg = `Subscription Expired: Your 1-year subscription for ${wsClass} has expired. Renew ${wsClass} for ₹99 (365 Days) to restore access!`;
+        upgradeMsg = `Subscription Expired: Your 1-year subscription for ${wsBoard} (${wsClass}) has expired. Renew for ₹99 (365 Days) to restore access!`;
       }
     } else if (wsClassStatus.status === 'LOCKED') {
       allowed = false;
-      upgradeMsg = `Class-Wise Restriction: ${wsClass} is locked on your account. Activate ${wsClass} for ₹99 (365 Days) to unlock all worksheets for ${wsClass}.`;
+      upgradeMsg = `Board & Class Restriction: ${wsBoard} (${wsClass}) is locked on your account. Activate ${wsBoard} (${wsClass}) for ₹99 (365 Days) to unlock all worksheets.`;
     } else {
-      // ACTIVE_FREE base class
+      // ACTIVE_FREE base (board, class)
       allowed = isDemo;
     }
 
@@ -2536,7 +2854,9 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
       isDemo: wsClassStatus.isPaidActive ? false : isDemo && allowed,
       isOtherClassLocked: wsClassStatus.status === 'LOCKED',
       isClassExpired: wsClassStatus.status === 'EXPIRED',
+      selectedBoard: userBoard,
       selectedClass: userClass,
+      worksheetBoard: wsBoard,
       worksheetClass: wsClass,
       effectivePlan: wsClassStatus.isPaidActive ? 'premium' : 'free',
       requiredPlan: 'premium',
@@ -2545,8 +2865,9 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
     });
   }
 
+  const targetBoard = requestedBoard || userBoard;
   const targetClass = requestedClass || userClass;
-  const targetStatus = getServerClassStatus(sub, targetClass);
+  const targetStatus = getServerBoardClassStatus(sub, targetBoard, targetClass);
 
   if (subject) {
     const allowedOnFree = SERVER_FREE_ALLOWED_SUBJECTS.has(String(subject));
@@ -2556,37 +2877,46 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
     } else if (targetStatus.status === 'ACTIVE_FREE') {
       allowed = allowedOnFree;
     } else if (targetStatus.status === 'EXPIRED') {
-      allowed = targetStatus.isFreeBase && getServerActivatedClasses(sub).length === 0 && allowedOnFree;
+      allowed =
+        targetStatus.isFreeBase &&
+        getServerActivatedBoardClassKeys(sub).length === 0 &&
+        allowedOnFree;
     }
 
     return res.json({
       success: true,
       allowed,
+      selectedBoard: targetBoard,
       selectedClass: targetClass,
       effectivePlan: targetStatus.isPaidActive ? 'premium' : 'free',
       requiredPlan: 'premium',
       message: allowed
         ? 'Access granted.'
         : targetStatus.status === 'LOCKED'
-        ? `${targetClass} is locked. Activate ${targetClass} for ₹99 (365 Days) to unlock ${subject}.`
-        : `${subject} requires the ₹99 Premium Plan for ${targetClass}.`
+        ? `${targetBoard} • ${targetClass} is locked. Activate for ₹99 (365 Days) to unlock ${subject}.`
+        : `${subject} requires the ₹99 Premium Plan for ${targetBoard} (${targetClass}).`
     });
   }
 
   if (feature) {
     const cleanFeature = String(feature);
-    const hasAnyActivePaid = getServerActivatedClasses(sub).length > 0;
-    const allowed =
-      targetStatus.isPaidActive ||
-      hasAnyActivePaid ||
-      SERVER_FREE_ALLOWED_FEATURES.has(cleanFeature) ||
-      sub.accountRole === 'teacher';
+    const hasAnyActivePaid = getServerActivatedBoardClassKeys(sub).length > 0;
+    const isBoardClassFeature = cleanFeature === 'study-material';
+    const allowed = isBoardClassFeature
+      ? targetStatus.isPaidActive || targetStatus.status === 'ACTIVE_FREE' || sub.accountRole === 'teacher'
+      : targetStatus.isPaidActive ||
+        hasAnyActivePaid ||
+        SERVER_FREE_ALLOWED_FEATURES.has(cleanFeature) ||
+        sub.accountRole === 'teacher';
     const effectivePlan: 'free' | 'premium' =
-      targetStatus.isPaidActive || hasAnyActivePaid ? 'premium' : 'free';
+      targetStatus.isPaidActive || (!isBoardClassFeature && hasAnyActivePaid)
+        ? 'premium'
+        : 'free';
 
     return res.json({
       success: true,
       allowed,
+      selectedBoard: targetBoard,
       selectedClass: targetClass,
       effectivePlan,
       requiredPlan: 'premium',
@@ -2599,41 +2929,53 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
   return res.json({
     success: true,
     allowed: targetStatus.isAccessible,
+    selectedBoard: targetBoard,
     selectedClass: targetClass,
     effectivePlan: targetStatus.isPaidActive ? 'premium' : 'free'
   });
 });
 
-// 8.4 Dedicated Class-Wise Worksheet Access Verification API (Standards 1st to 10th)
+// 8.4 Dedicated Board & Class-Wise Worksheet Access Verification API (Standards 1st to 10th)
 app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response) => {
   const studentId = String(req.params.studentId || '').trim();
+  const queryBoard = req.query.selectedBoard || req.query.board
+    ? normalizeBackendBoard(String(req.query.selectedBoard || req.query.board))
+    : null;
   const queryClass = req.query.selectedClass
     ? normalizeBackendClassLevel(String(req.query.selectedClass))
     : null;
   const sub = await evaluateServerSubscriptionFromStore(studentId);
+  const userBoard =
+    (sub.hasStoredProfile ? queryBoard || sub.selectedBoard : queryBoard) ||
+    sub.selectedBoard ||
+    sub.primaryBoard ||
+    'Maharashtra';
   const userClass =
     (sub.hasStoredProfile ? queryClass || sub.selectedClass : queryClass) ||
     sub.selectedClass ||
     sub.primaryClassLevel ||
     'Class 1';
-  const classStatus = getServerClassStatus(sub, userClass);
+  const classStatus = getServerBoardClassStatus(sub, userBoard, userClass);
   const isPremium = classStatus.isPaidActive;
-  const demoIds = getServerFreeDemoIdsForClass(userClass);
+  const demoIds = getServerFreeDemoIdsForClass(userClass, userBoard);
 
   return res.json({
     success: true,
     studentId,
+    selectedBoard: userBoard,
     selectedClass: userClass,
     classStatus: classStatus.status,
+    activatedBoard: isPremium ? userBoard : null,
     activatedClassLevel: isPremium ? userClass : null,
-    activatedClasses: getServerActivatedClasses(sub),
+    activatedClasses: getServerActivatedClasses(sub, userBoard),
+    activatedClassKeys: getServerActivatedBoardClassKeys(sub),
     effectivePlan: isPremium ? 'premium' : 'free',
     isPremium,
     printingAllowed: false,
     downloadingAllowed: false,
     demoWorksheetIds: classStatus.status === 'ACTIVE_FREE' ? demoIds : [],
     allowedWorksheets: isPremium
-      ? `ALL_WORKSHEETS_FOR_${userClass.toUpperCase().replace(/\s+/g, '_')}`
+      ? `ALL_WORKSHEETS_FOR_${userBoard.toUpperCase()}_${userClass.toUpperCase().replace(/\s+/g, '_')}`
       : classStatus.status === 'ACTIVE_FREE'
       ? demoIds
       : [],
@@ -2642,7 +2984,7 @@ app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response)
 });
 
 app.post('/api/worksheets/verify-access', async (req: Request, res: Response) => {
-  const { studentId, worksheetId, selectedClass } = req.body || {};
+  const { studentId, worksheetId, selectedBoard, board, selectedClass } = req.body || {};
   const cleanStudentId = String(studentId || '').trim();
   const cleanWorksheetId = String(worksheetId || '').trim();
 
@@ -2665,18 +3007,30 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
   }
 
   const sub = await evaluateServerSubscriptionFromStore(cleanStudentId);
+  const parsedWs = parseServerWorksheetBoardAndClass(cleanWorksheetId);
+  const userBoard =
+    (sub.hasStoredProfile
+      ? sub.selectedBoard
+      : selectedBoard || board
+      ? normalizeBackendBoard(selectedBoard || board)
+      : null) ||
+    sub.selectedBoard ||
+    sub.primaryBoard ||
+    parsedWs?.board ||
+    'Maharashtra';
   const userClass =
     (sub.hasStoredProfile
       ? sub.selectedClass
       : normalizeBackendClassLevel(selectedClass)) ||
     sub.selectedClass ||
     sub.primaryClassLevel ||
-    parseServerWorksheetClass(cleanWorksheetId) ||
+    parsedWs?.classLevel ||
     'Class 1';
-  const wsClass = parseServerWorksheetClass(cleanWorksheetId) || userClass;
-  const wsClassStatus = getServerClassStatus(sub, wsClass);
-  const activePaidClasses = getServerActivatedClasses(sub);
-  const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass));
+  const wsBoard = parsedWs?.board || userBoard;
+  const wsClass = parsedWs?.classLevel || userClass;
+  const wsClassStatus = getServerBoardClassStatus(sub, wsBoard, wsClass);
+  const activePaidKeys = getServerActivatedBoardClassKeys(sub);
+  const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass, wsBoard));
   const isDemo = demoIds.has(cleanWorksheetId);
 
   let allowed = false;
@@ -2685,16 +3039,16 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
     allowed = true;
     upgradeMsg = '';
   } else if (wsClassStatus.status === 'EXPIRED') {
-    if (wsClassStatus.isFreeBase && activePaidClasses.length === 0 && isDemo) {
+    if (wsClassStatus.isFreeBase && activePaidKeys.length === 0 && isDemo) {
       allowed = true;
       upgradeMsg = '';
     } else {
       allowed = false;
-      upgradeMsg = `Subscription Expired: Your 1-year subscription for ${wsClass} has expired. Renew ${wsClass} for ₹99 (365 Days) to restore access!`;
+      upgradeMsg = `Subscription Expired: Your 1-year subscription for ${wsBoard} (${wsClass}) has expired. Renew for ₹99 (365 Days) to restore access!`;
     }
   } else if (wsClassStatus.status === 'LOCKED') {
     allowed = false;
-    upgradeMsg = `Class-Wise Restriction: ${wsClass} is locked on your account. Activate ${wsClass} for ₹99 (365 Days) to unlock worksheets for ${wsClass}.`;
+    upgradeMsg = `Board & Class Restriction: ${wsBoard} (${wsClass}) is locked on your account. Activate ${wsBoard} (${wsClass}) for ₹99 (365 Days) to unlock worksheets.`;
   } else {
     allowed = isDemo;
   }
@@ -2706,7 +3060,9 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
     isOtherClassLocked: wsClassStatus.status === 'LOCKED',
     isClassExpired: wsClassStatus.status === 'EXPIRED',
     studentId: cleanStudentId,
+    selectedBoard: userBoard,
     selectedClass: userClass,
+    worksheetBoard: wsBoard,
     worksheetClass: wsClass,
     worksheetId: cleanWorksheetId,
     effectivePlan: wsClassStatus.isPaidActive ? 'premium' : 'free',

@@ -1,4 +1,4 @@
-import { ClassLevel, SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
+import { ClassLevel, EducationBoard, SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
 import { CLASS_2_QUESTIONS } from '../data/questions/class2';
 import { CLASS_3_QUESTIONS } from '../data/questions/class3';
 import { CLASS_4_QUESTIONS } from '../data/questions/class4';
@@ -7,11 +7,12 @@ import { CLASS_6_QUESTIONS } from '../data/questions/class6';
 import { CLASS_7_QUESTIONS } from '../data/questions/class7';
 import { CLASS_8_QUESTIONS } from '../data/questions/class8';
 import { generateEntireCurriculumMasterBank, getCurriculumQuestionsForLevel } from './curriculumQuestionBank';
-import { randomizeQuizQuestions } from './answerRandomizerService';
+import { normalizeBoardValue } from '../utils/subscriptionAccess';
 
-// Normalizes text for semantic duplicate comparison
+// Normalizes text for semantic duplicate comparison (strips leading [tag] prefixes so tag spoofing cannot hide duplicates)
 export function normalizeQuestionText(text: string): string {
-  return text
+  return String(text || '')
+    .replace(/^(\s*\[[^\]]+\]\s*)+/g, '')
     .toLowerCase()
     .replace(/[^\w\s\u0900-\u097F]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -105,9 +106,9 @@ const CLASS_PARTITIONS: Record<ClassLevel, QuizQuestion[]> = {
   'Class 10': []
 };
 
-// Returns initial unified question list across all classes with 4 levels x 10 unique questions for all 14 subjects (560 unique questions per class)
+// Returns initial unified question list across all boards & classes with 4 levels x 10 unique questions per subject
 export function getInitialSeedQuestions(): QuizQuestion[] {
-  return generateEntireCurriculumMasterBank();
+  return generateEntireCurriculumMasterBank(['Maharashtra', 'CBSE', 'ICSE']);
 }
 
 // Dynamic Curriculum Generator that respects Class-Specific topics, progression, and 15 question types
@@ -115,7 +116,8 @@ export function generateClassSpecificCurriculumQuestion(
   classLevel: ClassLevel,
   subject: SubjectName,
   existingClassPool: QuizQuestion[],
-  salt: number
+  salt: number,
+  board: EducationBoard = 'Maharashtra'
 ): QuizQuestion {
   const classNum = parseInt(classLevel.replace('Class ', ''), 10);
   const subjectCode = subject.substring(0, 3).toUpperCase();
@@ -335,9 +337,12 @@ export function generateClassSpecificCurriculumQuestion(
     };
   }
 
-  const newId = `VC-${classLevel.replace(' ', '')}-${subjectCode}-${uniqueCode}`;
+  const resolvedBoard = normalizeBoardValue(board);
+  const boardPrefix = resolvedBoard === 'Maharashtra' ? '' : `${resolvedBoard}-`;
+  const newId = `VC-${boardPrefix}${classLevel.replace(' ', '')}-${subjectCode}-${uniqueCode}`;
   return {
     id: newId,
+    board: resolvedBoard,
     classLevel,
     subject,
     topic: candidate.topic,
@@ -357,30 +362,29 @@ export function generateClassSpecificCurriculumQuestion(
   };
 }
 
-// Strictly filters questions by student's class and subject, preventing cross-class leakage
+// Strictly filters questions by student's board, class and subject, preventing cross-board/cross-class leakage
 export async function getStrictClassSubjectQuestions(
   classLevel: ClassLevel,
   subject: SubjectName,
   attemptedQuestionIds: string[],
-  masterDatabase: QuizQuestion[]
+  masterDatabase: QuizQuestion[],
+  board: EducationBoard = 'Maharashtra'
 ): Promise<QuizQuestion[]> {
-  // Simulate rapid non-blocking background fetch (150ms) to ensure smooth transitions without UI freeze
   await new Promise(resolve => setTimeout(resolve, 150));
+  const targetBoard = normalizeBoardValue(board);
 
-  // 1. Strict filtering: match both classLevel AND subject
   const candidates = masterDatabase.filter(
-    q => q.classLevel === classLevel && 
-         q.subject === subject && 
+    q => normalizeBoardValue(q.board || 'Maharashtra') === targetBoard &&
+         q.classLevel === classLevel &&
+         q.subject === subject &&
          q.status === 'approved' &&
          !attemptedQuestionIds.includes(q.id)
   );
 
-  // If we already have 10 or more unattempted questions in this class-subject bank, return 10
   if (candidates.length >= 10) {
     return candidates.slice(0, 10);
   }
 
-  // 2. Need additional questions to guarantee exactly 10 questions with ZERO repetition
   const result: QuizQuestion[] = [...candidates];
   let tries = 0;
 
@@ -391,6 +395,7 @@ export async function getStrictClassSubjectQuestions(
       masterDatabase,
       Date.now() + tries * 137
     );
+    candidate.board = targetBoard;
 
     const dupCheck = checkQuestionDuplicate(
       candidate.questionText,
@@ -405,22 +410,23 @@ export async function getStrictClassSubjectQuestions(
     tries++;
   }
 
-  // Return exactly 10 questions
   return result.slice(0, 10);
 }
 
-// Strictly filters questions by student's class, subject, AND LEVEL (1, 2, 3, 4)
+// Strictly filters questions by student's board, class, subject, AND LEVEL (1, 2, 3, 4)
 export async function getStrictClassSubjectLevelQuestions(
   classLevel: ClassLevel,
   subject: SubjectName,
   level: QuizLevel,
   attemptedQuestionIds: string[],
-  masterDatabase: QuizQuestion[]
+  masterDatabase: QuizQuestion[],
+  board: EducationBoard = 'Maharashtra'
 ): Promise<QuizQuestion[]> {
   await new Promise(resolve => setTimeout(resolve, 60));
+  const targetBoard = normalizeBoardValue(board);
 
-  // Always obtain the canonical 10 verified questions for this exact (classLevel, subject, level)
-  const canonicalQs = getCurriculumQuestionsForLevel(classLevel, subject, level);
+  // Always obtain the canonical 10 verified questions for this exact (board, classLevel, subject, level)
+  const canonicalQs = getCurriculumQuestionsForLevel(classLevel, subject, level, targetBoard);
 
   // Sync canonical questions into masterDatabase if missing or outdated
   for (const q of canonicalQs) {
@@ -432,9 +438,10 @@ export async function getStrictClassSubjectLevelQuestions(
     }
   }
 
-  // Also include any custom admin-added questions strictly for this classLevel, subject, and level
+  // Also include any custom admin-added questions strictly for this board, classLevel, subject, and level
   const customAdminQs = masterDatabase.filter(
     q =>
+      normalizeBoardValue(q.board || 'Maharashtra') === targetBoard &&
       q.classLevel === classLevel &&
       q.subject === subject &&
       q.level === level &&
@@ -450,8 +457,45 @@ export async function getStrictClassSubjectLevelQuestions(
     return unattempted.slice(0, 10);
   }
 
-  // Return the 10 level-specific questions for this level
   return canonicalQs.slice(0, 10);
+}
+
+export interface GlobalDuplicateAuditReport {
+  totalScanned: number;
+  duplicateGroupsCount: number;
+  duplicatePairs: {
+    normalizedStem: string;
+    questionIds: string[];
+    boards: string[];
+    classes: string[];
+  }[];
+}
+
+export function auditGlobalDuplicateQuestions(questions: QuizQuestion[]): GlobalDuplicateAuditReport {
+  const byStem = new Map<string, QuizQuestion[]>();
+  for (const q of questions) {
+    const norm = normalizeQuestionText(q.questionText);
+    if (!norm) continue;
+    const list = byStem.get(norm) || [];
+    list.push(q);
+    byStem.set(norm, list);
+  }
+  const duplicatePairs: GlobalDuplicateAuditReport['duplicatePairs'] = [];
+  for (const [normalizedStem, group] of byStem.entries()) {
+    if (group.length > 1) {
+      duplicatePairs.push({
+        normalizedStem,
+        questionIds: group.map(g => g.id),
+        boards: Array.from(new Set(group.map(g => g.board || 'Maharashtra'))),
+        classes: Array.from(new Set(group.map(g => g.classLevel)))
+      });
+    }
+  }
+  return {
+    totalScanned: questions.length,
+    duplicateGroupsCount: duplicatePairs.length,
+    duplicatePairs
+  };
 }
 
 // Administrator Analytics Helper
@@ -482,7 +526,11 @@ export function computeQuestionBankAnalytics(questions: QuizQuestion[]): Questio
     'Physics': 0, 'Chemistry': 0, 'Biology': 0,
     'Political Science': 0, 'Information Technology': 0,
     'Environmental Education': 0, 'Physical Education': 0,
-    'Mathematics – Algebra': 0, 'Mathematics – Geometry': 0
+    'Mathematics – Algebra': 0, 'Mathematics – Geometry': 0,
+    'Social Science': 0, 'History & Civics': 0,
+    'Computer Studies': 0, 'Computer Applications': 0,
+    'Economics': 0, 'Commercial Studies': 0,
+    'Sanskrit': 0
   };
 
   const typeCounts: Record<string, number> = {};

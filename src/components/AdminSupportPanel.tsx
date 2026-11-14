@@ -1,23 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   LifeBuoy, 
   Search, 
-  Filter, 
-  CheckCircle2, 
-  Clock, 
   AlertTriangle, 
-  MessageSquare, 
-  FileText, 
   Send, 
   RefreshCw, 
-  Check, 
   X, 
   ChevronRight, 
   ShieldCheck, 
   HelpCircle, 
-  Plus, 
-  Trash2,
-  ExternalLink
+  Plus,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   SupportTicket, 
@@ -36,9 +29,11 @@ import {
   saveSiteFaq,
   deleteSiteFaq
 } from '../services/supportService';
+import { AdminPagination } from './admin/AdminPagination';
 
-export const AdminSupportPanel: React.FC = () => {
+export const AdminSupportPanel: React.FC = React.memo(() => {
   const [activeTab, setActiveTab] = useState<'tickets' | 'grievances' | 'reports' | 'faqs'>('tickets');
+  const [actionBanner, setActionBanner] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
   // 1. Tickets State
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -68,20 +63,32 @@ export const AdminSupportPanel: React.FC = () => {
   const [faqQuestion, setFaqQuestion] = useState('');
   const [faqAnswer, setFaqAnswer] = useState('');
   const [faqCategory, setFaqCategory] = useState('Plans & Pricing');
+  const [confirmDeleteFaqId, setConfirmDeleteFaqId] = useState<string | null>(null);
+
+  // Pagination states
+  const [ticketPage, setTicketPage] = useState(1);
+  const [ticketPageSize, setTicketPageSize] = useState(15);
+  const [grievancePage, setGrievancePage] = useState(1);
+  const [grievancePageSize, setGrievancePageSize] = useState(15);
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPageSize, setReportPageSize] = useState(15);
 
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    loadAllData();
+  const showNotice = useCallback((message: string, type: 'success' | 'info' = 'success') => {
+    setActionBanner({ message, type });
+    setTimeout(() => {
+      setActionBanner((prev) => (prev?.message === message ? null : prev));
+    }, 3500);
   }, []);
 
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async (forceRefresh: boolean = false) => {
     setIsLoading(true);
     try {
       const [tList, gList, rList, fList] = await Promise.all([
-        getSupportTickets(),
-        getGrievances(),
-        getQuestionReports(),
+        getSupportTickets(undefined, forceRefresh),
+        getGrievances(undefined, forceRefresh),
+        getQuestionReports(forceRefresh),
         getSiteFaqs()
       ]);
       setTickets(tList);
@@ -93,33 +100,62 @@ export const AdminSupportPanel: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadAllData(false);
+  }, [loadAllData]);
 
   const handleUpdateTicket = async () => {
     if (!selectedTicket) return;
     await updateSupportTicketStatus(selectedTicket.id, ticketStatusSelect, ticketReplyText);
-    alert('Ticket updated successfully.');
+    const now = new Date().toISOString();
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === selectedTicket.id
+          ? { ...t, status: ticketStatusSelect, adminResponse: ticketReplyText, updatedAt: now }
+          : t
+      )
+    );
+    showNotice(`Ticket ${selectedTicket.ticketNumber} updated cleanly.`);
     setSelectedTicket(null);
     setTicketReplyText('');
-    loadAllData();
   };
 
   const handleUpdateGrievance = async () => {
     if (!selectedGrievance) return;
     await updateGrievanceStatus(selectedGrievance.id, grievanceStatusSelect, grievanceResolutionText);
-    alert('Grievance updated successfully.');
+    const now = new Date().toISOString();
+    setGrievances((prev) =>
+      prev.map((g) =>
+        g.id === selectedGrievance.id
+          ? {
+              ...g,
+              status: grievanceStatusSelect,
+              adminResolution: grievanceResolutionText,
+              updatedAt: now
+            }
+          : g
+      )
+    );
+    showNotice(`Grievance ${selectedGrievance.grievanceNumber} updated cleanly.`);
     setSelectedGrievance(null);
     setGrievanceResolutionText('');
-    loadAllData();
   };
 
   const handleUpdateReport = async () => {
     if (!selectedReport) return;
     await updateQuestionReportStatus(selectedReport.id, reportStatusSelect, reportNotes);
-    alert('Report status updated.');
+    setReports((prev) =>
+      prev.map((r) =>
+        r.id === selectedReport.id
+          ? { ...r, status: reportStatusSelect, adminNotes: reportNotes }
+          : r
+      )
+    );
+    showNotice(`Question report ${selectedReport.reportNumber} verified.`);
     setSelectedReport(null);
     setReportNotes('');
-    loadAllData();
   };
 
   const handleSaveFaq = async (e: React.FormEvent) => {
@@ -132,35 +168,67 @@ export const AdminSupportPanel: React.FC = () => {
       answer: faqAnswer.trim()
     };
     await saveSiteFaq(newFaq);
+    const fList = await getSiteFaqs();
+    setFaqs(fList);
     setIsAddingFaq(false);
     setEditingFaq(null);
     setFaqQuestion('');
     setFaqAnswer('');
-    loadAllData();
+    showNotice('FAQ entry saved.');
   };
 
-  const handleDeleteFaq = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this FAQ?')) return;
+  const handleConfirmDeleteFaq = async (id: string) => {
     await deleteSiteFaq(id);
-    loadAllData();
+    setFaqs((prev) => prev.filter((f) => f.id !== id));
+    setConfirmDeleteFaqId(null);
+    showNotice('FAQ deleted.', 'info');
   };
 
-  // Filtered lists
-  const filteredTickets = tickets.filter(t => {
-    const matchesStatus = ticketFilter === 'ALL' || t.status === ticketFilter;
+  // Filtered lists (memoized)
+  const filteredTickets = useMemo(() => {
     const q = ticketSearch.toLowerCase().trim();
-    if (!q) return matchesStatus;
-    const matchesSearch = 
-      t.ticketNumber.toLowerCase().includes(q) || 
-      t.studentName.toLowerCase().includes(q) || 
-      t.email.toLowerCase().includes(q) ||
-      t.subject.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
-  });
+    return tickets.filter(t => {
+      const matchesStatus = ticketFilter === 'ALL' || t.status === ticketFilter;
+      if (!q) return matchesStatus;
+      const matchesSearch =
+        t.ticketNumber.toLowerCase().includes(q) ||
+        t.studentName.toLowerCase().includes(q) ||
+        t.email.toLowerCase().includes(q) ||
+        t.subject.toLowerCase().includes(q);
+      return matchesStatus && matchesSearch;
+    });
+  }, [tickets, ticketFilter, ticketSearch]);
 
-  const filteredGrievances = grievances.filter(g => {
-    return grievanceFilter === 'ALL' || g.status === grievanceFilter;
-  });
+  const filteredGrievances = useMemo(
+    () => grievances.filter(g => grievanceFilter === 'ALL' || g.status === grievanceFilter),
+    [grievances, grievanceFilter]
+  );
+
+  useEffect(() => {
+    setTicketPage(1);
+  }, [ticketFilter, ticketSearch]);
+
+  useEffect(() => {
+    setGrievancePage(1);
+  }, [grievanceFilter]);
+
+  const safeTicketPage = Math.min(ticketPage, Math.max(1, Math.ceil(filteredTickets.length / ticketPageSize)));
+  const paginatedTickets = useMemo(
+    () => filteredTickets.slice((safeTicketPage - 1) * ticketPageSize, safeTicketPage * ticketPageSize),
+    [filteredTickets, safeTicketPage, ticketPageSize]
+  );
+
+  const safeGrievancePage = Math.min(grievancePage, Math.max(1, Math.ceil(filteredGrievances.length / grievancePageSize)));
+  const paginatedGrievances = useMemo(
+    () => filteredGrievances.slice((safeGrievancePage - 1) * grievancePageSize, safeGrievancePage * grievancePageSize),
+    [filteredGrievances, safeGrievancePage, grievancePageSize]
+  );
+
+  const safeReportPage = Math.min(reportPage, Math.max(1, Math.ceil(reports.length / reportPageSize)));
+  const paginatedReports = useMemo(
+    () => reports.slice((safeReportPage - 1) * reportPageSize, safeReportPage * reportPageSize),
+    [reports, safeReportPage, reportPageSize]
+  );
 
   return (
     <div className="space-y-6">
@@ -180,7 +248,7 @@ export const AdminSupportPanel: React.FC = () => {
 
         <button
           type="button"
-          onClick={loadAllData}
+          onClick={() => loadAllData(true)}
           disabled={isLoading}
           className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
         >
@@ -188,6 +256,22 @@ export const AdminSupportPanel: React.FC = () => {
           <span>Refresh Records</span>
         </button>
       </div>
+
+      {actionBanner && (
+        <div className="p-3.5 rounded-2xl border border-emerald-300 bg-emerald-50 text-emerald-900 text-xs font-bold flex items-center justify-between">
+          <span className="inline-flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{actionBanner.message}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setActionBanner(null)}
+            className="text-slate-500 hover:text-slate-800 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
@@ -276,15 +360,25 @@ export const AdminSupportPanel: React.FC = () => {
             </div>
           </div>
 
+          <AdminPagination
+            totalItems={filteredTickets.length}
+            currentPage={safeTicketPage}
+            pageSize={ticketPageSize}
+            onPageChange={setTicketPage}
+            onPageSizeChange={setTicketPageSize}
+            pageSizeOptions={[10, 15, 25, 50]}
+            itemLabel="tickets"
+          />
+
           {/* Tickets Table / List */}
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
-            {filteredTickets.length === 0 ? (
+            {paginatedTickets.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 No tickets matching current filters.
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {filteredTickets.map(ticket => (
+                {paginatedTickets.map(ticket => (
                   <div
                     key={ticket.id}
                     onClick={() => {
@@ -383,6 +477,8 @@ export const AdminSupportPanel: React.FC = () => {
                     <img
                       src={selectedTicket.screenshotUrl}
                       alt="Attachment"
+                      loading="lazy"
+                      decoding="async"
                       className="max-h-56 rounded-xl border border-slate-300 object-contain"
                     />
                   </div>
@@ -462,14 +558,24 @@ export const AdminSupportPanel: React.FC = () => {
             </div>
           </div>
 
+          <AdminPagination
+            totalItems={filteredGrievances.length}
+            currentPage={safeGrievancePage}
+            pageSize={grievancePageSize}
+            onPageChange={setGrievancePage}
+            onPageSizeChange={setGrievancePageSize}
+            pageSizeOptions={[10, 15, 25, 50]}
+            itemLabel="grievances"
+          />
+
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
-            {filteredGrievances.length === 0 ? (
+            {paginatedGrievances.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 No grievances registered under this filter.
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {filteredGrievances.map(grv => (
+                {paginatedGrievances.map(grv => (
                   <div
                     key={grv.id}
                     onClick={() => {
@@ -609,14 +715,24 @@ export const AdminSupportPanel: React.FC = () => {
             <span className="text-[11px] text-amber-800 font-bold">Academic Verification Desk</span>
           </div>
 
+          <AdminPagination
+            totalItems={reports.length}
+            currentPage={safeReportPage}
+            pageSize={reportPageSize}
+            onPageChange={setReportPage}
+            onPageSizeChange={setReportPageSize}
+            pageSizeOptions={[10, 15, 25, 50]}
+            itemLabel="question reports"
+          />
+
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
-            {reports.length === 0 ? (
+            {paginatedReports.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 No question inaccuracies reported yet.
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {reports.map(rep => (
+                {paginatedReports.map(rep => (
                   <div
                     key={rep.id}
                     onClick={() => {
@@ -799,13 +915,32 @@ export const AdminSupportPanel: React.FC = () => {
                     >
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFaq(faq.id)}
-                      className="text-red-600 hover:text-red-700 font-bold cursor-pointer"
-                    >
-                      Delete
-                    </button>
+                    {confirmDeleteFaqId === faq.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmDeleteFaq(faq.id)}
+                          className="px-2 py-0.5 rounded bg-red-600 text-white font-bold text-[10px] cursor-pointer"
+                        >
+                          Confirm Delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteFaqId(null)}
+                          className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px] cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteFaqId(faq.id)}
+                        className="text-red-600 hover:text-red-700 font-bold cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
                 <h4 className="font-extrabold text-sm text-slate-900">{faq.question}</h4>
@@ -897,4 +1032,5 @@ export const AdminSupportPanel: React.FC = () => {
       )}
     </div>
   );
-};
+});
+AdminSupportPanel.displayName = 'AdminSupportPanel';

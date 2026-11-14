@@ -21,6 +21,11 @@ import {
   ensureStudentReferralCodeInFirestore,
   findReferrerByCodeInFirestore,
 } from './firebase';
+import {
+  ADMIN_CACHE_DEFAULT_TTL_MS,
+  cachedAdminFetch,
+  invalidateAdminCache,
+} from './adminCacheService';
 
 async function getBearerAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
   const headers: Record<string, string> = { ...extraHeaders };
@@ -771,10 +776,16 @@ export const referralService = {
     }
   },
 
-  async getAdminStats(): Promise<AdminStatsResponse> {
-    const headers = await getBearerAuthHeaders();
-    const res = await fetch('/api/referrals/admin/stats', { headers });
-    return res.json();
+  async getAdminStats(forceRefresh: boolean = false): Promise<AdminStatsResponse> {
+    return cachedAdminFetch(
+      'admin:referral_stats',
+      async () => {
+        const headers = await getBearerAuthHeaders();
+        const res = await fetch('/api/referrals/admin/stats', { headers });
+        return res.json();
+      },
+      { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
+    );
   },
 
   async reviewTeacher(
@@ -788,6 +799,7 @@ export const referralService = {
       headers,
       body: JSON.stringify({ userId, status, notes }),
     });
+    invalidateAdminCache('admin:referral_stats');
     return res.json();
   },
 
@@ -803,6 +815,7 @@ export const referralService = {
       headers,
       body: JSON.stringify({ payoutId, action, transactionRef, notes }),
     });
+    invalidateAdminCache('admin:referral_stats');
     return res.json();
   },
 
@@ -813,10 +826,11 @@ export const referralService = {
       headers,
       body: JSON.stringify(updates),
     });
+    invalidateAdminCache('admin:referral_stats');
     return res.json();
   },
 
-  async getAdminAll() {
-    return this.getAdminStats();
+  async getAdminAll(forceRefresh: boolean = false) {
+    return this.getAdminStats(forceRefresh);
   },
 };

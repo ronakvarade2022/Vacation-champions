@@ -1,3 +1,7 @@
+export type EducationBoard = 'Maharashtra' | 'CBSE' | 'ICSE';
+
+export type BoardClassKey = `${EducationBoard}__${ClassLevel}`;
+
 export type ClassLevel = 
   | 'Class 1'
   | 'Class 2' 
@@ -38,7 +42,15 @@ export type SubjectName =
   | 'Physical Education'
   // Class 10 Maharashtra SSC Separate Mathematics Subjects
   | 'Mathematics – Algebra'
-  | 'Mathematics – Geometry';
+  | 'Mathematics – Geometry'
+  // CBSE & ICSE Curriculum Subjects
+  | 'Social Science'
+  | 'History & Civics'
+  | 'Computer Studies'
+  | 'Computer Applications'
+  | 'Economics'
+  | 'Commercial Studies'
+  | 'Sanskrit';
 
 export type QuizLevel = 1 | 2 | 3 | 4;
 
@@ -53,6 +65,7 @@ export interface WorksheetAttemptRecord {
   worksheetId: string;
   worksheetTitle: string;
   title?: string;
+  board?: EducationBoard;
   classLevel: ClassLevel;
   subject: SubjectName;
   chapter?: string;
@@ -70,6 +83,7 @@ export interface StudentProfile {
   parentEmail?: string;
   mobile: string;
   email: string;
+  board?: EducationBoard;
   classLevel: ClassLevel;
   schoolName?: string;
   parentConsent: boolean;
@@ -90,8 +104,10 @@ export interface StudentProfile {
   completedStoryIds: string[];
   completedWorksheetIds?: string[];
   worksheetAttempts?: WorksheetAttemptRecord[];
-  subjectProgress?: Record<string, SubjectLevelProgress>; // SubjectName or Class__SubjectName -> Level progress
+  subjectProgress?: Record<string, SubjectLevelProgress>; // SubjectName or Class__SubjectName or Board__Class__SubjectName -> Level progress
   classChangeLogs?: {
+    oldBoard?: EducationBoard;
+    newBoard?: EducationBoard;
     oldClass: ClassLevel;
     newClass: ClassLevel;
     reason: string;
@@ -103,12 +119,15 @@ export interface StudentProfile {
   isEmailVerified?: boolean;
   firebaseUid?: string;
   passwordHash?: string;
-  // Student & Teacher Portal role & Class-Wise Multi-Class Subscription activation
+  // Student & Teacher Portal role & Board+Class-Wise Multi-Class Subscription activation
   accountRole?: 'student' | 'teacher';
+  primaryBoard?: EducationBoard;
   primaryClassLevel?: ClassLevel;
+  activatedBoard?: EducationBoard;
   activatedClassLevel?: ClassLevel;
   activatedClasses?: ClassLevel[];
-  classSubscriptions?: Partial<Record<ClassLevel, ClassSubscriptionRecord>>;
+  activatedClassKeys?: BoardClassKey[];
+  classSubscriptions?: Partial<Record<string, ClassSubscriptionRecord>>;
   lastPaymentId?: string;
   lastOrderId?: string;
   // Referral & School Governance extensions
@@ -123,6 +142,8 @@ export interface StudentProfile {
 }
 
 export interface ClassSubscriptionRecord {
+  board?: EducationBoard;
+  boardClassKey?: BoardClassKey;
   classLevel: ClassLevel;
   plan: 'free' | 'basic' | 'premium';
   status: 'ACTIVE' | 'EXPIRED' | 'LOCKED';
@@ -133,6 +154,27 @@ export interface ClassSubscriptionRecord {
   amountInr?: number;
   validityDays?: number;
   updatedAt?: string;
+}
+
+export interface ChapterNoteExample {
+  prompt: string;
+  solution: string;
+}
+
+export interface ChapterStudyMaterial {
+  id: string;
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  chapterNumber: number;
+  chapterTitle: string;
+  textbookRef?: string;
+  overview: string;
+  keyPoints: string[];
+  formulasAndRules: string[];
+  solvedExamples: ChapterNoteExample[];
+  revisionChecklist: string[];
+  isFreePreview?: boolean;
 }
 
 export interface ParentProfile {
@@ -201,6 +243,7 @@ export interface AuthenticatedUser {
   role: 'student' | 'teacher' | 'admin';
   displayName: string;
   studentId?: string; // If student or teacher
+  board?: EducationBoard;
   classLevel?: ClassLevel;
   linkedStudentIds?: string[];
   isVerified: boolean;
@@ -211,6 +254,7 @@ export interface RegistrationResult {
   message: string;
   duplicateField?: 'email' | 'mobile';
   existingStudentName?: string;
+  existingBoard?: EducationBoard;
   existingClass?: ClassLevel;
   existingStudent?: StudentProfile;
   existingAccountMatchedPair?: boolean;
@@ -240,6 +284,7 @@ export type QuestionType =
 
 export interface QuizQuestion {
   id: string;
+  board?: EducationBoard;
   classLevel: ClassLevel;
   subject: SubjectName;
   level?: QuizLevel; // 1: Easy, 2: Medium, 3: Hard, 4: Expert (defaults to 1)
@@ -263,6 +308,7 @@ export interface QuizAttempt {
   id: string;
   studentId: string;
   studentName: string;
+  board?: EducationBoard;
   classLevel: ClassLevel;
   subject: SubjectName;
   level?: QuizLevel; // 1, 2, 3, or 4
@@ -400,6 +446,7 @@ export interface PaymentTransaction {
   studentName: string;
   parentEmail: string;
   parentMobile: string;
+  selectedBoard?: EducationBoard;
   selectedClass?: ClassLevel;
   planId: 'basic' | 'premium';
   planTitle: string;

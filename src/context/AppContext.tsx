@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   StudentProfile, 
   RegistrationResult,
@@ -12,6 +12,7 @@ import {
   InAppNotification, 
   ClassLevel, 
   SubjectName,
+  EducationBoard,
   QuestionType,
   QuizLevel,
   SubjectLevelProgress,
@@ -82,15 +83,24 @@ import {
   ScholarshipSection 
 } from '../data/scholarshipData';
 import {
+  buildBoardClassKey,
   canAccessWorksheet,
+  canSwitchBoardAndClass,
   canSwitchToClass,
   formatStandardOrdinal,
+  getActivatedBoardClassesList,
   getActivatedClassesList,
+  getBoardDisplayName,
   getClassSubscriptionInfo,
   getPremiumActivatedBannerMessage,
+  getPrimaryBaseBoard,
   getPrimaryBaseClass,
+  getRawBoardClassSubscriptionsMap,
   getRawClassSubscriptionsMap,
+  normalizeBoardValue,
   normalizeClassLevelValue,
+  parseBoardAndClassFromWorksheetId,
+  parseBoardClassKey,
   WORKSHEET_PREMIUM_UPGRADE_MESSAGE
 } from '../utils/subscriptionAccess';
 import {
@@ -141,6 +151,7 @@ interface AppContextType {
   setActiveRole: (role: UserRole) => void;
   currentUser: AuthenticatedUser | null;
   currentStudent: StudentProfile | null;
+  activeBoard: EducationBoard;
   studentsList: StudentProfile[];
   parentsList: ParentProfile[];
   announcements: AnnouncementItem[];
@@ -169,19 +180,22 @@ interface AppContextType {
     preferredRole?: 'student' | 'teacher';
   }) => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
   
-  // Auth & Session methods - Multi-Class Subscriptions Linked to Unique Mobile & Email Account
+  // Auth & Session methods - Multi-Board & Multi-Class Subscriptions Linked to Unique Mobile & Email Account
   checkAccountForMultiClassRegistration: (
     email: string,
     mobile: string,
-    targetClass?: ClassLevel
+    targetClass?: ClassLevel,
+    targetBoard?: EducationBoard
   ) => Promise<{
     exists: boolean;
     matchedPair: boolean;
     mismatchField?: 'email' | 'mobile' | null;
     existingStudentName?: string;
+    existingBoard?: EducationBoard;
     existingClass?: ClassLevel;
     accountRole?: 'student' | 'teacher';
     activeClasses?: ClassLevel[];
+    activeClassKeys?: string[];
     alreadyUnlockedTargetClass?: boolean;
     localStudent?: StudentProfile;
   }>;
@@ -216,23 +230,25 @@ interface AppContextType {
   // Automated Security Verification Test Runner
   runSecurityAuditTest: () => Promise<SecurityAuditReport>;
 
-  // Class Promotion & Multi-Class Switching (Classes 1 to 10)
+  // Class Promotion & Multi-Board / Multi-Class Switching (Maharashtra, CBSE, ICSE • Classes 1 to 10)
   adminPromoteOrCorrectClass: (studentId: string, newClass: ClassLevel, reason: string, adminName?: string) => { success: boolean; message: string };
-  switchActiveClass: (targetClass: ClassLevel) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
+  switchActiveClass: (targetClass: ClassLevel, targetBoard?: EducationBoard) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
+  switchActiveBoardAndClass: (targetBoard: EducationBoard, targetClass: ClassLevel) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
   promoteOrUpdateStudentClass: (newClass: ClassLevel, reason?: string) => { success: boolean; message: string };
   updateStudentClass: (newClass: ClassLevel) => void;
 
-  // Online Worksheets (Classes 1 to 10)
+  // Online Worksheets (Classes 1 to 10 across Maharashtra, CBSE, ICSE)
   submitWorksheetAttempt: (attemptData: Omit<WorksheetAttemptRecord, 'id' | 'completedAt'>) => WorksheetAttemptRecord;
 
-  // Quiz & Zero Repetition 4-Level Engine
-  getSubjectLevelProgress: (subject: SubjectName, classLevelOverride?: ClassLevel) => SubjectLevelProgress;
-  getUnattemptedQuizQuestions: (classLevel: ClassLevel, subject: SubjectName) => QuizQuestion[];
-  fetchClassSubjectQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName) => Promise<QuizQuestion[]>;
-  fetchClassSubjectLevelQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, level: QuizLevel) => Promise<QuizQuestion[]>;
+  // Quiz & Zero Repetition 4-Level Engine (Board + Class + Subject)
+  getSubjectLevelProgress: (subject: SubjectName, classLevelOverride?: ClassLevel, boardOverride?: EducationBoard) => SubjectLevelProgress;
+  getUnattemptedQuizQuestions: (classLevel: ClassLevel, subject: SubjectName, board?: EducationBoard) => QuizQuestion[];
+  fetchClassSubjectQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, board?: EducationBoard) => Promise<QuizQuestion[]>;
+  fetchClassSubjectLevelQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, level: QuizLevel, board?: EducationBoard) => Promise<QuizQuestion[]>;
   updateQuestionStatus: (questionId: string, status: 'approved' | 'rejected') => void;
   submitQuizAttempt: (attempt: Omit<QuizAttempt, 'id' | 'completedAt'>) => QuizAttempt;
   addNewQuestionWithValidation: (questionData: {
+    board?: EducationBoard;
     classLevel: ClassLevel;
     subject: SubjectName;
     level?: QuizLevel;
@@ -420,9 +436,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : generateUniqueStudentReferralCode(safeS.id, safeS.name, usedCodes);
             usedCodes.add(uniqueCode);
 
+            const resolvedBoard = normalizeBoardValue(safeS.board || 'Maharashtra');
             return {
               ...safeS,
               accountRole: safeS.accountRole || 'student',
+              board: resolvedBoard,
+              primaryBoard: normalizeBoardValue(safeS.primaryBoard || resolvedBoard),
+              activatedBoard: safeS.activatedBoard ? normalizeBoardValue(safeS.activatedBoard) : undefined,
               primaryClassLevel:
                 normalizeClassLevelValue(safeS.primaryClassLevel) ||
                 normalizeClassLevelValue(safeS.classLevel) ||
@@ -431,6 +451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 safeS.activatedClassLevel ||
                 (safeS.plan === 'premium' || safeS.plan === 'basic' ? safeS.classLevel : undefined),
               activatedClasses: Array.isArray(safeS.activatedClasses) ? safeS.activatedClasses : undefined,
+              activatedClassKeys: Array.isArray(safeS.activatedClassKeys) ? safeS.activatedClassKeys : undefined,
               classSubscriptions: safeS.classSubscriptions || undefined,
               referralCode: uniqueCode,
               referralLink: buildStudentReferralLink(uniqueCode),
@@ -469,9 +490,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const code =
           sanitizeReferralCode(safeParsed.referralCode) ||
           generateUniqueStudentReferralCode(safeParsed.id, safeParsed.name);
+        const resolvedBoard = normalizeBoardValue(safeParsed.board || 'Maharashtra');
         return {
           ...safeParsed,
           accountRole: safeParsed.accountRole || 'student',
+          board: resolvedBoard,
+          primaryBoard: normalizeBoardValue(safeParsed.primaryBoard || resolvedBoard),
+          activatedBoard: safeParsed.activatedBoard ? normalizeBoardValue(safeParsed.activatedBoard) : undefined,
           primaryClassLevel:
             normalizeClassLevelValue(safeParsed.primaryClassLevel) ||
             normalizeClassLevelValue(safeParsed.classLevel) ||
@@ -483,6 +508,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               : undefined),
           activatedClasses: Array.isArray(safeParsed.activatedClasses)
             ? safeParsed.activatedClasses
+            : undefined,
+          activatedClassKeys: Array.isArray(safeParsed.activatedClassKeys)
+            ? safeParsed.activatedClassKeys
             : undefined,
           classSubscriptions: safeParsed.classSubscriptions || undefined,
           referralCode: code,
@@ -864,15 +892,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           fbSub.activatedClasses && fbSub.activatedClasses.length > 0
             ? fbSub.activatedClasses
             : profile.activatedClasses;
+        const mergedActivatedKeys =
+          fbSub.activatedClassKeys && fbSub.activatedClassKeys.length > 0
+            ? fbSub.activatedClassKeys
+            : profile.activatedClassKeys;
         const resolvedPrimary =
           fbSub.primaryClassLevel || profile.primaryClassLevel || profile.classLevel;
+        const resolvedBoard = normalizeBoardValue(fbSub.board || profile.board || 'Maharashtra');
+        const resolvedPrimaryBoard = normalizeBoardValue(
+          fbSub.primaryBoard || profile.primaryBoard || resolvedBoard
+        );
         return {
           ...profile,
           plan: fbSub.plan!,
+          board: resolvedBoard,
+          primaryBoard: resolvedPrimaryBoard,
+          activatedBoard: fbSub.activatedBoard
+            ? normalizeBoardValue(fbSub.activatedBoard)
+            : profile.activatedBoard,
           primaryClassLevel: resolvedPrimary,
           activatedClassLevel:
             (fbSub.activatedClassLevel as ClassLevel) || profile.activatedClassLevel || profile.classLevel,
           activatedClasses: mergedActivatedClasses,
+          activatedClassKeys: mergedActivatedKeys,
           classSubscriptions: mergedClassSubs,
           planPurchasedAt: fbSub.planPurchasedAt || profile.planPurchasedAt,
           planExpiresAt: fbSub.planExpiresAt || profile.planExpiresAt,
@@ -884,8 +926,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const next = applySubSync(prev);
         if (
           prev.plan === next.plan &&
+          (prev.board || 'Maharashtra') === (next.board || 'Maharashtra') &&
           (prev.planExpiresAt || null) === (next.planExpiresAt || null) &&
-          JSON.stringify(prev.classSubscriptions || {}) === JSON.stringify(next.classSubscriptions || {})
+          JSON.stringify(prev.classSubscriptions || {}) === JSON.stringify(next.classSubscriptions || {}) &&
+          JSON.stringify(prev.activatedClassKeys || []) === JSON.stringify(next.activatedClassKeys || [])
         ) {
           return prev;
         }
@@ -935,14 +979,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentStudent?.id]);
 
-  // Multi-Class Auth Helpers - Single Account with Independent Class Subscriptions (Students & Teachers)
+  // Multi-Board & Multi-Class Auth Helpers - Single Account with Independent (Board, Class) Subscriptions (Students & Teachers)
   const checkAccountForMultiClassRegistration = async (
     email: string,
     mobile: string,
-    targetClass?: ClassLevel
+    targetClass?: ClassLevel,
+    targetBoard?: EducationBoard
   ) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
+    const resolvedBoard = normalizeBoardValue(targetBoard || 'Maharashtra');
 
     // 1. Check local student list first
     const localByMobile = cleanMobile.length === 10
@@ -953,18 +999,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : undefined;
 
     if (localByMobile && localByEmail && localByMobile.id === localByEmail.id) {
-      const activeClasses = getActivatedClassesList(localByMobile).map(c => c.classLevel);
+      const activeBoardClasses = getActivatedBoardClassesList(localByMobile);
+      const activeClasses = Array.from(new Set(activeBoardClasses.map(c => c.classLevel)));
+      const activeClassKeys = activeBoardClasses.map(c => c.boardClassKey);
       const alreadyUnlockedTargetClass = targetClass
-        ? canSwitchToClass(localByMobile, targetClass).allowed
+        ? canSwitchBoardAndClass(localByMobile, resolvedBoard, targetClass).allowed
         : false;
       return {
         exists: true,
         matchedPair: true,
         mismatchField: null,
         existingStudentName: localByMobile.name,
+        existingBoard: getPrimaryBaseBoard(localByMobile),
         existingClass: localByMobile.classLevel,
         accountRole: localByMobile.accountRole || 'student',
         activeClasses,
+        activeClassKeys,
         alreadyUnlockedTargetClass,
         localStudent: localByMobile,
       };
@@ -976,6 +1026,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         matchedPair: false,
         mismatchField: 'mobile' as const,
         existingStudentName: localByMobile.name,
+        existingBoard: getPrimaryBaseBoard(localByMobile),
         existingClass: localByMobile.classLevel,
       };
     }
@@ -986,6 +1037,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         matchedPair: false,
         mismatchField: 'mobile' as const,
         existingStudentName: localByMobile.name,
+        existingBoard: getPrimaryBaseBoard(localByMobile),
         existingClass: localByMobile.classLevel,
       };
     }
@@ -996,6 +1048,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         matchedPair: false,
         mismatchField: 'email' as const,
         existingStudentName: localByEmail.name,
+        existingBoard: getPrimaryBaseBoard(localByEmail),
         existingClass: localByEmail.classLevel,
       };
     }
@@ -1003,23 +1056,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Check Firestore/Backend across devices
     const serverRes = await checkExistingAccountApi(cleanEmail, cleanMobile);
     if (serverRes.exists) {
+      const serverPrimaryBoard = normalizeBoardValue(serverRes.primaryBoard || 'Maharashtra');
+      const serverPrimaryClass = normalizeClassLevelValue(serverRes.primaryClassLevel);
       const serverActiveClasses = (serverRes.activeClasses || [])
         .map(c => normalizeClassLevelValue(c))
         .filter(Boolean) as ClassLevel[];
+      const serverActiveKeys: string[] = Array.isArray(serverRes.activeClassKeys)
+        ? serverRes.activeClassKeys
+        : serverActiveClasses.map(c => buildBoardClassKey(serverPrimaryBoard, c));
       const targetNorm = targetClass ? normalizeClassLevelValue(targetClass) : null;
+      const targetComposite = targetNorm ? buildBoardClassKey(resolvedBoard, targetNorm) : null;
+
       const alreadyUnlockedTargetClass = Boolean(
         targetNorm &&
-          (serverActiveClasses.includes(targetNorm) ||
-            normalizeClassLevelValue(serverRes.primaryClassLevel) === targetNorm)
+          targetComposite &&
+          (serverActiveKeys.includes(targetComposite) ||
+            (serverPrimaryBoard === resolvedBoard && serverPrimaryClass === targetNorm))
       );
       return {
         exists: true,
         matchedPair: Boolean(serverRes.matchedPair),
         mismatchField: serverRes.mismatchField || null,
         existingStudentName: serverRes.studentName,
-        existingClass: normalizeClassLevelValue(serverRes.primaryClassLevel) || undefined,
+        existingBoard: serverPrimaryBoard,
+        existingClass: serverPrimaryClass || undefined,
         accountRole: serverRes.accountRole || 'student',
         activeClasses: serverActiveClasses,
+        activeClassKeys: serverActiveKeys,
         alreadyUnlockedTargetClass,
       };
     }
@@ -1041,6 +1104,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const resolvedAccountRole: 'student' | 'teacher' =
       options?.accountRole || data.accountRole || 'student';
     const roleLabel = resolvedAccountRole === 'teacher' ? 'Teacher' : 'Student';
+    const resolvedBoard = normalizeBoardValue(data.board || 'Maharashtra');
 
     if (cleanMobile.length !== 10) {
       return {
@@ -1059,20 +1123,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const existingMobile = studentsList.find(s => s.mobile.replace(/\D/g, '').slice(-10) === cleanMobile);
     const existingEmail = studentsList.find(s => s.email.trim().toLowerCase() === cleanEmail);
 
-    // 1. Same user (same mobile + same email) adding/activating an additional class on their existing account
+    // 1. Same user (same mobile + same email) adding/activating an additional board/class on their existing account
     if (existingMobile && existingEmail && existingMobile.id === existingEmail.id) {
-      const targetCheck = canSwitchToClass(existingMobile, data.classLevel);
+      const targetCheck = canSwitchBoardAndClass(existingMobile, resolvedBoard, data.classLevel);
       return {
         success: false,
         existingAccountMatchedPair: true,
         existingStudent: existingMobile,
         existingStudentName: existingMobile.name,
+        existingBoard: getPrimaryBaseBoard(existingMobile),
         existingClass: existingMobile.classLevel,
         alreadyUnlockedTargetClass: targetCheck.allowed,
         needsExistingAccountAuth: true,
         message: targetCheck.allowed
-          ? `Account recognized for "${existingMobile.name}"! ${data.classLevel} is already unlocked on your account. Sign in to switch directly to ${data.classLevel}.`
-          : `Existing account recognized for "${existingMobile.name}" (${existingMobile.email})! To unlock ${data.classLevel} (₹99 / 365 Days) on your existing account without creating a duplicate, verify your account password and proceed to subscription checkout.`
+          ? `Account recognized for "${existingMobile.name}"! ${getBoardDisplayName(resolvedBoard)} • ${data.classLevel} is already unlocked on your account. Sign in to switch directly.`
+          : `Existing account recognized for "${existingMobile.name}" (${existingMobile.email})! To unlock ${getBoardDisplayName(resolvedBoard)} • ${data.classLevel} (₹99 / 365 Days) on your existing account without creating a duplicate, verify your account password and proceed to subscription checkout.`
       };
     }
 
@@ -1082,8 +1147,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         success: false,
         duplicateField: 'mobile',
         existingStudentName: existingMobile.name,
+        existingBoard: getPrimaryBaseBoard(existingMobile),
         existingClass: existingMobile.classLevel,
-        message: `Mobile number ${cleanMobile} is already registered with "${existingMobile.name}" (${existingMobile.email}). Enter your exact registered Email & Mobile pair to activate another class on that account.`
+        message: `Mobile number ${cleanMobile} is already registered with "${existingMobile.name}" (${existingMobile.email}). Enter your exact registered Email & Mobile pair to activate another board or class on that account.`
       };
     }
 
@@ -1093,8 +1159,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         success: false,
         duplicateField: 'email',
         existingStudentName: existingEmail.name,
+        existingBoard: getPrimaryBaseBoard(existingEmail),
         existingClass: existingEmail.classLevel,
-        message: `Email address "${cleanEmail}" is already registered with "${existingEmail.name}" (${existingEmail.classLevel}). Enter your exact registered Mobile & Email pair to add another class to that account.`
+        message: `Email address "${cleanEmail}" is already registered with "${existingEmail.name}" (${existingEmail.classLevel}). Enter your exact registered Mobile & Email pair to add another board or class to that account.`
       };
     }
 
@@ -1121,8 +1188,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...data,
       id: newUid,
       accountRole: resolvedAccountRole,
+      board: resolvedBoard,
+      primaryBoard: resolvedBoard,
       primaryClassLevel: data.classLevel,
       activatedClasses: [],
+      activatedClassKeys: [],
       classSubscriptions: {},
       schoolName: (data.schoolName || '').trim(), // Optional field
       parentName: data.parentName || (resolvedAccountRole === 'teacher' ? 'Teacher Portal Account' : data.name),
@@ -1159,6 +1229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       displayName: newStudent.name,
       role: resolvedAccountRole,
       studentId: newStudent.id,
+      board: resolvedBoard,
       classLevel: newStudent.classLevel,
       isVerified: true
     });
@@ -1170,13 +1241,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification(
       `${roleLabel} Account Registered! 🎓✨`,
-      `Welcome ${newStudent.name}! Registered in Standard ${formatStandardOrdinal(newStudent.classLevel)} (${newStudent.classLevel}). You can activate additional classes anytime from your dashboard!`,
+      `Welcome ${newStudent.name}! Registered in ${getBoardDisplayName(resolvedBoard)} • Standard ${formatStandardOrdinal(newStudent.classLevel)} (${newStudent.classLevel}). You can activate additional boards or classes anytime from your dashboard!`,
       'achievement'
     );
 
     return {
       success: true,
-      message: `${roleLabel} account registered successfully for ${newStudent.name} in Standard ${formatStandardOrdinal(newStudent.classLevel)} (${newStudent.classLevel})!`,
+      message: `${roleLabel} account registered successfully for ${newStudent.name} in ${getBoardDisplayName(resolvedBoard)} • Standard ${formatStandardOrdinal(newStudent.classLevel)} (${newStudent.classLevel})!`,
       student: newStudent
     };
   };
@@ -1253,6 +1324,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: fbUid,
           name: fbRes.user.displayName || cleanEmail.split('@')[0] || 'Student',
           accountRole: roleFallback,
+          board: 'Maharashtra',
+          primaryBoard: 'Maharashtra',
           parentName: roleFallback === 'teacher' ? 'Teacher Portal Account' : 'Parent / Guardian',
           mobile: '',
           email: cleanEmail,
@@ -1282,10 +1355,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { passwordHash: _stripHash, ...safeFound } = found;
       const accountRole: 'student' | 'teacher' = safeFound.accountRole || preferredRole || 'student';
       const roleLabel = accountRole === 'teacher' ? 'Teacher' : 'Student';
+      const resolvedBoard = normalizeBoardValue(safeFound.board || 'Maharashtra');
 
       const updated: StudentProfile = {
         ...safeFound,
         accountRole,
+        board: resolvedBoard,
+        primaryBoard: normalizeBoardValue(safeFound.primaryBoard || resolvedBoard),
         firebaseUid: fbUid,
         isEmailVerified: Boolean(fbRes.user.emailVerified) || Boolean(safeFound.isEmailVerified)
       };
@@ -1328,6 +1404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         displayName: updated.name,
         role: accountRole,
         studentId: updated.id,
+        board: resolvedBoard,
         classLevel: updated.classLevel,
         isVerified: true
       });
@@ -1336,7 +1413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return {
         success: true,
-        message: `Welcome back, ${updated.name}! Signed into ${roleLabel} Portal (${updated.classLevel}).`,
+        message: `Welcome back, ${updated.name}! Signed into ${roleLabel} Portal (${getBoardDisplayName(resolvedBoard)} • ${updated.classLevel}).`,
         student: updated
       };
     } finally {
@@ -1388,6 +1465,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: fbUid,
           name: fbRes.user.displayName || cleanEmail.split('@')[0] || 'Student',
           accountRole: roleFallback,
+          board: 'Maharashtra',
+          primaryBoard: 'Maharashtra',
           parentName: roleFallback === 'teacher' ? 'Teacher Portal Account' : 'Parent / Guardian',
           mobile: cleanMobile,
           email: cleanEmail,
@@ -1425,6 +1504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const { passwordHash: _stripHash, ...safeFound } = found;
       const accountRole: 'student' | 'teacher' = safeFound.accountRole || params.preferredRole || 'student';
+      const resolvedBoard = normalizeBoardValue(safeFound.board || 'Maharashtra');
       const idToken = await fbRes.user.getIdToken().catch(() => undefined);
 
       const recRes = await recoverSingleDeviceSession({
@@ -1448,6 +1528,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updated: StudentProfile = {
         ...safeFound,
         accountRole,
+        board: resolvedBoard,
+        primaryBoard: normalizeBoardValue(safeFound.primaryBoard || resolvedBoard),
         firebaseUid: fbUid,
         mobile: safeFound.mobile || cleanMobile
       };
@@ -1466,6 +1548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         displayName: updated.name,
         role: accountRole,
         studentId: updated.id,
+        board: resolvedBoard,
         classLevel: updated.classLevel,
         isVerified: true
       });
@@ -1884,11 +1967,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mobile: '9000000003'
     });
 
+    const cbseFixture = baseFixture({
+      id: 'audit_cbse',
+      board: 'CBSE',
+      primaryBoard: 'CBSE',
+      classLevel: 'Class 5',
+      primaryClassLevel: 'Class 4',
+      activatedBoard: 'CBSE',
+      activatedClassLevel: 'Class 5',
+      activatedClasses: ['Class 5'],
+      activatedClassKeys: ['CBSE__Class 5'],
+      classSubscriptions: {
+        'CBSE__Class 5': {
+          board: 'CBSE',
+          boardClassKey: 'CBSE__Class 5',
+          classLevel: 'Class 5',
+          plan: 'premium',
+          status: 'ACTIVE',
+          purchasedAt: '2026-11-01',
+          expiresAt: '2027-11-01',
+          amountInr: 99,
+          validityDays: 365
+        }
+      },
+      plan: 'premium',
+      planPurchasedAt: '2026-11-01',
+      planExpiresAt: '2027-11-01',
+      email: 'cbse@test.local',
+      mobile: '9000000004'
+    });
+
     const checks: SecurityAuditCheck[] = [
       {
         id: 'sec-chk-1',
-        title: 'Unique Mobile & Email Identity With Multi-Class Linked Plans',
-        description: 'Verify accounts retain a single unique UID/email/mobile while supporting independent class subscriptions.',
+        title: 'Unique Mobile & Email Identity With Multi-Board & Multi-Class Linked Plans',
+        description: 'Verify accounts retain a single unique UID/email/mobile while supporting independent (board, class) subscriptions.',
         category: 'student_isolation',
         passed: s1.id !== s2.id && s1.email !== s2.email && s1.mobile !== s2.mobile && t2.email !== s2.email,
         details: `PASS: Strict credential binding active (${studentsList.length} registered local account(s)).`
@@ -1899,21 +2012,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         description: 'Verify Class 5 expiry locks Class 5 without revoking active Class 6, and unpaid Class 7 remains strictly locked.',
         category: 'student_isolation',
         passed:
-          canAccessWorksheet(s2, 'WS-C6-SCIENCE-2', 'Class 6').allowed &&
-          !canAccessWorksheet(s2, 'WS-C5-SCIENCE-2', 'Class 5').allowed &&
-          !canAccessWorksheet(s2, 'WS-C7-SCIENCE-2', 'Class 7').allowed &&
-          !canSwitchToClass(s2, 'Class 7').allowed &&
-          canSwitchToClass(s2, 'Class 6').allowed,
+          canAccessWorksheet(s2, 'WS-C6-SCIENCE-2', 'Class 6', undefined, 'Maharashtra').allowed &&
+          !canAccessWorksheet(s2, 'WS-C5-SCIENCE-2', 'Class 5', undefined, 'Maharashtra').allowed &&
+          !canAccessWorksheet(s2, 'WS-C7-SCIENCE-2', 'Class 7', undefined, 'Maharashtra').allowed &&
+          !canSwitchToClass(s2, 'Class 7', undefined, 'Maharashtra').allowed &&
+          canSwitchToClass(s2, 'Class 6', undefined, 'Maharashtra').allowed,
         details: 'PASS: Expired Class 5 & unpaid Class 7 stay locked while active Class 6 remains fully accessible.'
       },
       {
         id: 'sec-chk-3',
-        title: 'Teacher Portal Class-Wise Restriction',
-        description: 'Verify Teachers can access only activated or base registered classes.',
+        title: 'Teacher Portal Board & Class Restriction',
+        description: 'Verify Teachers can access only activated or base registered board & classes.',
         category: 'parent_isolation',
         passed:
-          canAccessWorksheet(t2, 'WS-C9-PHYSICS-1', 'Class 9').allowed &&
-          !canAccessWorksheet(t2, 'WS-C8-SCIENCE-1', 'Class 8').allowed,
+          canAccessWorksheet(t2, 'WS-C9-PHYSICS-1', 'Class 9', undefined, 'Maharashtra').allowed &&
+          !canAccessWorksheet(t2, 'WS-C8-SCIENCE-1', 'Class 8', undefined, 'Maharashtra').allowed,
         details: 'PASS: Class-9 Teacher account accesses Class 9 curriculum while unactivated classes remain restricted.'
       },
       {
@@ -1923,6 +2036,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: 'database_security',
         passed: true,
         details: 'PASS: All worksheets are interactive online-only with @media print blocking and keyboard print/save protection.'
+      },
+      {
+        id: 'sec-chk-5',
+        title: 'Strict 3-Board Subscription Isolation (Maharashtra • CBSE • ICSE)',
+        description: 'Verify activating CBSE Class 5 unlocks ONLY CBSE Class 5 and never unlocks ICSE Class 5, Maharashtra Class 5, or CBSE Class 6.',
+        category: 'student_isolation',
+        passed:
+          canSwitchBoardAndClass(cbseFixture, 'CBSE', 'Class 5').allowed &&
+          canAccessWorksheet(cbseFixture, 'WS-CBSE-C5-SCIENCE-2', 'Class 5', undefined, 'CBSE').allowed &&
+          !canSwitchBoardAndClass(cbseFixture, 'ICSE', 'Class 5').allowed &&
+          !canSwitchBoardAndClass(cbseFixture, 'Maharashtra', 'Class 5').allowed &&
+          !canSwitchBoardAndClass(cbseFixture, 'CBSE', 'Class 6').allowed &&
+          !canAccessWorksheet(cbseFixture, 'WS-ICSE-C5-SCIENCE-2', 'Class 5', undefined, 'ICSE').allowed &&
+          !canAccessWorksheet(cbseFixture, 'WS-C5-SCIENCE-2', 'Class 5', undefined, 'Maharashtra').allowed,
+        details: 'PASS: CBSE Class 5 active stays strictly isolated from ICSE, Maharashtra, and unpaid CBSE Class 6.'
       }
     ];
 
@@ -1980,8 +2108,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Switch Active Class (Strictly permitted ONLY to the account's Free Base class or ACTIVE paid ₹99 classes)
-  const switchActiveClass = async (
+  // Switch Active (Board, Class) — Strictly permitted ONLY to unlocked base or ACTIVE paid ₹99 (board, class)
+  const switchActiveBoardAndClass = async (
+    targetBoard: EducationBoard,
     targetClass: ClassLevel
   ): Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }> => {
     if (!currentStudent) {
@@ -1990,12 +2119,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!verifyLocalDeviceBeforeProtectedAction()) {
       return { success: false, message: SINGLE_DEVICE_BLOCK_MESSAGE };
     }
+    const resolvedBoard = normalizeBoardValue(targetBoard || currentStudent.board || 'Maharashtra');
     const normalizedTarget = normalizeClassLevelValue(targetClass) || currentStudent.classLevel;
-    const accessCheck = canSwitchToClass(currentStudent, normalizedTarget);
+    const accessCheck = canSwitchBoardAndClass(currentStudent, resolvedBoard, normalizedTarget);
 
     if (!accessCheck.allowed) {
       addNotification(
-        accessCheck.needsRenewal ? `${normalizedTarget} Subscription Expired ⏳` : `${normalizedTarget} Locked 🔒`,
+        accessCheck.needsRenewal
+          ? `${resolvedBoard} • ${normalizedTarget} Subscription Expired ⏳`
+          : `${resolvedBoard} • ${normalizedTarget} Locked 🔒`,
         accessCheck.reason,
         'membership'
       );
@@ -2007,15 +2139,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    if (currentStudent.classLevel === normalizedTarget) {
+    const currentBoard = normalizeBoardValue(currentStudent.board || 'Maharashtra');
+    if (currentBoard === resolvedBoard && currentStudent.classLevel === normalizedTarget) {
       return {
         success: true,
-        message: `Your workspace is already active on Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
+        message: `Your workspace is already active on ${getBoardDisplayName(resolvedBoard)} • Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
       };
     }
 
     const updatedStudent: StudentProfile = {
       ...currentStudent,
+      board: resolvedBoard,
       classLevel: normalizedTarget,
       lastActiveDate: new Date().toISOString(),
     };
@@ -2023,28 +2157,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentStudent(updatedStudent);
     setStudentsList(prev => prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s)));
     setCurrentUser(prev =>
-      prev ? { ...prev, classLevel: normalizedTarget } : prev
+      prev ? { ...prev, board: resolvedBoard, classLevel: normalizedTarget } : prev
     );
 
-    switchStudentActiveClassInFirestore(updatedStudent.id, normalizedTarget).catch(() => {});
+    switchStudentActiveClassInFirestore(updatedStudent.id, normalizedTarget, resolvedBoard).catch(() => {});
     (async () => {
       let token: string | undefined;
       try {
         token = await auth.currentUser?.getIdToken();
       } catch {}
-      await switchStudentActiveClassApi(updatedStudent.id, normalizedTarget, token);
+      await switchStudentActiveClassApi(updatedStudent.id, normalizedTarget, token, resolvedBoard);
     })().catch(() => {});
 
     addNotification(
-      `Switched to ${normalizedTarget} 🎓`,
-      `Active learning dashboard switched to Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
+      `Switched to ${resolvedBoard} • ${normalizedTarget} 🎓`,
+      `Active learning dashboard switched to ${getBoardDisplayName(resolvedBoard)} • Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
       'achievement'
     );
 
     return {
       success: true,
-      message: `Switched workspace to Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
+      message: `Switched workspace to ${getBoardDisplayName(resolvedBoard)} • Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}).`,
     };
+  };
+
+  // Switch Active Class (Backwards-compatible wrapper accepting optional targetBoard)
+  const switchActiveClass = async (
+    targetClass: ClassLevel,
+    targetBoard?: EducationBoard
+  ): Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }> => {
+    const resolvedBoard = normalizeBoardValue(targetBoard || currentStudent?.board || 'Maharashtra');
+    return switchActiveBoardAndClass(resolvedBoard, targetClass);
   };
 
   // Synchronous wrapper for class switching: unlocks ONLY if already purchased/active or base Free class
@@ -2052,7 +2195,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentStudent) {
       return { success: false, message: 'Please sign in first.' };
     }
-    const accessCheck = canSwitchToClass(currentStudent, newClass);
+    const activeB = normalizeBoardValue(currentStudent.board || 'Maharashtra');
+    const accessCheck = canSwitchBoardAndClass(currentStudent, activeB, newClass);
     if (!accessCheck.allowed) {
       addNotification('Class Access Restricted 🔒', accessCheck.reason, 'membership');
       return {
@@ -2060,10 +2204,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: accessCheck.reason
       };
     }
-    void switchActiveClass(newClass);
+    void switchActiveBoardAndClass(activeB, newClass);
     return {
       success: true,
-      message: `Switched active workspace to Standard ${formatStandardOrdinal(newClass)} (${newClass}).`
+      message: `Switched active workspace to ${activeB} • Standard ${formatStandardOrdinal(newClass)} (${newClass}).`
     };
   };
 
@@ -2072,9 +2216,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const submitWorksheetAttempt = (attemptData: Omit<WorksheetAttemptRecord, 'id' | 'completedAt'>): WorksheetAttemptRecord => {
-    const accessCheck = canAccessWorksheet(currentStudent, attemptData.worksheetId);
+    const parsedFromId = parseBoardAndClassFromWorksheetId(attemptData.worksheetId);
+    const resolvedBoard: EducationBoard = normalizeBoardValue(
+      attemptData.board || parsedFromId.board || currentStudent?.board || 'Maharashtra'
+    );
+    const resolvedClass: ClassLevel | undefined =
+      normalizeClassLevelValue(attemptData.classLevel) ||
+      parsedFromId.classLevel ||
+      currentStudent?.classLevel;
+
+    const accessCheck = canAccessWorksheet(
+      currentStudent,
+      attemptData.worksheetId,
+      resolvedClass,
+      undefined,
+      resolvedBoard
+    );
     const record: WorksheetAttemptRecord = {
       ...attemptData,
+      board: resolvedBoard,
+      classLevel: resolvedClass || currentStudent?.classLevel || 'Class 1',
       id: `ws_att_${Date.now()}`,
       completedAt: new Date().toISOString()
     };
@@ -2108,7 +2269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStudentProfileToFirestore(updatedStudent).catch(() => {});
 
       addNotification(
-        `Worksheet Completed: ${attemptData.subject}`,
+        `Worksheet Completed: ${resolvedBoard} • ${attemptData.subject}`,
         `You scored ${attemptData.obtainedMarks}/${attemptData.totalMarks} (${attemptData.percentage}%) on "${attemptData.worksheetTitle}" and earned +${bonusPoints} Champion Points!`,
         'achievement'
       );
@@ -2117,17 +2278,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return record;
   };
 
-  // ZERO QUESTION REPETITION ENGINE - STRICT REQUIREMENT
-  // Returns exactly 10 questions for the given class and subject that this student has NEVER seen before!
-  const getUnattemptedQuizQuestions = (classLevel: ClassLevel, subject: SubjectName): QuizQuestion[] => {
+  // ZERO QUESTION REPETITION ENGINE - STRICT REQUIREMENT (Scoped by Board, Class, and Subject)
+  // Returns exactly 10 questions for the given board, class and subject that this student has NEVER seen before!
+  const getUnattemptedQuizQuestions = (
+    classLevel: ClassLevel,
+    subject: SubjectName,
+    board?: EducationBoard
+  ): QuizQuestion[] => {
+    const resolvedBoard = normalizeBoardValue(board || currentStudent?.board || 'Maharashtra');
     const studentAttempted = currentStudent ? currentStudent.attemptedQuestionIds : [];
 
-    // Filter candidate pool strictly by classLevel and subject
+    // Filter candidate pool strictly by board, classLevel and subject
     let candidatePool = allQuestions.filter(
-      q => q.classLevel === classLevel && 
-           q.subject === subject && 
-           q.status === 'approved' &&
-           !studentAttempted.includes(q.id)
+      q =>
+        normalizeBoardValue(q.board || 'Maharashtra') === resolvedBoard &&
+        q.classLevel === classLevel &&
+        q.subject === subject &&
+        q.status === 'approved' &&
+        !studentAttempted.includes(q.id)
     );
 
     let updatedQuestions = [...allQuestions];
@@ -2135,10 +2303,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     while (candidatePool.length < 10 && counter <= 35) {
       const freshQuestion = generateClassSpecificCurriculumQuestion(
-        classLevel, 
-        subject, 
-        updatedQuestions, 
-        Date.now() + counter * 997
+        classLevel,
+        subject,
+        updatedQuestions,
+        Date.now() + counter * 997,
+        resolvedBoard
       );
 
       // Verify once more against the repetition rule and duplicate check
@@ -2162,7 +2331,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return candidatePool.slice(0, 10);
   };
 
-  const getSubjectLevelProgress = (subject: SubjectName, classLevelOverride?: ClassLevel): SubjectLevelProgress => {
+  const getSubjectLevelProgress = (
+    subject: SubjectName,
+    classLevelOverride?: ClassLevel,
+    boardOverride?: EducationBoard
+  ): SubjectLevelProgress => {
     if (!currentStudent || !currentStudent.subjectProgress) {
       return {
         maxUnlockedLevel: 4,
@@ -2170,9 +2343,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bestScores: {}
       };
     }
+    const targetBoard = normalizeBoardValue(boardOverride || currentStudent.board || 'Maharashtra');
     const targetClass = classLevelOverride || currentStudent.classLevel;
+    const boardClassScopedKey = `${targetBoard}__${targetClass}__${subject}` as SubjectName;
     const classScopedKey = `${targetClass}__${subject}` as SubjectName;
-    const found = currentStudent.subjectProgress[classScopedKey] || currentStudent.subjectProgress[subject];
+    const found =
+      currentStudent.subjectProgress[boardClassScopedKey] ||
+      (targetBoard === 'Maharashtra' ? currentStudent.subjectProgress[classScopedKey] : undefined) ||
+      (targetBoard === normalizeBoardValue(currentStudent.board || 'Maharashtra')
+        ? currentStudent.subjectProgress[subject]
+        : undefined);
     if (!found) {
       return {
         maxUnlockedLevel: 4,
@@ -2187,11 +2367,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const fetchClassSubjectQuestionsAsync = async (classLevel: ClassLevel, subject: SubjectName): Promise<QuizQuestion[]> => {
+  const fetchClassSubjectQuestionsAsync = async (
+    classLevel: ClassLevel,
+    subject: SubjectName,
+    board?: EducationBoard
+  ): Promise<QuizQuestion[]> => {
+    const resolvedBoard = normalizeBoardValue(board || currentStudent?.board || 'Maharashtra');
     const studentAttempted = currentStudent ? currentStudent.attemptedQuestionIds : [];
-    const questions = await getStrictClassSubjectQuestions(classLevel, subject, studentAttempted, allQuestions);
-    
-    // Check if new questions need to be persisted
+    const questions = await getStrictClassSubjectQuestions(
+      classLevel,
+      subject,
+      studentAttempted,
+      allQuestions,
+      resolvedBoard
+    );
+
     const existingIds = new Set(allQuestions.map(q => q.id));
     const newQuestions = questions.filter(q => !existingIds.has(q.id));
     if (newQuestions.length > 0) {
@@ -2202,14 +2392,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const fetchClassSubjectLevelQuestionsAsync = async (
-    classLevel: ClassLevel, 
-    subject: SubjectName, 
-    level: QuizLevel
+    classLevel: ClassLevel,
+    subject: SubjectName,
+    level: QuizLevel,
+    board?: EducationBoard
   ): Promise<QuizQuestion[]> => {
+    const resolvedBoard = normalizeBoardValue(board || currentStudent?.board || 'Maharashtra');
     const studentAttempted = currentStudent ? currentStudent.attemptedQuestionIds : [];
-    const questions = await getStrictClassSubjectLevelQuestions(classLevel, subject, level, studentAttempted, allQuestions);
-    
-    // Ensure all returned questions are persisted in master
+    const questions = await getStrictClassSubjectLevelQuestions(
+      classLevel,
+      subject,
+      level,
+      studentAttempted,
+      allQuestions,
+      resolvedBoard
+    );
+
     const existingIds = new Set(allQuestions.map(q => q.id));
     const newQuestions = questions.filter(q => !existingIds.has(q.id));
     if (newQuestions.length > 0) {
@@ -2226,9 +2424,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const submitQuizAttempt = (attemptData: Omit<QuizAttempt, 'id' | 'completedAt'>): QuizAttempt => {
     const passed = attemptData.scorePercent >= 60;
     const currentLvl = (attemptData.level || 1) as QuizLevel;
+    const resolvedBoard = normalizeBoardValue(
+      attemptData.board || currentStudent?.board || 'Maharashtra'
+    );
 
     const newAttempt: QuizAttempt = {
       ...attemptData,
+      board: resolvedBoard,
       level: currentLvl,
       passed,
       id: `att_${Date.now()}`,
@@ -2237,7 +2439,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setAllAttempts(prev => [newAttempt, ...prev]);
 
-    // Update current student points, streak, accuracy, attempted questions, and subject levels
+    // Update current student points, streak, accuracy, attempted questions, and board+class+subject levels
     if (currentStudent) {
       const newlyAttempted = Array.from(new Set([
         ...currentStudent.attemptedQuestionIds,
@@ -2255,10 +2457,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       else if (updatedPoints >= 500) newLevel = 3;
       else if (updatedPoints >= 200) newLevel = 2;
 
-      // Update 4-Level Subject Progression (both class-scoped and subject-scoped)
+      // Update 4-Level Subject Progression (board+class-scoped, plus legacy keys)
+      const boardClassScopedKey = `${resolvedBoard}__${newAttempt.classLevel}__${newAttempt.subject}` as SubjectName;
       const classScopedKey = `${newAttempt.classLevel}__${newAttempt.subject}` as SubjectName;
       const existingSubjProgress =
-        currentStudent.subjectProgress?.[classScopedKey] ||
+        currentStudent.subjectProgress?.[boardClassScopedKey] ||
+        (resolvedBoard === 'Maharashtra' ? currentStudent.subjectProgress?.[classScopedKey] : undefined) ||
         currentStudent.subjectProgress?.[newAttempt.subject] || {
           maxUnlockedLevel: 4 as QuizLevel,
           completedLevels: [] as QuizLevel[],
@@ -2289,7 +2493,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updatedSubjectProgressMap = {
         ...(currentStudent.subjectProgress || {}),
         [newAttempt.subject]: updatedSubjProgress,
-        [classScopedKey]: updatedSubjProgress
+        [classScopedKey]: updatedSubjProgress,
+        [boardClassScopedKey]: updatedSubjProgress
       };
 
       // Check new badges
@@ -2300,7 +2505,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (newAttempt.correctCount === 10 && !currentBadges.includes('badge-accuracy-master')) {
         currentBadges.push('badge-accuracy-master');
       }
-      if (newAttempt.subject === 'Mathematics' && !currentBadges.includes('badge-math-whiz')) {
+      if (
+        (newAttempt.subject === 'Mathematics' ||
+          newAttempt.subject === 'Mathematics – Algebra' ||
+          newAttempt.subject === 'Mathematics – Geometry') &&
+        !currentBadges.includes('badge-math-whiz')
+      ) {
         currentBadges.push('badge-math-whiz');
       }
 
@@ -2321,7 +2531,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const isLevelUpgraded = passed && currentLvl < 4 && newMaxUnlocked > existingSubjProgress.maxUnlockedLevel;
 
       addNotification(
-        `Quiz Completed: ${newAttempt.subject} (Level ${currentLvl})`,
+        `Quiz Completed: ${resolvedBoard} • ${newAttempt.subject} (Level ${currentLvl})`,
         `You scored ${newAttempt.correctCount}/10 (${newAttempt.scorePercent}%) and earned +${bonusPoints} Champion Points!${isLevelUpgraded ? ` 🔓 Level ${newMaxUnlocked} is now UNLOCKED!` : ''}`,
         'quiz'
       );
@@ -2330,8 +2540,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newAttempt;
   };
 
-  // Add question with strict duplicate detection for Administrator
+  // Add question with strict global duplicate detection for Administrator
   const addNewQuestionWithValidation = (questionData: {
+    board?: EducationBoard;
     classLevel: ClassLevel;
     subject: SubjectName;
     level?: QuizLevel;
@@ -2343,6 +2554,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     explanation: string;
     difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
   }) => {
+    const resolvedBoard = normalizeBoardValue(questionData.board || 'Maharashtra');
     const dupCheck = checkQuestionDuplicate(
       questionData.questionText,
       questionData.options[questionData.correctIndex],
@@ -2368,8 +2580,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const uniqueCode = Math.floor(Math.random() * 9000 + 1000);
+    const boardTag = resolvedBoard === 'Maharashtra' ? '' : `${resolvedBoard.toUpperCase()}-`;
     const newQuestion: QuizQuestion = {
-      id: `VC-C${questionData.classLevel.replace('Class ', '')}-${questionData.subject.substring(0, 3).toUpperCase()}-CUSTOM-${uniqueCode}`,
+      id: `VC-${boardTag}C${questionData.classLevel.replace('Class ', '')}-${questionData.subject.substring(0, 3).toUpperCase()}-CUSTOM-${uniqueCode}`,
+      board: resolvedBoard,
       classLevel: questionData.classLevel,
       subject: questionData.subject,
       level: questionData.level || 1,
@@ -2392,7 +2606,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: true,
-      message: 'Question passed zero-duplication check and was added to the curriculum bank successfully.'
+      message: `Question passed global zero-duplication check and was added to the ${resolvedBoard} question bank successfully.`
     };
   };
 
@@ -2543,13 +2757,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const student = currentStudent;
+    const targetBoard: EducationBoard = normalizeBoardValue(
+      transaction.selectedBoard || student.board || 'Maharashtra'
+    );
     const targetClass: ClassLevel =
       normalizeClassLevelValue(transaction.selectedClass) ||
       normalizeClassLevelValue(student.classLevel) ||
       'Class 1';
+    const compositeKey = buildBoardClassKey(targetBoard, targetClass);
 
-    const txWithClass: PaymentTransaction = {
+    const txWithBoardClass: PaymentTransaction = {
       ...transaction,
+      selectedBoard: targetBoard,
       selectedClass: targetClass
     };
 
@@ -2557,40 +2776,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const alreadyProcessedLocally = transactions.some(
       t =>
         t.status === 'SUCCESS' &&
-        (t.paymentId === txWithClass.paymentId ||
-          (Boolean(txWithClass.orderId) && t.orderId === txWithClass.orderId))
+        (t.paymentId === txWithBoardClass.paymentId ||
+          (Boolean(txWithBoardClass.orderId) && t.orderId === txWithBoardClass.orderId))
     );
 
     if (alreadyProcessedLocally) {
-      saveTransactionToFirestore(txWithClass).catch(() => {});
+      saveTransactionToFirestore(txWithBoardClass).catch(() => {});
       return;
     }
 
+    const existingCompositeMap = getRawBoardClassSubscriptionsMap(student);
     const existingClassMap = getRawClassSubscriptionsMap(student);
-    const targetExistingExpiry = existingClassMap[targetClass]?.expiresAt;
+    const targetExistingExpiry = existingCompositeMap[compositeKey]?.expiresAt;
     const computedDates = computePaidPlanExpiryIsoDate(targetExistingExpiry);
-    const resolvedPurchasedAt = txWithClass.membershipStartDate || computedDates.purchasedAt;
+    const resolvedPurchasedAt = txWithBoardClass.membershipStartDate || computedDates.purchasedAt;
     const resolvedExpiresAt =
-      customExpiryDate || txWithClass.membershipExpiryDate || computedDates.expiresAt;
+      customExpiryDate || txWithBoardClass.membershipExpiryDate || computedDates.expiresAt;
 
-    const updatedClassSubscriptions: Partial<Record<ClassLevel, ClassSubscriptionRecord>> = {
+    const newSubRecord: ClassSubscriptionRecord = {
+      board: targetBoard,
+      boardClassKey: compositeKey,
+      classLevel: targetClass,
+      plan: txWithBoardClass.planId,
+      status: 'ACTIVE',
+      purchasedAt: resolvedPurchasedAt,
+      expiresAt: resolvedExpiresAt,
+      paymentId: txWithBoardClass.paymentId,
+      orderId: txWithBoardClass.orderId,
+      amountInr: txWithBoardClass.amount || 99,
+      validityDays: 365,
+      updatedAt: new Date().toISOString()
+    };
+
+    const updatedClassSubscriptions: Record<string, ClassSubscriptionRecord> = {
       ...existingClassMap,
-      [targetClass]: {
-        classLevel: targetClass,
-        plan: txWithClass.planId,
-        status: 'ACTIVE',
-        purchasedAt: resolvedPurchasedAt,
-        expiresAt: resolvedExpiresAt,
-        paymentId: txWithClass.paymentId,
-        orderId: txWithClass.orderId,
-        amountInr: txWithClass.amount || 99,
-        validityDays: 365,
-        updatedAt: new Date().toISOString()
-      }
+      ...existingCompositeMap,
+      [compositeKey]: newSubRecord
     };
 
     const updatedBadges = [...student.badges];
-    if (txWithClass.planId === 'premium' && !updatedBadges.includes('badge-champion-premium')) {
+    if (txWithBoardClass.planId === 'premium' && !updatedBadges.includes('badge-champion-premium')) {
       updatedBadges.push('badge-champion-premium');
     }
 
@@ -2598,46 +2823,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...student,
       classSubscriptions: updatedClassSubscriptions
     };
-    const updatedActivatedClasses = getActivatedClassesList(tempForActiveList).map(i => i.classLevel);
-    if (!updatedActivatedClasses.includes(targetClass)) {
-      updatedActivatedClasses.push(targetClass);
-    }
+    const updatedActivatedPairs = getActivatedBoardClassesList(tempForActiveList);
+    const updatedActivatedKeys = Array.from(new Set([...updatedActivatedPairs.map(i => i.boardClassKey), compositeKey]));
+    const updatedActivatedClasses = Array.from(
+      new Set([
+        ...updatedActivatedKeys
+          .map(k => parseBoardClassKey(k)?.classLevel)
+          .filter((cls): cls is ClassLevel => Boolean(cls)),
+        targetClass
+      ])
+    );
 
     const updatedStudent: StudentProfile = {
       ...student,
+      board: targetBoard,
+      primaryBoard: getPrimaryBaseBoard(student),
       classLevel: targetClass,
       primaryClassLevel: getPrimaryBaseClass(student),
-      plan: txWithClass.planId,
+      plan: txWithBoardClass.planId,
+      activatedBoard: targetBoard,
       activatedClassLevel: targetClass,
       activatedClasses: updatedActivatedClasses,
+      activatedClassKeys: updatedActivatedKeys,
       classSubscriptions: updatedClassSubscriptions,
       planPurchasedAt: resolvedPurchasedAt,
       planExpiresAt: resolvedExpiresAt,
-      lastPaymentId: txWithClass.paymentId,
-      lastOrderId: txWithClass.orderId,
-      points: student.points + (txWithClass.planId === 'premium' ? 250 : 100),
+      lastPaymentId: txWithBoardClass.paymentId,
+      lastOrderId: txWithBoardClass.orderId,
+      points: student.points + (txWithBoardClass.planId === 'premium' ? 250 : 100),
       badges: updatedBadges,
       lastActiveDate: new Date().toISOString()
     };
 
     setCurrentStudent(updatedStudent);
     setCurrentUser(prev =>
-      prev ? { ...prev, classLevel: targetClass } : prev
+      prev ? { ...prev, board: targetBoard, classLevel: targetClass } : prev
     );
     setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
-    setTransactions(prev => [txWithClass, ...prev.filter(t => t.paymentId !== txWithClass.paymentId)]);
+    setTransactions(prev => [txWithBoardClass, ...prev.filter(t => t.paymentId !== txWithBoardClass.paymentId)]);
 
-    saveTransactionToFirestore(txWithClass).catch(() => {});
+    saveTransactionToFirestore(txWithBoardClass).catch(() => {});
     saveStudentProfileToFirestore(updatedStudent).catch(() => {});
     saveSubscriptionToFirestore(updatedStudent.id, {
-      plan: txWithClass.planId,
+      plan: txWithBoardClass.planId,
+      selectedBoard: targetBoard,
       selectedClass: targetClass,
       planPurchasedAt: resolvedPurchasedAt,
       planExpiresAt: resolvedExpiresAt,
       currentExpiresAt: targetExistingExpiry,
-      paymentId: txWithClass.paymentId,
-      orderId: txWithClass.orderId,
-      amountInr: txWithClass.amount
+      paymentId: txWithBoardClass.paymentId,
+      orderId: txWithBoardClass.orderId,
+      amountInr: txWithBoardClass.amount
     }).catch(() => {});
 
     (async () => {
@@ -2648,24 +2884,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch {
         // Proceed without token if offline
       }
-      await fetch('/api/subscription/sync', {
+      const syncBody = JSON.stringify({
+        studentId: updatedStudent.id,
+        plan: txWithBoardClass.planId,
+        selectedBoard: targetBoard,
+        selectedClass: targetClass,
+        planPurchasedAt: resolvedPurchasedAt,
+        planExpiresAt: resolvedExpiresAt,
+        paymentId: txWithBoardClass.paymentId,
+        orderId: txWithBoardClass.orderId
+      });
+      const res = await fetch('/api/subscription/sync', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          studentId: updatedStudent.id,
-          plan: txWithClass.planId,
-          selectedClass: targetClass,
-          planPurchasedAt: resolvedPurchasedAt,
-          planExpiresAt: resolvedExpiresAt,
-          paymentId: txWithClass.paymentId,
-          orderId: txWithClass.orderId
-        })
+        body: syncBody
       });
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      if (res.status === 404 || contentType.includes('text/html')) {
+        await fetch('/.netlify/functions/api/subscription/sync', {
+          method: 'POST',
+          headers,
+          body: syncBody
+        });
+      }
     })().catch(() => {});
 
     addNotification(
-      `${targetClass} Membership Activated! 👑`,
-      `Your Premium Access is Activated for Standard ${formatStandardOrdinal(targetClass)} (${targetClass}) — Valid 365 Days until ${formatDateIstDisplay(resolvedExpiresAt)}. Payment ID: ${txWithClass.paymentId}.`,
+      `${targetBoard} • ${targetClass} Membership Activated! 👑`,
+      `Your Premium Access is Activated for ${getBoardDisplayName(targetBoard)} • Standard ${formatStandardOrdinal(targetClass)} (${targetClass}) — Valid 365 Days until ${formatDateIstDisplay(resolvedExpiresAt)}. Payment ID: ${txWithBoardClass.paymentId}.`,
       'membership'
     );
   };
@@ -2813,87 +3059,122 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications([]);
   };
 
+  const clearSessionSecurityNotice = useCallback(() => setSessionSecurityNotice(null), []);
+  const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
+  const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
+  const activeBoardValue = normalizeBoardValue(currentStudent?.board || 'Maharashtra');
+
+  const contextValue = useMemo<AppContextType>(
+    () => ({
+      activeRole,
+      setActiveRole,
+      currentUser,
+      currentStudent,
+      activeBoard: activeBoardValue,
+      studentsList,
+      parentsList,
+      announcements,
+      allQuestions,
+      rejectedDuplicates,
+      allStories,
+      allPuzzles,
+      savedDrawings,
+      drawingTemplates,
+      allAttempts,
+      transactions,
+      notifications,
+      platformSettings,
+
+      switchRole,
+      loginAsTeacher,
+      loginAsAdmin,
+      activeDeviceSession,
+      sessionSecurityNotice,
+      clearSessionSecurityNotice,
+      acquireSessionAfterRegistration,
+      recoverBlockedDeviceSession,
+
+      checkAccountForMultiClassRegistration,
+      registerStudent,
+      loginWithEmail,
+      recoverAccount,
+      completePasswordReset,
+      logout,
+      quickSwitchStudent,
+      isAuthModalOpen,
+      setIsAuthModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      adminPromoteOrCorrectClass,
+      switchActiveClass,
+      switchActiveBoardAndClass,
+      promoteOrUpdateStudentClass,
+      updateStudentClass,
+      submitWorksheetAttempt,
+
+      updateStudentAttendance,
+      addStudentAssignment,
+      updateStudentAssignment,
+      updateStudentFeeRecord,
+      addAnnouncement,
+      deleteAnnouncement,
+      linkParentToStudent,
+      runSecurityAuditTest,
+
+      getSubjectLevelProgress,
+      getUnattemptedQuizQuestions,
+      fetchClassSubjectQuestionsAsync,
+      fetchClassSubjectLevelQuestionsAsync,
+      updateQuestionStatus,
+      submitQuizAttempt,
+      addNewQuestionWithValidation,
+      deleteQuestion,
+
+      markStoryCompleted,
+      saveDrawingSubmission,
+      deleteDrawingSubmission,
+      addDrawingTemplate,
+      toggleDrawingTemplatePublished,
+      deleteDrawingTemplate,
+      solvePuzzle,
+      activateVerifiedMembership,
+      adminApplyApproved365DayMigration,
+
+      recordScholarshipAttempt,
+      updateTimers,
+      markNotificationAsRead,
+      clearAllNotifications,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      activeRole,
+      currentUser,
+      currentStudent,
+      activeBoardValue,
+      studentsList,
+      parentsList,
+      announcements,
+      allQuestions,
+      rejectedDuplicates,
+      allStories,
+      allPuzzles,
+      savedDrawings,
+      drawingTemplates,
+      allAttempts,
+      transactions,
+      notifications,
+      platformSettings,
+      activeDeviceSession,
+      sessionSecurityNotice,
+      isAuthModalOpen,
+      clearSessionSecurityNotice,
+      openAuthModal,
+      closeAuthModal,
+    ]
+  );
+
   return (
-    <AppContext.Provider
-      value={{
-        activeRole,
-        setActiveRole,
-        currentUser,
-        currentStudent,
-        studentsList,
-        parentsList,
-        announcements,
-        allQuestions,
-        rejectedDuplicates,
-        allStories,
-        allPuzzles,
-        savedDrawings,
-        drawingTemplates,
-        allAttempts,
-        transactions,
-        notifications,
-        platformSettings,
-
-        switchRole,
-        loginAsTeacher,
-        loginAsAdmin,
-        activeDeviceSession,
-        sessionSecurityNotice,
-        clearSessionSecurityNotice: () => setSessionSecurityNotice(null),
-        acquireSessionAfterRegistration,
-        recoverBlockedDeviceSession,
-
-        checkAccountForMultiClassRegistration,
-        registerStudent,
-        loginWithEmail,
-        recoverAccount,
-        completePasswordReset,
-        logout,
-        quickSwitchStudent,
-        isAuthModalOpen,
-        setIsAuthModalOpen,
-        openAuthModal: () => setIsAuthModalOpen(true),
-        closeAuthModal: () => setIsAuthModalOpen(false),
-        adminPromoteOrCorrectClass,
-        switchActiveClass,
-        promoteOrUpdateStudentClass,
-        updateStudentClass,
-        submitWorksheetAttempt,
-
-        updateStudentAttendance,
-        addStudentAssignment,
-        updateStudentAssignment,
-        updateStudentFeeRecord,
-        addAnnouncement,
-        deleteAnnouncement,
-        linkParentToStudent,
-        runSecurityAuditTest,
-
-        getSubjectLevelProgress,
-        getUnattemptedQuizQuestions,
-        fetchClassSubjectQuestionsAsync,
-        fetchClassSubjectLevelQuestionsAsync,
-        updateQuestionStatus,
-        submitQuizAttempt,
-        addNewQuestionWithValidation,
-        deleteQuestion,
-
-        markStoryCompleted,
-        saveDrawingSubmission,
-        deleteDrawingSubmission,
-        addDrawingTemplate,
-        toggleDrawingTemplatePublished,
-        deleteDrawingTemplate,
-        solvePuzzle,
-        activateVerifiedMembership,
-        adminApplyApproved365DayMigration,
-
-        recordScholarshipAttempt,
-        updateTimers,
-        markNotificationAsRead,
-        clearAllNotifications
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

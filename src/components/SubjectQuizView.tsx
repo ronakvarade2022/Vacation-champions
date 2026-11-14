@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel, SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
+import { ClassLevel, EducationBoard, SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
 import { randomizeQuizQuestions } from '../services/answerRandomizerService';
 import confetti from 'canvas-confetti';
 import { 
@@ -25,7 +25,12 @@ import {
   Flame
 } from 'lucide-react';
 
-import { canAccessSubject, getClassSubscriptionInfo } from '../utils/subscriptionAccess';
+import {
+  ALL_BOARDS,
+  canAccessSubject,
+  getBoardClassSubscriptionInfo,
+  getBoardShortLabel
+} from '../utils/subscriptionAccess';
 import { PlanUpgradePromptModal } from './PlanUpgradePromptModal';
 import { ReportQuestionModal } from './ReportQuestionModal';
 import {
@@ -37,7 +42,7 @@ import {
 interface SubjectQuizViewProps {
   initialSubject?: SubjectName;
   initialLevel?: QuizLevel;
-  onOpenMembership?: (plan?: 'basic' | 'premium', targetClass?: ClassLevel) => void;
+  onOpenMembership?: (plan?: 'basic' | 'premium', targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
 const QUESTION_FORMAT_LABELS: Record<string, { label: string; badgeColor: string }> = {
@@ -110,25 +115,28 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
 }) => {
   const { 
     currentStudent, 
+    activeBoard,
     platformSettings, 
     fetchClassSubjectLevelQuestionsAsync,
     getSubjectLevelProgress,
     submitQuizAttempt,
-    switchActiveClass
+    switchActiveBoardAndClass
   } = useApp();
 
   const availableSubjectsForClass = React.useMemo(() => {
     const cls = currentStudent?.classLevel || 'Class 4';
-    const subjs = getSubjectsForClass(cls);
+    const subjs = getSubjectsForClass(cls, activeBoard);
     return subjs.map(s => {
-      const m = getSubjectMeta(s);
+      const m = getSubjectMeta(s, activeBoard);
       return { name: s, icon: m.icon, bgGradient: m.gradient };
     });
-  }, [currentStudent?.classLevel]);
+  }, [currentStudent?.classLevel, activeBoard]);
 
   const defaultSubjectForClass: SubjectName = availableSubjectsForClass[0]?.name || 'Mathematics';
   const safeInitialSubject: SubjectName =
-    canAccessSubject(currentStudent, initialSubject).allowed ? initialSubject : defaultSubjectForClass;
+    canAccessSubject(currentStudent, initialSubject, currentStudent?.classLevel, undefined, activeBoard).allowed
+      ? initialSubject
+      : defaultSubjectForClass;
 
   const [selectedSubject, setSelectedSubject] = useState<SubjectName>(safeInitialSubject);
   const [selectedLevel, setSelectedLevel] = useState<QuizLevel>(initialLevel);
@@ -177,8 +185,19 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
       ? platformSettings.timers.classes4to5 
       : platformSettings.timers.classes6to8;
 
-  const currentSubjProgress = getSubjectLevelProgress(selectedSubject);
+  const currentSubjProgress = getSubjectLevelProgress(selectedSubject, currentStudent.classLevel, activeBoard);
   const maxUnlockedLevel = currentSubjProgress.maxUnlockedLevel;
+
+  // Reset subject selection cleanly if activeBoard/classLevel changes and selectedSubject is not in class syllabus
+  useEffect(() => {
+    if (!availableSubjectsForClass.some(s => s.name === selectedSubject)) {
+      const fallback = availableSubjectsForClass[0]?.name || 'Mathematics';
+      setSelectedSubject(fallback);
+      setQuizState('idle');
+      setQuestions([]);
+      setAnswersLog([]);
+    }
+  }, [activeBoard, currentStudent.classLevel, availableSubjectsForClass, selectedSubject]);
 
   // Sync selectedSubject & selectedLevel whenever props change from external navigation
   useEffect(() => {
@@ -195,14 +214,14 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
 
   // Handle clicking on another subject tab
   const handleSubjectClick = (targetSubject: SubjectName) => {
-    const access = canAccessSubject(currentStudent, targetSubject);
+    const access = canAccessSubject(currentStudent, targetSubject, currentStudent.classLevel, undefined, activeBoard);
     if (!access.allowed) {
       setLockedSubjectPrompt({
         isOpen: true,
-        subjectName: `${targetSubject} Quizzes`,
+        subjectName: `${targetSubject} Quizzes (${getBoardShortLabel(activeBoard)})`,
         reason:
           access.reason ||
-          `${targetSubject} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan to unlock all 14 school subjects!`
+          `${targetSubject} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan to unlock all subjects for ${getBoardShortLabel(activeBoard)} ${currentStudent.classLevel}!`
       });
       return;
     }
@@ -241,11 +260,11 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     setLoadError(null);
 
     // Default to level 1 or highest unlocked level
-    const prog = getSubjectLevelProgress(subj);
+    const prog = getSubjectLevelProgress(subj, currentStudent.classLevel, activeBoard);
     setSelectedLevel(prog.maxUnlockedLevel || 1);
   };
 
-  // Start new 10-Question Quiz for chosen subject & level
+  // Start new 10-Question Quiz for chosen board, class, subject & level
   const startQuiz = async (subj: SubjectName, lvl: QuizLevel) => {
     setIsLoadingSubject(true);
     setLoadError(null);
@@ -254,7 +273,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     const requestId = ++activeRequestIdRef.current;
 
     try {
-      const qList = await fetchClassSubjectLevelQuestionsAsync(currentStudent.classLevel, subj, lvl);
+      const qList = await fetchClassSubjectLevelQuestionsAsync(currentStudent.classLevel, subj, lvl, activeBoard);
       const randomizedQs = randomizeQuizQuestions(qList, true);
       
       if (requestId === activeRequestIdRef.current) {
@@ -362,6 +381,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     submitQuizAttempt({
       studentId: currentStudent.id,
       studentName: currentStudent.name,
+      board: activeBoard,
       classLevel: currentStudent.classLevel,
       subject: selectedSubject,
       level: selectedLevel,
@@ -394,8 +414,8 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
   const currentSubjectObj =
     availableSubjectsForClass.find(s => s.name === selectedSubject) || {
       name: selectedSubject,
-      icon: getSubjectMeta(selectedSubject).icon,
-      bgGradient: getSubjectMeta(selectedSubject).gradient
+      icon: getSubjectMeta(selectedSubject, activeBoard).icon,
+      bgGradient: getSubjectMeta(selectedSubject, activeBoard).gradient
     };
 
   return (
@@ -410,7 +430,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
                 Subject Quiz Arena (Classes 1st to 10th)
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                {currentStudent.classLevel} ({availableSubjectsForClass.length} Subjects)
+                {getBoardShortLabel(activeBoard)} • {currentStudent.classLevel} ({availableSubjectsForClass.length} Subjects)
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
@@ -424,6 +444,58 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
           </div>
         </div>
 
+        {/* 3-Board Switcher Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
+            Education Board:
+          </span>
+          {ALL_BOARDS.map((b) => {
+            const isCurrBoard = activeBoard === b;
+            const firstAccessibleClass = ALL_10_CLASSES.find((c) =>
+              getBoardClassSubscriptionInfo(currentStudent, b, c).isAccessible
+            );
+            const currentClsInfo = getBoardClassSubscriptionInfo(currentStudent, b, currentStudent.classLevel);
+            const targetCls = currentClsInfo.isAccessible
+              ? currentStudent.classLevel
+              : firstAccessibleClass || currentStudent.classLevel;
+            const hasAnyAccess = Boolean(firstAccessibleClass);
+            return (
+              <button
+                key={b}
+                type="button"
+                onClick={async () => {
+                  if (isCurrBoard) return;
+                  if (hasAnyAccess) {
+                    const nextSubjs = getSubjectsForClass(targetCls, b);
+                    await switchActiveBoardAndClass(b, targetCls);
+                    setQuizState('idle');
+                    setQuestions([]);
+                    setAnswersLog([]);
+                    if (!nextSubjs.includes(selectedSubject)) {
+                      setSelectedSubject(nextSubjs[0] || 'Mathematics');
+                    }
+                  } else {
+                    onOpenMembership?.('premium', currentStudent.classLevel, b);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border inline-flex items-center gap-1 cursor-pointer ${
+                  isCurrBoard
+                    ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
+                    : hasAnyAccess
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                {!hasAnyAccess && <Lock className="w-3 h-3 text-amber-600" />}
+                <span>{getBoardShortLabel(b)}</span>
+                {!isCurrBoard && !hasAnyAccess && (
+                  <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-900">₹99</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Classes 1 to 10 Quick Selector Bar (Multi-Class Switcher & ₹99 Activation) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
@@ -431,7 +503,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
           </span>
           {ALL_10_CLASSES.map(cls => {
             const isCurrClass = currentStudent.classLevel === cls;
-            const cInfo = getClassSubscriptionInfo(currentStudent, cls);
+            const cInfo = getBoardClassSubscriptionInfo(currentStudent, activeBoard, cls);
             return (
               <button
                 key={cls}
@@ -439,8 +511,8 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
                 onClick={async () => {
                   if (cInfo.isAccessible) {
                     if (cls !== currentStudent.classLevel) {
-                      const nextSubjs = getSubjectsForClass(cls);
-                      await switchActiveClass(cls);
+                      const nextSubjs = getSubjectsForClass(cls, activeBoard);
+                      await switchActiveBoardAndClass(activeBoard, cls);
                       setQuizState('idle');
                       setQuestions([]);
                       setAnswersLog([]);
@@ -449,7 +521,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
                       }
                     }
                   } else {
-                    onOpenMembership?.('premium', cls);
+                    onOpenMembership?.('premium', cls, activeBoard);
                   }
                 }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border inline-flex items-center gap-1 cursor-pointer ${
@@ -465,12 +537,12 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
                 }`}
                 title={
                   isCurrClass
-                    ? `Active Workspace: ${cls}`
+                    ? `Active Workspace: ${getBoardShortLabel(activeBoard)} • ${cls}`
                     : cInfo.isAccessible
-                    ? `Switch quiz workspace to ${cls}`
+                    ? `Switch quiz workspace to ${getBoardShortLabel(activeBoard)} • ${cls}`
                     : cInfo.isExpired
-                    ? `${cls} expired — Click to renew for ₹99 (365 Days)`
-                    : `Click to unlock ${cls} for ₹99 (365 Days)`
+                    ? `${getBoardShortLabel(activeBoard)} ${cls} expired — Click to renew for ₹99 (365 Days)`
+                    : `Click to unlock ${getBoardShortLabel(activeBoard)} ${cls} for ₹99 (365 Days)`
                 }
               >
                 {!cInfo.isAccessible && <Lock className="w-3 h-3 text-amber-600" />}
@@ -492,8 +564,8 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
           {availableSubjectsForClass.map((sub) => {
             const isSelected = selectedSubject === sub.name;
-            const subProgress = getSubjectLevelProgress(sub.name);
-            const subjectAccess = canAccessSubject(currentStudent, sub.name);
+            const subProgress = getSubjectLevelProgress(sub.name, currentStudent.classLevel, activeBoard);
+            const subjectAccess = canAccessSubject(currentStudent, sub.name, currentStudent.classLevel, undefined, activeBoard);
             const isSubLocked = !subjectAccess.allowed;
             return (
               <button
@@ -1091,12 +1163,14 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         isOpen={lockedSubjectPrompt.isOpen}
         onClose={() => setLockedSubjectPrompt(prev => ({ ...prev, isOpen: false }))}
         currentStudent={currentStudent}
+        targetClass={currentStudent.classLevel}
+        targetBoard={activeBoard}
         featureTitle={lockedSubjectPrompt.subjectName}
         requiredPlan="basic"
         upgradeMessage={lockedSubjectPrompt.reason}
         onSelectUpgradePlan={(plan: 'basic' | 'premium') => {
           setLockedSubjectPrompt(prev => ({ ...prev, isOpen: false }));
-          onOpenMembership?.(plan, currentStudent.classLevel);
+          onOpenMembership?.(plan, currentStudent.classLevel, activeBoard);
         }}
       />
 
@@ -1109,6 +1183,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
           questionText={reportingQuestion.questionText}
           subject={selectedSubject}
           classLevel={currentStudent.classLevel}
+          board={activeBoard}
           selectedAnswer={
             selectedOption !== null && selectedOption >= 0 && reportingQuestion.options[selectedOption]
               ? reportingQuestion.options[selectedOption]

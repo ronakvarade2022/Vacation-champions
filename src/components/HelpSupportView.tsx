@@ -432,6 +432,8 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
                       <img
                         src={screenshotData}
                         alt="Screenshot Preview"
+                        loading="lazy"
+                        decoding="async"
                         className="w-16 h-16 object-cover rounded-xl border border-slate-300"
                       />
                       <div className="text-xs text-slate-600">

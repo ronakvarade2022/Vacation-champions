@@ -3,7 +3,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
+  orderBy,
+  query,
   setDoc,
   type Unsubscribe
 } from 'firebase/firestore';
@@ -13,6 +16,11 @@ import type {
   DeviceType
 } from '../types';
 import { auth, db } from './firebase';
+import {
+  ADMIN_CACHE_DEFAULT_TTL_MS,
+  cachedAdminFetch,
+  updateCachedAdminValue
+} from './adminCacheService';
 
 export const SINGLE_DEVICE_BLOCK_MESSAGE =
   'Your account is currently active on another device. Please log out from your previous device before logging in here.';
@@ -846,56 +854,76 @@ export function subscribeToUserDeviceSession(
 }
 
 export async function fetchAllDeviceSessionsForAdmin(
-  idToken?: string
+  idToken?: string,
+  forceRefresh: boolean = false
 ): Promise<DeviceSessionRecord[]> {
-  const merged = new Map<string, DeviceSessionRecord>();
-  const nowMs = Date.now();
+  return cachedAdminFetch(
+    'admin:device_sessions',
+    async () => {
+      const merged = new Map<string, DeviceSessionRecord>();
+      const nowMs = Date.now();
+      let loadedFromServer = false;
 
-  try {
-    const snap = await getDocs(collection(db, 'device_sessions'));
-    snap.forEach((d) => {
-      const data = d.data() as DeviceSessionRecord;
-      if (data?.userId) {
-        merged.set(d.id, data);
-      }
-    });
-  } catch {
-    // Fallback to backend admin endpoint
-  }
+      // Prefer authenticated backend endpoint first so we don't issue duplicate reads
+      if (idToken) {
+        try {
+          const res = await callSessionApi<{
+            success: boolean;
+            sessions?: DeviceSessionRecord[];
+          }>('/admin/sessions', { method: 'GET' }, idToken);
 
-  const res = await callSessionApi<{
-    success: boolean;
-    sessions?: DeviceSessionRecord[];
-  }>('/admin/sessions', { method: 'GET' }, idToken);
-
-  if (res.ok && Array.isArray(res.data?.sessions)) {
-    for (const s of res.data.sessions) {
-      const existing = merged.get(s.userId);
-      if (!existing) {
-        merged.set(s.userId, s);
-      } else {
-        const exTs = Date.parse(existing.lastActivityAt || '') || 0;
-        const srvTs = Date.parse(s.lastActivityAt || '') || 0;
-        if (srvTs >= exTs) {
-          merged.set(s.userId, s);
+          if (res.ok && Array.isArray(res.data?.sessions)) {
+            for (const s of res.data.sessions) {
+              if (s?.userId) merged.set(s.userId, s);
+            }
+            loadedFromServer = res.data.sessions.length > 0;
+          }
+        } catch {
+          // Fall through to bounded Firestore read
         }
       }
-    }
-  }
 
-  return Array.from(merged.values())
-    .map((rec) => {
-      const liveStatus: DeviceSessionStatus =
-        rec.status === 'ACTIVE' && Number(rec.expiresAtMs || 0) <= nowMs
-          ? 'EXPIRED'
-          : rec.status;
-      return { ...rec, status: liveStatus };
-    })
-    .sort(
-      (a, b) =>
-        (Date.parse(b.lastActivityAt || b.loginAt || '') || 0) -
-        (Date.parse(a.lastActivityAt || a.loginAt || '') || 0)
-    );
+      // Only query Firestore (bounded to 250 recent sessions) if server endpoint was unavailable or empty
+      if (!loadedFromServer) {
+        try {
+          let snap;
+          try {
+            snap = await getDocs(
+              query(collection(db, 'device_sessions'), orderBy('lastActivityAt', 'desc'), limit(250))
+            );
+          } catch {
+            snap = await getDocs(query(collection(db, 'device_sessions'), limit(250)));
+          }
+          snap.forEach((d) => {
+            const data = d.data() as DeviceSessionRecord;
+            if (data?.userId) {
+              const existing = merged.get(data.userId);
+              if (!existing) {
+                merged.set(data.userId, data);
+              }
+            }
+          });
+        } catch {
+          // Return whatever is in merged
+        }
+      }
+
+      return Array.from(merged.values())
+        .map((rec) => {
+          const liveStatus: DeviceSessionStatus =
+            rec.status === 'ACTIVE' && Number(rec.expiresAtMs || 0) <= nowMs
+              ? 'EXPIRED'
+              : rec.status;
+          return { ...rec, status: liveStatus };
+        })
+        .sort(
+          (a, b) =>
+            (Date.parse(b.lastActivityAt || b.loginAt || '') || 0) -
+            (Date.parse(a.lastActivityAt || a.loginAt || '') || 0)
+        );
+    },
+    { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
+  );
 }
 
 export async function adminTerminateUserSession(
@@ -959,6 +987,12 @@ export async function adminTerminateUserSession(
         error: res.data?.error || fsErr?.message || 'Failed to terminate session.'
       };
     }
+  }
+
+  if (updatedSession) {
+    updateCachedAdminValue<DeviceSessionRecord[]>('admin:device_sessions', (prev) =>
+      prev.map((item) => (item.userId === userId ? updatedSession! : item))
+    );
   }
 
   return { success: true, session: updatedSession };

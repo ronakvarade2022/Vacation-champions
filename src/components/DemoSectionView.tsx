@@ -6,15 +6,21 @@ import {
   GraduationCap, FileText, BarChart3, UserPlus, LogIn
 } from 'lucide-react';
 import { speechService } from '../services/speechService';
-import { ClassLevel } from '../types';
+import { ClassLevel, EducationBoard } from '../types';
 import {
   ALL_10_CLASSES_META,
   getSubjectsForClass,
   getSubjectMeta
 } from '../data/classCurriculumConfig';
+import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import { getVisitorDemoWorksheetsForClass, OnlineWorksheet } from '../data/worksheetsData';
-import { getDemoQuestionsForClass } from '../data/demoQuestionsData';
-import { formatStandardOrdinal } from '../utils/subscriptionAccess';
+import { getDemoQuestionsForBoardAndClass } from '../data/demoQuestionsData';
+import {
+  formatStandardOrdinal,
+  FREE_ALLOWED_SUBJECTS,
+  getBoardDisplayName,
+  getBoardShortLabel
+} from '../utils/subscriptionAccess';
 
 interface DemoSectionViewProps {
   onUpgradeClick: () => void;
@@ -144,28 +150,29 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<InteractiveDemoTab>('overview');
 
-  // --- 0. Visitor Class Preview (Standards 1st to 10th) & Sample Worksheets ---
+  // --- 0. Visitor Board & Class Preview (Maharashtra, CBSE, ICSE • Standards 1st to 10th) ---
+  const [selectedDemoBoard, setSelectedDemoBoard] = useState<EducationBoard>('Maharashtra');
   const [selectedDemoClass, setSelectedDemoClass] = useState<ClassLevel>('Class 1');
   const [activeDemoWorksheet, setActiveDemoWorksheet] = useState<OnlineWorksheet | null>(null);
   const [wsAnswers, setWsAnswers] = useState<Record<string, number>>({});
   const [wsSubmitted, setWsSubmitted] = useState(false);
 
   const demoSubjects = useMemo(
-    () => getSubjectsForClass(selectedDemoClass),
-    [selectedDemoClass]
+    () => getSubjectsForClass(selectedDemoClass, selectedDemoBoard),
+    [selectedDemoClass, selectedDemoBoard]
   );
   const demoWorksheets = useMemo(
-    () => getVisitorDemoWorksheetsForClass(selectedDemoClass),
-    [selectedDemoClass]
+    () => getVisitorDemoWorksheetsForClass(selectedDemoClass, selectedDemoBoard),
+    [selectedDemoClass, selectedDemoBoard]
   );
 
-  // --- 1. Live Class-Specific Demo Quiz State (Strictly 2 Unique Questions per Class) ---
+  // --- 1. Live Class-Specific Demo Quiz State (Strictly 2 Unique Questions per Class per Board) ---
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
   const classDemoQuestions = useMemo(
-    () => getDemoQuestionsForClass(selectedDemoClass),
-    [selectedDemoClass]
+    () => getDemoQuestionsForBoardAndClass(selectedDemoBoard, selectedDemoClass),
+    [selectedDemoBoard, selectedDemoClass]
   );
 
   const answeredInClassCount = classDemoQuestions.filter(
@@ -179,10 +186,30 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
     }, 0);
   }, [classDemoQuestions, quizAnswers, quizSubmitted]);
 
+  const handleSelectDemoBoard = (board: EducationBoard) => {
+    setSelectedDemoBoard(board);
+    if (activeDemoWorksheet) {
+      const nextWorksheets = getVisitorDemoWorksheetsForClass(selectedDemoClass, board);
+      const matchingSubjectWs = nextWorksheets.find(
+        ws =>
+          ws.subject === activeDemoWorksheet.subject ||
+          (ws.subject.startsWith('Mathematics') &&
+            activeDemoWorksheet.subject.startsWith('Mathematics'))
+      );
+      setActiveDemoWorksheet(matchingSubjectWs || nextWorksheets[0] || null);
+    } else {
+      setActiveDemoWorksheet(null);
+    }
+    setWsAnswers({});
+    setWsSubmitted(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+  };
+
   const handleSelectDemoClass = (cls: ClassLevel) => {
     setSelectedDemoClass(cls);
     if (activeDemoWorksheet) {
-      const nextWorksheets = getVisitorDemoWorksheetsForClass(cls);
+      const nextWorksheets = getVisitorDemoWorksheetsForClass(cls, selectedDemoBoard);
       const matchingSubjectWs = nextWorksheets.find(
         ws =>
           ws.subject === activeDemoWorksheet.subject ||
@@ -223,6 +250,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
   const activeStory = DEMO_STORIES[activeStoryIndex];
 
   useEffect(() => {
+    document.title = 'mystudyzone.in - Visitor Demo Dashboard';
     return () => {
       speechService.stop();
     };
@@ -416,7 +444,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
               <Sparkles className="w-4 h-4" /> VISITOR DEMO MODE • READ-ONLY PREVIEW (CLASSES 1ST TO 10TH)
             </div>
             <h1 className="text-3xl sm:text-4xl font-black mb-2">
-              MyStudyZone — Visitor Demo Playground
+              mystudyzone.in - Visitor Demo Dashboard
             </h1>
             <p className="text-indigo-200 max-w-2xl text-sm sm:text-base">
               Preview any class from Standard 1st to Standard 10th, try sample English &amp; Mathematics worksheets, test 4-level quizzes, play Sudoku &amp; riddles, and listen to English &amp; Marathi stories. Demo exploration does not save records or activate real purchases.
@@ -456,17 +484,52 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
           </div>
         </div>
 
-        {/* Standard 1st to 10th Quick Class Switcher inside Demo Mode */}
-        <div className="mt-6 pt-5 border-t border-white/15 space-y-2.5 relative z-10">
+        {/* 3-Board Switcher + Standard 1st to 10th Quick Class Switcher inside Demo Mode */}
+        <div className="mt-6 pt-5 border-t border-white/15 space-y-3 relative z-10">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
               <GraduationCap className="w-4 h-4" />
-              <span>Preview Any Class (Standard 1st to Standard 10th):</span>
+              <span>Select Education Board &amp; Class (Standards 1st to 10th):</span>
             </span>
             <span className="text-indigo-200 font-semibold">
-              Currently Previewing: <strong className="text-white">Standard {formatStandardOrdinal(selectedDemoClass)}</strong> ({demoSubjects.length} Subjects)
+              Previewing: <strong className="text-amber-300">{getBoardShortLabel(selectedDemoBoard)}</strong> •{' '}
+              <strong className="text-white">Standard {formatStandardOrdinal(selectedDemoClass)}</strong> ({demoSubjects.length} Subjects)
             </span>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {BOARD_META_LIST.map((bMeta) => {
+              const isSelected = selectedDemoBoard === bMeta.id;
+              return (
+                <button
+                  key={bMeta.id}
+                  type="button"
+                  onClick={() => handleSelectDemoBoard(bMeta.id)}
+                  className={`px-3.5 py-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                    isSelected
+                      ? 'bg-white text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/50'
+                      : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg shrink-0">{bMeta.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black truncate">{bMeta.shortLabel}</p>
+                      <p className={`text-[10px] truncate ${isSelected ? 'text-slate-600 font-bold' : 'text-indigo-200'}`}>
+                        {bMeta.affiliationLabel}
+                      </p>
+                    </div>
+                  </div>
+                  {isSelected && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-600 text-white shrink-0">
+                      Active
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex flex-wrap gap-1.5">
             {ALL_10_CLASSES_META.map((clsMeta) => {
               const isSelected = selectedDemoClass === clsMeta.classLevel;
@@ -492,7 +555,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
         <div className="mt-5 pt-4 border-t border-white/15 flex flex-wrap gap-2 relative z-10">
           {[
             { id: 'overview', label: 'Demo Overview & Progress', icon: Sparkles },
-            { id: 'live-curriculum', label: `Classes & Worksheets (${formatStandardOrdinal(selectedDemoClass)})`, icon: FileText },
+            { id: 'live-curriculum', label: `${getBoardShortLabel(selectedDemoBoard)} Worksheets (${formatStandardOrdinal(selectedDemoClass)})`, icon: FileText },
             { id: 'live-quiz', label: 'Sample Subject Quiz', icon: BookOpen },
             { id: 'live-puzzles', label: 'Sudoku & Riddles', icon: Brain },
             { id: 'live-stories', label: 'Stories Audio (EN & MR)', icon: Volume2 },
@@ -530,13 +593,13 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                Visitor Preview • Zero Database Writes
+                {getBoardDisplayName(selectedDemoBoard)} • Zero Database Writes
               </span>
               <h2 className="text-2xl font-black text-slate-900 mt-2">
-                Standard {formatStandardOrdinal(selectedDemoClass)} — Subjects &amp; Sample Worksheets
+                {getBoardShortLabel(selectedDemoBoard)} • Standard {formatStandardOrdinal(selectedDemoClass)} — Subjects &amp; Sample Worksheets
               </h2>
               <p className="text-xs text-slate-600 mt-1">
-                Try the live class-specific sample Mathematics, English, Science &amp; General Knowledge worksheets for {selectedDemoClass}, or switch to any Standard (1st to 10th).
+                Try the live {getBoardShortLabel(selectedDemoBoard)} sample Mathematics, English, Science &amp; General Knowledge worksheets for {selectedDemoClass}, or switch between Maharashtra, CBSE, and ICSE Boards (Standards 1st to 10th).
               </p>
             </div>
             {!isAuthenticated && onRegisterClick && (
@@ -545,41 +608,69 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                 onClick={onRegisterClick}
                 className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
               >
-                Register Account for {selectedDemoClass} →
+                Register {getBoardShortLabel(selectedDemoBoard)} Account for {selectedDemoClass} →
               </button>
             )}
           </div>
 
-          {/* Class Selector Inside Worksheets Tab */}
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-              Select Class to View Its Unique Demo Worksheets:
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {ALL_10_CLASSES_META.map((clsMeta) => {
-                const isSelected = selectedDemoClass === clsMeta.classLevel;
-                return (
-                  <button
-                    key={clsMeta.classLevel}
-                    type="button"
-                    onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {clsMeta.shortLabel}
-                  </button>
-                );
-              })}
+          {/* Board & Class Selector Inside Worksheets Tab */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                Select Education Board:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {BOARD_META_LIST.map((bMeta) => {
+                  const isSelected = selectedDemoBoard === bMeta.id;
+                  return (
+                    <button
+                      key={bMeta.id}
+                      type="button"
+                      onClick={() => handleSelectDemoBoard(bMeta.id)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>{bMeta.icon}</span>
+                      <span>{bMeta.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                Select Class to View {getBoardShortLabel(selectedDemoBoard)} Demo Worksheets:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_10_CLASSES_META.map((clsMeta) => {
+                  const isSelected = selectedDemoClass === clsMeta.classLevel;
+                  return (
+                    <button
+                      key={clsMeta.classLevel}
+                      type="button"
+                      onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {clsMeta.shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* 4 Interactive Class-Specific Sample Worksheets for Selected Class */}
+          {/* 4 Interactive Board & Class-Specific Sample Worksheets */}
           <div className="space-y-3">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-700">
-              Try Interactive Sample Worksheets ({selectedDemoClass} • {demoWorksheets.length} Subjects)
+              Try Interactive Sample Worksheets ({getBoardShortLabel(selectedDemoBoard)} • {selectedDemoClass} • {demoWorksheets.length} Subjects)
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {demoWorksheets.map((ws) => {
@@ -594,7 +685,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-1.5">
                         <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                          {ws.classLevel} • Free Preview
+                          {getBoardShortLabel(selectedDemoBoard)} • {ws.classLevel} • Free Preview
                         </span>
                         <span className="text-xs font-bold text-slate-500">
                           {ws.questions.length} Questions • {ws.totalMarks} Marks
@@ -727,19 +818,15 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
             </div>
           )}
 
-          {/* Available Subjects for Selected Class */}
+          {/* Available Subjects for Selected Board & Class */}
           <div className="space-y-3">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-700">
-              All {demoSubjects.length} Curriculum Subjects in Standard {formatStandardOrdinal(selectedDemoClass)}
+              All {demoSubjects.length} {getBoardShortLabel(selectedDemoBoard)} Subjects in Standard {formatStandardOrdinal(selectedDemoClass)}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {demoSubjects.map((sub) => {
-                const meta = getSubjectMeta(sub);
-                const isFreeSub =
-                  sub === 'English' ||
-                  sub === 'Mathematics' ||
-                  sub === 'Mathematics – Algebra' ||
-                  sub === 'Mathematics – Geometry';
+                const meta = getSubjectMeta(sub, selectedDemoBoard);
+                const isFreeSub = FREE_ALLOWED_SUBJECTS.includes(sub);
                 return (
                   <div
                     key={sub}
@@ -749,7 +836,9 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                       <span className="text-xl shrink-0">{meta.icon}</span>
                       <div className="min-w-0">
                         <p className="text-xs font-black text-slate-900 truncate">{sub}</p>
-                        <p className="text-[11px] text-slate-500 truncate">{meta.marathiTitle}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {selectedDemoBoard === 'Maharashtra' ? meta.marathiTitle : meta.shortCode + ' • ' + getBoardShortLabel(selectedDemoBoard)}
+                        </p>
                       </div>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
@@ -773,13 +862,13 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-100">
             <div>
               <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
-                Interactive Demo Quiz • {selectedDemoClass} (2 Questions)
+                Interactive Demo Quiz • {getBoardShortLabel(selectedDemoBoard)} • {selectedDemoClass} (2 Questions)
               </span>
               <h2 className="text-2xl font-black text-slate-900 mt-2">
-                Standard {formatStandardOrdinal(selectedDemoClass)} — Sample Demo Quiz
+                {getBoardShortLabel(selectedDemoBoard)} • Standard {formatStandardOrdinal(selectedDemoClass)} — Sample Demo Quiz
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Answer both questions below and submit to check the correct answers and explanations.
+                Answer both {getBoardShortLabel(selectedDemoBoard)} syllabus questions below and submit to check the correct answers and explanations.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -798,29 +887,57 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
             </div>
           </div>
 
-          {/* Class Selector Inside Quiz Tab */}
-          <div className="mb-6">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-              Select Class to View Its 2 Demo Questions:
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {ALL_10_CLASSES_META.map((clsMeta) => {
-                const isSelected = selectedDemoClass === clsMeta.classLevel;
-                return (
-                  <button
-                    key={clsMeta.classLevel}
-                    type="button"
-                    onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {clsMeta.shortLabel}
-                  </button>
-                );
-              })}
+          {/* Board & Class Selector Inside Quiz Tab */}
+          <div className="mb-6 space-y-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                Select Board:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {BOARD_META_LIST.map((bMeta) => {
+                  const isSelected = selectedDemoBoard === bMeta.id;
+                  return (
+                    <button
+                      key={bMeta.id}
+                      type="button"
+                      onClick={() => handleSelectDemoBoard(bMeta.id)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>{bMeta.icon}</span>
+                      <span>{bMeta.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                Select Class to View Its 2 Unique {getBoardShortLabel(selectedDemoBoard)} Demo Questions:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_10_CLASSES_META.map((clsMeta) => {
+                  const isSelected = selectedDemoClass === clsMeta.classLevel;
+                  return (
+                    <button
+                      key={clsMeta.classLevel}
+                      type="button"
+                      onClick={() => handleSelectDemoClass(clsMeta.classLevel)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {clsMeta.shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -1447,7 +1564,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-900">1. Student Progress &amp; Class Preview</h2>
-                  <p className="text-xs text-slate-500">Demo Preview • Standard {formatStandardOrdinal(selectedDemoClass)} ({demoSubjects.length} Subjects)</p>
+                  <p className="text-xs text-slate-500">{getBoardShortLabel(selectedDemoBoard)} • Standard {formatStandardOrdinal(selectedDemoClass)} ({demoSubjects.length} Subjects)</p>
                 </div>
               </div>
               <button
@@ -1464,15 +1581,15 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800 text-sm">Sample Performance Tracking Preview</span>
-                  <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">DEMO PREVIEW</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">{getBoardShortLabel(selectedDemoBoard)} DEMO</span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Registered students get real-time subject accuracy bars, chapter-wise worksheet scores, daily streak tracking, and achievement badges.
+                  Registered students get real-time subject accuracy bars, chapter-wise worksheet scores, daily streak tracking, and achievement badges across Maharashtra, CBSE &amp; ICSE boards.
                 </p>
                 <div className="grid grid-cols-3 gap-2 pt-1 text-center">
                   <div className="p-2 rounded-xl bg-white border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block">Selected Class</span>
-                    <span className="text-xs font-black text-indigo-700">{selectedDemoClass}</span>
+                    <span className="text-[10px] font-bold text-slate-400 block">Board &amp; Class</span>
+                    <span className="text-xs font-black text-indigo-700">{getBoardShortLabel(selectedDemoBoard)} • {selectedDemoClass}</span>
                   </div>
                   <div className="p-2 rounded-xl bg-white border border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 block">Demo Score</span>
@@ -1500,10 +1617,10 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-900">
-                    2. Demo Subject Quizzes ({formatStandardOrdinal(selectedDemoClass)})
+                    2. Demo Subject Quizzes ({getBoardShortLabel(selectedDemoBoard)} • {formatStandardOrdinal(selectedDemoClass)})
                   </h2>
                   <p className="text-xs text-slate-500">
-                    2 unique questions tailored for {selectedDemoClass}
+                    2 unique questions tailored for {getBoardShortLabel(selectedDemoBoard)} {selectedDemoClass}
                   </p>
                 </div>
               </div>
@@ -1527,7 +1644,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
                         {dq.subject} — {dq.topic}
                       </span>
                       <span className="text-[10px] font-black px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
-                        {selectedDemoClass}
+                        {getBoardShortLabel(selectedDemoBoard)} {selectedDemoClass}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">

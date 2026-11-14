@@ -1,4 +1,4 @@
-import { ClassLevel, SubjectName } from '../types';
+import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { getSubjectsForClass, getSubjectMeta, ALL_10_CLASSES_META } from './classCurriculumConfig';
 import { getCurriculumQuestionsForLevel } from '../services/curriculumQuestionBank';
 import {
@@ -48,6 +48,7 @@ export interface WorksheetQuestionItem {
 
 export interface OnlineWorksheet {
   id: string;
+  board?: EducationBoard;
   classLevel: ClassLevel;
   subject: SubjectName;
   worksheetNumber: 1 | 2;
@@ -61,10 +62,14 @@ export interface OnlineWorksheet {
   questions: WorksheetQuestionItem[];
 }
 
-export function getFreeDemoWorksheetIdsForClass(classLevel: ClassLevel = 'Class 1'): readonly [string, string] {
+export function getFreeDemoWorksheetIdsForClass(
+  classLevel: ClassLevel = 'Class 1',
+  board: EducationBoard = 'Maharashtra'
+): readonly [string, string] {
   const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 1;
-  const mathKey = cNum === 10 ? 'MATHEMATICSALGEBRA' : 'MATHEMATICS';
-  return [`WS-C${cNum}-ENGLISH-1`, `WS-C${cNum}-${mathKey}-1`] as const;
+  const boardCode = board === 'CBSE' ? 'CBSE-' : board === 'ICSE' ? 'ICSE-' : '';
+  const mathKey = board === 'Maharashtra' && cNum === 10 ? 'MATHEMATICSALGEBRA' : 'MATHEMATICS';
+  return [`WS-${boardCode}C${cNum}-ENGLISH-1`, `WS-${boardCode}C${cNum}-${mathKey}-1`] as const;
 }
 
 export const FREE_DEMO_WORKSHEET_IDS: readonly string[] = [
@@ -96,7 +101,14 @@ const SUBJECT_CHAPTER_THEMES: Record<SubjectName, [string, string]> = {
   'Environmental Education': ['Chapter 1: Ecosystem Dynamics, Biodiversity & Western Ghats', 'Chapter 2: Water Management, Solid Waste & Climate Action'],
   'Physical Education': ['Chapter 1: Physical Fitness Components, BMI & Yogasanas', 'Chapter 2: Sports Rules, First Aid (R.I.C.E.) & Balanced Nutrition'],
   'Mathematics – Algebra': ['Chapter 1: Linear Equations in Two Variables & Quadratic Equations', 'Chapter 2: Arithmetic Progression, Probability, GST & Statistics'],
-  'Mathematics – Geometry': ['Chapter 1: Similarity of Triangles, Pythagoras Theorem & Circles', 'Chapter 2: Coordinate Geometry, Trigonometry & 3D Mensuration']
+  'Mathematics – Geometry': ['Chapter 1: Similarity of Triangles, Pythagoras Theorem & Circles', 'Chapter 2: Coordinate Geometry, Trigonometry & 3D Mensuration'],
+  'Social Science': ['Chapter 1: Civilisations, Earth Physical Features & Resources', 'Chapter 2: Democratic Politics, Federalism & Sectors of Economy'],
+  'History & Civics': ['Chapter 1: Harappa, Revolt of 1857 & Indian Freedom Struggle', 'Chapter 2: World Wars, United Nations & Union Parliament'],
+  'Computer Studies': ['Chapter 1: Computer Hardware, Memory & Number Systems', 'Chapter 2: HTML5 Web Design, Spreadsheets & Coding Logic'],
+  'Computer Applications': ['Chapter 1: Java OOP Principles, Operators & Constructors', 'Chapter 2: Loops, String Handling & 1D/2D Arrays'],
+  'Economics': ['Chapter 1: Factors of Production, Demand & Market Equilibrium', 'Chapter 2: Money, RBI Banking, Inflation & Food Security'],
+  'Commercial Studies': ['Chapter 1: Stakeholders, E-Commerce & Marketing Strategies', 'Chapter 2: Final Accounts (Trading/P&L), Budgeting & Logistics'],
+  'Sanskrit': ['अध्याय १: संस्कृत वर्णमाला, लकार व शब्द रूपाणि', 'अध्याय २: संधि, समास, उपसर्ग एवं सुभाषितानि']
 };
 
 function selectFormatForSubjectAndIndex(subject: SubjectName, index: number): WorksheetItemFormat {
@@ -178,29 +190,34 @@ function selectFormatForSubjectAndIndex(subject: SubjectName, index: number): Wo
  */
 export function getWorksheetsForClassAndSubject(
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  board: EducationBoard = 'Maharashtra'
 ): OnlineWorksheet[] {
   const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 4;
-  const subjMeta = getSubjectMeta(subject);
+  const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
+  const boardCode = normalizedBoard === 'CBSE' ? 'CBSE-' : normalizedBoard === 'ICSE' ? 'ICSE-' : '';
+  const titlePrefix = normalizedBoard === 'Maharashtra' ? '' : `${normalizedBoard} `;
+
+  const subjMeta = getSubjectMeta(subject, normalizedBoard);
   const classMeta = ALL_10_CLASSES_META.find(c => c.classLevel === classLevel);
   const chapters = SUBJECT_CHAPTER_THEMES[subject] || ['Chapter 1: Core Concepts', 'Chapter 2: Advanced Applications'];
-  const classDemoIds = getFreeDemoWorksheetIdsForClass(classLevel);
+  const classDemoIds = getFreeDemoWorksheetIdsForClass(classLevel, normalizedBoard);
 
-  // Pull canonical questions from Levels 1-4 so worksheets are 100% syllabus-accurate and aligned with the class & subject
-  const l1 = getCurriculumQuestionsForLevel(classLevel, subject, 1);
-  const l2 = getCurriculumQuestionsForLevel(classLevel, subject, 2);
-  const l3 = getCurriculumQuestionsForLevel(classLevel, subject, 3);
-  const l4 = getCurriculumQuestionsForLevel(classLevel, subject, 4);
+  // Pull canonical questions from Levels 1-4 for this exact (classLevel, subject, board)
+  const l1 = getCurriculumQuestionsForLevel(classLevel, subject, 1, normalizedBoard);
+  const l2 = getCurriculumQuestionsForLevel(classLevel, subject, 2, normalizedBoard);
+  const l3 = getCurriculumQuestionsForLevel(classLevel, subject, 3, normalizedBoard);
+  const l4 = getCurriculumQuestionsForLevel(classLevel, subject, 4, normalizedBoard);
 
   const ws1Pool = [...l1.slice(0, 5), ...l2.slice(0, 5)];
   const ws2Pool = [...l3.slice(0, 5), ...l4.slice(0, 5)];
 
   const buildWorksheet = (wsNum: 1 | 2, pool: typeof ws1Pool, chapterName: string): OnlineWorksheet => {
-    const wsId = `WS-C${cNum}-${subject.replace(/[^A-Za-z0-9]/g, '').toUpperCase()}-${wsNum}`;
+    const wsId = `WS-${boardCode}C${cNum}-${subject.replace(/[^A-Za-z0-9]/g, '').toUpperCase()}-${wsNum}`;
     const formatsSet = new Set<WorksheetItemFormat>();
 
     const classSpecificQ =
-      wsNum === 1 ? getClassSpecificWorksheetQuestions(classLevel, subject) : null;
+      wsNum === 1 ? getClassSpecificWorksheetQuestions(classLevel, subject, normalizedBoard) : null;
 
     const questions: WorksheetQuestionItem[] = pool.map((q, idx) => {
       const override = classSpecificQ && idx < classSpecificQ.length ? classSpecificQ[idx] : null;
@@ -236,11 +253,15 @@ export function getWorksheetsForClassAndSubject(
 
     return {
       id: wsId,
+      board: normalizedBoard,
       classLevel,
       subject,
       worksheetNumber: wsNum,
-      title: `${classLevel} • ${subject} – Worksheet #${wsNum}`,
-      marathiSubtitle: `${classMeta?.marathiLabel || classLevel} • ${subjMeta.marathiTitle} सराव कार्यपत्रिका ${wsNum}`,
+      title: `${titlePrefix}${classLevel} • ${subject} – Worksheet #${wsNum}`,
+      marathiSubtitle:
+        normalizedBoard === 'Maharashtra'
+          ? `${classMeta?.marathiLabel || classLevel} • ${subjMeta.marathiTitle} सराव कार्यपत्रिका ${wsNum}`
+          : `${normalizedBoard} • ${classLevel} ${subject} Practice Worksheet #${wsNum}`,
       chapterName,
       durationMinutes: 20,
       totalMarks: questions.length * 2,
@@ -256,35 +277,41 @@ export function getWorksheetsForClassAndSubject(
   ];
 }
 
-export function getAllWorksheetsForClass(classLevel: ClassLevel): OnlineWorksheet[] {
-  const subjects = getSubjectsForClass(classLevel);
+export function getAllWorksheetsForClass(
+  classLevel: ClassLevel,
+  board: EducationBoard = 'Maharashtra'
+): OnlineWorksheet[] {
+  const subjects = getSubjectsForClass(classLevel, board);
   const list: OnlineWorksheet[] = [];
   for (const subj of subjects) {
-    list.push(...getWorksheetsForClassAndSubject(classLevel, subj));
+    list.push(...getWorksheetsForClassAndSubject(classLevel, subj, board));
   }
   return list;
 }
 
 /**
- * Returns the strictly TWO designated Free Demo Worksheets for a student's or teacher's registered class:
- * 1. 1 English worksheet ('WS-C{N}-ENGLISH-1')
- * 2. 1 Mathematics worksheet ('WS-C{N}-MATHEMATICS-1' or 'WS-C10-MATHEMATICSALGEBRA-1')
+ * Returns the strictly TWO designated Free Demo Worksheets for a student's or teacher's registered (board, class).
  */
-export function getFreeDemoWorksheets(classLevel: ClassLevel = 'Class 1'): OnlineWorksheet[] {
-  const englishDemo = getWorksheetsForClassAndSubject(classLevel, 'English')[0];
-  const mathSubject: SubjectName = classLevel === 'Class 10' ? 'Mathematics – Algebra' : 'Mathematics';
-  const mathDemo = getWorksheetsForClassAndSubject(classLevel, mathSubject)[0];
+export function getFreeDemoWorksheets(
+  classLevel: ClassLevel = 'Class 1',
+  board: EducationBoard = 'Maharashtra'
+): OnlineWorksheet[] {
+  const englishDemo = getWorksheetsForClassAndSubject(classLevel, 'English', board)[0];
+  const mathSubject: SubjectName =
+    board === 'Maharashtra' && classLevel === 'Class 10' ? 'Mathematics – Algebra' : 'Mathematics';
+  const mathDemo = getWorksheetsForClassAndSubject(classLevel, mathSubject, board)[0];
   return [englishDemo, mathDemo].filter(Boolean);
 }
 
 /**
- * Returns the 4 unique, class-specific Demo Worksheets (Mathematics, English, Science, General Knowledge)
- * for the Visitor Demo Playground across Class 1 to Class 10.
+ * Returns the 4 unique, class- and board-specific Demo Worksheets (Mathematics, English, Science, General Knowledge)
+ * for the Visitor Demo Dashboard across Class 1 to Class 10.
  */
 export function getVisitorDemoWorksheetsForClass(
-  classLevel: ClassLevel = 'Class 1'
+  classLevel: ClassLevel = 'Class 1',
+  board: EducationBoard = 'Maharashtra'
 ): OnlineWorksheet[] {
-  return getClassDemoWorksheets(classLevel);
+  return getClassDemoWorksheets(classLevel, board);
 }
 
 

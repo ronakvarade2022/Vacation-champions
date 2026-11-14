@@ -1,32 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Users, 
   Wallet, 
   CheckCircle2, 
-  XCircle, 
-  Clock, 
-  AlertCircle, 
-  TrendingUp, 
   Sliders, 
   ShieldCheck, 
   RefreshCw, 
   School, 
-  GraduationCap, 
-  Award, 
-  ArrowUpRight,
-  IndianRupee,
-  Sparkles,
-  Search,
-  ExternalLink
+  Sparkles
 } from 'lucide-react';
 import { referralService, AdminStatsResponse } from '../services/referralService';
 import { TeacherCertificateModal } from './TeacherCertificateModal';
+import { AdminPagination } from './admin/AdminPagination';
 
-export const AdminReferralPanel: React.FC = () => {
+export const AdminReferralPanel: React.FC = React.memo(() => {
   const [data, setData] = useState<AdminStatsResponse['stats'] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'teachers' | 'payouts' | 'config' | 'transactions'>('teachers');
+
+  // Pagination state
+  const [teacherPage, setTeacherPage] = useState(1);
+  const [payoutPage, setPayoutPage] = useState(1);
+  const [txPage, setTxPage] = useState(1);
+  const pageSize = 15;
 
   // Config Form
   const [budgetCap, setBudgetCap] = useState(50000);
@@ -44,10 +40,10 @@ export const AdminReferralPanel: React.FC = () => {
   // Selected teacher for certificate preview
   const [certTeacher, setCertTeacher] = useState<{ name: string; school: string; count: number } | null>(null);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async (forceRefresh: boolean = false) => {
     try {
       setRefreshing(true);
-      const res = await referralService.getAdminStats();
+      const res = await referralService.getAdminStats(forceRefresh);
       if (res.success && res.stats) {
         setData(res.stats);
         setBudgetCap(res.stats.config.budgetCap);
@@ -62,16 +58,33 @@ export const AdminReferralPanel: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchStats();
-  }, []);
+    fetchStats(false);
+  }, [fetchStats]);
+
+  const pendingTeachers = data?.pendingTeachers || [];
+  const payoutRequests = data?.payoutRequests || [];
+  const recentTransactions = data?.recentTransactions || [];
+
+  const paginatedTeachers = useMemo(
+    () => pendingTeachers.slice((teacherPage - 1) * pageSize, teacherPage * pageSize),
+    [pendingTeachers, teacherPage]
+  );
+  const paginatedPayouts = useMemo(
+    () => payoutRequests.slice((payoutPage - 1) * pageSize, payoutPage * pageSize),
+    [payoutRequests, payoutPage]
+  );
+  const paginatedTransactions = useMemo(
+    () => recentTransactions.slice((txPage - 1) * pageSize, txPage * pageSize),
+    [recentTransactions, txPage]
+  );
 
   const handleTeacherAction = async (userId: string, status: 'VERIFIED' | 'REJECTED') => {
     try {
       await referralService.reviewTeacher(userId, status, status === 'VERIFIED' ? 'State educator credentials confirmed' : 'Insufficient institutional documentation');
-      await fetchStats();
+      await fetchStats(true);
     } catch (err) {
       console.error(err);
     }
@@ -87,7 +100,7 @@ export const AdminReferralPanel: React.FC = () => {
         action === 'APPROVE' ? 'Bank transfer processed' : 'Rejected by administrator'
       );
       setTxnRefInput('');
-      await fetchStats();
+      await fetchStats(true);
     } catch (err) {
       console.error(err);
     } finally {
@@ -110,7 +123,7 @@ export const AdminReferralPanel: React.FC = () => {
       if (res.success) {
         setConfigFeedback('Configuration updated successfully!');
         setTimeout(() => setConfigFeedback(null), 3000);
-        await fetchStats();
+        await fetchStats(true);
       }
     } catch (err: any) {
       setConfigFeedback(`Error saving config: ${err.message}`);
@@ -135,7 +148,7 @@ export const AdminReferralPanel: React.FC = () => {
         </div>
 
         <button
-          onClick={fetchStats}
+          onClick={() => fetchStats(true)}
           disabled={refreshing}
           className="flex items-center space-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/20 transition-all cursor-pointer self-start sm:self-auto"
         >
@@ -287,26 +300,34 @@ export const AdminReferralPanel: React.FC = () => {
             </div>
           </div>
 
-          {(!data?.pendingTeachers || data.pendingTeachers.length === 0) ? (
+          {pendingTeachers.length === 0 ? (
             <div className="text-center py-10 text-gray-400 text-sm">
               <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500 mb-2" />
               <span>All educator requests have been processed. No pending verifications in queue.</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 text-gray-600 uppercase border-b">
-                  <tr>
-                    <th className="py-2.5 px-3">Educator Name</th>
-                    <th className="py-2.5 px-3">School / Institution</th>
-                    <th className="py-2.5 px-3">Teacher ID / Code</th>
-                    <th className="py-2.5 px-3">Referral Code</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {data.pendingTeachers.map((tch) => (
+            <div className="space-y-3">
+              <AdminPagination
+                totalItems={pendingTeachers.length}
+                currentPage={teacherPage}
+                pageSize={pageSize}
+                onPageChange={setTeacherPage}
+                itemLabel="educator requests"
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-600 uppercase border-b">
+                    <tr>
+                      <th className="py-2.5 px-3">Educator Name</th>
+                      <th className="py-2.5 px-3">School / Institution</th>
+                      <th className="py-2.5 px-3">Teacher ID / Code</th>
+                      <th className="py-2.5 px-3">Referral Code</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedTeachers.map((tch) => (
                     <tr key={tch.userId} className="hover:bg-amber-50/40">
                       <td className="py-3 px-3 font-bold text-gray-900">{tch.name}</td>
                       <td className="py-3 px-3 text-gray-700">{tch.schoolName || 'Partner School'}</td>
@@ -339,8 +360,9 @@ export const AdminReferralPanel: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -356,27 +378,35 @@ export const AdminReferralPanel: React.FC = () => {
             </div>
           </div>
 
-          {(!data?.payoutRequests || data.payoutRequests.length === 0) ? (
+          {payoutRequests.length === 0 ? (
             <div className="text-center py-10 text-gray-400 text-sm">
               <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500 mb-2" />
               <span>No payout requests recorded.</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 text-gray-600 uppercase border-b">
-                  <tr>
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">User</th>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Amount</th>
-                    <th className="py-2.5 px-3">Method &amp; Details</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {data.payoutRequests.map((p) => (
+            <div className="space-y-3">
+              <AdminPagination
+                totalItems={payoutRequests.length}
+                currentPage={payoutPage}
+                pageSize={pageSize}
+                onPageChange={setPayoutPage}
+                itemLabel="payout requests"
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-600 uppercase border-b">
+                    <tr>
+                      <th className="py-2.5 px-3">Date</th>
+                      <th className="py-2.5 px-3">User</th>
+                      <th className="py-2.5 px-3">Type</th>
+                      <th className="py-2.5 px-3">Amount</th>
+                      <th className="py-2.5 px-3">Method &amp; Details</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedPayouts.map((p) => (
                     <tr key={p.id} className="hover:bg-amber-50/40">
                       <td className="py-3 px-3 text-gray-500 font-mono text-[11px]">
                         {new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
@@ -428,8 +458,9 @@ export const AdminReferralPanel: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -541,21 +572,29 @@ export const AdminReferralPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50 text-gray-600 uppercase border-b">
-                <tr>
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Referrer</th>
-                  <th className="py-2.5 px-3">Buyer Student</th>
-                  <th className="py-2.5 px-3">Plan Enrolled</th>
-                  <th className="py-2.5 px-3">Referrer Reward</th>
-                  <th className="py-2.5 px-3">Buyer Cashback</th>
-                  <th className="py-2.5 px-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {data?.recentTransactions?.map((tx) => (
+          <div className="space-y-3">
+            <AdminPagination
+              totalItems={recentTransactions.length}
+              currentPage={txPage}
+              pageSize={pageSize}
+              onPageChange={setTxPage}
+              itemLabel="referral transactions"
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-gray-600 uppercase border-b">
+                  <tr>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Referrer</th>
+                    <th className="py-2.5 px-3">Buyer Student</th>
+                    <th className="py-2.5 px-3">Plan Enrolled</th>
+                    <th className="py-2.5 px-3">Referrer Reward</th>
+                    <th className="py-2.5 px-3">Buyer Cashback</th>
+                    <th className="py-2.5 px-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-amber-50/40">
                     <td className="py-3 px-3 text-gray-500 font-mono text-[11px]">
                       {new Date(tx.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
@@ -588,8 +627,9 @@ export const AdminReferralPanel: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -606,4 +646,5 @@ export const AdminReferralPanel: React.FC = () => {
       )}
     </div>
   );
-};
+});
+AdminReferralPanel.displayName = 'AdminReferralPanel';

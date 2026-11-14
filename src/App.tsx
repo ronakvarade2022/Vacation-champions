@@ -1,20 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
 import { SubjectQuizView } from './components/SubjectQuizView';
-import { StoryWorldView } from './components/StoryWorldView';
-import { DrawingChampionsView } from './components/DrawingChampionsView';
-import { PuzzleChampionsView } from './components/PuzzleChampionsView';
-import { AdminDashboard } from './components/AdminDashboard';
-import { CertificatesView } from './components/CertificatesView';
-import { CricketChampionsView } from './components/CricketChampionsView';
-import { ScholarshipChampionsView } from './components/ScholarshipChampionsView';
-import { StudentProfileView } from './components/StudentProfileView';
-import { ShivajiStoriesView } from './components/ShivajiStoriesView';
-import { SudokuView } from './components/SudokuView';
-import { FutureSkillsView } from './components/FutureSkillsView';
-import { ReferralHubView } from './components/ReferralHubView';
 import { DemoSectionView } from './components/DemoSectionView';
 import { MembershipModal } from './components/MembershipModal';
 import { PlanUpgradePromptModal } from './components/PlanUpgradePromptModal';
@@ -26,13 +14,70 @@ import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
 import { AboutUsView } from './components/AboutUsView';
 import { ContactUsView } from './components/ContactUsView';
 import { FaqsView } from './components/FaqsView';
-import { WorksheetsView } from './components/WorksheetsView';
-import { ClassLevel, SubjectName, QuizLevel } from './types';
+
+const AdminDashboard = lazy(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const StoryWorldView = lazy(() =>
+  import('./components/StoryWorldView').then((m) => ({ default: m.StoryWorldView }))
+);
+const DrawingChampionsView = lazy(() =>
+  import('./components/DrawingChampionsView').then((m) => ({ default: m.DrawingChampionsView }))
+);
+const PuzzleChampionsView = lazy(() =>
+  import('./components/PuzzleChampionsView').then((m) => ({ default: m.PuzzleChampionsView }))
+);
+const CertificatesView = lazy(() =>
+  import('./components/CertificatesView').then((m) => ({ default: m.CertificatesView }))
+);
+const CricketChampionsView = lazy(() =>
+  import('./components/CricketChampionsView').then((m) => ({ default: m.CricketChampionsView }))
+);
+const ScholarshipChampionsView = lazy(() =>
+  import('./components/ScholarshipChampionsView').then((m) => ({
+    default: m.ScholarshipChampionsView,
+  }))
+);
+const StudentProfileView = lazy(() =>
+  import('./components/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
+);
+const ShivajiStoriesView = lazy(() =>
+  import('./components/ShivajiStoriesView').then((m) => ({ default: m.ShivajiStoriesView }))
+);
+const SudokuView = lazy(() =>
+  import('./components/SudokuView').then((m) => ({ default: m.SudokuView }))
+);
+const FutureSkillsView = lazy(() =>
+  import('./components/FutureSkillsView').then((m) => ({ default: m.FutureSkillsView }))
+);
+const ReferralHubView = lazy(() =>
+  import('./components/ReferralHubView').then((m) => ({ default: m.ReferralHubView }))
+);
+const WorksheetsView = lazy(() =>
+  import('./components/WorksheetsView').then((m) => ({ default: m.WorksheetsView }))
+);
+const StudyMaterialsView = lazy(() =>
+  import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
+);
+
+const PortalLoadingCard: React.FC = () => (
+  <div className="bg-white rounded-3xl p-8 border border-amber-200/80 shadow-xs space-y-4 animate-pulse">
+    <div className="h-6 w-56 bg-slate-200 rounded-xl" />
+    <div className="h-4 w-80 max-w-full bg-slate-100 rounded-lg" />
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+      <div className="h-24 bg-slate-100 rounded-2xl" />
+      <div className="h-24 bg-slate-100 rounded-2xl" />
+      <div className="h-24 bg-slate-100 rounded-2xl" />
+    </div>
+  </div>
+);
+import { ClassLevel, EducationBoard, SubjectName, QuizLevel } from './types';
 import {
   canAccessFeature,
   canAccessSubject,
   formatStandardOrdinal,
-  getActivatedClassesList,
+  getActivatedBoardClassesList,
+  getBoardShortLabel,
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage
 } from './utils/subscriptionAccess';
@@ -57,6 +102,7 @@ const AppContent: React.FC = () => {
     activeRole,
     currentUser,
     currentStudent,
+    activeBoard,
     isAuthModalOpen,
     setIsAuthModalOpen,
     sessionSecurityNotice,
@@ -74,9 +120,15 @@ const AppContent: React.FC = () => {
   const [isMembershipOpen, setIsMembershipOpen] = useState<boolean>(false);
   const [membershipInitialPlan, setMembershipInitialPlan] = useState<'basic' | 'premium'>('premium');
   const [membershipTargetClass, setMembershipTargetClass] = useState<ClassLevel | undefined>(undefined);
+  const [membershipTargetBoard, setMembershipTargetBoard] = useState<EducationBoard | undefined>(undefined);
 
   const isLearningPortal = activeRole === 'student' || activeRole === 'teacher';
   const isTeacherPortal = activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
+
+  // Keep browser tab title consistent
+  useEffect(() => {
+    document.title = 'mystudyzone.in - Visitor Demo Dashboard';
+  }, [currentTab]);
 
   // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=...)
   useEffect(() => {
@@ -133,9 +185,14 @@ const AppContent: React.FC = () => {
     reasonMessage: '',
   });
 
-  const openMembershipWithPlan = (_plan: 'basic' | 'premium' = 'premium', targetClass?: ClassLevel) => {
+  const openMembershipWithPlan = (
+    _plan: 'basic' | 'premium' = 'premium',
+    targetClass?: ClassLevel,
+    targetBoard?: EducationBoard
+  ) => {
     setMembershipInitialPlan('premium');
     setMembershipTargetClass(targetClass || currentStudent?.classLevel);
+    setMembershipTargetBoard(targetBoard || activeBoard);
     setIsMembershipOpen(true);
   };
 
@@ -147,6 +204,7 @@ const AppContent: React.FC = () => {
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
     const alwaysOpenTabs = new Set([
       'demo', 'dashboard', 'profile', 'account', 'subscription', 'worksheets',
+      'study-materials', 'study-material',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin'
     ]);
@@ -155,7 +213,7 @@ const AppContent: React.FC = () => {
     if (isLearningPortal && currentStudent && !alwaysOpenTabs.has(tab)) {
       // 1. If navigating to a specific quiz subject, check subject access first
       if (tab === 'quizzes' && subjectParam) {
-        const subjAccess = canAccessSubject(currentStudent, subjectParam);
+        const subjAccess = canAccessSubject(currentStudent, subjectParam, undefined, undefined, activeBoard);
         if (!subjAccess.allowed) {
           setUpgradePrompt({
             isOpen: true,
@@ -163,7 +221,7 @@ const AppContent: React.FC = () => {
             requiredPlan: 'premium',
             reasonMessage:
               subjAccess.reason ||
-              `${subjectParam} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan (365 Days / 1 Year) to unlock all subjects for your class!`,
+              `${subjectParam} is locked on the Free Plan. Upgrade to the ₹99 Premium Plan (365 Days / 1 Year) to unlock all subjects for your Board & Class!`,
           });
           return;
         }
@@ -190,11 +248,11 @@ const AppContent: React.FC = () => {
     if (levelParam) {
       setQuizInitialLevel(levelParam);
     }
-    setCurrentTab(tab);
+    setCurrentTab(tab === 'study-material' ? 'study-materials' : tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const planInfo = getStudentPlanInfo(currentStudent);
+  const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
   const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
 
   return (
@@ -204,7 +262,7 @@ const AppContent: React.FC = () => {
         currentTab={currentTab}
         setCurrentTab={(tab) => handleNavigateTab(tab)}
         onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
-        onOpenMembership={(targetClass) => openMembershipWithPlan('premium', targetClass)}
+        onOpenMembership={(targetClass, targetBoard) => openMembershipWithPlan('premium', targetClass, targetBoard)}
       />
 
       {/* Main Content Arena */}
@@ -247,24 +305,25 @@ const AppContent: React.FC = () => {
           </div>
         )}
 
-        {/* Live Interactive Visitor DEMO Playground (All Classes 1st–10th preview, zero DB writes) */}
-        {currentTab === 'demo' ? (
-          <DemoSectionView
-            onUpgradeClick={() => openMembershipWithPlan('premium')}
-            onRegisterClick={() => openAuthModalWithTab('register')}
-            onSignInClick={() => openAuthModalWithTab('login')}
-            isAuthenticated={Boolean(currentStudent)}
-          />
-        ) : currentTab === 'referrals' ? (
-          <ReferralHubView
-            currentUserId={currentStudent?.id || 'guest_ambassador'}
-            userName={currentStudent?.name || 'Visitor Preview'}
-            userEmail={currentStudent?.email || ''}
-            userMobile={currentStudent?.mobile || ''}
-            initialRole="student"
-            onNavigateUpgrade={() => openMembershipWithPlan('premium')}
-          />
-        ) : currentTab === 'help-support' ? (
+        {/* Live Interactive Visitor Demo Dashboard (All Classes 1st–10th preview, zero DB writes) */}
+        <Suspense fallback={<PortalLoadingCard />}>
+          {currentTab === 'demo' ? (
+            <DemoSectionView
+              onUpgradeClick={() => openMembershipWithPlan('premium')}
+              onRegisterClick={() => openAuthModalWithTab('register')}
+              onSignInClick={() => openAuthModalWithTab('login')}
+              isAuthenticated={Boolean(currentStudent)}
+            />
+          ) : currentTab === 'referrals' ? (
+            <ReferralHubView
+              currentUserId={currentStudent?.id || 'guest_ambassador'}
+              userName={currentStudent?.name || 'Visitor Preview'}
+              userEmail={currentStudent?.email || ''}
+              userMobile={currentStudent?.mobile || ''}
+              initialRole="student"
+              onNavigateUpgrade={() => openMembershipWithPlan('premium')}
+            />
+          ) : currentTab === 'help-support' ? (
           <HelpSupportView
             onNavigateTab={(t) => handleNavigateTab(t)}
             onOpenMembership={() => openMembershipWithPlan('premium')}
@@ -301,7 +360,7 @@ const AppContent: React.FC = () => {
                     <div className="lg:col-span-7 space-y-4">
                       <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-300 text-xs font-black uppercase tracking-wider">
                         <Sparkles className="w-3.5 h-3.5" />
-                        <span>Standards 1st to 10th • Maharashtra State Board Aligned</span>
+                        <span>Standards 1st to 10th • Maharashtra • CBSE • ICSE Boards</span>
                       </span>
                       <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-black leading-tight tracking-tight">
                         MyStudyZone
@@ -438,22 +497,22 @@ const AppContent: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-xs font-extrabold uppercase tracking-wider">
                             <GraduationCap className="w-3.5 h-3.5" />
-                            <span>Dedicated Teacher Portal • Active: Standard {formatStandardOrdinal(currentStudent.classLevel)} ({currentStudent.classLevel})</span>
+                            <span>Dedicated Teacher Portal • Active: {getBoardShortLabel(activeBoard)} • Standard {formatStandardOrdinal(currentStudent.classLevel)} ({currentStudent.classLevel})</span>
                           </span>
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-amber-200 text-xs font-bold">
                             <Sparkles className="w-3 h-3" />
                             <span>
-                              Multi-Class Ready ({getActivatedClassesList(currentStudent).length} Paid Class{getActivatedClassesList(currentStudent).length === 1 ? '' : 'es'})
+                              Multi-Board &amp; Multi-Class ({getActivatedBoardClassesList(currentStudent).length} Paid Activation{getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 's'})
                             </span>
                           </span>
                         </div>
                         <h2 className="text-xl sm:text-2xl font-display font-black">
-                          Welcome, {currentStudent.name}! (Standard {formatStandardOrdinal(currentStudent.classLevel)} Educator Hub)
+                          Welcome, {currentStudent.name}! ({getBoardShortLabel(activeBoard)} • Standard {formatStandardOrdinal(currentStudent.classLevel)} Educator Hub)
                         </h2>
                         <p className="text-xs sm:text-sm text-emerald-100 font-medium">
                           {isPremiumActive
-                            ? getPremiumActivatedBannerMessage(currentStudent.classLevel)
-                            : `Complete access to Standard ${formatStandardOrdinal(currentStudent.classLevel)} curriculum: Subjects, Class-Wise Worksheets (2 Free Demos / ₹99 All Unlocked), 4-Level Quizzes, Audio Stories, Daily & Cricket Current Affairs, Scholarship Practice, and Model Solutions.`}
+                            ? getPremiumActivatedBannerMessage(currentStudent.classLevel, activeBoard)
+                            : `Complete access to ${getBoardShortLabel(activeBoard)} Standard ${formatStandardOrdinal(currentStudent.classLevel)} curriculum: Subjects, Board & Class-Wise Worksheets, Study Notes, 4-Level Quizzes, Audio Stories, Cricket Current Affairs, Scholarship Practice, and Model Solutions.`}
                         </p>
                       </div>
 
@@ -461,20 +520,20 @@ const AppContent: React.FC = () => {
                         {!isPremiumActive ? (
                           <button
                             type="button"
-                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel)}
+                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard)}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs shadow-md cursor-pointer"
                           >
                             <Crown className="w-4 h-4" />
-                            <span>Unlock All {currentStudent.classLevel} Worksheets – ₹99</span>
+                            <span>Unlock {getBoardShortLabel(activeBoard)} {currentStudent.classLevel} – ₹99</span>
                           </button>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => openMembershipWithPlan('premium')}
+                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard)}
                             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer transition-colors"
                           >
                             <Crown className="w-4 h-4" />
-                            <span>₹99 Active ({currentStudent.classLevel}) • Add Class</span>
+                            <span>₹99 Active ({getBoardShortLabel(activeBoard)} • {currentStudent.classLevel}) • Add Board/Class</span>
                           </button>
                         )}
                       </div>
@@ -490,7 +549,7 @@ const AppContent: React.FC = () => {
                         }`}
                       >
                         <GraduationCap className="w-3.5 h-3.5" />
-                        <span>{currentStudent.classLevel} Subjects &amp; Overview</span>
+                        <span>{getBoardShortLabel(activeBoard)} {currentStudent.classLevel} Overview</span>
                       </button>
                       <button
                         type="button"
@@ -501,6 +560,16 @@ const AppContent: React.FC = () => {
                       >
                         <BookOpen className="w-3.5 h-3.5" />
                         <span>Class-Wise Worksheets &amp; Solutions</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('study-materials')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'study-materials' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Chapter Study Notes</span>
                       </button>
                       <button
                         type="button"
@@ -549,7 +618,7 @@ const AppContent: React.FC = () => {
                 {currentTab === 'dashboard' && (
                   <StudentDashboard
                     onNavigateTab={handleNavigateTab}
-                    onOpenMembership={(plan, targetClass) => openMembershipWithPlan(plan || 'premium', targetClass)}
+                    onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                   />
                 )}
 
@@ -557,14 +626,24 @@ const AppContent: React.FC = () => {
                   <SubjectQuizView
                     initialSubject={quizInitialSubject}
                     initialLevel={quizInitialLevel}
-                    onOpenMembership={(plan, targetClass) => openMembershipWithPlan(plan || 'premium', targetClass)}
+                    onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                   />
                 )}
 
                 {currentTab === 'worksheets' && (
                   <WorksheetsView
                     initialSubject={quizInitialSubject}
-                    onUnlockClick={(targetClass) => openMembershipWithPlan('premium', targetClass)}
+                    onUnlockClick={(targetClass, targetBoard) => openMembershipWithPlan('premium', targetClass, targetBoard)}
+                  />
+                )}
+
+                {currentTab === 'study-materials' && (
+                  <StudyMaterialsView
+                    initialBoard={activeBoard}
+                    initialClass={currentStudent.classLevel}
+                    initialSubject={quizInitialSubject}
+                    onNavigateTab={handleNavigateTab}
+                    onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                   />
                 )}
 
@@ -594,7 +673,7 @@ const AppContent: React.FC = () => {
 
                 {(currentTab === 'profile' || currentTab === 'account' || currentTab === 'subscription') && (
                   <StudentProfileView
-                    onOpenMembership={(plan, targetClass) => openMembershipWithPlan(plan || 'premium', targetClass)}
+                    onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                     onNavigateTab={(t) => handleNavigateTab(t)}
                   />
                 )}
@@ -624,6 +703,7 @@ const AppContent: React.FC = () => {
             )}
           </>
         )}
+        </Suspense>
       </main>
 
       {/* Global Modals */}
@@ -632,6 +712,7 @@ const AppContent: React.FC = () => {
         onClose={() => setIsMembershipOpen(false)}
         initialSelectedPlan={membershipInitialPlan}
         initialSelectedClass={membershipTargetClass}
+        initialSelectedBoard={membershipTargetBoard}
         onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
       />
 
@@ -639,12 +720,14 @@ const AppContent: React.FC = () => {
         isOpen={upgradePrompt.isOpen}
         onClose={() => setUpgradePrompt((prev) => ({ ...prev, isOpen: false }))}
         currentStudent={currentStudent}
+        targetClass={currentStudent?.classLevel}
+        targetBoard={activeBoard}
         featureTitle={upgradePrompt.featureTitle}
         requiredPlan={upgradePrompt.requiredPlan}
         upgradeMessage={upgradePrompt.reasonMessage}
         onSelectUpgradePlan={() => {
           setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
-          openMembershipWithPlan('premium', currentStudent?.classLevel);
+          openMembershipWithPlan('premium', currentStudent?.classLevel, activeBoard);
         }}
         onTryDemo={() => {
           setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
@@ -656,8 +739,8 @@ const AppContent: React.FC = () => {
         isOpen={isAuthModalOpen || isAuthOpen}
         defaultTab={authDefaultTab}
         initialEmail={authInitialEmail}
-        onExistingAccountProceedToSubscription={(targetClass) => {
-          openMembershipWithPlan('premium', targetClass);
+        onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
+          openMembershipWithPlan('premium', targetClass, targetBoard);
         }}
         onClose={() => {
           setIsAuthModalOpen(false);

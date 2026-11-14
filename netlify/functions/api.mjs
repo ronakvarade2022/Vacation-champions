@@ -206,6 +206,8 @@ function jsonResponse(statusCode, payload) {
   };
 }
 
+const VALID_NETLIFY_BOARDS = ['Maharashtra', 'CBSE', 'ICSE'];
+
 const VALID_NETLIFY_CLASSES = [
   'Class 1',
   'Class 2',
@@ -219,12 +221,42 @@ const VALID_NETLIFY_CLASSES = [
   'Class 10'
 ];
 
+function normalizeNetlifyBoard(raw) {
+  const s = String(raw || '').trim().toUpperCase();
+  if (!s || s === 'MAHARASHTRA' || s === 'MAHARASHTRA STATE BOARD' || s === 'MSBSHSE' || s === 'MH') {
+    return 'Maharashtra';
+  }
+  if (s === 'CBSE' || s === 'NCERT' || s.includes('CENTRAL BOARD')) {
+    return 'CBSE';
+  }
+  if (s === 'ICSE' || s === 'CISCE' || s.includes('INDIAN CERTIFICATE')) {
+    return 'ICSE';
+  }
+  return 'Maharashtra';
+}
+
 function normalizeNetlifyClassLevel(raw) {
   const str = String(raw || '').trim();
   const m = /^(?:Class\s*)?(\d{1,2})(?:st|nd|rd|th)?$/i.exec(str);
   if (!m) return null;
   const n = parseInt(m[1], 10);
   return n >= 1 && n <= 10 ? `Class ${n}` : null;
+}
+
+function buildNetlifyBoardClassKey(board, classLevel) {
+  return `${normalizeNetlifyBoard(board)}__${normalizeNetlifyClassLevel(classLevel) || 'Class 1'}`;
+}
+
+function parseNetlifyBoardClassKey(rawKey) {
+  const str = String(rawKey || '').trim();
+  if (!str) return null;
+  if (str.includes('__')) {
+    const [bRaw, cRaw] = str.split('__');
+    const c = normalizeNetlifyClassLevel(cRaw);
+    return c ? { board: normalizeNetlifyBoard(bRaw), classLevel: c } : null;
+  }
+  const c = normalizeNetlifyClassLevel(str);
+  return c ? { board: 'Maharashtra', classLevel: c } : null;
 }
 
 function toFirestoreValue(val) {
@@ -276,20 +308,54 @@ function fromFirestoreValue(v) {
   return null;
 }
 
-function buildUpdatedNetlifyClassSubscriptions(existingDoc, targetClass, startDateIso, expiryDateIso, paymentId, orderId, amountInr = 99) {
-  const existingMap =
-    existingDoc?.classSubscriptions && typeof existingDoc.classSubscriptions === 'object'
-      ? { ...existingDoc.classSubscriptions }
-      : {};
+function buildUpdatedNetlifyClassSubscriptions(
+  existingDoc,
+  targetBoard,
+  targetClass,
+  startDateIso,
+  expiryDateIso,
+  paymentId,
+  orderId,
+  amountInr = 99
+) {
+  const resolvedBoard = normalizeNetlifyBoard(targetBoard);
+  const resolvedClass = normalizeNetlifyClassLevel(targetClass) || 'Class 1';
+  const targetKey = buildNetlifyBoardClassKey(resolvedBoard, resolvedClass);
+
+  const existingMap = {};
+  if (existingDoc?.classSubscriptions && typeof existingDoc.classSubscriptions === 'object') {
+    for (const [rawKey, entry] of Object.entries(existingDoc.classSubscriptions)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const parsed = parseNetlifyBoardClassKey(rawKey);
+      const entryBoard = normalizeNetlifyBoard(
+        entry.board || parsed?.board || existingDoc.primaryBoard || existingDoc.board || 'Maharashtra'
+      );
+      const entryClass = normalizeNetlifyClassLevel(entry.classLevel || parsed?.classLevel || rawKey);
+      if (!entryClass) continue;
+      const compositeKey = buildNetlifyBoardClassKey(entryBoard, entryClass);
+      existingMap[compositeKey] = {
+        ...entry,
+        board: entryBoard,
+        classLevel: entryClass,
+        boardClassKey: compositeKey
+      };
+    }
+  }
 
   if (existingDoc?.plan && existingDoc.plan !== 'free') {
+    const legacyBoard = normalizeNetlifyBoard(
+      existingDoc.activatedBoard || existingDoc.board || existingDoc.primaryBoard || 'Maharashtra'
+    );
     const legacyCls =
       normalizeNetlifyClassLevel(existingDoc.activatedClassLevel) ||
       normalizeNetlifyClassLevel(existingDoc.classLevel) ||
-      targetClass;
-    if (!existingMap[legacyCls]) {
-      existingMap[legacyCls] = {
+      resolvedClass;
+    const legacyKey = buildNetlifyBoardClassKey(legacyBoard, legacyCls);
+    if (!existingMap[legacyKey]) {
+      existingMap[legacyKey] = {
+        board: legacyBoard,
         classLevel: legacyCls,
+        boardClassKey: legacyKey,
         plan: existingDoc.plan === 'basic' ? 'basic' : 'premium',
         status: 'ACTIVE',
         purchasedAt: existingDoc.planPurchasedAt,
@@ -302,8 +368,10 @@ function buildUpdatedNetlifyClassSubscriptions(existingDoc, targetClass, startDa
     }
   }
 
-  existingMap[targetClass] = {
-    classLevel: targetClass,
+  existingMap[targetKey] = {
+    board: resolvedBoard,
+    classLevel: resolvedClass,
+    boardClassKey: targetKey,
     plan: 'premium',
     status: 'ACTIVE',
     purchasedAt: startDateIso,
@@ -316,19 +384,38 @@ function buildUpdatedNetlifyClassSubscriptions(existingDoc, targetClass, startDa
   };
 
   const todayIst = formatIstDateString(new Date());
-  const activatedClasses = VALID_NETLIFY_CLASSES.filter((cls) => {
-    const rec = existingMap[cls];
-    if (!rec || rec.plan === 'free') return false;
-    const exp = String(rec.expiresAt || '').slice(0, 10);
-    return !exp || exp >= todayIst;
-  });
+  const activatedClassKeys = [];
+  const activeClassSet = new Set();
+  for (const b of VALID_NETLIFY_BOARDS) {
+    for (const cls of VALID_NETLIFY_CLASSES) {
+      const k = buildNetlifyBoardClassKey(b, cls);
+      const rec = existingMap[k];
+      if (!rec || rec.plan === 'free') continue;
+      const exp = String(rec.expiresAt || '').slice(0, 10);
+      if (!exp || exp >= todayIst) {
+        activatedClassKeys.push(k);
+        activeClassSet.add(cls);
+      }
+    }
+  }
 
+  const activatedClasses = VALID_NETLIFY_CLASSES.filter((c) => activeClassSet.has(c));
+  const primaryBoard = normalizeNetlifyBoard(
+    existingDoc?.primaryBoard || existingDoc?.board || resolvedBoard
+  );
   const primaryClassLevel =
     normalizeNetlifyClassLevel(existingDoc?.primaryClassLevel) ||
     normalizeNetlifyClassLevel(existingDoc?.classLevel) ||
-    targetClass;
+    resolvedClass;
 
-  return { existingMap, activatedClasses, primaryClassLevel };
+  return {
+    existingMap,
+    activatedClasses,
+    activatedClassKeys,
+    primaryBoard,
+    primaryClassLevel,
+    targetKey
+  };
 }
 
 async function patchFirestoreDocument(collectionName, docId, fieldsObj) {
@@ -507,7 +594,8 @@ export async function handler(event) {
       const body = JSON.parse(event.body || '{}');
       const rawPlan = body.planId || body.plan || 'premium';
       const planId = rawPlan === 'premium' ? 'premium' : null;
-      const { studentId, studentName, email, mobile, selectedClass, classLevel } = body;
+      const { studentId, studentName, email, mobile, selectedBoard, board, selectedClass, classLevel } = body;
+      const normalizedBoard = normalizeNetlifyBoard(selectedBoard || board);
       const normalizedClass = normalizeNetlifyClassLevel(selectedClass || classLevel) || '';
 
       if (!studentId) {
@@ -555,6 +643,8 @@ export async function handler(event) {
             studentName: String(studentName || 'Student').slice(0, 250),
             email: String(email || '').slice(0, 250),
             mobile: String(mobile || '').slice(0, 250),
+            selectedBoard: normalizedBoard,
+            board: normalizedBoard,
             selectedClass: normalizedClass,
             classLevel: normalizedClass,
             planId: 'premium',
@@ -583,6 +673,7 @@ export async function handler(event) {
         keyId: creds.keyId,
         receiptNumber,
         planId,
+        selectedBoard: normalizedBoard,
         selectedClass: normalizedClass || undefined,
         isMock: false,
         mode: creds.isLive ? 'LIVE' : 'TEST'
@@ -601,7 +692,8 @@ export async function handler(event) {
       const body = JSON.parse(event.body || '{}');
       const rawPlan = body.planId || body.plan || 'premium';
       const planId = rawPlan === 'premium' ? 'premium' : null;
-      const { studentId, studentName, email, mobile, selectedClass, classLevel } = body;
+      const { studentId, studentName, email, mobile, selectedBoard, board, selectedClass, classLevel } = body;
+      const normalizedBoard = normalizeNetlifyBoard(selectedBoard || board);
       const normalizedClass = normalizeNetlifyClassLevel(selectedClass || classLevel) || '';
 
       if (!studentId) {
@@ -623,8 +715,8 @@ export async function handler(event) {
       const amountInPaise = 9900;
       const amountInRupees = 99;
       const planTitle = normalizedClass
-        ? `PREMIUM PLAN (${normalizedClass}) – ₹99 – 365 Days`
-        : 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)';
+        ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹99 – 365 Days`
+        : `PREMIUM PLAN (${normalizedBoard}) – ₹99 – 365 Days (1 Year)`;
       const authHeader = 'Basic ' + Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString('base64');
 
       const qrRes = await fetch('https://api.razorpay.com/v1/payments/qr_codes', {
@@ -645,6 +737,8 @@ export async function handler(event) {
             studentName: String(studentName || 'Student').slice(0, 250),
             email: String(email || '').slice(0, 250),
             mobile: String(mobile || '').slice(0, 250),
+            selectedBoard: normalizedBoard,
+            board: normalizedBoard,
             selectedClass: normalizedClass,
             classLevel: normalizedClass,
             planId: 'premium',
@@ -672,6 +766,7 @@ export async function handler(event) {
         amountRupees: amountInRupees,
         currency: 'INR',
         planId,
+        selectedBoard: normalizedBoard,
         selectedClass: normalizedClass || undefined,
         planTitle,
         status: qrData.status || 'active',
@@ -692,7 +787,7 @@ export async function handler(event) {
     try {
       const qrId = normalizedPath.replace('/razorpay/qr-status/', '').split('?')[0];
       const params = event.queryStringParameters || {};
-      const { studentId, planId, studentName, email, mobile, selectedClass, classLevel } = params;
+      const { studentId, planId, studentName, email, mobile, selectedBoard, board, selectedClass, classLevel } = params;
 
       const creds = getResolvedRazorpayCredentials();
       if (!creds.isConfigured || !creds.keySecret) {
@@ -730,34 +825,51 @@ export async function handler(event) {
         const paymentId = successfulPayment.id;
         const now = new Date();
         const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
+        const resolvedBoard = normalizeNetlifyBoard(
+          qrData?.notes?.selectedBoard ||
+            qrData?.notes?.board ||
+            selectedBoard ||
+            board ||
+            existingStudentDoc?.board ||
+            'Maharashtra'
+        );
         const resolvedClass =
           normalizeNetlifyClassLevel(qrData?.notes?.selectedClass || qrData?.notes?.classLevel || selectedClass || classLevel) ||
           normalizeNetlifyClassLevel(existingStudentDoc?.classLevel) ||
           'Class 1';
-        const existingClassExpiry = existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt;
+        const targetKey = buildNetlifyBoardClassKey(resolvedBoard, resolvedClass);
+        const existingClassExpiry =
+          existingStudentDoc?.classSubscriptions?.[targetKey]?.expiresAt ||
+          (resolvedBoard === 'Maharashtra' ? existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt : undefined);
         const dates = computeNetlifySubscriptionDates(now, existingClassExpiry);
         const startDateIso = dates.startDateIso;
         const expiryDateIso = dates.expiryDateIso;
-        const planTitle = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
+        const planTitle = `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
         const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
-        const { existingMap, activatedClasses, primaryClassLevel } = buildUpdatedNetlifyClassSubscriptions(
-          existingStudentDoc,
-          resolvedClass,
-          startDateIso,
-          expiryDateIso,
-          paymentId,
-          qrId,
-          amountRupees
-        );
+        const { existingMap, activatedClasses, activatedClassKeys, primaryBoard, primaryClassLevel } =
+          buildUpdatedNetlifyClassSubscriptions(
+            existingStudentDoc,
+            resolvedBoard,
+            resolvedClass,
+            startDateIso,
+            expiryDateIso,
+            paymentId,
+            qrId,
+            amountRupees
+          );
 
         // Patch Firestore
         await Promise.all([
           patchFirestoreDocument('students', String(studentId), {
             id: String(studentId),
+            board: resolvedBoard,
             classLevel: resolvedClass,
+            primaryBoard,
             primaryClassLevel,
+            activatedBoard: resolvedBoard,
             activatedClassLevel: resolvedClass,
             activatedClasses,
+            activatedClassKeys,
             classSubscriptions: existingMap,
             plan: resolvedPlanId,
             subscriptionTier: 'premium',
@@ -779,8 +891,10 @@ export async function handler(event) {
             studentName: String(studentName || 'Student'),
             parentEmail: String(email || ''),
             parentMobile: String(mobile || ''),
+            selectedBoard: resolvedBoard,
             selectedClass: resolvedClass,
             classLevel: resolvedClass,
+            boardClassKey: targetKey,
             planId: resolvedPlanId,
             planTitle,
             amount: amountRupees,
@@ -802,8 +916,11 @@ export async function handler(event) {
           status: 'PAID',
           paymentId,
           orderId: qrId,
+          selectedBoard: resolvedBoard,
           selectedClass: resolvedClass,
+          boardClassKey: targetKey,
           activatedClasses,
+          activatedClassKeys,
           method: 'UPI',
           amount: amountRupees,
           transaction: {
@@ -811,6 +928,7 @@ export async function handler(event) {
             receiptNumber,
             studentId: String(studentId),
             studentName: String(studentName || 'Student'),
+            selectedBoard: resolvedBoard,
             selectedClass: resolvedClass,
             planId: resolvedPlanId,
             planTitle,
@@ -826,8 +944,11 @@ export async function handler(event) {
             membershipId: `mem_${paymentId}`,
             studentId: String(studentId),
             studentName: String(studentName || 'Student'),
+            selectedBoard: resolvedBoard,
             selectedClass: resolvedClass,
+            boardClassKey: targetKey,
             activatedClasses,
+            activatedClassKeys,
             planId: resolvedPlanId,
             planTitle,
             amount: amountRupees,
@@ -874,6 +995,8 @@ export async function handler(event) {
         studentName,
         email,
         mobile,
+        selectedBoard,
+        board,
         selectedClass,
         classLevel,
         method: payMethod = 'UPI',
@@ -914,6 +1037,7 @@ export async function handler(event) {
         return jsonResponse(200, {
           success: true,
           alreadyProcessed: true,
+          selectedBoard: existingTx?.selectedBoard || 'Maharashtra',
           selectedClass: existingTx?.selectedClass,
           transaction: existingTx,
           message: 'This payment has already been verified and activated.'
@@ -974,9 +1098,17 @@ export async function handler(event) {
         });
       }
 
-      // Compute exact 365-day expiry date in IST ONLY for the resolved selectedClass
+      // Compute exact 365-day expiry date in IST ONLY for the resolved (selectedBoard, selectedClass)
       const now = new Date();
       const existingStudentDoc = await getFirestoreDocument('students', String(studentId));
+      const resolvedBoard = normalizeNetlifyBoard(
+        captureCheck.notes?.selectedBoard ||
+          captureCheck.notes?.board ||
+          selectedBoard ||
+          board ||
+          existingStudentDoc?.board ||
+          'Maharashtra'
+      );
       const resolvedClass =
         normalizeNetlifyClassLevel(
           captureCheck.notes?.selectedClass ||
@@ -986,7 +1118,10 @@ export async function handler(event) {
         ) ||
         normalizeNetlifyClassLevel(existingStudentDoc?.classLevel) ||
         'Class 1';
-      const existingClassExpiry = existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt;
+      const targetKey = buildNetlifyBoardClassKey(resolvedBoard, resolvedClass);
+      const existingClassExpiry =
+        existingStudentDoc?.classSubscriptions?.[targetKey]?.expiresAt ||
+        (resolvedBoard === 'Maharashtra' ? existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt : undefined);
       const dates = computeNetlifySubscriptionDates(
         now,
         existingClassExpiry || (!existingStudentDoc?.classSubscriptions ? (currentExpiresAt || existingStudentDoc?.planExpiresAt) : undefined)
@@ -996,20 +1131,22 @@ export async function handler(event) {
       const daysRemaining = dates.daysRemaining;
 
       const verifiedAmount = 99;
-      const planTitle = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
+      const planTitle = `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
       const subscriptionTier = 'premium';
       const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
       const resolvedMethod = captureCheck.method || payMethod || 'RAZORPAY';
 
-      const { existingMap, activatedClasses, primaryClassLevel } = buildUpdatedNetlifyClassSubscriptions(
-        existingStudentDoc,
-        resolvedClass,
-        startDateIso,
-        expiryDateIso,
-        razorpay_payment_id,
-        razorpay_order_id,
-        verifiedAmount
-      );
+      const { existingMap, activatedClasses, activatedClassKeys, primaryBoard, primaryClassLevel } =
+        buildUpdatedNetlifyClassSubscriptions(
+          existingStudentDoc,
+          resolvedBoard,
+          resolvedClass,
+          startDateIso,
+          expiryDateIso,
+          razorpay_payment_id,
+          razorpay_order_id,
+          verifiedAmount
+        );
 
       const transactionRecord = {
         id: `tx_${razorpay_payment_id}`,
@@ -1018,8 +1155,10 @@ export async function handler(event) {
         studentName: String(studentName || 'Student'),
         parentEmail: String(email || ''),
         parentMobile: String(mobile || ''),
+        selectedBoard: resolvedBoard,
         selectedClass: resolvedClass,
         classLevel: resolvedClass,
+        boardClassKey: targetKey,
         planId,
         planTitle,
         amount: verifiedAmount,
@@ -1039,8 +1178,11 @@ export async function handler(event) {
         membershipId: `mem_${razorpay_payment_id}`,
         studentId: String(studentId),
         studentName: String(studentName || 'Student'),
+        selectedBoard: resolvedBoard,
         selectedClass: resolvedClass,
+        boardClassKey: targetKey,
         activatedClasses,
+        activatedClassKeys,
         planId,
         planTitle,
         amount: verifiedAmount,
@@ -1060,10 +1202,14 @@ export async function handler(event) {
       await Promise.all([
         patchFirestoreDocument('students', String(studentId), {
           id: String(studentId),
+          board: resolvedBoard,
           classLevel: resolvedClass,
+          primaryBoard,
           primaryClassLevel,
+          activatedBoard: resolvedBoard,
           activatedClassLevel: resolvedClass,
           activatedClasses,
+          activatedClassKeys,
           classSubscriptions: existingMap,
           plan: planId,
           subscriptionTier,
@@ -1088,8 +1234,11 @@ export async function handler(event) {
       return jsonResponse(200, {
         success: true,
         alreadyProcessed: false,
+        selectedBoard: resolvedBoard,
         selectedClass: resolvedClass,
+        boardClassKey: targetKey,
         activatedClasses,
+        activatedClassKeys,
         classSubscriptions: existingMap,
         transaction: transactionRecord,
         membership: membershipRecord
@@ -1223,32 +1372,44 @@ export async function handler(event) {
         if (studentId && paymentId) {
           const now = new Date();
           const existingStudentDoc = await getFirestoreDocument('students', studentId);
+          const resolvedBoard = normalizeNetlifyBoard(
+            notes.selectedBoard || notes.board || existingStudentDoc?.board || 'Maharashtra'
+          );
           const resolvedClass =
             normalizeNetlifyClassLevel(notes.selectedClass || notes.classLevel) ||
             normalizeNetlifyClassLevel(existingStudentDoc?.classLevel) ||
             'Class 1';
-          const existingClassExpiry = existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt;
+          const targetKey = buildNetlifyBoardClassKey(resolvedBoard, resolvedClass);
+          const existingClassExpiry =
+            existingStudentDoc?.classSubscriptions?.[targetKey]?.expiresAt ||
+            (resolvedBoard === 'Maharashtra' ? existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt : undefined);
           const dates = computeNetlifySubscriptionDates(now, existingClassExpiry);
           const startDateIso = dates.startDateIso;
           const expiryDateIso = dates.expiryDateIso;
           const amountInr = 99;
-          const planTitle = `PREMIUM PLAN (${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
-          const { existingMap, activatedClasses, primaryClassLevel } = buildUpdatedNetlifyClassSubscriptions(
-            existingStudentDoc,
-            resolvedClass,
-            startDateIso,
-            expiryDateIso,
-            paymentId,
-            orderId,
-            amountInr
-          );
+          const planTitle = `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
+          const { existingMap, activatedClasses, activatedClassKeys, primaryBoard, primaryClassLevel } =
+            buildUpdatedNetlifyClassSubscriptions(
+              existingStudentDoc,
+              resolvedBoard,
+              resolvedClass,
+              startDateIso,
+              expiryDateIso,
+              paymentId,
+              orderId,
+              amountInr
+            );
 
           await patchFirestoreDocument('students', studentId, {
             id: studentId,
+            board: resolvedBoard,
             classLevel: resolvedClass,
+            primaryBoard,
             primaryClassLevel,
+            activatedBoard: resolvedBoard,
             activatedClassLevel: resolvedClass,
             activatedClasses,
+            activatedClassKeys,
             classSubscriptions: existingMap,
             plan: planId,
             subscriptionTier: 'premium',
@@ -1268,8 +1429,11 @@ export async function handler(event) {
             status: 'ok',
             event: eventType,
             studentId,
+            selectedBoard: resolvedBoard,
             selectedClass: resolvedClass,
+            boardClassKey: targetKey,
             activatedClasses,
+            activatedClassKeys,
             plan: planId,
             planExpiresAt: expiryDateIso,
             validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
@@ -1333,22 +1497,35 @@ export async function handler(event) {
       ]);
 
       if (!emailDoc && !mobileDoc) {
-        return jsonResponse(200, { success: true, exists: false, matchedPair: false, activeClasses: [] });
+        return jsonResponse(200, { success: true, exists: false, matchedPair: false, activeClasses: [], activeClassKeys: [] });
       }
       if (emailDoc && mobileDoc && emailDoc.id === mobileDoc.id) {
         const todayIst = formatIstDateString(new Date());
         const map = emailDoc.data?.classSubscriptions || {};
-        const activeClasses = VALID_NETLIFY_CLASSES.filter((c) => {
-          const r = map[c];
-          return r && r.plan !== 'free' && (!r.expiresAt || String(r.expiresAt).slice(0, 10) >= todayIst);
-        });
+        const activeClassKeys = [];
+        const activeClassSet = new Set();
+        for (const [k, r] of Object.entries(map)) {
+          if (!r || r.plan === 'free') continue;
+          if (!r.expiresAt || String(r.expiresAt).slice(0, 10) >= todayIst) {
+            const parsed = parseNetlifyBoardClassKey(k);
+            const b = normalizeNetlifyBoard(r.board || parsed?.board || emailDoc.data?.primaryBoard || emailDoc.data?.board || 'Maharashtra');
+            const c = normalizeNetlifyClassLevel(r.classLevel || parsed?.classLevel || k);
+            if (c) {
+              activeClassKeys.push(buildNetlifyBoardClassKey(b, c));
+              activeClassSet.add(c);
+            }
+          }
+        }
+        const activeClasses = VALID_NETLIFY_CLASSES.filter((c) => activeClassSet.has(c));
         return jsonResponse(200, {
           success: true,
           exists: true,
           matchedPair: true,
           accountRole: emailDoc.data?.accountRole === 'teacher' ? 'teacher' : 'student',
+          primaryBoard: normalizeNetlifyBoard(emailDoc.data?.primaryBoard || emailDoc.data?.board || 'Maharashtra'),
           primaryClassLevel: emailDoc.data?.primaryClassLevel || emailDoc.data?.classLevel || 'Class 1',
-          activeClasses
+          activeClasses,
+          activeClassKeys
         });
       }
       return jsonResponse(200, {
@@ -1356,7 +1533,8 @@ export async function handler(event) {
         exists: true,
         matchedPair: false,
         mismatchField: emailDoc && !mobileDoc ? 'email' : 'mobile',
-        activeClasses: []
+        activeClasses: [],
+        activeClassKeys: []
       });
     } catch (err) {
       return jsonResponse(500, { success: false, error: err?.message });
@@ -1370,11 +1548,32 @@ export async function handler(event) {
       const cleanStudentId = String(body.studentId || '').trim();
       const requestedPlan = body.plan || 'free';
       const cleanPaymentId = String(body.paymentId || '').trim();
+      const targetBoard = normalizeNetlifyBoard(body.selectedBoard || body.board || body.activatedBoard || 'Maharashtra');
       const targetClass =
         normalizeNetlifyClassLevel(body.selectedClass || body.activatedClassLevel) || 'Class 1';
 
       if (!cleanStudentId) {
         return jsonResponse(400, { success: false, error: 'studentId is required.' });
+      }
+
+      const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+      const isGuestOrDemo = cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+      if (adminAuth && !isGuestOrDemo) {
+        const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+        if (!authHeader.startsWith('Bearer ')) {
+          return jsonResponse(401, { success: false, error: 'Authentication Bearer token required.' });
+        }
+        try {
+          const decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim());
+          const existingStu = await getFirestoreDocument('students', cleanStudentId);
+          const matchesOwner =
+            decoded.uid === cleanStudentId || existingStu?.firebaseUid === decoded.uid;
+          if (!matchesOwner && decoded.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL) {
+            return jsonResponse(403, { success: false, error: 'Forbidden: Token mismatch.' });
+          }
+        } catch {
+          return jsonResponse(401, { success: false, error: 'Invalid or expired authentication token.' });
+        }
       }
 
       if (requestedPlan === 'basic' || requestedPlan === 'premium') {
@@ -1410,6 +1609,7 @@ export async function handler(event) {
         success: true,
         subscription: {
           studentId: cleanStudentId,
+          selectedBoard: targetBoard,
           selectedClass: targetClass,
           plan: requestedPlan === 'premium' || requestedPlan === 'basic' ? 'premium' : 'free',
           planPurchasedAt: body.planPurchasedAt,
@@ -1434,15 +1634,41 @@ export async function handler(event) {
       if (!cleanStudentId || !targetClass) {
         return jsonResponse(400, { success: false, allowed: false, error: 'studentId and targetClass are required.' });
       }
+      const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+      const isGuestOrDemo = cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
       const docData = await getFirestoreDocument('students', cleanStudentId);
+      if (adminAuth && !isGuestOrDemo) {
+        const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+        if (!authHeader.startsWith('Bearer ')) {
+          return jsonResponse(401, { success: false, allowed: false, error: 'Authentication Bearer token required.' });
+        }
+        try {
+          const decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim());
+          const matchesOwner =
+            decoded.uid === cleanStudentId || docData?.firebaseUid === decoded.uid;
+          if (!matchesOwner && decoded.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL) {
+            return jsonResponse(403, { success: false, allowed: false, error: 'Forbidden: Token mismatch.' });
+          }
+        } catch {
+          return jsonResponse(401, { success: false, allowed: false, error: 'Invalid or expired authentication token.' });
+        }
+      }
+
+      const targetBoard = normalizeNetlifyBoard(
+        body.targetBoard || body.selectedBoard || body.board || docData?.board || 'Maharashtra'
+      );
+      const targetKey = buildNetlifyBoardClassKey(targetBoard, targetClass);
+      const primaryBoard = normalizeNetlifyBoard(docData?.primaryBoard || docData?.board || 'Maharashtra');
       const primaryClass = normalizeNetlifyClassLevel(docData?.primaryClassLevel || docData?.classLevel) || 'Class 1';
-      const entry = docData?.classSubscriptions?.[targetClass];
+      const entry =
+        docData?.classSubscriptions?.[targetKey] ||
+        (targetBoard === 'Maharashtra' ? docData?.classSubscriptions?.[targetClass] : undefined);
       const todayIst = formatIstDateString(new Date());
       const isPaidActive =
         entry &&
         entry.plan !== 'free' &&
         (!entry.expiresAt || String(entry.expiresAt).slice(0, 10) >= todayIst);
-      const isAccessible = isPaidActive || targetClass === primaryClass;
+      const isAccessible = isPaidActive || (targetBoard === primaryBoard && targetClass === primaryClass);
 
       if (!isAccessible) {
         return jsonResponse(403, {
@@ -1450,14 +1676,23 @@ export async function handler(event) {
           allowed: false,
           needsPurchase: !entry,
           needsRenewal: Boolean(entry),
-          error: `${targetClass} is locked. Activate or renew ${targetClass} for ₹99 (365 Days).`
+          targetBoard,
+          targetClass,
+          boardClassKey: targetKey,
+          error: `${targetBoard} • ${targetClass} is locked. Activate or renew for ₹99 (365 Days).`
         });
       }
 
-      if (cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')) {
-        await patchFirestoreDocument('students', cleanStudentId, { classLevel: targetClass });
+      if (!isGuestOrDemo) {
+        await patchFirestoreDocument('students', cleanStudentId, { board: targetBoard, classLevel: targetClass });
       }
-      return jsonResponse(200, { success: true, allowed: true, selectedClass: targetClass });
+      return jsonResponse(200, {
+        success: true,
+        allowed: true,
+        selectedBoard: targetBoard,
+        selectedClass: targetClass,
+        boardClassKey: targetKey
+      });
     } catch (err) {
       return jsonResponse(500, { success: false, allowed: false, error: err?.message });
     }
@@ -1471,9 +1706,12 @@ export async function handler(event) {
       success: true,
       subscription: {
         studentId,
+        selectedBoard: normalizeNetlifyBoard(docData?.board || docData?.primaryBoard || 'Maharashtra'),
         selectedClass: docData?.classLevel || 'Class 1',
+        primaryBoard: normalizeNetlifyBoard(docData?.primaryBoard || docData?.board || 'Maharashtra'),
         primaryClassLevel: docData?.primaryClassLevel || docData?.classLevel || 'Class 1',
         activatedClasses: docData?.activatedClasses || [],
+        activatedClassKeys: docData?.activatedClassKeys || [],
         classSubscriptions: docData?.classSubscriptions || {},
         plan: docData?.plan || 'free',
         planPurchasedAt: docData?.planPurchasedAt || null,
