@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { StoryItem } from '../types';
+import { canAccessFeature } from '../utils/subscriptionAccess';
 import {
   speechService,
   SpeechParagraphState,
   READING_SPEED_OPTIONS,
   getReadingSpeedLabel
 } from '../services/speechService';
-import { 
+import {
   Play, 
   Pause, 
   Square,
@@ -22,11 +23,23 @@ import {
   AlertCircle,
   RefreshCw,
   Award,
-  Gauge
+  Gauge,
+  Lock,
+  Crown
 } from 'lucide-react';
 
-export const StoryWorldView: React.FC = () => {
+interface StoryWorldViewProps {
+  onOpenAuth?: () => void;
+  onOpenMembership?: () => void;
+}
+
+export const StoryWorldView: React.FC<StoryWorldViewProps> = ({
+  onOpenAuth,
+  onOpenMembership,
+}) => {
   const { allStories, currentStudent, markStoryCompleted } = useApp();
+  const hasFullAccess = canAccessFeature(currentStudent, 'stories').allowed;
+  const [lockedStoryNotice, setLockedStoryNotice] = useState<string | null>(null);
 
   const [selectedLanguage, setSelectedLanguage] = useState<'English' | 'Hindi' | 'Marathi'>('English');
   const [selectedStory, setSelectedStory] = useState<StoryItem | null>(null);
@@ -91,7 +104,11 @@ export const StoryWorldView: React.FC = () => {
     }
   }, [speechState.currentParagraphIndex, speechState.isPlaying]);
 
-  const filteredStories = allStories.filter(s => s.language === selectedLanguage);
+  const publishedStories = allStories.filter(s => s.published !== false);
+  const filteredStories = publishedStories.filter(s => s.language === selectedLanguage);
+  const engCount = publishedStories.filter(s => s.language === 'English').length;
+  const hinCount = publishedStories.filter(s => s.language === 'Hindi').length;
+  const marCount = publishedStories.filter(s => s.language === 'Marathi').length;
 
   // Assemble full narrative paragraphs from first word to final word: [Title, ...content, Moral]
   const getStoryParagraphs = (story: StoryItem): string[] => {
@@ -228,7 +245,7 @@ export const StoryWorldView: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-2xl">📚</span>
               <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900">
-                Story World (45 Complete Audio Stories)
+                Story World ({publishedStories.length} Complete Audio Stories)
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
@@ -239,64 +256,135 @@ export const StoryWorldView: React.FC = () => {
           {/* Stories completed count badge */}
           <div className="bg-amber-100/70 border border-amber-300 text-amber-900 px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-bold self-start sm:self-auto">
             <Sparkles className="w-4 h-4 text-amber-600" />
-            <span>{currentStudent?.completedStoryIds.length || 0} / 45 Stories Completed</span>
+            <span>{currentStudent?.completedStoryIds.length || 0} / {publishedStories.length} Stories Completed</span>
           </div>
         </div>
 
-        {/* 3 Language Tabs: English (15), Hindi (15), Marathi (15) */}
-        <div className="flex items-center gap-2 bg-amber-50 p-1.5 rounded-2xl border border-amber-200 max-w-md">
-          <button
-            onClick={() => {
-              speechService.stop();
-              setSelectedLanguage('English');
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${selectedLanguage === 'English' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-900'}`}
-          >
-            English (15 Stories)
-          </button>
-          <button
-            onClick={() => {
-              speechService.stop();
-              setSelectedLanguage('Hindi');
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${selectedLanguage === 'Hindi' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-900'}`}
-          >
-            हिन्दी (15 कहानियाँ)
-          </button>
-          <button
-            onClick={() => {
-              speechService.stop();
-              setSelectedLanguage('Marathi');
-            }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${selectedLanguage === 'Marathi' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-900'}`}
-          >
-            मराठी (15 गोष्टी)
-          </button>
+        {/* 3 Language Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 bg-amber-50 p-1.5 rounded-2xl border border-amber-200 max-w-md w-full">
+            <button
+              onClick={() => {
+                speechService.stop();
+                setSelectedLanguage('English');
+                setLockedStoryNotice(null);
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${selectedLanguage === 'English' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-900'}`}
+            >
+              English ({engCount})
+            </button>
+            <button
+              onClick={() => {
+                speechService.stop();
+                setSelectedLanguage('Hindi');
+                setLockedStoryNotice(null);
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${selectedLanguage === 'Hindi' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-900'}`}
+            >
+              हिन्दी ({hinCount})
+            </button>
+            <button
+              onClick={() => {
+                speechService.stop();
+                setSelectedLanguage('Marathi');
+                setLockedStoryNotice(null);
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${selectedLanguage === 'Marathi' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-900'}`}
+            >
+              मराठी ({marCount})
+            </button>
+          </div>
+
+          {!hasFullAccess && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-2xl px-3.5 py-2 text-xs font-bold text-amber-950">
+              <span>🎁 Free Preview: First 3 {selectedLanguage} stories open!</span>
+              <button
+                type="button"
+                onClick={() => (!currentStudent && onOpenAuth ? onOpenAuth() : onOpenMembership?.())}
+                className="px-3 py-1 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold cursor-pointer"
+              >
+                {!currentStudent ? 'Sign In' : 'Unlock All (₹99)'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Story Cards Grid (15 items per tab) */}
+      {lockedStoryNotice && (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-amber-950 font-bold">
+            <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+            <span>{lockedStoryNotice}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!currentStudent && onOpenAuth && (
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold cursor-pointer"
+              >
+                Sign In / Register
+              </button>
+            )}
+            {onOpenMembership && (
+              <button
+                type="button"
+                onClick={onOpenMembership}
+                className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold flex items-center gap-1 cursor-pointer"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>Unlock All for ₹99</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Story Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredStories.map((story, idx) => {
           const isCompleted = currentStudent?.completedStoryIds.includes(story.id);
+          const isLocked = !hasFullAccess && idx >= 3;
 
           return (
             <div
               key={story.id}
-              onClick={() => setSelectedStory(story)}
-              className="group bg-white rounded-3xl p-6 border border-amber-200/80 shadow-xs hover:shadow-lg hover:border-amber-400 transition-all cursor-pointer flex flex-col justify-between"
+              onClick={() => {
+                if (isLocked) {
+                  setLockedStoryNotice(
+                    `"${story.title}" is included in the ₹99 Annual Premium Plan. Enjoy Stories #1–#3 as free audio previews or unlock all ${publishedStories.length} stories!`
+                  );
+                  return;
+                }
+                setLockedStoryNotice(null);
+                setSelectedStory(story);
+              }}
+              className={`group bg-white rounded-3xl p-6 border shadow-xs transition-all cursor-pointer flex flex-col justify-between ${
+                isLocked
+                  ? 'border-slate-200 opacity-90 hover:border-amber-400'
+                  : 'border-amber-200/80 hover:shadow-lg hover:border-amber-400'
+              }`}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
                     Story #{idx + 1} • {story.classRecommendation}
                   </span>
-                  {isCompleted && (
+                  {isLocked ? (
+                    <span className="flex items-center gap-1 text-[10px] font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full">
+                      <Lock className="w-3 h-3" />
+                      ₹99 Plan
+                    </span>
+                  ) : isCompleted ? (
                     <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                       <CheckCircle className="w-3 h-3" />
                       Completed
                     </span>
-                  )}
+                  ) : !hasFullAccess ? (
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                      Free Preview
+                    </span>
+                  ) : null}
                 </div>
 
                 <h3 className="font-display font-bold text-lg text-slate-900 group-hover:text-amber-800 transition-colors mb-2 leading-snug">
@@ -314,7 +402,7 @@ export const StoryWorldView: React.FC = () => {
                   {story.estimatedReadMinutes} min read
                 </span>
                 <span className="flex items-center gap-1 text-amber-700 group-hover:translate-x-1 transition-transform">
-                  Full Audio Story 🎧
+                  {isLocked ? 'Unlock Story 🔒' : 'Full Audio Story 🎧'}
                 </span>
               </div>
             </div>

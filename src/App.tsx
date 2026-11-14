@@ -65,6 +65,12 @@ const PublicHomeDashboard = lazy(() =>
 const PublicZoneExplorerView = lazy(() =>
   import('./components/PublicZoneExplorerView').then((m) => ({ default: m.PublicZoneExplorerView }))
 );
+const AllCoursesExplorerView = lazy(() =>
+  import('./components/AllCoursesExplorerView').then((m) => ({ default: m.AllCoursesExplorerView }))
+);
+const OtherProgramsView = lazy(() =>
+  import('./components/OtherProgramsView').then((m) => ({ default: m.OtherProgramsView }))
+);
 
 const PortalLoadingCard: React.FC = () => (
   <div className="bg-white rounded-3xl p-8 border border-amber-200/80 shadow-xs space-y-4 animate-pulse">
@@ -77,7 +83,7 @@ const PortalLoadingCard: React.FC = () => (
     </div>
   </div>
 );
-import { ClassLevel, EducationBoard, SubjectName, QuizLevel } from './types';
+import { ClassLevel, EducationBoard, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
 import { MainMenuId, NavSubActionId } from './data/navigationConfig';
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
 import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
@@ -117,6 +123,7 @@ const AppContent: React.FC = () => {
     setIsAuthModalOpen,
     sessionSecurityNotice,
     clearSessionSecurityNotice,
+    isSectionVisible,
   } = useApp();
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -283,7 +290,9 @@ const AppContent: React.FC = () => {
 
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
     const alwaysOpenTabs = new Set([
-      'demo', 'dashboard', 'public-home', 'explore-zone', 'profile', 'account', 'subscription',
+      'demo', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
+      'scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
+      'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin'
@@ -355,6 +364,10 @@ const AppContent: React.FC = () => {
       }
 
       // COURSES
+      case 'course-all': {
+        handleNavigateTab('all-courses');
+        return;
+      }
       case 'course-maharashtra':
       case 'course-cbse':
       case 'course-icse': {
@@ -367,6 +380,36 @@ const AppContent: React.FC = () => {
         setPublicBoard(targetBoard);
         setHomeScrollTarget('courses-section');
         setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+        return;
+      }
+
+      // SPECIAL LEARNING
+      case 'sl-scholarship': {
+        handleNavigateTab('scholarship');
+        return;
+      }
+      case 'sl-drawing': {
+        handleNavigateTab('drawing');
+        return;
+      }
+      case 'sl-stories': {
+        handleNavigateTab('stories');
+        return;
+      }
+      case 'sl-shivaji': {
+        handleNavigateTab('shivaji');
+        return;
+      }
+      case 'sl-gk': {
+        handleNavigateTab('cricket');
+        return;
+      }
+      case 'sl-creative': {
+        handleNavigateTab('puzzles');
+        return;
+      }
+      case 'sl-programs': {
+        handleNavigateTab('other-programs');
         return;
       }
 
@@ -500,11 +543,25 @@ const AppContent: React.FC = () => {
       if (explorerZone === 'performance') return 'performance';
       if (explorerZone === 'plans') return 'plans';
     }
+    if (currentTab === 'all-courses') return 'courses';
+    if (
+      currentTab === 'scholarship' ||
+      currentTab === 'drawing' ||
+      currentTab === 'stories' ||
+      currentTab === 'shivaji' ||
+      currentTab === 'cricket' ||
+      currentTab === 'puzzles' ||
+      currentTab === 'sudoku' ||
+      currentTab === 'future-skills' ||
+      currentTab === 'ai-academy' ||
+      currentTab === 'other-programs'
+    ) {
+      return 'special-learning';
+    }
     if (currentTab === 'study-materials') return 'study-material';
-    if (currentTab === 'worksheets' || currentTab === 'quizzes' || currentTab === 'cricket' || currentTab === 'puzzles' || currentTab === 'sudoku') {
+    if (currentTab === 'worksheets' || currentTab === 'quizzes') {
       return 'practice-zone';
     }
-    if (currentTab === 'scholarship') return 'exam-zone';
     if (currentTab === 'certificates' || currentTab === 'leaderboard') return 'performance';
     if (currentTab === 'profile' || currentTab === 'account' || currentTab === 'subscription') {
       return 'account';
@@ -664,6 +721,24 @@ const AppContent: React.FC = () => {
               onClearScrollTarget={() => setHomeScrollTarget(null)}
               onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
               onNavigateZone={(tab, subSection, subject) => {
+                const directStudioTabs = new Set([
+                  'all-courses',
+                  'other-programs',
+                  'scholarship',
+                  'drawing',
+                  'stories',
+                  'shivaji',
+                  'cricket',
+                  'puzzles',
+                  'sudoku',
+                  'future-skills',
+                  'ai-academy',
+                  'faqs',
+                ]);
+                if (directStudioTabs.has(tab)) {
+                  handleNavigateTab(tab, subject);
+                  return;
+                }
                 if (isLearningPortal && currentStudent) {
                   if (tab === 'performance') {
                     handleNavigateTab('dashboard');
@@ -671,20 +746,11 @@ const AppContent: React.FC = () => {
                     handleNavigateTab(tab, subject);
                   }
                 } else {
-                  if (tab === 'faqs') {
-                    handleNavigateTab('faqs');
-                    return;
-                  }
                   if (tab === 'study-materials') setExplorerZone('study-material');
-                  else if (tab === 'worksheets' || tab === 'quizzes' || tab === 'cricket') {
+                  else if (tab === 'worksheets' || tab === 'quizzes') {
                     setExplorerZone('practice-zone');
-                  } else if (tab === 'scholarship') {
-                    setExplorerZone('exam-zone');
                   } else if (tab === 'performance') {
                     setExplorerZone('performance');
-                  } else if (tab === 'stories') {
-                    openDemoWithTab('overview');
-                    return;
                   } else {
                     setExplorerZone('study-material');
                   }
@@ -739,7 +805,121 @@ const AppContent: React.FC = () => {
             onNavigateTab={(t) => handleNavigateTab(t)}
             onOpenMembership={() => openMembershipWithPlan('premium')}
           />
-        ) : (
+          ) : currentTab === 'all-courses' ? (
+            <AllCoursesExplorerView
+              selectedBoard={currentStudent ? activeBoard : publicBoard}
+              selectedClass={currentStudent ? currentStudent.classLevel : publicClass}
+              onSelectBoard={setPublicBoard}
+              onSelectClass={setPublicClass}
+              onOpenSubjectPractice={(board, cls, subj, mode) => {
+                setPublicBoard(board);
+                setPublicClass(cls);
+                if (currentStudent) {
+                  handleNavigateTab(mode, subj);
+                } else {
+                  openDemoWithTab(mode === 'quizzes' ? 'live-quiz' : 'live-curriculum');
+                }
+              }}
+              onOpenMembership={(targetClass, targetBoard) =>
+                openMembershipWithPlan('premium', targetClass, targetBoard)
+              }
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          ) : currentTab === 'other-programs' ? (
+            <OtherProgramsView
+              onNavigateStudio={(targetTab) => handleNavigateTab(targetTab)}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          ) : (['scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku', 'future-skills', 'ai-academy'] as const).includes(currentTab as 'scholarship') ? (
+            (() => {
+              const sectionKeyMap: Record<string, SpecialLearningSectionId> = {
+                scholarship: 'scholarship',
+                drawing: 'drawing',
+                stories: 'stories',
+                shivaji: 'shivaji',
+                cricket: 'gk_cricket',
+                puzzles: 'creative_activities',
+                sudoku: 'creative_activities',
+                'future-skills': 'future_skills',
+                'ai-academy': 'future_skills',
+              };
+              const visKey = sectionKeyMap[currentTab];
+              if (visKey && !isSectionVisible(visKey)) {
+                return (
+                  <div className="max-w-lg mx-auto my-12 bg-white rounded-3xl p-8 border border-amber-200 shadow-sm text-center space-y-4">
+                    <h2 className="text-xl font-display font-extrabold text-slate-900">
+                      Section Temporarily Hidden
+                    </h2>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      This Special Learning section is currently hidden for your account view by the platform administrator.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home')}
+                      className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs cursor-pointer"
+                    >
+                      Return to Home
+                    </button>
+                  </div>
+                );
+              }
+              if (currentTab === 'scholarship') {
+                return (
+                  <ScholarshipChampionsView
+                    onOpenAuth={() => openAuthModalWithTab('login')}
+                    onOpenMembership={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
+                  />
+                );
+              }
+              if (currentTab === 'drawing') {
+                return <DrawingChampionsView onOpenAuth={() => openAuthModalWithTab('login')} />;
+              }
+              if (currentTab === 'stories') {
+                return (
+                  <StoryWorldView
+                    onOpenAuth={() => openAuthModalWithTab('login')}
+                    onOpenMembership={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
+                  />
+                );
+              }
+              if (currentTab === 'shivaji') {
+                return (
+                  <ShivajiStoriesView
+                    onOpenAuth={() => openAuthModalWithTab('login')}
+                    onOpenMembership={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
+                  />
+                );
+              }
+              if (currentTab === 'cricket') {
+                return (
+                  <CricketChampionsView
+                    onOpenAuth={() => openAuthModalWithTab('login')}
+                    onOpenMembership={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
+                  />
+                );
+              }
+              if (currentTab === 'puzzles') {
+                return <PuzzleChampionsView />;
+              }
+              if (currentTab === 'sudoku') {
+                return <SudokuView />;
+              }
+              return (
+                <FutureSkillsView
+                  onOpenAuth={() => openAuthModalWithTab('login')}
+                  onOpenMembership={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
+                />
+              );
+            })()
+          ) : (
           <>
             {/* Signed-Out Public Home Dashboard */}
             {isLearningPortal && !currentStudent && (
@@ -751,21 +931,30 @@ const AppContent: React.FC = () => {
                 scrollTarget={homeScrollTarget}
                 onClearScrollTarget={() => setHomeScrollTarget(null)}
                 onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
-                onNavigateZone={(tab, subSection) => {
-                  if (tab === 'faqs') {
-                    handleNavigateTab('faqs');
+                onNavigateZone={(tab, subSection, subject) => {
+                  const directStudioTabs = new Set([
+                    'all-courses',
+                    'other-programs',
+                    'scholarship',
+                    'drawing',
+                    'stories',
+                    'shivaji',
+                    'cricket',
+                    'puzzles',
+                    'sudoku',
+                    'future-skills',
+                    'ai-academy',
+                    'faqs',
+                  ]);
+                  if (directStudioTabs.has(tab)) {
+                    handleNavigateTab(tab, subject);
                     return;
                   }
                   if (tab === 'study-materials') setExplorerZone('study-material');
-                  else if (tab === 'worksheets' || tab === 'quizzes' || tab === 'cricket') {
+                  else if (tab === 'worksheets' || tab === 'quizzes') {
                     setExplorerZone('practice-zone');
-                  } else if (tab === 'scholarship') {
-                    setExplorerZone('exam-zone');
                   } else if (tab === 'performance') {
                     setExplorerZone('performance');
-                  } else if (tab === 'stories') {
-                    openDemoWithTab('overview');
-                    return;
                   } else {
                     setExplorerZone('study-material');
                   }
@@ -942,26 +1131,6 @@ const AppContent: React.FC = () => {
                     initialSubject={quizInitialSubject}
                     onNavigateTab={handleNavigateTab}
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
-                  />
-                )}
-
-                {currentTab === 'stories' && <StoryWorldView />}
-
-                {currentTab === 'drawing' && <DrawingChampionsView />}
-
-                {currentTab === 'puzzles' && <PuzzleChampionsView />}
-
-                {currentTab === 'sudoku' && <SudokuView />}
-
-                {currentTab === 'cricket' && <CricketChampionsView />}
-
-                {currentTab === 'scholarship' && <ScholarshipChampionsView />}
-
-                {currentTab === 'shivaji' && <ShivajiStoriesView />}
-
-                {(currentTab === 'future-skills' || currentTab === 'ai-academy') && (
-                  <FutureSkillsView
-                    onOpenMembership={() => openMembershipWithPlan('premium')}
                   />
                 )}
 

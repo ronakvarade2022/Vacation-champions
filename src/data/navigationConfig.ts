@@ -1,8 +1,9 @@
-import { EducationBoard } from '../types';
+import { EducationBoard, SpecialLearningSectionId } from '../types';
 
 export type MainMenuId =
   | 'home'
   | 'courses'
+  | 'special-learning'
   | 'study-material'
   | 'practice-zone'
   | 'exam-zone'
@@ -16,9 +17,18 @@ export type NavSubActionId =
   | 'home-how-it-works'
   | 'home-why-choose-us'
   // COURSES
+  | 'course-all'
   | 'course-maharashtra'
   | 'course-cbse'
   | 'course-icse'
+  // SPECIAL LEARNING
+  | 'sl-scholarship'
+  | 'sl-drawing'
+  | 'sl-stories'
+  | 'sl-shivaji'
+  | 'sl-gk'
+  | 'sl-creative'
+  | 'sl-programs'
   // STUDY MATERIAL
   | 'sm-notes'
   | 'sm-important-questions'
@@ -54,12 +64,14 @@ export interface NavSubItemConfig {
   description: string;
   boardFilter?: EducationBoard;
   badgeText?: string;
+  sectionVisibilityKey?: SpecialLearningSectionId;
 }
 
 export interface NavMenuGroupConfig {
   id: MainMenuId;
   label: string;
   defaultActionId: NavSubActionId;
+  highlight?: boolean;
   items: NavSubItemConfig[];
 }
 
@@ -89,8 +101,15 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
   {
     id: 'courses',
     label: 'Courses',
-    defaultActionId: 'course-maharashtra',
+    defaultActionId: 'course-all',
     items: [
+      {
+        id: 'course-all',
+        label: 'Explore All Courses (MH · CBSE · ICSE)',
+        description: 'Complete Classes 1–10 catalog across all 3 isolated boards',
+        badgeText: 'All 1–10',
+        sectionVisibilityKey: 'all_courses',
+      },
       {
         id: 'course-maharashtra',
         label: 'Maharashtra State Board',
@@ -111,6 +130,63 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         description: 'Classes 1–10 CISCE curriculum with split Physics/Chem/Bio',
         boardFilter: 'ICSE',
         badgeText: 'CISCE',
+      },
+    ],
+  },
+  {
+    id: 'special-learning',
+    label: '🎓 Special Learning',
+    defaultActionId: 'sl-scholarship',
+    highlight: true,
+    items: [
+      {
+        id: 'sl-scholarship',
+        label: '1. Scholarship Corner',
+        description: 'MSCE Std 4th & 7th Scholarship Champions, 600 Qs & mock sets',
+        badgeText: 'Std 4 & 7',
+        sectionVisibilityKey: 'scholarship',
+      },
+      {
+        id: 'sl-drawing',
+        label: '2. Drawing Studio',
+        description: '120+ colouring templates, freehand canvas & saved art portfolio',
+        badgeText: '120+ Art',
+        sectionVisibilityKey: 'drawing',
+      },
+      {
+        id: 'sl-stories',
+        label: '3. Story World',
+        description: '45+ English, Hindi & Marathi audio stories with comprehension',
+        badgeText: '45 Stories',
+        sectionVisibilityKey: 'stories',
+      },
+      {
+        id: 'sl-shivaji',
+        label: '4. Shivaji Maharaj Stories',
+        description: '50 chronological Swarajya historical chapters with narration',
+        badgeText: '50 Chapters',
+        sectionVisibilityKey: 'shivaji',
+      },
+      {
+        id: 'sl-gk',
+        label: '5. General Knowledge',
+        description: 'Daily Cricket Current Affairs & 4-level GK Quiz Arena',
+        badgeText: 'Daily GK',
+        sectionVisibilityKey: 'gk_cricket',
+      },
+      {
+        id: 'sl-creative',
+        label: '6. Creative Activities',
+        description: '47+ Brain Riddles, Memory Match Games & Sudoku (4×4/6×6/9×9)',
+        badgeText: 'Puzzles',
+        sectionVisibilityKey: 'creative_activities',
+      },
+      {
+        id: 'sl-programs',
+        label: '7. Other Existing Learning Programs',
+        description: 'AI Learning Academy, Future Skills, Certificates & All Studios',
+        badgeText: 'All Tracks',
+        sectionVisibilityKey: 'future_skills',
       },
     ],
   },

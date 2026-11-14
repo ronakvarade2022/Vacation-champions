@@ -421,5 +421,48 @@ service cloud.firestore {
       );
       allow delete: if isAdmin();
     }
+
+    // PlatformConfig Schema Validator (Zero-PII global timers & visibility configuration)
+    function isValidPlatformConfig(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             (!('timers' in data) || data.timers is map) &&
+             (!('sectionVisibility' in data) || data.sectionVisibility is map) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    // SpecialContentItem Schema Validator (Zero-PII admin-managed Special Learning records)
+    function isValidSpecialContentItem(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.contentType in ['story', 'shivaji_story', 'scholarship_question', 'drawing_template', 'gk_question', 'learning_program'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.published is bool &&
+             data.payload is map &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    // 13. Collection: /platform_config/{configId}
+    match /platform_config/{configId} {
+      allow get: if isValidId(configId) && (configId == 'main' || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(configId) && isAdmin() && isValidPlatformConfig(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 14. Collection: /special_content/{itemId}
+    match /special_content/{itemId} {
+      allow get: if isValidId(itemId) && (isAdmin() || existing().published == true);
+      allow list: if isAdmin() || resource.data.published == true;
+      allow create, update: if isValidId(itemId) && isAdmin() && isValidSpecialContentItem(incoming());
+      allow delete: if isAdmin();
+    }
   }
 }

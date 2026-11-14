@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { SHIVAJI_STORIES, ShivajiStory } from '../data/shivajiStoriesData';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { ShivajiStory } from '../data/shivajiStoriesData';
+import { useApp } from '../context/AppContext';
+import { canAccessFeature } from '../utils/subscriptionAccess';
 import {
   speechService,
   SpeechParagraphState,
@@ -23,10 +25,26 @@ import {
   Sparkles,
   Gauge,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 
-export const ShivajiStoriesView: React.FC = () => {
+interface ShivajiStoriesViewProps {
+  onOpenAuth?: () => void;
+  onOpenMembership?: () => void;
+}
+
+export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
+  onOpenAuth,
+  onOpenMembership,
+}) => {
+  const { shivajiStories, currentStudent } = useApp();
+  const hasFullAccess = canAccessFeature(currentStudent, 'shivaji').allowed;
+  const liveStories = useMemo(
+    () => shivajiStories.filter(s => s.published !== false),
+    [shivajiStories]
+  );
+
   const [selectedLanguage, setSelectedLanguage] = useState<'Marathi' | 'Hindi' | 'English'>('Marathi');
   const [activeStoryIndex, setActiveStoryIndex] = useState<number>(0);
 
@@ -59,13 +77,16 @@ export const ShivajiStoriesView: React.FC = () => {
 
   const activeParagraphRef = useRef<HTMLDivElement | null>(null);
 
-  const currentStory: ShivajiStory = SHIVAJI_STORIES[activeStoryIndex] || SHIVAJI_STORIES[0];
-  const bodyParagraphs = currentStory.paragraphs[selectedLanguage] || [];
-  const moralText = currentStory.moral[selectedLanguage] || '';
+  const safeActiveIndex = Math.min(activeStoryIndex, Math.max(0, liveStories.length - 1));
+  const currentStory: ShivajiStory = liveStories[safeActiveIndex] || liveStories[0];
+  const isChapterLocked = !hasFullAccess && safeActiveIndex >= 3;
+  const bodyParagraphs = currentStory?.paragraphs[selectedLanguage] || [];
+  const moralText = currentStory?.moral[selectedLanguage] || '';
 
   // Full narration sequence from first word to final word:
   // [0: Story Title, 1..N: Body Paragraphs, N+1: Moral Lesson]
   const getFullNarrationParagraphs = (): string[] => {
+    if (!currentStory) return [];
     const titleText = currentStory.title[selectedLanguage] || '';
     const moralPrefix =
       selectedLanguage === 'Marathi'
@@ -77,7 +98,7 @@ export const ShivajiStoriesView: React.FC = () => {
   };
 
   // Filtered stories list
-  const filteredStories = SHIVAJI_STORIES.filter(s => {
+  const filteredStories = liveStories.filter(s => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -232,10 +253,10 @@ export const ShivajiStoriesView: React.FC = () => {
               <span>CHHATRAPATI SHIVAJI MAHARAJ GATHA</span>
             </div>
             <h1 className="text-2xl sm:text-4xl font-display font-extrabold tracking-tight">
-              छत्रपती शिवाजी महाराज: ५० ऐतिहासिक अमृतकथा
+              छत्रपती शिवाजी महाराज: {liveStories.length} ऐतिहासिक अमृतकथा
             </h1>
             <p className="text-amber-100 text-xs sm:text-sm max-w-2xl leading-relaxed">
-              Complete chronological saga of 50 inspiring stories in Marathi, Hindi, and English with natural Female Voice narration from first word to final word and 6 reading speeds (0.5x to 2.0x)!
+              Complete chronological saga of {liveStories.length} inspiring stories in Marathi, Hindi, and English with natural Female Voice narration from first word to final word and 6 reading speeds (0.5x to 2.0x)!
             </p>
           </div>
 
@@ -243,7 +264,7 @@ export const ShivajiStoriesView: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 text-center">
               <p className="text-[10px] uppercase font-bold text-amber-200">Stories Completed</p>
-              <p className="text-xl font-extrabold text-white">{completedCount} / 50</p>
+              <p className="text-xl font-extrabold text-white">{completedCount} / {liveStories.length}</p>
             </div>
 
             {/* Language Selector */}
@@ -502,6 +523,43 @@ export const ShivajiStoriesView: React.FC = () => {
               )}
             </div>
 
+            {isChapterLocked ? (
+              <div className="rounded-3xl bg-amber-50 border-2 border-amber-300 p-8 text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white mx-auto flex items-center justify-center shadow-md">
+                  <Lock className="w-7 h-7" />
+                </div>
+                <div className="space-y-1 max-w-lg mx-auto">
+                  <h3 className="font-display font-extrabold text-lg text-slate-900">
+                    Free Preview Completed (Chapters 1–3)
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600">
+                    Chapters 4 to {liveStories.length} of the Chhatrapati Shivaji Maharaj Swarajya Gatha are unlocked with any ₹99 Annual Plan (365 Days).
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-3">
+                  {!currentStudent && onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={onOpenAuth}
+                      className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer"
+                    >
+                      Sign In / Register Free
+                    </button>
+                  )}
+                  {onOpenMembership && (
+                    <button
+                      type="button"
+                      onClick={onOpenMembership}
+                      className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <Crown className="w-4 h-4" />
+                      <span>Unlock All {liveStories.length} Chapters — ₹99/Yr</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Story Paragraphs with Synchronized Paragraph & Sentence Audio Highlighting */}
             <div className="space-y-4 text-slate-800 leading-relaxed text-sm sm:text-base">
               {bodyParagraphs.map((p, idx) => {
@@ -618,44 +676,48 @@ export const ShivajiStoriesView: React.FC = () => {
             <div className="flex items-center justify-between pt-4 border-t border-amber-100">
               <button
                 onClick={() => {
-                  if (activeStoryIndex > 0) setActiveStoryIndex(activeStoryIndex - 1);
+                  if (safeActiveIndex > 0) setActiveStoryIndex(safeActiveIndex - 1);
                 }}
-                disabled={activeStoryIndex === 0}
+                disabled={safeActiveIndex === 0}
                 className="px-4 py-2 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 Previous Story
               </button>
 
-              <button
-                onClick={() => markAsCompleted(currentStory.id)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Mark Story Completed
-              </button>
+              {!isChapterLocked && (
+                <button
+                  onClick={() => markAsCompleted(currentStory.id)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Mark Story Completed
+                </button>
+              )}
 
               <button
                 onClick={() => {
-                  if (activeStoryIndex < SHIVAJI_STORIES.length - 1) setActiveStoryIndex(activeStoryIndex + 1);
+                  if (safeActiveIndex < liveStories.length - 1) setActiveStoryIndex(safeActiveIndex + 1);
                 }}
-                disabled={activeStoryIndex >= SHIVAJI_STORIES.length - 1}
+                disabled={safeActiveIndex >= liveStories.length - 1}
                 className="px-4 py-2 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
               >
                 Next Story
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Right Column: 50 Stories Chronological Index (4 cols) */}
+        {/* Right Column: Chronological Index (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-white rounded-3xl p-5 border border-amber-200 shadow-md space-y-4 sticky top-24">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-display font-extrabold text-slate-900 text-sm">
                 <BookOpen className="w-4 h-4 text-amber-600" />
-                <span>५० अमृतकथांची अनुक्रमणिका</span>
+                <span>{liveStories.length} अमृतकथांची अनुक्रमणिका</span>
               </div>
               <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
                 1630 - 1680 CE
@@ -674,17 +736,18 @@ export const ShivajiStoriesView: React.FC = () => {
               />
             </div>
 
-            {/* Scrollable List of 50 Stories */}
+            {/* Scrollable List of Stories */}
             <div className="max-h-[560px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {filteredStories.map(story => {
-                const isSelected = SHIVAJI_STORIES[activeStoryIndex]?.id === story.id;
+                const idx = liveStories.findIndex(s => s.id === story.id);
+                const isSelected = currentStory?.id === story.id;
                 const isDone = completedStories[story.id];
+                const isLockedItem = !hasFullAccess && idx >= 3;
 
                 return (
                   <button
                     key={story.id}
                     onClick={() => {
-                      const idx = SHIVAJI_STORIES.findIndex(s => s.id === story.id);
                       if (idx !== -1) setActiveStoryIndex(idx);
                     }}
                     className={`w-full text-left p-3 rounded-2xl transition-all cursor-pointer border flex items-center justify-between gap-2.5 ${
@@ -711,7 +774,11 @@ export const ShivajiStoriesView: React.FC = () => {
                       </div>
                     </div>
 
-                    {isDone && <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />}
+                    {isLockedItem ? (
+                      <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    ) : isDone ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : null}
                   </button>
                 );
               })}

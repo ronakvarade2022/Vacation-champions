@@ -109,6 +109,23 @@ export const AdminDashboard: React.FC = () => {
     allQuestions,
     rejectedDuplicates,
     allStories,
+    shivajiStories,
+    customScholarshipQuestions,
+    gkQuestions,
+    learningPrograms,
+    sectionVisibility,
+    updateSectionVisibility,
+    addOrUpdateStory,
+    toggleStoryPublished,
+    deleteCustomStory,
+    addOrUpdateShivajiStory,
+    deleteCustomShivajiStory,
+    addOrUpdateScholarshipQuestion,
+    deleteCustomScholarshipQuestion,
+    addOrUpdateGkQuestion,
+    deleteCustomGkQuestion,
+    addOrUpdateLearningProgram,
+    deleteLearningProgram,
     transactions,
     platformSettings,
     drawingTemplates,
@@ -414,7 +431,7 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          <span>Story Library ({tabCounts.stories})</span>
+          <span>Stories &amp; Shivaji ({tabCounts.stories + shivajiStories.length})</span>
         </button>
         <button
           type="button"
@@ -462,7 +479,7 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <span>🏏</span>
-          <span>Cricket Bank (40 Qs)</span>
+          <span>GK &amp; Cricket ({gkQuestions.length} Qs)</span>
         </button>
         <button
           type="button"
@@ -486,7 +503,7 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <Settings className="w-4 h-4" />
-          <span>Timer & Platform Settings</span>
+          <span>Visibility, Timers &amp; Programs</span>
         </button>
         <button
           type="button"
@@ -564,7 +581,17 @@ export const AdminDashboard: React.FC = () => {
           />
         )}
 
-        {activeSection === 'stories' && <AdminStoriesSection allStories={allStories} />}
+        {activeSection === 'stories' && (
+          <AdminStoriesSection
+            allStories={allStories}
+            shivajiStories={shivajiStories}
+            onSaveStory={addOrUpdateStory}
+            onToggleStoryPublished={toggleStoryPublished}
+            onDeleteCustomStory={deleteCustomStory}
+            onSaveShivajiStory={addOrUpdateShivajiStory}
+            onDeleteCustomShivajiStory={deleteCustomShivajiStory}
+          />
+        )}
 
         {activeSection === 'drawings' && (
           <AdminDrawingsSection
@@ -584,14 +611,31 @@ export const AdminDashboard: React.FC = () => {
           />
         )}
 
-        {activeSection === 'cricket' && <AdminCricketSection />}
+        {activeSection === 'cricket' && (
+          <AdminCricketSection
+            gkQuestions={gkQuestions}
+            onSaveGkQuestion={addOrUpdateGkQuestion}
+            onDeleteGkQuestion={deleteCustomGkQuestion}
+          />
+        )}
 
-        {activeSection === 'scholarship' && <AdminScholarshipSection />}
+        {activeSection === 'scholarship' && (
+          <AdminScholarshipSection
+            customQuestions={customScholarshipQuestions}
+            onSaveCustomQuestion={addOrUpdateScholarshipQuestion}
+            onDeleteCustomQuestion={deleteCustomScholarshipQuestion}
+          />
+        )}
 
         {activeSection === 'settings' && (
           <AdminSettingsSection
             initialTimers={platformSettings.timers}
             onSaveTimers={updateTimers}
+            sectionVisibility={sectionVisibility}
+            onSaveSectionVisibility={updateSectionVisibility}
+            learningPrograms={learningPrograms}
+            onSaveLearningProgram={addOrUpdateLearningProgram}
+            onDeleteLearningProgram={deleteLearningProgram}
           />
         )}
 

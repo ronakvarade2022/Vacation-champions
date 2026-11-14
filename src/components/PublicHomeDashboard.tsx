@@ -24,7 +24,8 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
-import { ClassLevel, EducationBoard, SubjectName } from '../types';
+import { ClassLevel, EducationBoard, SpecialLearningSectionId, SubjectName } from '../types';
+import { useApp } from '../context/AppContext';
 import { BOARD_META_LIST, getEducationBoardMeta } from '../data/boards/boardMeta';
 import {
   ALL_10_CLASSES_META,
@@ -44,6 +45,7 @@ import {
 export type HomeScrollTarget =
   | 'home-overview'
   | 'courses-section'
+  | 'special-learning-section'
   | 'home-how-it-works'
   | 'home-why-choose-us'
   | 'plans-pricing'
@@ -162,8 +164,104 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   currentUserName,
   isDesktopMode = false,
 }) => {
+  const { isSectionVisible, learningPrograms } = useApp();
   const [expandedFaqId, setExpandedFaqId] = useState<string>('faq-1');
   const [pricingBoardTab, setPricingBoardTab] = useState<EducationBoard>(selectedBoard);
+
+  const specialLearningCards = useMemo<
+    Array<{
+      id: string;
+      visKey: SpecialLearningSectionId;
+      emoji: string;
+      badge: string;
+      title: string;
+      desc: string;
+      targetTab: string;
+      secondaryTab?: { label: string; tab: string };
+      accentClass: string;
+    }>
+  >(
+    () => [
+      {
+        id: 'sl-scholarship',
+        visKey: 'scholarship',
+        emoji: '🏆',
+        badge: 'Std 4 & 7 · Set #1 Free',
+        title: '1. Scholarship Corner',
+        desc: 'Official MSCE Std 4th (PSE) & Std 7th (UPS) practice banks across 10 mock sets in Marathi, English & Hindi.',
+        targetTab: 'scholarship',
+        accentClass: 'border-amber-200 bg-amber-50/40',
+      },
+      {
+        id: 'sl-drawing',
+        visKey: 'drawing',
+        emoji: '🎨',
+        badge: '120+ Templates · Free Canvas',
+        title: '2. Drawing Studio',
+        desc: 'Interactive flood-fill colouring templates, freehand painting canvas, shapes & PNG artwork export.',
+        targetTab: 'drawing',
+        accentClass: 'border-rose-200 bg-rose-50/40',
+      },
+      {
+        id: 'sl-stories',
+        visKey: 'stories',
+        emoji: '📖',
+        badge: '45+ Audio Stories · 3 Free',
+        title: '3. Story World',
+        desc: 'English, Hindi & Marathi moral stories with speech narration, vocabulary builder & comprehension checks.',
+        targetTab: 'stories',
+        accentClass: 'border-indigo-200 bg-indigo-50/40',
+      },
+      {
+        id: 'sl-shivaji',
+        visKey: 'shivaji',
+        emoji: '🚩',
+        badge: '50 Chapters · 3 Free',
+        title: '4. Shivaji Maharaj Stories',
+        desc: 'Chronological Swarajya history chapters in English, Marathi & Hindi with audio read-along.',
+        targetTab: 'shivaji',
+        accentClass: 'border-orange-200 bg-orange-50/40',
+      },
+      {
+        id: 'sl-gk',
+        visKey: 'gk_cricket',
+        emoji: '🏏',
+        badge: 'Daily GK · Level 1 Free',
+        title: '5. General Knowledge',
+        desc: 'Daily Cricket Current Affairs, Records, Women Cricket & General Knowledge 4-level arena.',
+        targetTab: 'cricket',
+        accentClass: 'border-emerald-200 bg-emerald-50/40',
+      },
+      {
+        id: 'sl-creative',
+        visKey: 'creative_activities',
+        emoji: '🧩',
+        badge: 'Riddles & Sudoku Open',
+        title: '6. Creative Activities',
+        desc: '47+ Brain Riddles, sequence logic puzzles & interactive 4×4, 6×6 & 9×9 Sudoku challenges.',
+        targetTab: 'puzzles',
+        secondaryTab: { label: 'Open Sudoku', tab: 'sudoku' },
+        accentClass: 'border-purple-200 bg-purple-50/40',
+      },
+      {
+        id: 'sl-programs',
+        visKey: 'future_skills',
+        emoji: '✨',
+        badge: `${learningPrograms.filter((p) => p.published !== false).length} Programs`,
+        title: '7. Other Existing Programs',
+        desc: 'AI Learning Academy, Future Skills, Champion Certificates & all specialized study tracks.',
+        targetTab: 'other-programs',
+        secondaryTab: { label: 'AI Academy', tab: 'future-skills' },
+        accentClass: 'border-sky-200 bg-sky-50/40',
+      },
+    ],
+    [learningPrograms]
+  );
+
+  const visibleSpecialCards = useMemo(
+    () => specialLearningCards.filter((card) => isSectionVisible(card.visKey)),
+    [specialLearningCards, isSectionVisible]
+  );
 
   useEffect(() => {
     setPricingBoardTab(selectedBoard);
@@ -597,10 +695,23 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
             <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
               Every board maintains completely independent subjects, textbooks, notes, worksheets, and question banks. Select your board first, then pick any class from Standard 1st to 10th.
             </p>
-            <div className="pt-1 text-xs font-bold text-slate-700">
-              Currently Showing:{' '}
-              <span className={boardAccent.textAccent}>{getBoardDisplayName(selectedBoard)}</span> ·{' '}
-              <span>{selectedClass}</span> ({selectedClassSubjects.length} Board-Exclusive Subjects)
+            <div className="pt-1 flex flex-wrap items-center gap-3">
+              <span className="text-xs font-bold text-slate-700">
+                Currently Showing:{' '}
+                <span className={boardAccent.textAccent}>{getBoardDisplayName(selectedBoard)}</span> ·{' '}
+                <span>{selectedClass}</span> ({selectedClassSubjects.length} Board-Exclusive Subjects)
+              </span>
+              {isSectionVisible('all_courses') && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateZone('all-courses')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs cursor-pointer transition-colors"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Browse All Courses Directory (MH · CBSE · ICSE)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -833,6 +944,80 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
           </div>
         </div>
       </section>
+
+      {/* 3B. SPECIAL LEARNING STUDIOS & ENRICHMENT PROGRAMS */}
+      {visibleSpecialCards.length > 0 && (
+        <section id="special-learning-section" className="space-y-6 scroll-mt-28">
+          <div className="bg-gradient-to-r from-amber-50 via-white to-indigo-50 rounded-3xl p-6 sm:p-8 border border-amber-200/80 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div className="space-y-1.5">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-amber-700">
+                  🎓 Special Learning Studios · Free Previews Available
+                </p>
+                <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 tracking-tight">
+                  Scholarship, Drawing, Stories, Shivaji Maharaj &amp; GK
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 max-w-2xl">
+                  All existing enrichment programs and championship studios remain live and accessible—try Set #1, Chapters 1–3, Drawing Canvas, and Puzzles right away.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateZone('other-programs')}
+                className="min-h-[42px] px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>View All Special Programs</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {visibleSpecialCards.map((card) => (
+                <div
+                  key={card.id}
+                  className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${card.accentClass}`}
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-2xl" aria-hidden="true">
+                        {card.emoji}
+                      </span>
+                      <span className="text-[10px] font-extrabold text-slate-700 bg-white/90 border border-slate-200 px-2.5 py-0.5 rounded-lg">
+                        {card.badge}
+                      </span>
+                    </div>
+                    <h3 className="font-display font-extrabold text-base text-slate-900">
+                      {card.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">{card.desc}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/70">
+                    <button
+                      type="button"
+                      onClick={() => onNavigateZone(card.targetTab)}
+                      className="text-xs font-extrabold text-amber-900 hover:text-amber-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Explore Studio</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    {card.secondaryTab && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigateZone(card.secondaryTab!.tab)}
+                        className="ml-auto text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-white px-2.5 py-1 rounded-lg border border-slate-200 cursor-pointer"
+                      >
+                        {card.secondaryTab.label}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 4. STUDY MATERIAL & LEARNING FACILITIES (All 9 Requested Facilities + Visuals) */}
       <section className="space-y-7">

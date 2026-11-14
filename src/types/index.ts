@@ -355,6 +355,79 @@ export interface StoryItem {
   questions: StoryComprehensionQuestion[];
   estimatedReadMinutes: number;
   audioSampleScript: string;
+  published?: boolean;
+  isCustom?: boolean;
+}
+
+export type SpecialLearningSectionId =
+  | 'scholarship'
+  | 'drawing'
+  | 'stories'
+  | 'shivaji'
+  | 'gk_cricket'
+  | 'creative_activities'
+  | 'future_skills'
+  | 'all_courses';
+
+export interface SectionVisibilityRule {
+  visibleToVisitors: boolean;
+  visibleToStudents: boolean;
+}
+
+export type SectionVisibilityConfig = Record<SpecialLearningSectionId, SectionVisibilityRule>;
+
+export interface SpecialLearningProgramItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  category: string;
+  description: string;
+  iconEmoji: string;
+  targetTab: string;
+  badgeText?: string;
+  highlights: string[];
+  published: boolean;
+  isCustom?: boolean;
+  createdAt?: string;
+}
+
+export interface CustomScholarshipQuestionRecord {
+  id: string;
+  stdLevel: 'Std 4th (PSE)' | 'Std 7th (UPS)';
+  testNumber: number;
+  section: 'First Language' | 'Mathematics' | 'Second Language' | 'Intelligence Test';
+  subject: 'First Language' | 'Mathematics' | 'Second Language' | 'Intelligence Test';
+  questionNumberInSet: number;
+  difficulty: 'easy' | 'moderate' | 'difficult';
+  type: string;
+  questionText: Record<string, string>;
+  options: Record<string, [string, string, string, string]>;
+  correctIndex: number;
+  explanation: Record<string, string>;
+  marks: number;
+  published?: boolean;
+  isCustom?: boolean;
+  createdAt?: string;
+}
+
+export interface CustomGkQuestionItem {
+  id: string;
+  level: QuizLevel;
+  category:
+    | 'Current Affairs'
+    | 'Records & Stats'
+    | 'IPL & Leagues'
+    | 'Rules & Terminology'
+    | 'World Cup & History'
+    | 'Women Cricket'
+    | 'General Knowledge';
+  question: string;
+  options: [string, string, string, string];
+  correctIndex: number;
+  explanation: string;
+  published?: boolean;
+  isCustom?: boolean;
+  createdAt?: string;
 }
 
 export type DrawingCategory = 

@@ -25,7 +25,12 @@ import {
   AnnouncementItem,
   AuthenticatedUser,
   WorksheetAttemptRecord,
-  DeviceSessionRecord
+  DeviceSessionRecord,
+  SpecialLearningSectionId,
+  SectionVisibilityConfig,
+  SpecialLearningProgramItem,
+  CustomScholarshipQuestionRecord,
+  CustomGkQuestionItem
 } from '../types';
 import {
   acquireSingleDeviceSession,
@@ -47,6 +52,8 @@ import {
   generateClassSpecificCurriculumQuestion 
 } from '../services/questionBankService';
 import { ALL_45_STORIES } from '../data/storiesMaster';
+import { SHIVAJI_STORIES, ShivajiStory } from '../data/shivajiStoriesData';
+import { DAILY_CRICKET_QUESTIONS_BANK } from '../data/cricketQuizData';
 import { SEED_PUZZLES } from '../data/puzzlesData';
 import { READY_MADE_DRAWING_TEMPLATES } from '../data/drawingsData';
 import { 
@@ -67,6 +74,14 @@ import {
   ensureStudentReferralCodeInFirestore,
   onAuthStateChanged
 } from '../services/firebase';
+import {
+  DEFAULT_SECTION_VISIBILITY,
+  loadPlatformConfigFromFirestore,
+  savePlatformConfigToFirestore,
+  loadPublishedSpecialContentFromFirestore,
+  saveSpecialContentItemToFirestore,
+  deleteSpecialContentItemFromFirestore,
+} from '../services/specialContentFirestoreService';
 import {
   checkExistingAccountApi,
   switchStudentActiveClassApi,
@@ -129,6 +144,7 @@ interface PlatformSettings {
   pointsPerStoryRead: number; // 20
   pointsPerDrawing: number; // 30
   pointsPerPuzzle: number; // 25
+  sectionVisibility: SectionVisibilityConfig;
 }
 
 export interface SecurityAuditCheck {
@@ -158,12 +174,19 @@ interface AppContextType {
   allQuestions: QuizQuestion[];
   rejectedDuplicates: RejectedQuestionRecord[];
   allStories: StoryItem[];
+  shivajiStories: ShivajiStory[];
+  customScholarshipQuestions: CustomScholarshipQuestionRecord[];
+  gkQuestions: CustomGkQuestionItem[];
+  learningPrograms: SpecialLearningProgramItem[];
   allPuzzles: PuzzleItem[];
   savedDrawings: DrawingSubmission[];
   allAttempts: QuizAttempt[];
   transactions: PaymentTransaction[];
   notifications: InAppNotification[];
   platformSettings: PlatformSettings;
+  sectionVisibility: SectionVisibilityConfig;
+  isSectionVisible: (sectionId: SpecialLearningSectionId) => boolean;
+  updateSectionVisibility: (next: SectionVisibilityConfig) => Promise<void>;
   
   // Student & Teacher Portal Authentication & Session Guarding
   switchRole: (targetRole: UserRole) => { allowed: boolean; message?: string };
@@ -262,8 +285,13 @@ interface AppContextType {
   }) => { success: boolean; message: string; duplicateCheck?: any };
   deleteQuestion: (questionId: string) => void;
 
-  // Story methods
+  // Story & Shivaji CMS methods
   markStoryCompleted: (storyId: string) => void;
+  addOrUpdateStory: (story: StoryItem) => Promise<void>;
+  toggleStoryPublished: (storyId: string) => Promise<void>;
+  deleteCustomStory: (storyId: string) => Promise<void>;
+  addOrUpdateShivajiStory: (story: ShivajiStory) => Promise<void>;
+  deleteCustomShivajiStory: (storyId: string) => Promise<void>;
 
   // Drawing methods & Template Management
   drawingTemplates: DrawingTemplate[];
@@ -275,6 +303,14 @@ interface AppContextType {
 
   // Puzzle methods
   solvePuzzle: (puzzleId: string, pointsAwarded: number) => void;
+
+  // GK & Scholarship & Learning Program CMS methods
+  addOrUpdateScholarshipQuestion: (q: CustomScholarshipQuestionRecord) => Promise<void>;
+  deleteCustomScholarshipQuestion: (id: string) => Promise<void>;
+  addOrUpdateGkQuestion: (q: CustomGkQuestionItem) => Promise<void>;
+  deleteCustomGkQuestion: (id: string) => Promise<void>;
+  addOrUpdateLearningProgram: (program: SpecialLearningProgramItem) => Promise<void>;
+  deleteLearningProgram: (id: string) => Promise<void>;
 
   // Payment & Membership
   activateVerifiedMembership: (transaction: PaymentTransaction, customExpiryDate?: string) => void;
@@ -303,6 +339,113 @@ interface AppContextType {
   clearAllNotifications: () => void;
 }
 
+const DEFAULT_LEARNING_PROGRAMS: SpecialLearningProgramItem[] = [
+  {
+    id: 'prog-scholarship',
+    title: 'MSCE Scholarship Corner',
+    subtitle: 'Std 4th (PSE) & Std 7th (UPS)',
+    category: 'Competitive Exams',
+    description: '600+ official Maharashtra Scholarship questions across 10 mock sets in Marathi, English & Hindi.',
+    iconEmoji: '🏆',
+    targetTab: 'scholarship',
+    badgeText: '600 Qs',
+    highlights: ['4 MSCE Sections', '3 Exam Languages', 'Instant Answer Keys'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-drawing',
+    title: 'Drawing & Colouring Studio',
+    subtitle: '120+ Vector Templates + Freehand Canvas',
+    category: 'Creative Arts',
+    description: 'Interactive flood-fill colouring templates, brush tools, shape stamps, and artwork portfolio.',
+    iconEmoji: '🎨',
+    targetTab: 'drawing',
+    badgeText: '120 Templates',
+    highlights: ['Flood-Fill Bucket', 'Undo/Redo Studio', 'PNG Download'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-stories',
+    title: 'Story World (Audio Library)',
+    subtitle: '45 Moral Stories in 3 Languages',
+    category: 'Reading & Listening',
+    description: '15 English, 15 Hindi & 15 Marathi stories with read-along speech synthesis and vocabulary quizzes.',
+    iconEmoji: '📖',
+    targetTab: 'stories',
+    badgeText: '45 Stories',
+    highlights: ['Audio Narration', 'Speed Control', 'Comprehension Quiz'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-shivaji',
+    title: 'Chhatrapati Shivaji Maharaj Stories',
+    subtitle: '50 Chronological Historical Chapters',
+    category: 'Heritage & Leadership',
+    description: 'From Shivneri to Raigad: 50 inspiring Swarajya chapters with Marathi, Hindi & English narration.',
+    iconEmoji: '👑',
+    targetTab: 'shivaji',
+    badgeText: '50 Chapters',
+    highlights: ['Trilingual Text & Audio', 'Timeline & Forts', 'Leadership Lessons'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-puzzles',
+    title: 'Brain Puzzles & Logic Arena',
+    subtitle: '47+ Math Riddles, Pattern & Memory Games',
+    category: 'Creative Activities',
+    description: 'Fun critical-thinking challenges designed for Classes 1 to 10 to sharpen reasoning speed.',
+    iconEmoji: '🧩',
+    targetTab: 'puzzles',
+    badgeText: '47+ Puzzles',
+    highlights: ['Memory Card Match', 'Hints & Explanations', 'Logic Sequences'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-sudoku',
+    title: 'Sudoku Mastery (4×4 · 6×6 · 9×9)',
+    subtitle: 'Beginner to Champion Grid Logic',
+    category: 'Creative Activities',
+    description: 'Age-progressive Sudoku boards with pencil-note mode, smart hint checker, and timer.',
+    iconEmoji: '🔢',
+    targetTab: 'sudoku',
+    badgeText: '3 Grid Sizes',
+    highlights: ['4×4 Kids Grid', 'Pencil Marks', 'Instant Verification'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-ai-academy',
+    title: 'AI Learning Academy & Future Skills',
+    subtitle: '8 Modules · 24 Interactive AI Lessons',
+    category: '21st-Century Skills',
+    description: 'Kid-friendly lessons covering AI, Machine Learning, Robotics, Computer Vision, and Digital Ethics.',
+    iconEmoji: '🤖',
+    targetTab: 'future-skills',
+    badgeText: '24 Lessons',
+    highlights: ['Interactive Lesson Quizzes', 'Robotics & Vision', 'Digital Safety'],
+    published: true,
+    isCustom: false,
+  },
+  {
+    id: 'prog-certificates',
+    title: 'Champion Certificates & Leaderboard',
+    subtitle: 'Verified Achievement Recognition',
+    category: 'Rewards & Milestones',
+    description: 'Earn points, badges, and printable merit certificates across quizzes, worksheets, stories, and art.',
+    iconEmoji: '🎖️',
+    targetTab: 'certificates',
+    badgeText: '15 Badges',
+    highlights: ['Printable Certificates', 'Skill Badges', 'XP Tracking'],
+    published: true,
+    isCustom: false,
+  },
+];
+
 const DEFAULT_SETTINGS: PlatformSettings = {
   timers: {
     classes2to3: 30,
@@ -312,7 +455,8 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   pointsPerQuizCorrect: 10,
   pointsPerStoryRead: 25,
   pointsPerDrawing: 30,
-  pointsPerPuzzle: 25
+  pointsPerPuzzle: 25,
+  sectionVisibility: DEFAULT_SECTION_VISIBILITY,
 };
 
 const LEGACY_SAMPLE_IDS = new Set([
@@ -570,7 +714,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [allStories] = useState<StoryItem[]>(ALL_45_STORIES);
+  const [allStories, setAllStories] = useState<StoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_custom_stories');
+      if (!saved) return ALL_45_STORIES.map(s => ({ ...s, published: true }));
+      const custom: StoryItem[] = JSON.parse(saved);
+      const map = new Map<string, StoryItem>(ALL_45_STORIES.map(s => [s.id, { ...s, published: true }]));
+      custom.forEach(item => map.set(item.id, item));
+      return Array.from(map.values());
+    } catch {
+      return ALL_45_STORIES.map(s => ({ ...s, published: true }));
+    }
+  });
+
+  const [shivajiStories, setShivajiStories] = useState<ShivajiStory[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_custom_shivaji_stories');
+      if (!saved) return SHIVAJI_STORIES.map(s => ({ ...s, published: true }));
+      const custom: ShivajiStory[] = JSON.parse(saved);
+      const map = new Map<string, ShivajiStory>(SHIVAJI_STORIES.map(s => [s.id, { ...s, published: true }]));
+      custom.forEach(item => map.set(item.id, item));
+      return Array.from(map.values()).sort((a, b) => a.order - b.order);
+    } catch {
+      return SHIVAJI_STORIES.map(s => ({ ...s, published: true }));
+    }
+  });
+
+  const [customScholarshipQuestions, setCustomScholarshipQuestions] = useState<CustomScholarshipQuestionRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_custom_scholarship_questions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [gkQuestions, setGkQuestions] = useState<CustomGkQuestionItem[]>(() => {
+    const builtIn: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap(lvl =>
+      (DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map(q => ({
+        ...q,
+        published: true,
+        isCustom: false,
+      }))
+    );
+    try {
+      const saved = localStorage.getItem('vc_custom_gk_questions');
+      if (!saved) return builtIn;
+      const custom: CustomGkQuestionItem[] = JSON.parse(saved);
+      const map = new Map<string, CustomGkQuestionItem>(builtIn.map(q => [q.id, q]));
+      custom.forEach(item => map.set(item.id, item));
+      return Array.from(map.values());
+    } catch {
+      return builtIn;
+    }
+  });
+
+  const [learningPrograms, setLearningPrograms] = useState<SpecialLearningProgramItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_custom_learning_programs');
+      if (!saved) return DEFAULT_LEARNING_PROGRAMS;
+      const custom: SpecialLearningProgramItem[] = JSON.parse(saved);
+      const map = new Map<string, SpecialLearningProgramItem>(DEFAULT_LEARNING_PROGRAMS.map(p => [p.id, p]));
+      custom.forEach(item => map.set(item.id, item));
+      return Array.from(map.values());
+    } catch {
+      return DEFAULT_LEARNING_PROGRAMS;
+    }
+  });
+
   const [allPuzzles, setAllPuzzles] = useState<PuzzleItem[]>(() => {
     const saved = localStorage.getItem('vc_puzzles_bank');
     return saved ? JSON.parse(saved) : SEED_PUZZLES;
@@ -586,9 +797,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!saved) return READY_MADE_DRAWING_TEMPLATES;
     try {
       const parsed: DrawingTemplate[] = JSON.parse(saved);
-      const existingIds = new Set(parsed.map(p => p.id));
-      const missing = READY_MADE_DRAWING_TEMPLATES.filter(t => !existingIds.has(t.id));
-      return [...parsed, ...missing];
+      const map = new Map<string, DrawingTemplate>(READY_MADE_DRAWING_TEMPLATES.map(t => [t.id, t]));
+      parsed.forEach(t => map.set(t.id, t));
+      return Array.from(map.values());
     } catch (e) {
       return READY_MADE_DRAWING_TEMPLATES;
     }
@@ -627,8 +838,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => {
-    const saved = localStorage.getItem('vc_platform_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    try {
+      const saved = localStorage.getItem('vc_platform_settings');
+      if (!saved) return DEFAULT_SETTINGS;
+      const parsed = JSON.parse(saved);
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        timers: { ...DEFAULT_SETTINGS.timers, ...(parsed.timers || {}) },
+        sectionVisibility: {
+          ...DEFAULT_SECTION_VISIBILITY,
+          ...(parsed.sectionVisibility || {}),
+        },
+      };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
   });
 
   // Sync to local storage safely without exceeding browser quota
@@ -659,11 +884,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [savedDrawings]);
 
   useEffect(() => {
-    // Only persist custom drawing templates added by admin
-    const builtInIds = new Set(READY_MADE_DRAWING_TEMPLATES.map(t => t.id));
-    const customTemplates = drawingTemplates.filter(t => !builtInIds.has(t.id));
-    safeSetLocalStorage('vc_drawing_templates', JSON.stringify(customTemplates));
+    // Only persist custom/modified drawing templates
+    const builtInMap = new Map(READY_MADE_DRAWING_TEMPLATES.map(t => [t.id, t]));
+    const modifiedOrCustom = drawingTemplates.filter(t => {
+      const builtIn = builtInMap.get(t.id);
+      return !builtIn || builtIn.published !== t.published || builtIn.title !== t.title;
+    });
+    safeSetLocalStorage('vc_drawing_templates', JSON.stringify(modifiedOrCustom));
   }, [drawingTemplates]);
+
+  useEffect(() => {
+    const builtInIds = new Set(ALL_45_STORIES.map(s => s.id));
+    const customOrModified = allStories.filter(s => s.isCustom || !builtInIds.has(s.id) || s.published === false);
+    safeSetLocalStorage('vc_custom_stories', JSON.stringify(customOrModified));
+  }, [allStories]);
+
+  useEffect(() => {
+    const builtInIds = new Set(SHIVAJI_STORIES.map(s => s.id));
+    const customOrModified = shivajiStories.filter(s => s.isCustom || !builtInIds.has(s.id) || s.published === false);
+    safeSetLocalStorage('vc_custom_shivaji_stories', JSON.stringify(customOrModified));
+  }, [shivajiStories]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_custom_scholarship_questions', JSON.stringify(customScholarshipQuestions));
+  }, [customScholarshipQuestions]);
+
+  useEffect(() => {
+    const customOrModified = gkQuestions.filter(q => q.isCustom || q.published === false);
+    safeSetLocalStorage('vc_custom_gk_questions', JSON.stringify(customOrModified));
+  }, [gkQuestions]);
+
+  useEffect(() => {
+    const builtInIds = new Set(DEFAULT_LEARNING_PROGRAMS.map(p => p.id));
+    const customOrModified = learningPrograms.filter(p => p.isCustom || !builtInIds.has(p.id) || p.published === false);
+    safeSetLocalStorage('vc_custom_learning_programs', JSON.stringify(customOrModified));
+  }, [learningPrograms]);
 
   useEffect(() => {
     safeSetLocalStorage('vc_quiz_attempts', JSON.stringify(allAttempts));
@@ -735,9 +990,104 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Test Firestore Connection & Sync Firebase Auth state on App boot (with strict Single Device Session validation)
+  // Test Firestore Connection, hydrate Special Learning config/content & Sync Firebase Auth state on App boot
   useEffect(() => {
     testFirestoreConnection();
+
+    let cancelledConfig = false;
+    (async () => {
+      const [remoteCfg, remoteSpecialDocs] = await Promise.all([
+        loadPlatformConfigFromFirestore(),
+        loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin'),
+      ]);
+      if (cancelledConfig) return;
+
+      if (remoteCfg) {
+        setPlatformSettings(prev => ({
+          ...prev,
+          timers: { ...prev.timers, ...(remoteCfg.timers || {}) },
+          sectionVisibility: {
+            ...DEFAULT_SECTION_VISIBILITY,
+            ...prev.sectionVisibility,
+            ...(remoteCfg.sectionVisibility || {}),
+          },
+        }));
+      }
+
+      if (remoteSpecialDocs.length > 0) {
+        const storyDocs = remoteSpecialDocs.filter(d => d.contentType === 'story');
+        if (storyDocs.length > 0) {
+          setAllStories(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            storyDocs.forEach(d => {
+              const p = d.payload as unknown as StoryItem;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const shivajiDocs = remoteSpecialDocs.filter(d => d.contentType === 'shivaji_story');
+        if (shivajiDocs.length > 0) {
+          setShivajiStories(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            shivajiDocs.forEach(d => {
+              const p = d.payload as unknown as ShivajiStory;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values()).sort((a, b) => a.order - b.order);
+          });
+        }
+
+        const schDocs = remoteSpecialDocs.filter(d => d.contentType === 'scholarship_question');
+        if (schDocs.length > 0) {
+          setCustomScholarshipQuestions(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            schDocs.forEach(d => {
+              const p = d.payload as unknown as CustomScholarshipQuestionRecord;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const drawDocs = remoteSpecialDocs.filter(d => d.contentType === 'drawing_template');
+        if (drawDocs.length > 0) {
+          setDrawingTemplates(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            drawDocs.forEach(d => {
+              const p = d.payload as unknown as DrawingTemplate;
+              if (p?.id) map.set(p.id, { ...p, published: d.published });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const gkDocs = remoteSpecialDocs.filter(d => d.contentType === 'gk_question');
+        if (gkDocs.length > 0) {
+          setGkQuestions(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            gkDocs.forEach(d => {
+              const p = d.payload as unknown as CustomGkQuestionItem;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const progDocs = remoteSpecialDocs.filter(d => d.contentType === 'learning_program');
+        if (progDocs.length > 0) {
+          setLearningPrograms(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            progDocs.forEach(d => {
+              const p = d.payload as unknown as SpecialLearningProgramItem;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+      }
+    })();
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) return;
@@ -2710,16 +3060,187 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addDrawingTemplate = (tpl: DrawingTemplate) => {
-    setDrawingTemplates(prev => [tpl, ...prev]);
+    setDrawingTemplates(prev => [tpl, ...prev.filter(t => t.id !== tpl.id)]);
     addNotification('New Drawing Added', `Template "${tpl.title}" added to Drawing Champions!`, 'drawing');
+    void saveSpecialContentItemToFirestore({
+      id: tpl.id,
+      contentType: 'drawing_template',
+      title: tpl.title,
+      published: tpl.published !== false,
+      payload: tpl as unknown as Record<string, unknown>,
+    }).catch(() => {});
   };
 
   const toggleDrawingTemplatePublished = (templateId: string) => {
-    setDrawingTemplates(prev => prev.map(t => t.id === templateId ? { ...t, published: !t.published } : t));
+    let targetTpl: DrawingTemplate | undefined;
+    setDrawingTemplates(prev =>
+      prev.map(t => {
+        if (t.id === templateId) {
+          targetTpl = { ...t, published: !t.published };
+          return targetTpl;
+        }
+        return t;
+      })
+    );
+    if (targetTpl) {
+      void saveSpecialContentItemToFirestore({
+        id: targetTpl.id,
+        contentType: 'drawing_template',
+        title: targetTpl.title,
+        published: targetTpl.published,
+        payload: targetTpl as unknown as Record<string, unknown>,
+      }).catch(() => {});
+    }
   };
 
   const deleteDrawingTemplate = (templateId: string) => {
     setDrawingTemplates(prev => prev.filter(t => t.id !== templateId));
+    void deleteSpecialContentItemFromFirestore(templateId).catch(() => {});
+  };
+
+  // Story World & Shivaji Stories CMS handlers
+  const addOrUpdateStory = async (story: StoryItem) => {
+    const normalized: StoryItem = { ...story, published: story.published !== false, isCustom: true };
+    setAllStories(prev => {
+      const exists = prev.some(s => s.id === normalized.id);
+      return exists ? prev.map(s => (s.id === normalized.id ? normalized : s)) : [normalized, ...prev];
+    });
+    await saveSpecialContentItemToFirestore({
+      id: normalized.id,
+      contentType: 'story',
+      title: normalized.title,
+      published: normalized.published !== false,
+      payload: normalized as unknown as Record<string, unknown>,
+    }).catch(() => {});
+  };
+
+  const toggleStoryPublished = async (storyId: string) => {
+    let updatedItem: StoryItem | undefined;
+    setAllStories(prev =>
+      prev.map(s => {
+        if (s.id === storyId) {
+          updatedItem = { ...s, published: s.published === false, isCustom: true };
+          return updatedItem;
+        }
+        return s;
+      })
+    );
+    if (updatedItem) {
+      await saveSpecialContentItemToFirestore({
+        id: updatedItem.id,
+        contentType: 'story',
+        title: updatedItem.title,
+        published: updatedItem.published !== false,
+        payload: updatedItem as unknown as Record<string, unknown>,
+      }).catch(() => {});
+    }
+  };
+
+  const deleteCustomStory = async (storyId: string) => {
+    setAllStories(prev => prev.filter(s => s.id !== storyId));
+    await deleteSpecialContentItemFromFirestore(storyId).catch(() => {});
+  };
+
+  const addOrUpdateShivajiStory = async (story: ShivajiStory) => {
+    const normalized: ShivajiStory = { ...story, published: story.published !== false, isCustom: true };
+    setShivajiStories(prev => {
+      const exists = prev.some(s => s.id === normalized.id);
+      const next = exists ? prev.map(s => (s.id === normalized.id ? normalized : s)) : [...prev, normalized];
+      return next.sort((a, b) => a.order - b.order);
+    });
+    await saveSpecialContentItemToFirestore({
+      id: normalized.id,
+      contentType: 'shivaji_story',
+      title: normalized.title.English || normalized.title.Marathi,
+      published: normalized.published !== false,
+      payload: normalized as unknown as Record<string, unknown>,
+    }).catch(() => {});
+  };
+
+  const deleteCustomShivajiStory = async (storyId: string) => {
+    setShivajiStories(prev => prev.filter(s => s.id !== storyId));
+    await deleteSpecialContentItemFromFirestore(storyId).catch(() => {});
+  };
+
+  // Scholarship Custom Questions CMS
+  const addOrUpdateScholarshipQuestion = async (q: CustomScholarshipQuestionRecord) => {
+    const normalized: CustomScholarshipQuestionRecord = {
+      ...q,
+      published: q.published !== false,
+      isCustom: true,
+      createdAt: q.createdAt || new Date().toISOString(),
+    };
+    setCustomScholarshipQuestions(prev => {
+      const exists = prev.some(item => item.id === normalized.id);
+      return exists ? prev.map(item => (item.id === normalized.id ? normalized : item)) : [normalized, ...prev];
+    });
+    await saveSpecialContentItemToFirestore({
+      id: normalized.id,
+      contentType: 'scholarship_question',
+      title: normalized.questionText.English || normalized.questionText.Marathi || 'Scholarship Question',
+      published: normalized.published !== false,
+      payload: normalized as unknown as Record<string, unknown>,
+      createdAt: normalized.createdAt,
+    }).catch(() => {});
+  };
+
+  const deleteCustomScholarshipQuestion = async (id: string) => {
+    setCustomScholarshipQuestions(prev => prev.filter(q => q.id !== id));
+    await deleteSpecialContentItemFromFirestore(id).catch(() => {});
+  };
+
+  // GK & Cricket CMS
+  const addOrUpdateGkQuestion = async (q: CustomGkQuestionItem) => {
+    const normalized: CustomGkQuestionItem = {
+      ...q,
+      published: q.published !== false,
+      isCustom: true,
+      createdAt: q.createdAt || new Date().toISOString(),
+    };
+    setGkQuestions(prev => {
+      const exists = prev.some(item => item.id === normalized.id);
+      return exists ? prev.map(item => (item.id === normalized.id ? normalized : item)) : [normalized, ...prev];
+    });
+    await saveSpecialContentItemToFirestore({
+      id: normalized.id,
+      contentType: 'gk_question',
+      title: normalized.question,
+      published: normalized.published !== false,
+      payload: normalized as unknown as Record<string, unknown>,
+      createdAt: normalized.createdAt,
+    }).catch(() => {});
+  };
+
+  const deleteCustomGkQuestion = async (id: string) => {
+    setGkQuestions(prev => prev.filter(q => q.id !== id));
+    await deleteSpecialContentItemFromFirestore(id).catch(() => {});
+  };
+
+  // Other Learning Programs CMS
+  const addOrUpdateLearningProgram = async (program: SpecialLearningProgramItem) => {
+    const normalized: SpecialLearningProgramItem = {
+      ...program,
+      published: program.published !== false,
+      isCustom: true,
+      createdAt: program.createdAt || new Date().toISOString(),
+    };
+    setLearningPrograms(prev => {
+      const exists = prev.some(item => item.id === normalized.id);
+      return exists ? prev.map(item => (item.id === normalized.id ? normalized : item)) : [...prev, normalized];
+    });
+    await saveSpecialContentItemToFirestore({
+      id: normalized.id,
+      contentType: 'learning_program',
+      title: normalized.title,
+      published: normalized.published !== false,
+      payload: normalized as unknown as Record<string, unknown>,
+      createdAt: normalized.createdAt,
+    }).catch(() => {});
+  };
+
+  const deleteLearningProgram = async (id: string) => {
+    setLearningPrograms(prev => prev.filter(p => p.id !== id));
+    await deleteSpecialContentItemFromFirestore(id).catch(() => {});
   };
 
   // Puzzles
@@ -2973,10 +3494,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateTimers = (classes2to3: number, classes4to5: number, classes6to8: number) => {
+    const nextTimers = { classes2to3, classes4to5, classes6to8 };
+    setPlatformSettings(prev => {
+      const updated = { ...prev, timers: nextTimers };
+      void savePlatformConfigToFirestore({
+        timers: nextTimers,
+        sectionVisibility: updated.sectionVisibility,
+      }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const sectionVisibility = platformSettings.sectionVisibility || DEFAULT_SECTION_VISIBILITY;
+
+  const isSectionVisible = useCallback(
+    (sectionId: SpecialLearningSectionId): boolean => {
+      if (activeRole === 'admin' && currentUser?.role === 'admin') {
+        return true;
+      }
+      const rule = sectionVisibility[sectionId] || DEFAULT_SECTION_VISIBILITY[sectionId];
+      if (!rule) return true;
+      return currentStudent ? rule.visibleToStudents !== false : rule.visibleToVisitors !== false;
+    },
+    [activeRole, currentUser?.role, currentStudent, sectionVisibility]
+  );
+
+  const updateSectionVisibility = async (next: SectionVisibilityConfig) => {
+    const updatedVis = { ...DEFAULT_SECTION_VISIBILITY, ...next };
     setPlatformSettings(prev => ({
       ...prev,
-      timers: { classes2to3, classes4to5, classes6to8 }
+      sectionVisibility: updatedVis,
     }));
+    await savePlatformConfigToFirestore({
+      timers: platformSettings.timers,
+      sectionVisibility: updatedVis,
+    }).catch(() => {});
   };
 
   const addNotification = (title: string, message: string, type: InAppNotification['type']) => {
@@ -3077,6 +3629,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       allQuestions,
       rejectedDuplicates,
       allStories,
+      shivajiStories,
+      customScholarshipQuestions,
+      gkQuestions,
+      learningPrograms,
       allPuzzles,
       savedDrawings,
       drawingTemplates,
@@ -3084,6 +3640,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactions,
       notifications,
       platformSettings,
+      sectionVisibility,
+      isSectionVisible,
+      updateSectionVisibility,
 
       switchRole,
       loginAsTeacher,
@@ -3131,12 +3690,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deleteQuestion,
 
       markStoryCompleted,
+      addOrUpdateStory,
+      toggleStoryPublished,
+      deleteCustomStory,
+      addOrUpdateShivajiStory,
+      deleteCustomShivajiStory,
       saveDrawingSubmission,
       deleteDrawingSubmission,
       addDrawingTemplate,
       toggleDrawingTemplatePublished,
       deleteDrawingTemplate,
       solvePuzzle,
+      addOrUpdateScholarshipQuestion,
+      deleteCustomScholarshipQuestion,
+      addOrUpdateGkQuestion,
+      deleteCustomGkQuestion,
+      addOrUpdateLearningProgram,
+      deleteLearningProgram,
       activateVerifiedMembership,
       adminApplyApproved365DayMigration,
 
@@ -3157,6 +3727,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       allQuestions,
       rejectedDuplicates,
       allStories,
+      shivajiStories,
+      customScholarshipQuestions,
+      gkQuestions,
+      learningPrograms,
       allPuzzles,
       savedDrawings,
       drawingTemplates,
@@ -3164,6 +3738,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactions,
       notifications,
       platformSettings,
+      sectionVisibility,
+      isSectionVisible,
       activeDeviceSession,
       sessionSecurityNotice,
       isAuthModalOpen,

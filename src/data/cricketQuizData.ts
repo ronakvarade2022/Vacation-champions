@@ -3,7 +3,7 @@ import { QuizQuestion, QuizLevel } from '../types';
 export interface CricketQuizQuestion {
   id: string;
   level: QuizLevel;
-  category: 'Current Affairs' | 'Records & Stats' | 'IPL & Leagues' | 'Rules & Terminology' | 'World Cup & History' | 'Women Cricket';
+  category: 'Current Affairs' | 'Records & Stats' | 'IPL & Leagues' | 'Rules & Terminology' | 'World Cup & History' | 'Women Cricket' | 'General Knowledge';
   question: string;
   options: [string, string, string, string];
   correctIndex: number;

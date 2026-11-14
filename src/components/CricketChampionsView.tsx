@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { QuizLevel } from '../types';
-import { DAILY_CRICKET_QUESTIONS_BANK, CricketQuizQuestion } from '../data/cricketQuizData';
-import { randomizeQuizQuestions, shuffleSingleQuestionOptions } from '../services/answerRandomizerService';
+import { CricketQuizQuestion } from '../data/cricketQuizData';
+import { randomizeQuizQuestions } from '../services/answerRandomizerService';
+import { canAccessFeature } from '../utils/subscriptionAccess';
 import confetti from 'canvas-confetti';
 import { 
   Trophy, 
@@ -18,11 +19,23 @@ import {
   Calendar,
   AlertCircle,
   HelpCircle,
-  ArrowRight
+  ArrowRight,
+  Lock,
+  Crown
 } from 'lucide-react';
 
-export const CricketChampionsView: React.FC = () => {
-  const { currentStudent, submitQuizAttempt } = useApp();
+interface CricketChampionsViewProps {
+  onOpenAuth?: () => void;
+  onOpenMembership?: () => void;
+}
+
+export const CricketChampionsView: React.FC<CricketChampionsViewProps> = ({
+  onOpenAuth,
+  onOpenMembership,
+}) => {
+  const { currentStudent, submitQuizAttempt, gkQuestions } = useApp();
+  const hasFullAccess = canAccessFeature(currentStudent, 'cricket').allowed;
+  const [lockedLevelNotice, setLockedLevelNotice] = useState<string | null>(null);
 
   const [selectedLevel, setSelectedLevel] = useState<QuizLevel>(1);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'completed'>('idle');
@@ -70,8 +83,15 @@ export const CricketChampionsView: React.FC = () => {
 
   // Start quiz with randomized answer positions
   const startCricketQuiz = (lvl: QuizLevel) => {
+    if (!hasFullAccess && lvl > 1) {
+      setLockedLevelNotice(
+        `Level 1 (Beginner) is free for all visitors! Unlock Levels 2–4 with the ₹99 Annual Plan.`
+      );
+      return;
+    }
+    setLockedLevelNotice(null);
     setSelectedLevel(lvl);
-    const rawQuestions = DAILY_CRICKET_QUESTIONS_BANK[lvl] || [];
+    const rawQuestions = gkQuestions.filter(q => q.published !== false && q.level === lvl);
     
     // Convert to QuizQuestion format for answerRandomizerService
     const formattedForRandomizer = rawQuestions.map(q => ({
@@ -167,6 +187,7 @@ export const CricketChampionsView: React.FC = () => {
       }
 
       // Record attempt in platform state
+      const totalQs = Math.max(1, questions.length);
       if (currentStudent) {
         submitQuizAttempt({
           studentId: currentStudent.id,
@@ -174,14 +195,14 @@ export const CricketChampionsView: React.FC = () => {
           classLevel: currentStudent.classLevel,
           subject: 'General Knowledge',
           level: selectedLevel,
-          totalQuestions: 10,
+          totalQuestions: totalQs,
           correctCount: score,
-          incorrectCount: 10 - score,
+          incorrectCount: totalQs - score,
           unansweredCount: 0,
-          scorePercent: Math.round((score / 10) * 100),
+          scorePercent: Math.round((score / totalQs) * 100),
           timeTakenSeconds: 300,
           pointsEarned: score * 10,
-          passed: score >= 6,
+          passed: score >= Math.ceil(totalQs * 0.6),
           questionIds: questions.map(q => q.id),
           answers: answersLog
         });
@@ -215,12 +236,13 @@ export const CricketChampionsView: React.FC = () => {
         {/* 4 Levels Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-6">
           {[
-            { lvl: 1, title: 'Level 1: Beginner', desc: 'Basics & Popular Heroes', color: 'bg-emerald-500/30 border-emerald-300' },
-            { lvl: 2, title: 'Level 2: Intermediate', desc: 'IPL & National Updates', color: 'bg-teal-500/30 border-teal-300' },
+            { lvl: 1, title: 'Level 1: Beginner', desc: 'Basics & Free Preview', color: 'bg-emerald-500/30 border-emerald-300' },
+            { lvl: 2, title: 'Level 2: Intermediate', desc: 'IPL & GK Updates', color: 'bg-teal-500/30 border-teal-300' },
             { lvl: 3, title: 'Level 3: Advanced', desc: 'Records & Match Tactics', color: 'bg-cyan-500/30 border-cyan-300' },
             { lvl: 4, title: 'Level 4: Champion', desc: 'World Cup & Master Trivia', color: 'bg-amber-500/30 border-amber-300' }
           ].map(item => {
             const isSel = selectedLevel === item.lvl && gameState !== 'idle';
+            const isLocked = !hasFullAccess && item.lvl > 1;
             return (
               <button
                 key={item.lvl}
@@ -229,13 +251,46 @@ export const CricketChampionsView: React.FC = () => {
                   isSel ? 'bg-white text-emerald-950 font-bold shadow-lg scale-[1.02]' : `${item.color} text-white hover:bg-white/20`
                 }`}
               >
-                <div className="font-extrabold text-xs">{item.title}</div>
+                <div className="font-extrabold text-xs flex items-center justify-between gap-1">
+                  <span>{item.title}</span>
+                  {isLocked && <Lock className="w-3 h-3 shrink-0" />}
+                </div>
                 <div className={`text-[10px] mt-0.5 ${isSel ? 'text-emerald-800' : 'text-emerald-100'}`}>{item.desc}</div>
               </button>
             );
           })}
         </div>
       </div>
+
+      {lockedLevelNotice && (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-amber-950 font-bold">
+            <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+            <span>{lockedLevelNotice}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!currentStudent && onOpenAuth && (
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold cursor-pointer"
+              >
+                Sign In Free
+              </button>
+            )}
+            {onOpenMembership && (
+              <button
+                type="button"
+                onClick={onOpenMembership}
+                className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold flex items-center gap-1 cursor-pointer"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>Unlock ₹99 Plan</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* QUIZ ARENA */}
       {gameState === 'playing' && questions.length > 0 && (
@@ -244,7 +299,7 @@ export const CricketChampionsView: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full">
-                Level {selectedLevel} • Q{currentIndex + 1} of 10
+                Level {selectedLevel} • Q{currentIndex + 1} of {questions.length}
               </span>
               <span className="text-xs font-semibold text-slate-500">
                 Category: {questions[currentIndex].category}
@@ -326,7 +381,7 @@ export const CricketChampionsView: React.FC = () => {
                     onClick={handleNextQuestion}
                     className="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
                   >
-                    <span>{currentIndex < 9 ? 'Next Question' : 'Complete Daily Quiz'}</span>
+                    <span>{currentIndex < questions.length - 1 ? 'Next Question' : 'Complete Daily Quiz'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -347,7 +402,7 @@ export const CricketChampionsView: React.FC = () => {
               Daily Cricket Quiz Completed!
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 font-medium">
-              You scored <strong className="text-emerald-700 text-base">{score} / 10</strong> ({score * 10}%) in Level {selectedLevel}!
+              You scored <strong className="text-emerald-700 text-base">{score} / {questions.length}</strong> ({Math.round((score / Math.max(1, questions.length)) * 100)}%) in Level {selectedLevel}!
             </p>
           </div>
 

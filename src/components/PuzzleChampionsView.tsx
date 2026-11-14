@@ -162,7 +162,7 @@ export const PuzzleChampionsView: React.FC = () => {
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-              Interactive brain puzzles, logical riddles, mathematical teasers, and memory games tailored for {currentStudent?.classLevel}.
+              Interactive brain puzzles, logical riddles, mathematical teasers, and memory games tailored for {currentStudent?.classLevel || 'Classes 1–10'}.
             </p>
           </div>
 

@@ -268,6 +268,33 @@
         "terminationReason": { "type": "string", "maxLength": 200 }
       },
       "required": ["userId", "activeSessionId", "deviceId", "deviceSignature", "status", "loginAt", "expiresAtMs"]
+    },
+    "PlatformConfig": {
+      "title": "PlatformConfig",
+      "description": "Zero-PII global platform configuration storing quiz timers and visitor/student visibility toggles.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timers": { "type": "object" },
+        "sectionVisibility": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id"]
+    },
+    "SpecialContentItem": {
+      "title": "SpecialContentItem",
+      "description": "Zero-PII admin-published Special Learning enrichment content (stories, Shivaji chapters, scholarship questions, drawing templates, GK items, programs).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "contentType": { "type": "string", "enum": ["story", "shivaji_story", "scholarship_question", "drawing_template", "gk_question", "learning_program"] },
+        "title": { "type": "string", "maxLength": 200 },
+        "published": { "type": "boolean" },
+        "payload": { "type": "object" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "contentType", "title", "published", "payload"]
     }
   },
   "firestore": {
@@ -330,6 +357,14 @@
     "/device_sessions/{userId}": {
       "schema": { "$ref": "#/entities/DeviceSession" },
       "description": "Single-device active session records preventing concurrent multi-device logins."
+    },
+    "/platform_config/{configId}": {
+      "schema": { "$ref": "#/entities/PlatformConfig" },
+      "description": "Global quiz timer settings and Special Learning section visibility configuration."
+    },
+    "/special_content/{itemId}": {
+      "schema": { "$ref": "#/entities/SpecialContentItem" },
+      "description": "Admin-managed Special Learning stories, scholarship questions, drawings, GK bank, and programs."
     }
   }
 }

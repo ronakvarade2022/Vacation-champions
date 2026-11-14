@@ -11,6 +11,7 @@ import {
   getDynamicScholarshipQuestions 
 } from '../data/scholarshipData';
 import { randomizeQuizQuestions } from '../services/answerRandomizerService';
+import { canAccessFeature } from '../utils/subscriptionAccess';
 import confetti from 'canvas-confetti';
 import { 
   Trophy, 
@@ -30,11 +31,23 @@ import {
   Layers,
   Sparkles,
   Info,
-  BookOpen
+  BookOpen,
+  Lock,
+  Crown
 } from 'lucide-react';
 
-export const ScholarshipChampionsView: React.FC = () => {
-  const { currentStudent, recordScholarshipAttempt } = useApp();
+interface ScholarshipChampionsViewProps {
+  onOpenAuth?: () => void;
+  onOpenMembership?: () => void;
+}
+
+export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> = ({
+  onOpenAuth,
+  onOpenMembership,
+}) => {
+  const { currentStudent, recordScholarshipAttempt, customScholarshipQuestions } = useApp();
+  const hasFullAccess = canAccessFeature(currentStudent, 'scholarship').allowed;
+  const [lockedSetNotice, setLockedSetNotice] = useState<string | null>(null);
 
   // Active configurations
   const [selectedClass, setSelectedClass] = useState<ScholarshipClass>('Std 4th (PSE)');
@@ -89,17 +102,54 @@ export const ScholarshipChampionsView: React.FC = () => {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // Start exam / practice set (Guaranteed exactly 30 questions)
+  // Start exam / practice set (Guaranteed 30 questions + merges admin custom questions for this class & set)
   const startScholarshipSet = (setNumber: number) => {
+    if (!hasFullAccess && setNumber > 1) {
+      setLockedSetNotice(
+        `Practice Set #1 is open as a Free MSCE Preview. Sets #2 to #10 unlock with the ₹99 Annual Plan!`
+      );
+      return;
+    }
+    setLockedSetNotice(null);
     setSelectedSetNum(setNumber);
     setActiveSectionFilter('All');
 
-    // Retrieve exactly 30 unique questions for this class and set number, prioritizing unattempted questions
-    const rawSetQuestions = getDynamicScholarshipQuestions(
+    // Retrieve 30 unique questions for this class and set number, prioritizing unattempted questions
+    const baseSetQuestions = getDynamicScholarshipQuestions(
       selectedClass, 
       setNumber, 
       currentStudent?.attemptedScholarshipQuestionIds || []
     );
+
+    const matchingCustom = customScholarshipQuestions
+      .filter(cq => cq.stdLevel === selectedClass && cq.testNumber === setNumber && cq.published !== false)
+      .map(cq => ({
+        id: cq.id,
+        testNumber: cq.testNumber,
+        section: cq.section,
+        subject: cq.subject,
+        questionNumberInSet: cq.questionNumberInSet,
+        difficulty: cq.difficulty,
+        type: cq.type,
+        questionText: cq.questionText,
+        options: cq.options,
+        correctIndex: cq.correctIndex,
+        explanation: cq.explanation,
+        marks: cq.marks || 2,
+      } as ScholarshipQuestion));
+
+    // Inject admin-created custom questions into matching section slots (keeps set cleanly structured)
+    const rawSetQuestions = [...baseSetQuestions];
+    matchingCustom.forEach(customQ => {
+      const replaceIdx = rawSetQuestions.findIndex(
+        rq => rq.section === customQ.section && !rq.id.startsWith('msce-custom-')
+      );
+      if (replaceIdx !== -1) {
+        rawSetQuestions[replaceIdx] = customQ;
+      } else {
+        rawSetQuestions.push(customQ);
+      }
+    });
 
     // Format for independent option randomizer to strictly eliminate predictable ABCD patterns
     const formatted = rawSetQuestions.map(q => ({
@@ -190,12 +240,12 @@ export const ScholarshipChampionsView: React.FC = () => {
     });
 
     setTotalMarksObtained(obtainedTotal);
-    setMaxMarks(60); // Exactly 30 questions × 2 marks each = 60 marks
+    setMaxMarks(questions.length * 2 || 60);
     setSectionScores(scores);
     setExamState('submitted');
 
-    // Persist attempt to Firebase Firestore and update student question history
-    if (recordScholarshipAttempt) {
+    // Persist attempt to Firebase Firestore only when logged in
+    if (currentStudent && recordScholarshipAttempt) {
       recordScholarshipAttempt(
         selectedClass,
         selectedSetNum,
@@ -203,7 +253,7 @@ export const ScholarshipChampionsView: React.FC = () => {
         questions,
         userAnswers,
         obtainedTotal,
-        60,
+        questions.length * 2 || 60,
         scores
       );
     }
@@ -561,6 +611,23 @@ export const ScholarshipChampionsView: React.FC = () => {
             </div>
           </div>
 
+          {!currentStudent && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <span className="font-bold text-amber-950">
+                Sign in or create a free account to save your Scholarship scores, earn Champion points, and unlock Sets #2–#10.
+              </span>
+              {onOpenAuth && (
+                <button
+                  type="button"
+                  onClick={onOpenAuth}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold cursor-pointer shrink-0"
+                >
+                  Sign In / Register Free
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Action buttons: Retake or Switch Set */}
           <div className="flex justify-center gap-3">
             <button
@@ -697,47 +764,99 @@ export const ScholarshipChampionsView: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(setNum => (
-                <div
-                  key={setNum}
-                  onClick={() => startScholarshipSet(setNum)}
-                  className="bg-white rounded-2xl p-5 border border-amber-200/90 shadow-xs hover:border-amber-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
-                        Set #{setNum}
-                      </span>
-                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-                        30 Questions
-                      </span>
-                    </div>
-
-                    <h4 className="font-display font-bold text-sm text-slate-900 group-hover:text-amber-800 transition-colors">
-                      Practice Set {setNum}
-                    </h4>
-
-                    <div className="text-[11px] text-slate-500 space-y-0.5 leading-tight">
-                      <p>• First Lang: 5 Qs</p>
-                      <p>• Mathematics: 10 Qs</p>
-                      <p>• Second Lang: 5 Qs</p>
-                      <p>• Intelligence: 10 Qs</p>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-700">
-                    <span className="flex items-center gap-1 text-slate-400 font-medium text-[11px]">
-                      <Clock className="w-3 h-3" />
-                      45 mins
-                    </span>
-                    <span className="flex items-center gap-0.5 group-hover:translate-x-1 transition-transform">
-                      <span>Start Set</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </span>
-                  </div>
+            {lockedSetNotice && (
+              <div className="mb-4 p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-amber-950 font-bold">
+                  <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>{lockedSetNotice}</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-2 shrink-0">
+                  {!currentStudent && onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={onOpenAuth}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold cursor-pointer"
+                    >
+                      Sign In Free
+                    </button>
+                  )}
+                  {onOpenMembership && (
+                    <button
+                      type="button"
+                      onClick={onOpenMembership}
+                      className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>Unlock ₹99 Plan</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(setNum => {
+                const isSetLocked = !hasFullAccess && setNum > 1;
+                const customInSetCount = customScholarshipQuestions.filter(
+                  cq => cq.stdLevel === selectedClass && cq.testNumber === setNum && cq.published !== false
+                ).length;
+
+                return (
+                  <div
+                    key={setNum}
+                    onClick={() => startScholarshipSet(setNum)}
+                    className={`bg-white rounded-2xl p-5 border shadow-xs transition-all cursor-pointer flex flex-col justify-between group ${
+                      isSetLocked
+                        ? 'border-slate-200 hover:border-amber-400'
+                        : 'border-amber-200/90 hover:border-amber-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-extrabold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
+                          Set #{setNum}
+                        </span>
+                        {isSetLocked ? (
+                          <span className="text-[10px] text-amber-900 font-bold bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                            <Lock className="w-2.5 h-2.5" /> ₹99
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
+                            {!hasFullAccess && setNum === 1 ? 'Free Preview' : '30 Questions'}
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="font-display font-bold text-sm text-slate-900 group-hover:text-amber-800 transition-colors">
+                        Practice Set {setNum}
+                      </h4>
+
+                      <div className="text-[11px] text-slate-500 space-y-0.5 leading-tight">
+                        <p>• First Lang: 5 Qs</p>
+                        <p>• Mathematics: 10 Qs</p>
+                        <p>• Second Lang: 5 Qs</p>
+                        <p>• Intelligence: 10 Qs</p>
+                        {customInSetCount > 0 && (
+                          <p className="text-indigo-700 font-bold pt-0.5">
+                            +{customInSetCount} Custom Qs
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-700">
+                      <span className="flex items-center gap-1 text-slate-400 font-medium text-[11px]">
+                        <Clock className="w-3 h-3" />
+                        45 mins
+                      </span>
+                      <span className="flex items-center gap-0.5 group-hover:translate-x-1 transition-transform">
+                        <span>{isSetLocked ? 'Unlock' : 'Start Set'}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

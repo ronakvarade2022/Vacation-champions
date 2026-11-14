@@ -23,6 +23,8 @@ export interface ShivajiStory {
     Marathi: string[];
     Hindi: string[];
   };
+  published?: boolean;
+  isCustom?: boolean;
 }
 
 // 50 Chronological Historical Stories of Chhatrapati Shivaji Maharaj

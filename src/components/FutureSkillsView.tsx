@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { canAccessFeature } from '../utils/subscriptionAccess';
 import { 
   AI_ACADEMY_MODULES, 
   FUTURE_SKILLS_COURSES, 
@@ -29,9 +30,10 @@ import {
 
 interface FutureSkillsViewProps {
   onOpenMembership: () => void;
+  onOpenAuth?: () => void;
 }
 
-export const FutureSkillsView: React.FC<FutureSkillsViewProps> = ({ onOpenMembership }) => {
+export const FutureSkillsView: React.FC<FutureSkillsViewProps> = ({ onOpenMembership, onOpenAuth }) => {
   const { currentStudent } = useApp();
 
   // Active view: course tracks list vs active AI academy module/lesson
@@ -54,8 +56,10 @@ export const FutureSkillsView: React.FC<FutureSkillsViewProps> = ({ onOpenMember
     }
   });
 
-  // Check if current user has the ₹99 Premium Plan
-  const hasPremiumAccess = currentStudent?.plan === 'premium';
+  // Check if current user has active ₹99 Plan (works across MH/CBSE/ICSE boards & classes + Teachers)
+  const hasPremiumAccess = canAccessFeature(currentStudent, 'future-skills').allowed;
+  const isLessonFreePreview = activeModuleIndex === 0 && activeLessonIndex === 0;
+  const canReadSelectedLesson = hasPremiumAccess || isLessonFreePreview;
 
   const activeModule: AIModule = AI_ACADEMY_MODULES[activeModuleIndex] || AI_ACADEMY_MODULES[0];
   const activeLesson: AILesson = activeModule.lessons[activeLessonIndex] || activeModule.lessons[0];
@@ -227,8 +231,8 @@ export const FutureSkillsView: React.FC<FutureSkillsViewProps> = ({ onOpenMember
             </div>
           </div>
 
-          {/* Lock Gate for Non-Premium Users */}
-          {!hasPremiumAccess ? (
+          {/* AI Workspace: Allow Free Preview of Module 1 Lesson 1, Lock Lessons 2-24 until ₹99 Plan */}
+          {!canReadSelectedLesson ? (
             <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-purple-500/10 rounded-3xl p-8 border-2 border-amber-400/80 shadow-xl text-center space-y-6">
               <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-4xl shadow-lg shadow-orange-500/30">
                 <Lock className="w-10 h-10 text-white" />
@@ -240,41 +244,37 @@ export const FutureSkillsView: React.FC<FutureSkillsViewProps> = ({ onOpenMember
                   PREMIUM ₹99 PLAN EXCLUSIVE
                 </span>
                 <h3 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900">
-                  Unlock the Complete AI Learning Academy
+                  Unlock All 24 AI Learning Academy Lessons
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
-                  The 8-module, 24-lesson Artificial Intelligence course is exclusively accessible to students on the <strong>Champion Premium (₹99)</strong> plan.
+                  Module 1 Lesson 1 is open as a free preview. Unlock all 8 modules and 24 interactive AI lessons with any ₹99 Annual Plan!
                 </p>
               </div>
 
-              <div className="max-w-md mx-auto p-4 rounded-2xl bg-white border border-amber-200 text-left text-xs space-y-2 shadow-xs">
-                <p className="font-extrabold text-amber-900">🌟 What is included with the ₹99 Premium Plan:</p>
-                <ul className="space-y-1.5 text-slate-700 text-[11px]">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>All 8 Modules & 24 Lessons of AI Learning Academy</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Interactive Lesson MCQ Quizzes & AI Champion Certificates</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>MSCE Scholarship Practice Sets (Std 4 & Std 7)</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Daily Cricket Quiz Arena & Full Brain Puzzles</span>
-                  </li>
-                </ul>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSelectLesson(0, 0)}
+                  className="px-5 py-3 rounded-2xl bg-white border border-purple-300 text-purple-900 font-bold text-xs cursor-pointer hover:bg-purple-50"
+                >
+                  Open Free Lesson 1 Preview
+                </button>
+                {!currentStudent && onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={onOpenAuth}
+                    className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-bold text-xs cursor-pointer"
+                  >
+                    Sign In Free
+                  </button>
+                )}
+                <button
+                  onClick={onOpenMembership}
+                  className="px-8 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-orange-500/20 cursor-pointer transition-all hover:scale-102"
+                >
+                  Unlock Premium Plan (₹99)
+                </button>
               </div>
-
-              <button
-                onClick={onOpenMembership}
-                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-sm shadow-xl shadow-orange-500/20 cursor-pointer transition-all hover:scale-102"
-              >
-                Upgrade to Premium Plan (₹99)
-              </button>
             </div>
           ) : (
             /* Premium Content: Active Lesson Workspace & Modules Sidebar */

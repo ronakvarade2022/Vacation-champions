@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { DrawingCategory, DrawingTemplate, DrawingSubmission } from '../types';
-import { DRAWING_CATEGORIES, READY_MADE_DRAWING_TEMPLATES, ACTIVE_DRAWING_CHALLENGES } from '../data/drawingsData';
+import { DRAWING_CATEGORIES } from '../data/drawingsData';
+import { Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
   Palette, 
@@ -56,13 +57,23 @@ const PALETTE_36 = [
 type StudioMode = 'gallery' | 'colouring' | 'my-drawing' | 'saved-art';
 type ActiveTool = 'bucket' | 'pencil' | 'brush' | 'eraser' | 'line' | 'rect' | 'circle' | 'star' | 'text';
 
-export const DrawingChampionsView: React.FC = () => {
+interface DrawingChampionsViewProps {
+  onOpenAuth?: () => void;
+}
+
+export const DrawingChampionsView: React.FC<DrawingChampionsViewProps> = ({ onOpenAuth }) => {
   const { 
     currentStudent, 
+    drawingTemplates,
     savedDrawings, 
     saveDrawingSubmission,
     deleteDrawingSubmission 
   } = useApp();
+
+  const liveTemplates = React.useMemo(
+    () => drawingTemplates.filter(t => t.published !== false),
+    [drawingTemplates]
+  );
 
   // Navigation mode: Ready-made Gallery, Colouring Studio, My Own Drawing, Saved Art Portfolio
   const [activeMode, setActiveMode] = useState<StudioMode>('gallery');
@@ -106,9 +117,9 @@ export const DrawingChampionsView: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Filter drawings by current student UID
-  const studentDrawings = savedDrawings.filter(d => 
-    !currentStudent || d.studentId === currentStudent.id
-  );
+  const studentDrawings = currentStudent
+    ? savedDrawings.filter(d => d.studentId === currentStudent.id)
+    : [];
 
   // Helper to push canvas state into history stack
   const pushHistory = useCallback(() => {
@@ -400,7 +411,7 @@ export const DrawingChampionsView: React.FC = () => {
   // Re-open saved artwork from portfolio
   const handleResumeSavedDrawing = (drawing: DrawingSubmission) => {
     if (drawing.type === 'coloured' && drawing.templateId) {
-      const matched = READY_MADE_DRAWING_TEMPLATES.find(t => t.id === drawing.templateId);
+      const matched = liveTemplates.find(t => t.id === drawing.templateId);
       if (matched) {
         setActiveTemplate(matched);
       }
@@ -436,7 +447,7 @@ export const DrawingChampionsView: React.FC = () => {
   // Cycle Previous & Next Drawing within current category
   const navigateTemplate = (direction: 'prev' | 'next') => {
     if (!activeTemplate) return;
-    const sameCategoryTemplates = READY_MADE_DRAWING_TEMPLATES.filter(t => t.category === activeTemplate.category);
+    const sameCategoryTemplates = liveTemplates.filter(t => t.category === activeTemplate.category);
     const currentIndex = sameCategoryTemplates.findIndex(t => t.id === activeTemplate.id);
     if (currentIndex === -1) return;
 
@@ -625,6 +636,14 @@ export const DrawingChampionsView: React.FC = () => {
 
   // Save Artwork to Student Account
   const handleSaveArtwork = (celebrate: boolean = false) => {
+    if (!currentStudent) {
+      handleDownload();
+      setToastMessage('PNG downloaded! Sign in to save artworks in your Student Cloud Portfolio.');
+      setTimeout(() => setToastMessage(null), 3500);
+      onOpenAuth?.();
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dataUrl = canvas.toDataURL('image/png');
@@ -657,7 +676,7 @@ export const DrawingChampionsView: React.FC = () => {
   };
 
   // Filtered Templates for Gallery
-  const filteredTemplates = READY_MADE_DRAWING_TEMPLATES.filter(t => {
+  const filteredTemplates = liveTemplates.filter(t => {
     if (activeCategory !== 'All' && t.category !== activeCategory) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -695,7 +714,7 @@ export const DrawingChampionsView: React.FC = () => {
               }`}
             >
               <span>🖼️</span>
-              <span>Colouring World ({READY_MADE_DRAWING_TEMPLATES.length})</span>
+              <span>Colouring World ({liveTemplates.length})</span>
             </button>
             <button
               onClick={() => handleOpenMyOwnDrawing()}
@@ -719,6 +738,27 @@ export const DrawingChampionsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Visitor Free Studio Info Strip */}
+      {!currentStudent && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-amber-950 font-bold">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Free Drawing Preview Mode: Paint any template or sketch on your blank canvas &amp; download PNGs freely. Sign in to save artworks in your portfolio!
+            </span>
+          </div>
+          {onOpenAuth && (
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold shrink-0 cursor-pointer"
+            >
+              Sign In / Register Free
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="bg-emerald-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-3 shadow-md animate-bounce">
@@ -728,16 +768,16 @@ export const DrawingChampionsView: React.FC = () => {
       )}
 
       {/* ============================================================== */}
-      {/* SECTION 1: READY-MADE DRAWINGS GALLERY (6 CATEGORIES, 120 DRAWINGS) */}
+      {/* SECTION 1: READY-MADE DRAWINGS GALLERY */}
       {/* ============================================================== */}
       {activeMode === 'gallery' && (
         <div className="space-y-6">
-          {/* 6 Categories Selection Bar */}
+          {/* Categories Selection Bar */}
           <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  6 Ready-Made Colouring Categories (20 drawings each):
+                  Ready-Made Colouring Categories ({liveTemplates.length} Live Drawings):
                 </p>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                   <button
@@ -749,23 +789,26 @@ export const DrawingChampionsView: React.FC = () => {
                     }`}
                   >
                     <span>✨</span>
-                    <span>All (120)</span>
+                    <span>All ({liveTemplates.length})</span>
                   </button>
 
-                  {DRAWING_CATEGORIES.map(cat => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setActiveCategory(cat.id)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-                        activeCategory === cat.id
-                          ? 'bg-rose-500 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-700'
-                      }`}
-                    >
-                      <span>{cat.icon}</span>
-                      <span>{cat.name} ({cat.count})</span>
-                    </button>
-                  ))}
+                  {DRAWING_CATEGORIES.map(cat => {
+                    const catCount = liveTemplates.filter(t => t.category === cat.id).length;
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => setActiveCategory(cat.id)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeCategory === cat.id
+                            ? 'bg-rose-500 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-700'
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        <span>{cat.name} ({catCount})</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
