@@ -434,6 +434,38 @@ export interface InAppNotification {
   read: boolean;
 }
 
+export type DeviceSessionStatus = 'ACTIVE' | 'TERMINATED' | 'EXPIRED';
+
+export type DeviceType = 'Mobile' | 'Tablet' | 'Laptop' | 'Desktop';
+
+export interface DeviceSessionRecord {
+  userId: string;
+  firebaseUid?: string;
+  email: string;
+  studentName: string;
+  accountRole: 'student' | 'teacher';
+  activeSessionId: string;
+  deviceId: string;
+  hardwareSignature: string;
+  deviceSignature: string;
+  deviceName: string;
+  deviceType: DeviceType;
+  browser: string;
+  os: string;
+  userAgentSummary: string;
+  status: DeviceSessionStatus;
+  loginAt: string;
+  lastActivityAt: string;
+  expiresAt: string;
+  expiresAtMs: number;
+  terminatedBy?: 'USER_LOGOUT' | 'ADMIN' | 'USER_RECOVERY' | 'EXPIRED' | 'SECURITY_MISMATCH';
+  terminatedAt?: string;
+  terminationReason?: string;
+  recoveryCount24h?: number;
+  lastRecoveryAt?: string;
+}
+
 export * from './referral';
 export * from './support';
+
 

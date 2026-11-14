@@ -33,6 +33,17 @@ import {
   verifyBearerIdToken
 } from './firebase/admin.ts';
 import {
+  acquireDeviceSessionServer,
+  validateDeviceSessionServer,
+  heartbeatDeviceSessionServer,
+  releaseDeviceSessionServer,
+  recoverDeviceSessionServer,
+  listDeviceSessionsAdminServer,
+  terminateDeviceSessionAdminServer,
+  loadDeviceSessionFromStore,
+  SINGLE_DEVICE_BLOCK_MESSAGE
+} from './src/server/deviceSessionStore.ts';
+import {
   getResolvedRazorpayCredentials,
   createRazorpayClient,
   createRazorpayOrderBackend,
@@ -136,7 +147,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Razorpay-Signature'
+    'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature'
   );
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -1812,6 +1823,318 @@ app.post('/api/auth/check-existing-account', async (req: Request, res: Response)
   }
 });
 
+// Helper: Verify active single-device session headers when a non-demo student calls a protected API
+async function verifyRequestDeviceSession(
+  req: Request,
+  studentId: string
+): Promise<{ valid: boolean; statusCode: number; error?: string }> {
+  const cleanId = String(studentId || '').trim();
+  if (!cleanId || cleanId === 'guest' || cleanId.startsWith('demo_')) {
+    return { valid: true, statusCode: 200 };
+  }
+
+  const sessionId = String(req.headers['x-session-id'] || '').trim();
+  const deviceId = String(req.headers['x-device-id'] || '').trim();
+  const hardwareSignature = String(req.headers['x-hardware-signature'] || '').trim();
+  const deviceSignature = String(req.headers['x-device-signature'] || '').trim();
+
+  const existing = await loadDeviceSessionFromStore(cleanId);
+  const hasSessionHeaders = Boolean(sessionId || deviceId || hardwareSignature || deviceSignature);
+
+  if (!existing && !hasSessionHeaders) {
+    return { valid: true, statusCode: 200 };
+  }
+
+  if (existing && existing.status === 'ACTIVE' && Number(existing.expiresAtMs || 0) > Date.now() && !hasSessionHeaders) {
+    return {
+      valid: false,
+      statusCode: 401,
+      error: SINGLE_DEVICE_BLOCK_MESSAGE
+    };
+  }
+
+  if (hasSessionHeaders) {
+    const check = await validateDeviceSessionServer({
+      userId: cleanId,
+      activeSessionId: sessionId || undefined,
+      deviceId: deviceId || '',
+      hardwareSignature: hardwareSignature || '',
+      deviceSignature: deviceSignature || '',
+      allowBootstrapIfMissing: !existing
+    });
+    if (!check.valid) {
+      return {
+        valid: false,
+        statusCode: 401,
+        error: check.error || SINGLE_DEVICE_BLOCK_MESSAGE
+      };
+    }
+  }
+
+  return { valid: true, statusCode: 200 };
+}
+
+// 8.0a Acquire Single Device Login Session (blocks concurrent login on another device)
+app.post('/api/auth/session/acquire', async (req: Request, res: Response) => {
+  try {
+    let verifiedUid: string | undefined;
+    if (req.headers.authorization) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid && isFirebaseAdminConfigured()) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          allowed: false,
+          error: tokenCheck.error || 'Authentication token verification failed.'
+        });
+      }
+      if (tokenCheck.valid) {
+        verifiedUid = tokenCheck.uid;
+      }
+    }
+
+    const body = req.body || {};
+    const userId = String(body.userId || verifiedUid || '').trim();
+    const result = await acquireDeviceSessionServer({
+      userId,
+      firebaseUid: body.firebaseUid || verifiedUid,
+      email: String(body.email || ''),
+      studentName: String(body.studentName || 'Student'),
+      accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+      deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
+      hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
+      deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
+      deviceName: body.deviceName,
+      deviceType: body.deviceType,
+      browser: body.browser,
+      os: body.os,
+      userAgentSummary: body.userAgentSummary
+    });
+
+    if (!result.allowed) {
+      return res.status(result.code === 'INVALID_INPUT' ? 400 : 403).json({
+        success: false,
+        allowed: false,
+        code: result.code,
+        error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE,
+        activeDevice: result.activeDevice
+      });
+    }
+
+    return res.json({
+      success: true,
+      allowed: true,
+      resumed: Boolean(result.resumed),
+      session: result.session
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      allowed: false,
+      error: error?.message || 'Failed to acquire device session.'
+    });
+  }
+});
+
+// 8.0b Validate Active Single Device Session (zero-trust check on boot, refresh, focus)
+app.post('/api/auth/session/validate', async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const result = await validateDeviceSessionServer({
+      userId: String(body.userId || '').trim(),
+      activeSessionId: body.activeSessionId || (req.headers['x-session-id'] as string) || undefined,
+      deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
+      hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
+      deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
+      allowBootstrapIfMissing: Boolean(body.allowBootstrapIfMissing),
+      firebaseUid: body.firebaseUid,
+      email: body.email,
+      studentName: body.studentName,
+      accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+      deviceName: body.deviceName,
+      deviceType: body.deviceType,
+      browser: body.browser,
+      os: body.os,
+      userAgentSummary: body.userAgentSummary
+    });
+
+    if (!result.valid) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        reason: result.reason,
+        terminatedBy: result.terminatedBy,
+        error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
+      });
+    }
+
+    return res.json({
+      success: true,
+      valid: true,
+      bootstrapped: Boolean(result.bootstrapped),
+      session: result.session
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      valid: false,
+      error: error?.message || 'Session validation error.'
+    });
+  }
+});
+
+// 8.0c Heartbeat to maintain sliding inactivity TTL on active device
+app.post('/api/auth/session/heartbeat', async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const result = await heartbeatDeviceSessionServer({
+      userId: String(body.userId || '').trim(),
+      activeSessionId: String(body.activeSessionId || req.headers['x-session-id'] || ''),
+      deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
+      hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
+      deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || '')
+    });
+
+    if (!result.valid) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        reason: result.reason,
+        error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
+      });
+    }
+
+    return res.json({
+      success: true,
+      valid: true,
+      session: result.session
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, valid: false, error: error?.message });
+  }
+});
+
+// 8.0d Release active session immediately upon Logout
+app.post('/api/auth/session/release', async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const result = await releaseDeviceSessionServer({
+      userId: String(body.userId || '').trim(),
+      activeSessionId: body.activeSessionId || (req.headers['x-session-id'] as string) || undefined,
+      deviceId: body.deviceId || (req.headers['x-device-id'] as string) || undefined,
+      hardwareSignature:
+        body.hardwareSignature || (req.headers['x-hardware-signature'] as string) || undefined,
+      reason: body.reason ? String(body.reason) : undefined
+    });
+
+    if (!result.released) {
+      return res.status(403).json({
+        success: false,
+        released: false,
+        error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
+      });
+    }
+
+    return res.json({ success: true, released: true });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, released: false, error: error?.message });
+  }
+});
+
+// 8.0e Lost / Damaged Previous Device Recovery (requires verified Firebase Auth + registered mobile match)
+app.post('/api/auth/session/recover', async (req: Request, res: Response) => {
+  try {
+    let verifiedUid: string | undefined;
+    let verifiedEmail: string | undefined;
+    if (req.headers.authorization) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          error: tokenCheck.error || 'Verified Firebase login required for device recovery.'
+        });
+      }
+      verifiedUid = tokenCheck.uid;
+      verifiedEmail = tokenCheck.email;
+    }
+
+    const body = req.body || {};
+    const result = await recoverDeviceSessionServer({
+      userId: String(body.userId || verifiedUid || '').trim(),
+      firebaseUid: body.firebaseUid || verifiedUid,
+      email: String(verifiedEmail || body.email || ''),
+      mobile: String(body.mobile || ''),
+      studentName: String(body.studentName || 'Student'),
+      accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+      deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
+      hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
+      deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
+      deviceName: body.deviceName,
+      deviceType: body.deviceType,
+      browser: body.browser,
+      os: body.os,
+      userAgentSummary: body.userAgentSummary
+    });
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      error: result.error,
+      session: result.session
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Device recovery failed.'
+    });
+  }
+});
+
+// 8.0f Admin: List all active & historical device sessions
+app.get('/api/admin/sessions', async (req: Request, res: Response) => {
+  const adminCheck = await verifyAdminRequest(req.headers);
+  if (!adminCheck.authorized) {
+    return res.status(adminCheck.statusCode).json({
+      success: false,
+      error: adminCheck.error || 'Administrator authentication required.'
+    });
+  }
+
+  const sessions = await listDeviceSessionsAdminServer();
+  return res.json({
+    success: true,
+    totalCount: sessions.length,
+    sessions
+  });
+});
+
+// 8.0g Admin: Terminate a user's active device session immediately
+app.post('/api/admin/sessions/terminate', async (req: Request, res: Response) => {
+  const adminCheck = await verifyAdminRequest(req.headers);
+  if (!adminCheck.authorized) {
+    return res.status(adminCheck.statusCode).json({
+      success: false,
+      error: adminCheck.error || 'Administrator authentication required.'
+    });
+  }
+
+  try {
+    const userId = String(req.body?.userId || '').trim();
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'userId is required.' });
+    }
+    const reason = String(req.body?.reason || 'Terminated by administrator');
+    const result = await terminateDeviceSessionAdminServer(userId, reason);
+    return res.json({
+      success: true,
+      session: result.session
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to terminate session.'
+    });
+  }
+});
+
 // 8.1 Sync student/teacher subscription (paid plans strictly require verified payment proof)
 app.post('/api/subscription/sync', async (req: Request, res: Response) => {
   try {
@@ -2059,6 +2382,16 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
           error: tokenCheck.error || 'Invalid authentication token.'
         });
       }
+    }
+
+    const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
+    if (!sessionCheck.valid) {
+      return res.status(sessionCheck.statusCode).json({
+        success: false,
+        allowed: false,
+        code: 'SINGLE_DEVICE_SESSION_INVALID',
+        error: sessionCheck.error || SINGLE_DEVICE_BLOCK_MESSAGE
+      });
     }
 
     const sub = await evaluateServerSubscriptionFromStore(cleanStudentId);
@@ -2318,6 +2651,16 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
       success: false,
       allowed: false,
       error: 'worksheetId is required.'
+    });
+  }
+
+  const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
+  if (!sessionCheck.valid) {
+    return res.status(sessionCheck.statusCode).json({
+      success: false,
+      allowed: false,
+      code: 'SINGLE_DEVICE_SESSION_INVALID',
+      error: sessionCheck.error || SINGLE_DEVICE_BLOCK_MESSAGE
     });
   }
 

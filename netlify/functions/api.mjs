@@ -18,6 +18,10 @@ const AUTHORIZED_ADMIN_EMAIL = 'ronakvarade2022@gmail.com';
 const processedPaymentIds = new Set();
 const processedOrderIds = new Set();
 const transactionLedger = [];
+const netlifyDeviceSessions = new Map();
+const SINGLE_DEVICE_BLOCK_MESSAGE =
+  'Your account is currently active on another device. Please log out from your previous device before logging in here.';
+const SESSION_INACTIVITY_TTL_MS = 12 * 60 * 60 * 1000;
 
 let cachedNetlifyAdmin = null;
 function getNetlifyFirebaseAdmin() {
@@ -195,7 +199,7 @@ function jsonResponse(statusCode, payload) {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers':
-        'Content-Type, Authorization, X-Razorpay-Signature',
+        'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature',
       'Cache-Control': 'no-store, no-cache, must-revalidate'
     },
     body: JSON.stringify(payload)
@@ -1765,6 +1769,361 @@ export async function handler(event) {
       return jsonResponse(200, { success: true, leaderboard: parsed });
     } catch {
       return jsonResponse(200, { success: true, leaderboard: [] });
+    }
+  }
+
+  // 10. Single Device Session Management Endpoints (Netlify Production Parity)
+  const reqHeaders = event.headers || {};
+  const getHeader = (name) => {
+    const lower = name.toLowerCase();
+    for (const [k, v] of Object.entries(reqHeaders)) {
+      if (k.toLowerCase() === lower) return String(v || '');
+    }
+    return '';
+  };
+
+  if (method === 'POST' && normalizedPath === '/auth/session/acquire') {
+    try {
+      const body = JSON.parse(event.body || '{}');
+      const userId = String(body.userId || '').trim();
+      const deviceId = String(body.deviceId || getHeader('x-device-id')).trim();
+      const hardwareSignature = String(body.hardwareSignature || getHeader('x-hardware-signature')).trim();
+      const deviceSignature = String(body.deviceSignature || getHeader('x-device-signature')).trim();
+
+      if (!userId || deviceId.length < 6 || hardwareSignature.length < 8 || deviceSignature.length < 8) {
+        return jsonResponse(400, {
+          success: false,
+          allowed: false,
+          code: 'INVALID_INPUT',
+          error: 'Valid userId and device signatures are required.'
+        });
+      }
+
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const existing =
+        (await getFirestoreDocument('device_sessions', userId)) ||
+        netlifyDeviceSessions.get(userId) ||
+        null;
+
+      if (existing && existing.status === 'ACTIVE' && Number(existing.expiresAtMs || 0) > nowMs) {
+        const sameDevice =
+          existing.deviceId === deviceId &&
+          existing.hardwareSignature === hardwareSignature &&
+          existing.deviceSignature === deviceSignature;
+        if (!sameDevice) {
+          return jsonResponse(403, {
+            success: false,
+            allowed: false,
+            code: 'DEVICE_SESSION_ACTIVE_ELSEWHERE',
+            error: SINGLE_DEVICE_BLOCK_MESSAGE
+          });
+        }
+
+        const resumed = {
+          ...existing,
+          lastActivityAt: nowIso,
+          expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+          expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+        };
+        netlifyDeviceSessions.set(userId, resumed);
+        await patchFirestoreDocument('device_sessions', userId, resumed);
+        return jsonResponse(200, { success: true, allowed: true, resumed: true, session: resumed });
+      }
+
+      const fresh = {
+        userId,
+        firebaseUid: body.firebaseUid || undefined,
+        email: String(body.email || '').trim().toLowerCase(),
+        studentName: String(body.studentName || 'Student').slice(0, 100),
+        accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+        activeSessionId: `sess_${crypto.randomBytes(20).toString('hex')}`,
+        deviceId,
+        hardwareSignature,
+        deviceSignature,
+        deviceName: String(body.deviceName || 'Registered Browser').slice(0, 120),
+        deviceType: body.deviceType || 'Desktop',
+        browser: String(body.browser || 'Browser').slice(0, 60),
+        os: String(body.os || 'Unknown OS').slice(0, 60),
+        userAgentSummary: String(body.userAgentSummary || '').slice(0, 200),
+        status: 'ACTIVE',
+        loginAt: nowIso,
+        lastActivityAt: nowIso,
+        expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+        expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+      };
+      netlifyDeviceSessions.set(userId, fresh);
+      await patchFirestoreDocument('device_sessions', userId, fresh);
+      return jsonResponse(200, { success: true, allowed: true, resumed: false, session: fresh });
+    } catch (err) {
+      return jsonResponse(500, { success: false, allowed: false, error: err?.message });
+    }
+  }
+
+  if (method === 'POST' && normalizedPath === '/auth/session/validate') {
+    const body = JSON.parse(event.body || '{}');
+    const userId = String(body.userId || '').trim();
+    const activeSessionId = String(body.activeSessionId || getHeader('x-session-id')).trim();
+    const deviceId = String(body.deviceId || getHeader('x-device-id')).trim();
+    const hardwareSignature = String(body.hardwareSignature || getHeader('x-hardware-signature')).trim();
+    const deviceSignature = String(body.deviceSignature || getHeader('x-device-signature')).trim();
+    const nowMs = Date.now();
+    const existing =
+      (await getFirestoreDocument('device_sessions', userId)) ||
+      netlifyDeviceSessions.get(userId) ||
+      null;
+
+    if (!existing) {
+      if (body.allowBootstrapIfMissing && deviceId.length >= 6 && hardwareSignature.length >= 8) {
+        const nowIso = new Date(nowMs).toISOString();
+        const fresh = {
+          userId,
+          firebaseUid: body.firebaseUid || undefined,
+          email: String(body.email || '').trim().toLowerCase(),
+          studentName: String(body.studentName || 'Student').slice(0, 100),
+          accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+          activeSessionId: `sess_${crypto.randomBytes(20).toString('hex')}`,
+          deviceId,
+          hardwareSignature,
+          deviceSignature,
+          deviceName: String(body.deviceName || 'Registered Browser').slice(0, 120),
+          deviceType: body.deviceType || 'Desktop',
+          browser: String(body.browser || 'Browser').slice(0, 60),
+          os: String(body.os || 'Unknown OS').slice(0, 60),
+          userAgentSummary: String(body.userAgentSummary || '').slice(0, 200),
+          status: 'ACTIVE',
+          loginAt: nowIso,
+          lastActivityAt: nowIso,
+          expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+          expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+        };
+        netlifyDeviceSessions.set(userId, fresh);
+        await patchFirestoreDocument('device_sessions', userId, fresh);
+        return jsonResponse(200, { success: true, valid: true, bootstrapped: true, session: fresh });
+      }
+      return jsonResponse(401, { success: false, valid: false, reason: 'NO_ACTIVE_SESSION', error: SINGLE_DEVICE_BLOCK_MESSAGE });
+    }
+
+    if (existing.status === 'TERMINATED') {
+      return jsonResponse(401, { success: false, valid: false, reason: 'TERMINATED', error: 'Your session was logged out or terminated. Please log in again.' });
+    }
+    if (existing.status === 'EXPIRED' || Number(existing.expiresAtMs || 0) <= nowMs) {
+      return jsonResponse(401, { success: false, valid: false, reason: 'EXPIRED', error: 'Your session expired due to inactivity. Please log in again.' });
+    }
+    const sameHw =
+      existing.deviceId === deviceId &&
+      existing.hardwareSignature === hardwareSignature &&
+      existing.deviceSignature === deviceSignature;
+    const sameSess = !activeSessionId || existing.activeSessionId === activeSessionId;
+    if (!sameHw || !sameSess) {
+      return jsonResponse(401, { success: false, valid: false, reason: 'HARDWARE_OR_SESSION_MISMATCH', error: SINGLE_DEVICE_BLOCK_MESSAGE });
+    }
+    return jsonResponse(200, { success: true, valid: true, session: existing });
+  }
+
+  if (method === 'POST' && normalizedPath === '/auth/session/heartbeat') {
+    const body = JSON.parse(event.body || '{}');
+    const userId = String(body.userId || '').trim();
+    const activeSessionId = String(body.activeSessionId || getHeader('x-session-id')).trim();
+    const deviceId = String(body.deviceId || getHeader('x-device-id')).trim();
+    const hardwareSignature = String(body.hardwareSignature || getHeader('x-hardware-signature')).trim();
+    const deviceSignature = String(body.deviceSignature || getHeader('x-device-signature')).trim();
+    const nowMs = Date.now();
+    const existing =
+      (await getFirestoreDocument('device_sessions', userId)) ||
+      netlifyDeviceSessions.get(userId) ||
+      null;
+    if (
+      !existing ||
+      existing.status !== 'ACTIVE' ||
+      Number(existing.expiresAtMs || 0) <= nowMs ||
+      existing.activeSessionId !== activeSessionId ||
+      existing.deviceId !== deviceId ||
+      existing.hardwareSignature !== hardwareSignature ||
+      existing.deviceSignature !== deviceSignature
+    ) {
+      return jsonResponse(401, { success: false, valid: false, error: SINGLE_DEVICE_BLOCK_MESSAGE });
+    }
+    const updated = {
+      ...existing,
+      lastActivityAt: new Date(nowMs).toISOString(),
+      expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+      expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+    };
+    netlifyDeviceSessions.set(userId, updated);
+    await patchFirestoreDocument('device_sessions', userId, updated);
+    return jsonResponse(200, { success: true, valid: true, session: updated });
+  }
+
+  if (method === 'POST' && normalizedPath === '/auth/session/release') {
+    const body = JSON.parse(event.body || '{}');
+    const userId = String(body.userId || '').trim();
+    const activeSessionId = String(body.activeSessionId || getHeader('x-session-id')).trim();
+    const hardwareSignature = String(body.hardwareSignature || getHeader('x-hardware-signature')).trim();
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const existing =
+      (await getFirestoreDocument('device_sessions', userId)) ||
+      netlifyDeviceSessions.get(userId) ||
+      null;
+    if (existing) {
+      if (existing.status === 'ACTIVE' && Number(existing.expiresAtMs || 0) > nowMs) {
+        const matchSess = !activeSessionId || existing.activeSessionId === activeSessionId;
+        const matchHw = !hardwareSignature || existing.hardwareSignature === hardwareSignature;
+        if (!matchSess || !matchHw) {
+          return jsonResponse(403, {
+            success: false,
+            released: false,
+            error: SINGLE_DEVICE_BLOCK_MESSAGE
+          });
+        }
+      }
+      const terminated = {
+        ...existing,
+        status: 'TERMINATED',
+        terminatedBy: 'USER_LOGOUT',
+        terminatedAt: nowIso,
+        terminationReason: body.reason || 'Logged out by user',
+        expiresAt: nowIso,
+        expiresAtMs: nowMs
+      };
+      netlifyDeviceSessions.set(userId, terminated);
+      await patchFirestoreDocument('device_sessions', userId, terminated);
+    }
+    return jsonResponse(200, { success: true, released: true });
+  }
+
+  if (method === 'POST' && normalizedPath === '/auth/session/recover') {
+    const body = JSON.parse(event.body || '{}');
+    const authHeader = getHeader('authorization');
+    const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+    if (adminAuth) {
+      if (!authHeader.startsWith('Bearer ')) {
+        return jsonResponse(401, { success: false, error: 'Verified Firebase login required for device recovery.' });
+      }
+      try {
+        await adminAuth.verifyIdToken(authHeader.slice(7).trim());
+      } catch {
+        return jsonResponse(401, { success: false, error: 'Invalid or expired authentication token.' });
+      }
+    }
+
+    const userId = String(body.userId || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const providedMobile = String(body.mobile || '').replace(/\D/g, '').slice(-10);
+    if (!userId || !email || providedMobile.length !== 10) {
+      return jsonResponse(400, { success: false, error: 'Valid email and 10-digit mobile number are required.' });
+    }
+    const studentDoc = await getFirestoreDocument('students', userId);
+    if (studentDoc?.mobile) {
+      const storedMob = String(studentDoc.mobile).replace(/\D/g, '').slice(-10);
+      if (storedMob.length === 10 && storedMob !== providedMobile) {
+        return jsonResponse(403, { success: false, error: 'Entered mobile number does not match the registered mobile number.' });
+      }
+    }
+
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const existing =
+      (await getFirestoreDocument('device_sessions', userId)) ||
+      netlifyDeviceSessions.get(userId) ||
+      null;
+
+    let nextRecoveryCount = 1;
+    if (existing?.lastRecoveryAt) {
+      const lastRecMs = Date.parse(existing.lastRecoveryAt) || 0;
+      if (nowMs - lastRecMs < 24 * 60 * 60 * 1000) {
+        const currCount = Number(existing.recoveryCount24h || 0);
+        if (currCount >= 3) {
+          return jsonResponse(429, {
+            success: false,
+            error: 'Device recovery limit reached (max 3 recoveries per 24 hours). Please contact MyStudyZone support or wait 24 hours.'
+          });
+        }
+        nextRecoveryCount = currCount + 1;
+      }
+    }
+
+    const recovered = {
+      userId,
+      firebaseUid: body.firebaseUid || existing?.firebaseUid || undefined,
+      email,
+      studentName: String(body.studentName || existing?.studentName || 'Student').slice(0, 100),
+      accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+      activeSessionId: `sess_${crypto.randomBytes(20).toString('hex')}`,
+      deviceId: String(body.deviceId || getHeader('x-device-id')),
+      hardwareSignature: String(body.hardwareSignature || getHeader('x-hardware-signature')),
+      deviceSignature: String(body.deviceSignature || getHeader('x-device-signature')),
+      deviceName: String(body.deviceName || 'Recovered Device').slice(0, 120),
+      deviceType: body.deviceType || 'Desktop',
+      browser: String(body.browser || 'Browser').slice(0, 60),
+      os: String(body.os || 'Unknown OS').slice(0, 60),
+      userAgentSummary: String(body.userAgentSummary || '').slice(0, 200),
+      status: 'ACTIVE',
+      loginAt: nowIso,
+      lastActivityAt: nowIso,
+      expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+      expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS,
+      lastRecoveryAt: nowIso,
+      recoveryCount24h: nextRecoveryCount
+    };
+    netlifyDeviceSessions.set(userId, recovered);
+    await patchFirestoreDocument('device_sessions', userId, recovered);
+    return jsonResponse(200, { success: true, session: recovered });
+  }
+
+  if (method === 'GET' && normalizedPath === '/admin/sessions') {
+    const authHeader = getHeader('authorization');
+    const { auth: adminAuth, db: adminDb } = getNetlifyFirebaseAdmin();
+    if (!adminAuth || !authHeader.startsWith('Bearer ')) {
+      return jsonResponse(401, { success: false, error: 'Administrator authentication required.' });
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim());
+      if (decoded.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL || !decoded.email_verified) {
+        return jsonResponse(403, { success: false, error: 'Forbidden.' });
+      }
+      const snap = await adminDb.collection('device_sessions').limit(500).get();
+      const sessions = snap.docs.map((d) => d.data());
+      return jsonResponse(200, { success: true, totalCount: sessions.length, sessions });
+    } catch {
+      return jsonResponse(401, { success: false, error: 'Invalid admin token.' });
+    }
+  }
+
+  if (method === 'POST' && normalizedPath === '/admin/sessions/terminate') {
+    const authHeader = getHeader('authorization');
+    const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+    if (!adminAuth || !authHeader.startsWith('Bearer ')) {
+      return jsonResponse(401, { success: false, error: 'Administrator authentication required.' });
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim());
+      if (decoded.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL || !decoded.email_verified) {
+        return jsonResponse(403, { success: false, error: 'Forbidden.' });
+      }
+      const body = JSON.parse(event.body || '{}');
+      const userId = String(body.userId || '').trim();
+      if (!userId) return jsonResponse(400, { success: false, error: 'userId is required.' });
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const existing = (await getFirestoreDocument('device_sessions', userId)) || {};
+      const terminated = {
+        ...existing,
+        userId,
+        activeSessionId: `terminated_${crypto.randomBytes(10).toString('hex')}`,
+        status: 'TERMINATED',
+        terminatedBy: 'ADMIN',
+        terminatedAt: nowIso,
+        terminationReason: String(body.reason || 'Terminated by administrator'),
+        expiresAt: nowIso,
+        expiresAtMs: nowMs
+      };
+      netlifyDeviceSessions.set(userId, terminated);
+      await patchFirestoreDocument('device_sessions', userId, terminated);
+      return jsonResponse(200, { success: true, session: terminated });
+    } catch {
+      return jsonResponse(401, { success: false, error: 'Invalid admin token.' });
     }
   }
 

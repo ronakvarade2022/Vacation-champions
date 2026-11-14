@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, User, Lock, Phone, Mail, School, GraduationCap, ShieldAlert,
-  Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin
+  Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin, Smartphone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ClassLevel } from '../types';
 import {
+  auth,
   registerFirebaseEmailUser,
   saveStudentProfileToFirestore,
 } from '../services/firebase';
@@ -54,6 +55,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     loginAsTeacher,
     loginAsAdmin,
     recoverAccount,
+    acquireSessionAfterRegistration,
+    recoverBlockedDeviceSession,
   } = useApp();
 
   const [tab, setTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>(defaultTab);
@@ -121,6 +124,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [existingAccountPassword, setExistingAccountPassword] = useState('');
   const [showExistingPassword, setShowExistingPassword] = useState(false);
 
+  // Single-Device Lost/Damaged Device Recovery State
+  const [showDeviceRecovery, setShowDeviceRecovery] = useState(false);
+  const [recoveryMobile, setRecoveryMobile] = useState('');
+  const [recoveryRole, setRecoveryRole] = useState<'student' | 'teacher'>('student');
+
   useEffect(() => {
     setTab(defaultTab);
     if (initialEmail) {
@@ -142,6 +150,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setSuccessMsg('');
     setExistingAccountMatch(null);
     setExistingAccountPassword('');
+    setShowDeviceRecovery(false);
+    setRecoveryMobile('');
   }, [defaultTab, initialEmail, isOpen]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-class addition)
@@ -243,9 +253,57 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (!res.success) {
       setError(res.message);
+      if (res.blockedByActiveDevice) {
+        setShowDeviceRecovery(true);
+        setRecoveryRole('student');
+      }
       return;
     }
 
+    setShowDeviceRecovery(false);
+    setRecoveryMobile('');
+    onSuccess?.();
+    onClose();
+  };
+
+  // --- Lost or Damaged Previous Device Recovery Flow ---
+  const handleRecoverBlockedDevice = async (roleForRecovery: 'student' | 'teacher') => {
+    setError('');
+    setSuccessMsg('');
+
+    const targetEmail = (roleForRecovery === 'teacher' ? teacherEmail : loginEmail).trim().toLowerCase();
+    const targetPassword = roleForRecovery === 'teacher' ? teacherPassword : loginPassword;
+    const cleanMobile = recoveryMobile.replace(/\D/g, '').slice(-10);
+
+    if (!isValidEmail(targetEmail)) {
+      setError('Please enter your registered email address above before recovering device access.');
+      return;
+    }
+    if (!targetPassword) {
+      setError('Please enter your account password above to verify ownership.');
+      return;
+    }
+    if (!isValidMobile(cleanMobile)) {
+      setError('Please enter your registered 10-digit mobile number to confirm device recovery.');
+      return;
+    }
+
+    setIsLoading(true);
+    const res = await recoverBlockedDeviceSession({
+      email: targetEmail,
+      password: targetPassword,
+      mobile: cleanMobile,
+      preferredRole: roleForRecovery,
+    });
+    setIsLoading(false);
+
+    if (!res.success) {
+      setError(res.message);
+      return;
+    }
+
+    setShowDeviceRecovery(false);
+    setRecoveryMobile('');
     onSuccess?.();
     onClose();
   };
@@ -273,6 +331,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (!loginRes.success) {
       setError(loginRes.message);
+      if (loginRes.blockedByActiveDevice) {
+        setRecoveryRole(existingAccountMatch.accountRole);
+      }
       return;
     }
 
@@ -464,7 +525,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       await saveStudentProfileToFirestore(regResult.student);
 
-      // 4. Register in Referral Hub & Track Referral Signup
+      // 4. Bind Single-Device Session for this newly registered device immediately
+      try {
+        const idToken = fbReg.user.getIdToken
+          ? await fbReg.user.getIdToken().catch(() => undefined)
+          : await auth.currentUser?.getIdToken().catch(() => undefined);
+        await acquireSessionAfterRegistration(regResult.student, idToken);
+      } catch {
+        // Non-blocking fallback handled by auth state listener
+      }
+
+      // 5. Register in Referral Hub & Track Referral Signup
       try {
         await referralService.registerAccount({
           userId: regResult.student.id,
@@ -543,8 +614,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(false);
     if (!res.success) {
       setError(res.message);
+      if (res.blockedByActiveDevice) {
+        setShowDeviceRecovery(true);
+        setRecoveryRole('teacher');
+      }
       return;
     }
+    setShowDeviceRecovery(false);
+    setRecoveryMobile('');
     onSuccess?.();
     onClose();
   };
@@ -730,16 +807,75 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </form>
 
-              <p className="text-center text-xs text-slate-500 mt-5">
-                New Student or Teacher?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setTab('register'); setError(''); setSuccessMsg(''); }}
-                  className="text-indigo-600 font-bold hover:underline cursor-pointer"
-                >
-                  Create Class-Wise Account
-                </button>
-              </p>
+              <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecoveryRole('student');
+                      setShowDeviceRecovery((prev) => !(prev && recoveryRole === 'student'));
+                      setError('');
+                    }}
+                    className="text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Lost or Damaged Previous Device? Recover Access</span>
+                  </button>
+                </div>
+
+                {showDeviceRecovery && recoveryRole === 'student' && (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-3 text-xs">
+                    <div className="space-y-1">
+                      <p className="font-black text-amber-950 flex items-center gap-1.5">
+                        <Smartphone className="w-4 h-4 text-amber-700" />
+                        <span>Lost / Damaged Device Access Recovery</span>
+                      </p>
+                      <p className="text-[11px] text-amber-900 leading-relaxed">
+                        Verify your registered <strong>10-digit mobile number</strong> along with your email &amp; password above. This will automatically log out your previous device and activate this device immediately (max 3 recoveries per 24 hours).
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-amber-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={recoveryMobile}
+                        onChange={(e) => setRecoveryMobile(e.target.value.replace(/\D/g, ''))}
+                        placeholder="Enter registered 10-digit mobile number"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-amber-300 bg-white focus:border-amber-600 focus:outline-none text-xs font-bold"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => handleRecoverBlockedDevice('student')}
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-black text-xs shadow-xs cursor-pointer transition-colors"
+                      >
+                        {isLoading ? 'Recovering Access...' : 'Log Out Old Device & Sign In Here'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeviceRecovery(false)}
+                        className="px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-amber-900 font-bold text-xs hover:bg-amber-100 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-center text-xs text-slate-500">
+                  New Student or Teacher?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setTab('register'); setError(''); setSuccessMsg(''); }}
+                    className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Create Class-Wise Account
+                  </button>
+                </p>
+              </div>
             </div>
           )}
 
@@ -820,22 +956,81 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </form>
 
-              <p className="text-center text-xs text-slate-500">
-                Want to register as a Teacher?{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRegRoleType('teacher');
-                    setRegAvatar('👩‍🏫');
-                    setTab('register');
-                    setError('');
-                    setSuccessMsg('');
-                  }}
-                  className="text-emerald-700 font-bold hover:underline cursor-pointer"
-                >
-                  Register Teacher Account
-                </button>
-              </p>
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecoveryRole('teacher');
+                      setShowDeviceRecovery((prev) => !(prev && recoveryRole === 'teacher'));
+                      setError('');
+                    }}
+                    className="text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Lost or Damaged Previous Device? Recover Access</span>
+                  </button>
+                </div>
+
+                {showDeviceRecovery && recoveryRole === 'teacher' && (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-3 text-xs">
+                    <div className="space-y-1">
+                      <p className="font-black text-amber-950 flex items-center gap-1.5">
+                        <Smartphone className="w-4 h-4 text-amber-700" />
+                        <span>Lost / Damaged Device Access Recovery</span>
+                      </p>
+                      <p className="text-[11px] text-amber-900 leading-relaxed">
+                        Verify your registered <strong>10-digit mobile number</strong> along with your teacher email &amp; password above to log out your previous device and sign in here.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-amber-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={recoveryMobile}
+                        onChange={(e) => setRecoveryMobile(e.target.value.replace(/\D/g, ''))}
+                        placeholder="Enter registered 10-digit mobile number"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-amber-300 bg-white focus:border-amber-600 focus:outline-none text-xs font-bold"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => handleRecoverBlockedDevice('teacher')}
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-black text-xs shadow-xs cursor-pointer transition-colors"
+                      >
+                        {isLoading ? 'Recovering Access...' : 'Log Out Old Device & Sign In Here'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeviceRecovery(false)}
+                        className="px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-amber-900 font-bold text-xs hover:bg-amber-100 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-center text-xs text-slate-500">
+                  Want to register as a Teacher?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegRoleType('teacher');
+                      setRegAvatar('👩‍🏫');
+                      setTab('register');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className="text-emerald-700 font-bold hover:underline cursor-pointer"
+                  >
+                    Register Teacher Account
+                  </button>
+                </p>
+              </div>
             </div>
           )}
 

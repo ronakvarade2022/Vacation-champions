@@ -232,6 +232,36 @@
         "issueType": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "studentId", "questionId"]
+    },
+    "DeviceSession": {
+      "title": "DeviceSession",
+      "description": "Single-device active login session record bound to one authorized browser/device per user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "firebaseUid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 150 },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "accountRole": { "type": "string", "enum": ["student", "teacher"] },
+        "activeSessionId": { "type": "string", "maxLength": 128 },
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "hardwareSignature": { "type": "string", "maxLength": 128 },
+        "deviceSignature": { "type": "string", "maxLength": 128 },
+        "deviceName": { "type": "string", "maxLength": 120 },
+        "deviceType": { "type": "string", "enum": ["Mobile", "Tablet", "Laptop", "Desktop"] },
+        "browser": { "type": "string", "maxLength": 60 },
+        "os": { "type": "string", "maxLength": 60 },
+        "userAgentSummary": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["ACTIVE", "TERMINATED", "EXPIRED"] },
+        "loginAt": { "type": "string", "maxLength": 50 },
+        "lastActivityAt": { "type": "string", "maxLength": 50 },
+        "expiresAt": { "type": "string", "maxLength": 50 },
+        "expiresAtMs": { "type": "number" },
+        "terminatedBy": { "type": "string", "maxLength": 40 },
+        "terminatedAt": { "type": "string", "maxLength": 50 },
+        "terminationReason": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["userId", "activeSessionId", "deviceId", "deviceSignature", "status", "loginAt", "expiresAtMs"]
     }
   },
   "firestore": {
@@ -290,6 +320,10 @@
     "/question_reports/{reportId}": {
       "schema": { "$ref": "#/entities/QuestionReport" },
       "description": "Student quiz question accuracy reports."
+    },
+    "/device_sessions/{userId}": {
+      "schema": { "$ref": "#/entities/DeviceSession" },
+      "description": "Single-device active session records preventing concurrent multi-device logins."
     }
   }
 }

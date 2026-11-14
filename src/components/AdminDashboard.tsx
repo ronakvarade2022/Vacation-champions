@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel, SubjectName, QuizQuestion, QuestionType, QuizLevel, DrawingCategory, DrawingTemplate } from '../types';
+import { ClassLevel, SubjectName, QuizQuestion, QuestionType, QuizLevel, DrawingCategory, DrawingTemplate, DeviceSessionRecord } from '../types';
 import { checkQuestionDuplicate, computeQuestionBankAnalytics } from '../services/questionBankService';
 import { DRAWING_CATEGORIES, ACTIVE_DRAWING_CHALLENGES } from '../data/drawingsData';
 import { DAILY_CRICKET_QUESTIONS_BANK } from '../data/cricketQuizData';
 import { STD_4_SCHOLARSHIP_BANK, STD_7_SCHOLARSHIP_BANK, MSCE_LANGUAGES } from '../data/scholarshipData';
+import { auth } from '../services/firebase';
+import { fetchAllDeviceSessionsForAdmin, adminTerminateUserSession } from '../services/deviceSessionService';
 import { 
   ShieldCheck, 
   Users, 
@@ -34,7 +36,12 @@ import {
   User,
   LogOut,
   Gift,
-  LifeBuoy
+  LifeBuoy,
+  Monitor,
+  Smartphone,
+  Power,
+  Clock,
+  ShieldAlert
 } from 'lucide-react';
 import { LogoutConfirmModal } from './LogoutConfirmModal';
 import { AdminReferralPanel } from './AdminReferralPanel';
@@ -159,6 +166,97 @@ export const AdminDashboard: React.FC = () => {
   const [classChangeReason, setClassChangeReason] = useState<string>('Annual academic promotion');
   const [adminAuthName, setAdminAuthName] = useState<string>('Head Administrator');
   const [classChangeFeedback, setClassChangeFeedback] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Single-Device Session Monitoring & Termination State
+  const [deviceSessionsMap, setDeviceSessionsMap] = useState<Record<string, DeviceSessionRecord>>({});
+  const [isLoadingSessions, setIsLoadingSessions] = useState<boolean>(false);
+  const [confirmTerminateUserId, setConfirmTerminateUserId] = useState<string | null>(null);
+  const [terminatingUserId, setTerminatingUserId] = useState<string | null>(null);
+  const [sessionAdminFeedback, setSessionAdminFeedback] = useState<{ success: boolean; message: string } | null>(null);
+
+  const loadDeviceSessions = useCallback(async () => {
+    setIsLoadingSessions(true);
+    try {
+      const token = await auth.currentUser?.getIdToken().catch(() => undefined);
+      const sessions = await fetchAllDeviceSessionsForAdmin(token);
+      const mapped: Record<string, DeviceSessionRecord> = {};
+      sessions.forEach((sess) => {
+        if (sess.userId) mapped[sess.userId] = sess;
+        if (sess.email) mapped[sess.email.trim().toLowerCase()] = sess;
+      });
+      setDeviceSessionsMap(mapped);
+    } catch {
+      // Keep existing state cleanly
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === 'students') {
+      loadDeviceSessions();
+    }
+  }, [activeSection, loadDeviceSessions]);
+
+  const formatIstDateTime = (iso?: string | null): string => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    try {
+      return (
+        new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }).format(d) + ' IST'
+      );
+    } catch {
+      return d.toISOString();
+    }
+  };
+
+  const handleTerminateStudentSession = async (userId: string, studentName: string) => {
+    setTerminatingUserId(userId);
+    setSessionAdminFeedback(null);
+    try {
+      const token = await auth.currentUser?.getIdToken().catch(() => undefined);
+      const res = await adminTerminateUserSession(userId, token, 'Terminated by administrator');
+      if (res.success) {
+        setDeviceSessionsMap((prev) => {
+          const next = { ...prev };
+          const existing = next[userId];
+          if (existing) {
+            const updated: DeviceSessionRecord = {
+              ...existing,
+              status: 'TERMINATED',
+              terminatedBy: 'ADMIN',
+              terminatedAt: new Date().toISOString(),
+              terminationReason: 'Terminated by administrator',
+            };
+            next[userId] = updated;
+            if (existing.email) next[existing.email.trim().toLowerCase()] = updated;
+          }
+          return next;
+        });
+        setSessionAdminFeedback({
+          success: true,
+          message: `Active session terminated for ${studentName}. They can now log in cleanly on a new device.`,
+        });
+      } else {
+        setSessionAdminFeedback({
+          success: false,
+          message: res.error || 'Could not terminate device session. Please try again.',
+        });
+      }
+    } finally {
+      setTerminatingUserId(null);
+      setConfirmTerminateUserId(null);
+    }
+  };
 
   const filteredStudents = studentsList.filter(s => 
     s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
@@ -935,25 +1033,62 @@ export const AdminDashboard: React.FC = () => {
               <h2 className="text-xl font-display font-bold text-slate-900 flex items-center gap-2">
                 <span>Student &amp; Teacher Accounts</span>
                 <span className="text-xs bg-amber-100 text-amber-900 border border-amber-300 font-mono px-2 py-0.5 rounded-full font-bold">
-                  Multi-Class Subscriptions (1–10)
+                  Multi-Class + Single Device Security
                 </span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Each account keeps a single verified identity (mobile + email) and can hold independent ₹99 / 365-day subscriptions across multiple classes.
+                Each account keeps a single verified identity (mobile + email), supports independent ₹99 / 365-day subscriptions across multiple classes, and enforces one active device at a time.
               </p>
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-                placeholder="Search by student, email, mobile, or UID..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-hidden"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadDeviceSessions}
+                disabled={isLoadingSessions}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSessions ? 'animate-spin' : ''}`} />
+                <span>{isLoadingSessions ? 'Syncing Devices...' : 'Refresh Active Devices'}</span>
+              </button>
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search by student, email, mobile, or UID..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-hidden"
+                />
+              </div>
             </div>
           </div>
+
+          {sessionAdminFeedback && (
+            <div
+              className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 ${
+                sessionAdminFeedback.success
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-50 text-rose-900 border-rose-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {sessionAdminFeedback.success ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{sessionAdminFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSessionAdminFeedback(null)}
+                className="text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           <div className="border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
@@ -965,6 +1100,8 @@ export const AdminDashboard: React.FC = () => {
                   <th className="p-3">Permanent Class</th>
                   <th className="p-3">Plan</th>
                   <th className="p-3">Subscription Status</th>
+                  <th className="p-3">Active Device</th>
+                  <th className="p-3">Last Login Time (IST)</th>
                   <th className="p-3">Purchase Date (IST)</th>
                   <th className="p-3">Expiry Date (IST)</th>
                   <th className="p-3">Remaining Days</th>
@@ -975,6 +1112,13 @@ export const AdminDashboard: React.FC = () => {
                 {filteredStudents.map((s) => {
                   const sPlanInfo = getStudentPlanInfo(s);
                   const sAudit = auditStudentSubscriptionRecord(s);
+                  const deviceSess =
+                    deviceSessionsMap[s.id] ||
+                    deviceSessionsMap[s.email.trim().toLowerCase()] ||
+                    null;
+                  const isSessionActive =
+                    deviceSess?.status === 'ACTIVE' &&
+                    (!deviceSess.expiresAt || new Date(deviceSess.expiresAt).getTime() > Date.now());
                   return (
                     <tr key={s.id} className="hover:bg-amber-50/20">
                       <td className="p-3">
@@ -1047,6 +1191,57 @@ export const AdminDashboard: React.FC = () => {
                             : 'ACTIVE (Lifetime Free)'}
                         </span>
                       </td>
+                      <td className="p-3">
+                        {deviceSess ? (
+                          <div className="space-y-1 min-w-[155px]">
+                            <div className="flex items-center gap-1.5">
+                              {deviceSess.deviceType === 'Mobile' || deviceSess.deviceType === 'Tablet' ? (
+                                <Smartphone className={`w-3.5 h-3.5 shrink-0 ${isSessionActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                              ) : (
+                                <Monitor className={`w-3.5 h-3.5 shrink-0 ${isSessionActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                              )}
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  isSessionActive
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : deviceSess.status === 'TERMINATED'
+                                    ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}
+                              >
+                                {isSessionActive ? 'ACTIVE' : deviceSess.status}
+                              </span>
+                            </div>
+                            <p className="text-[11px] font-bold text-slate-800 leading-tight">
+                              {deviceSess.deviceName}
+                            </p>
+                            <p className="text-[10px] text-slate-500 leading-tight">
+                              {deviceSess.browser} • {deviceSess.os}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">
+                            Offline
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-slate-700 font-mono text-[11px] min-w-[140px]">
+                        {deviceSess?.loginAt ? (
+                          <div className="space-y-0.5">
+                            <span className="font-bold text-slate-800 inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>{formatIstDateTime(deviceSess.loginAt)}</span>
+                            </span>
+                            {deviceSess.lastActivityAt && (
+                              <span className="block text-[10px] text-slate-400">
+                                Ping: {formatIstDateTime(deviceSess.lastActivityAt)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="p-3 text-slate-700 font-mono text-[11px]">
                         {sAudit.currentPurchaseDateIst ? (
                           <div>
@@ -1079,19 +1274,53 @@ export const AdminDashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        <button
-                          onClick={() => {
-                            setEditingStudent(s);
-                            setTargetNewClass(s.classLevel);
-                            setClassChangeReason('Annual academic grade promotion');
-                            setClassChangeFeedback(null);
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                          title="Promote or correct student's grade"
-                        >
-                          <GraduationCap className="w-3.5 h-3.5" />
-                          <span>Promote / Correct</span>
-                        </button>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              setEditingStudent(s);
+                              setTargetNewClass(s.classLevel);
+                              setClassChangeReason('Annual academic grade promotion');
+                              setClassChangeFeedback(null);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                            title="Promote or correct student's grade"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>Promote / Correct</span>
+                          </button>
+
+                          {isSessionActive && (
+                            confirmTerminateUserId === s.id ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={terminatingUserId === s.id}
+                                  onClick={() => handleTerminateStudentSession(s.id, s.name)}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-700 hover:bg-rose-800 disabled:opacity-60 text-white font-black text-[10px] cursor-pointer whitespace-nowrap"
+                                >
+                                  {terminatingUserId === s.id ? 'Terminating...' : 'Confirm Force Logout'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmTerminateUserId(null)}
+                                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmTerminateUserId(s.id)}
+                                className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                title="Force logout active device so student can sign in on another device"
+                              >
+                                <Power className="w-3.5 h-3.5" />
+                                <span>Terminate Session</span>
+                              </button>
+                            )
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

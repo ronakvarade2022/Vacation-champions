@@ -23,8 +23,21 @@ import {
   FeeRecord,
   AnnouncementItem,
   AuthenticatedUser,
-  WorksheetAttemptRecord
+  WorksheetAttemptRecord,
+  DeviceSessionRecord
 } from '../types';
+import {
+  acquireSingleDeviceSession,
+  clearLocalActiveSessionState,
+  getLocalActiveSessionState,
+  recoverSingleDeviceSession,
+  releaseSingleDeviceSession,
+  sendDeviceSessionHeartbeat,
+  SINGLE_DEVICE_BLOCK_MESSAGE,
+  subscribeToUserDeviceSession,
+  validateActiveDeviceSession,
+  verifyLocalSessionNotCopied
+} from '../services/deviceSessionService';
 import { 
   getInitialSeedQuestions, 
   getStrictClassSubjectQuestions, 
@@ -143,8 +156,18 @@ interface AppContextType {
   
   // Student & Teacher Portal Authentication & Session Guarding
   switchRole: (targetRole: UserRole) => { allowed: boolean; message?: string };
-  loginAsTeacher: (email: string, password?: string) => Promise<{ success: boolean; message: string; teacher?: StudentProfile }>;
+  loginAsTeacher: (email: string, password?: string) => Promise<{ success: boolean; message: string; teacher?: StudentProfile; blockedByActiveDevice?: boolean }>;
   loginAsAdmin: (email: string, password?: string) => Promise<{ success: boolean; message: string; adminEmail?: string }>;
+  activeDeviceSession: DeviceSessionRecord | null;
+  sessionSecurityNotice: string | null;
+  clearSessionSecurityNotice: () => void;
+  acquireSessionAfterRegistration: (student: StudentProfile, idToken?: string) => Promise<{ allowed: boolean; error?: string }>;
+  recoverBlockedDeviceSession: (params: {
+    email: string;
+    password: string;
+    mobile: string;
+    preferredRole?: 'student' | 'teacher';
+  }) => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
   
   // Auth & Session methods - Multi-Class Subscriptions Linked to Unique Mobile & Email Account
   checkAccountForMultiClassRegistration: (
@@ -171,7 +194,7 @@ interface AppContextType {
       accountRole?: 'student' | 'teacher';
     }
   ) => RegistrationResult;
-  loginWithEmail: (email: string, password?: string, preferredRole?: 'student' | 'teacher') => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
+  loginWithEmail: (email: string, password?: string, preferredRole?: 'student' | 'teacher') => Promise<{ success: boolean; message: string; student?: StudentProfile; blockedByActiveDevice?: boolean }>;
   recoverAccount: (email: string) => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
   completePasswordReset: (oobCode: string, newPassword: string) => Promise<{ success: boolean; message: string; email?: string; student?: StudentProfile }>;
   logout: () => Promise<void>;
@@ -331,6 +354,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return 'student';
   });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [activeDeviceSession, setActiveDeviceSession] = useState<DeviceSessionRecord | null>(null);
+  const [sessionSecurityNotice, setSessionSecurityNotice] = useState<string | null>(null);
+  const isHandlingAuthFlowRef = React.useRef<boolean>(false);
 
   // Authenticated user session with role and linked IDs (signed out by default until verified login)
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
@@ -347,6 +373,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (parsed?.role === 'parent') {
           parsed.role = 'student';
+        }
+        // Prevent copied localStorage tokens from booting an unauthorized session on another device
+        if (parsed?.role !== 'admin') {
+          const localSess = getLocalActiveSessionState();
+          if (localSess && !verifyLocalSessionNotCopied(parsed.uid).valid) {
+            return null;
+          }
         }
         return parsed;
       } catch (e) {
@@ -426,6 +459,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed: StudentProfile = JSON.parse(saved);
         if (!parsed || !parsed.id || LEGACY_SAMPLE_IDS.has(parsed.id)) {
+          return null;
+        }
+        const localSess = getLocalActiveSessionState();
+        if (localSess && !verifyLocalSessionNotCopied(parsed.id).valid) {
           return null;
         }
         const { passwordHash: _stripHash, ...safeParsed } = parsed;
@@ -634,12 +671,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  // Test Firestore Connection & Sync Firebase Auth state on App boot
+  const forceInvalidateSessionState = (reasonMessage: string) => {
+    clearLocalActiveSessionState();
+    try {
+      localStorage.removeItem('vc_current_student');
+      localStorage.removeItem('vc_current_user');
+      localStorage.setItem('vc_is_logged_out', 'true');
+    } catch {}
+    setActiveDeviceSession(null);
+    setCurrentStudent(null);
+    setCurrentUser(null);
+    setActiveRole('student');
+    setSessionSecurityNotice(reasonMessage);
+    void signOutFirebaseUser();
+  };
+
+  // Detect copied localStorage tokens on initial mount immediately
+  useEffect(() => {
+    try {
+      const savedStuRaw = localStorage.getItem('vc_current_student');
+      const savedUsrRaw = localStorage.getItem('vc_current_user');
+      const isLoggedOut = localStorage.getItem('vc_is_logged_out') === 'true';
+      if (!isLoggedOut && savedStuRaw && savedUsrRaw) {
+        const parsedStu = JSON.parse(savedStuRaw) as StudentProfile;
+        const parsedUsr = JSON.parse(savedUsrRaw) as AuthenticatedUser;
+        if (parsedUsr?.role !== 'admin' && parsedStu?.id) {
+          const localSess = getLocalActiveSessionState();
+          if (localSess && !verifyLocalSessionNotCopied(parsedStu.id).valid) {
+            forceInvalidateSessionState(SINGLE_DEVICE_BLOCK_MESSAGE);
+          }
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
+  // Test Firestore Connection & Sync Firebase Auth state on App boot (with strict Single Device Session validation)
   useEffect(() => {
     testFirestoreConnection();
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) return;
+      if (isHandlingAuthFlowRef.current) return;
       const isLoggedOut = localStorage.getItem('vc_is_logged_out') === 'true';
       if (isLoggedOut) return;
 
@@ -648,32 +722,130 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      if (!currentStudent || currentStudent.firebaseUid !== fbUser.uid) {
-        const fbProfile = await fetchStudentProfileFromFirestore(fbUser.uid, fbEmail || undefined).catch(() => null);
-        if (fbProfile) {
-          const { passwordHash: _stripHash, ...safeProfile } = fbProfile;
-          const accountRole: 'student' | 'teacher' = safeProfile.accountRole || 'student';
-          setCurrentStudent(safeProfile);
-          setStudentsList(prev => {
-            const exists = prev.some(s => s.id === safeProfile.id);
-            return exists ? prev.map(s => (s.id === safeProfile.id ? safeProfile : s)) : [...prev, safeProfile];
-          });
-          setCurrentUser({
-            uid: safeProfile.id,
-            email: safeProfile.email,
-            displayName: safeProfile.name,
-            role: accountRole,
-            studentId: safeProfile.id,
-            classLevel: safeProfile.classLevel,
-            isVerified: true
-          });
-          setActiveRole(accountRole);
-        }
+      let resolvedProfile: StudentProfile | null = null;
+      const fbProfile = await fetchStudentProfileFromFirestore(fbUser.uid, fbEmail || undefined).catch(() => null);
+      if (fbProfile) {
+        const { passwordHash: _stripHash, ...safeProfile } = fbProfile;
+        resolvedProfile = safeProfile;
+      } else if (currentStudent && (currentStudent.firebaseUid === fbUser.uid || currentStudent.id === fbUser.uid)) {
+        resolvedProfile = currentStudent;
       }
+
+      if (!resolvedProfile) return;
+
+      const idToken = await fbUser.getIdToken().catch(() => undefined);
+      const accountRole: 'student' | 'teacher' = resolvedProfile.accountRole || 'student';
+      const sessCheck = await validateActiveDeviceSession({
+        userId: resolvedProfile.id,
+        firebaseUid: fbUser.uid,
+        email: resolvedProfile.email || fbEmail,
+        studentName: resolvedProfile.name,
+        accountRole,
+        idToken,
+        allowLegacyBootstrap: true
+      });
+
+      if (!sessCheck.valid) {
+        forceInvalidateSessionState(sessCheck.error || SINGLE_DEVICE_BLOCK_MESSAGE);
+        return;
+      }
+
+      setActiveDeviceSession(sessCheck.session || null);
+      setSessionSecurityNotice(null);
+      setCurrentStudent(resolvedProfile);
+      setStudentsList(prev => {
+        const exists = prev.some(s => s.id === resolvedProfile!.id);
+        return exists ? prev.map(s => (s.id === resolvedProfile!.id ? resolvedProfile! : s)) : [...prev, resolvedProfile!];
+      });
+      setCurrentUser({
+        uid: resolvedProfile.id,
+        email: resolvedProfile.email,
+        displayName: resolvedProfile.name,
+        role: accountRole,
+        studentId: resolvedProfile.id,
+        classLevel: resolvedProfile.classLevel,
+        isVerified: true
+      });
+      setActiveRole(accountRole);
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Real-Time Firestore Session Listener + 60s Heartbeat + Window Focus Guard (forces immediate logout on revocation/mismatch)
+  useEffect(() => {
+    const activeId = currentStudent?.id;
+    if (!activeId || currentUser?.role === 'admin') return;
+
+    let cancelled = false;
+
+    const verifyCurrentDeviceLive = async () => {
+      if (cancelled) return;
+      const copyCheck = verifyLocalSessionNotCopied(activeId);
+      if (!copyCheck.valid) {
+        forceInvalidateSessionState(SINGLE_DEVICE_BLOCK_MESSAGE);
+        return;
+      }
+      const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+      const hb = await sendDeviceSessionHeartbeat(activeId, idToken);
+      if (cancelled) return;
+      if (!hb.valid) {
+        forceInvalidateSessionState(hb.error || SINGLE_DEVICE_BLOCK_MESSAGE);
+        return;
+      }
+      if (hb.session) {
+        setActiveDeviceSession(hb.session);
+      }
+    };
+
+    const unsubSession = subscribeToUserDeviceSession(activeId, (remote) => {
+      if (cancelled) return;
+      const local = getLocalActiveSessionState();
+      const copyCheck = verifyLocalSessionNotCopied(activeId);
+      if (!local || !copyCheck.valid) {
+        forceInvalidateSessionState(SINGLE_DEVICE_BLOCK_MESSAGE);
+        return;
+      }
+      const expiredByTime = Number(remote.expiresAtMs || 0) <= Date.now();
+      if (
+        remote.status !== 'ACTIVE' ||
+        expiredByTime ||
+        remote.activeSessionId !== local.activeSessionId ||
+        remote.hardwareSignature !== local.hardwareSignature ||
+        remote.deviceId !== local.deviceId
+      ) {
+        const msg =
+          remote.terminatedBy === 'ADMIN'
+            ? 'Your active session was terminated by the MyStudyZone Administrator. Please log in again.'
+            : remote.terminatedBy === 'USER_RECOVERY'
+            ? 'Your session was signed out because access was recovered on a new device.'
+            : SINGLE_DEVICE_BLOCK_MESSAGE;
+        forceInvalidateSessionState(msg);
+      } else {
+        setActiveDeviceSession(remote);
+      }
+    });
+
+    const intervalId = window.setInterval(() => {
+      void verifyCurrentDeviceLive();
+    }, 60_000);
+
+    const onFocusOrVisible = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void verifyCurrentDeviceLive();
+      }
+    };
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+
+    return () => {
+      cancelled = true;
+      unsubSession();
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+    };
+  }, [currentStudent?.id, currentUser?.role]);
 
   // Synchronize displayed subscription status with actual subscription stored in Firebase Firestore
   useEffect(() => {
@@ -1009,11 +1181,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const acquireSessionAfterRegistration = async (
+    student: StudentProfile,
+    idToken?: string
+  ): Promise<{ allowed: boolean; error?: string }> => {
+    const resolvedToken =
+      idToken || (await auth.currentUser?.getIdToken().catch(() => undefined));
+    const res = await acquireSingleDeviceSession({
+      userId: student.id,
+      firebaseUid: student.firebaseUid,
+      email: student.email,
+      studentName: student.name,
+      accountRole: student.accountRole === 'teacher' ? 'teacher' : 'student',
+      idToken: resolvedToken
+    });
+    if (res.allowed && res.session) {
+      setActiveDeviceSession(res.session);
+      setSessionSecurityNotice(null);
+    }
+    return { allowed: res.allowed, error: res.error };
+  };
+
   const loginWithEmail = async (
     email: string,
     password?: string,
     preferredRole?: 'student' | 'teacher'
-  ): Promise<{ success: boolean; message: string; student?: StudentProfile }> => {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    student?: StudentProfile;
+    blockedByActiveDevice?: boolean;
+  }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       return {
@@ -1029,97 +1227,270 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // Fail-closed Firebase Auth verification
-    const fbRes = await loginFirebaseEmailUser(cleanEmail, password);
-    if (!fbRes.success || !fbRes.user) {
+    isHandlingAuthFlowRef.current = true;
+    try {
+      // Fail-closed Firebase Auth verification
+      const fbRes = await loginFirebaseEmailUser(cleanEmail, password);
+      if (!fbRes.success || !fbRes.user) {
+        return {
+          success: false,
+          message:
+            fbRes.error ||
+            'Incorrect email or password. Please verify your credentials or click "Forgot Password?" below to reset it.'
+        };
+      }
+
+      const fbUid = fbRes.user.uid;
+      let found =
+        studentsList.find(s => s.firebaseUid === fbUid || s.id === fbUid || s.email.trim().toLowerCase() === cleanEmail) ||
+        (await fetchStudentProfileFromFirestore(fbUid, cleanEmail).catch(() => null));
+
+      if (!found) {
+        // Authenticated Firebase user whose Firestore profile hasn't synced locally yet — restore safe base profile
+        const fallbackCode = generateUniqueStudentReferralCode(fbUid, fbRes.user.displayName || cleanEmail);
+        const roleFallback: 'student' | 'teacher' = preferredRole || 'student';
+        found = {
+          id: fbUid,
+          name: fbRes.user.displayName || cleanEmail.split('@')[0] || 'Student',
+          accountRole: roleFallback,
+          parentName: roleFallback === 'teacher' ? 'Teacher Portal Account' : 'Parent / Guardian',
+          mobile: '',
+          email: cleanEmail,
+          classLevel: 'Class 5',
+          schoolName: '',
+          parentConsent: true,
+          registeredAt: new Date().toISOString(),
+          points: 100,
+          coins: 50,
+          level: 1,
+          streakDays: 1,
+          lastActiveDate: new Date().toISOString(),
+          badges: ['badge-first-quiz'],
+          plan: 'free',
+          avatar: roleFallback === 'teacher' ? '👩‍🏫' : '🌟',
+          attemptedQuestionIds: [],
+          attemptedPuzzleIds: [],
+          completedStoryIds: [],
+          classChangeLogs: [],
+          firebaseUid: fbUid,
+          isEmailVerified: Boolean(fbRes.user.emailVerified),
+          referralCode: fallbackCode,
+          referralLink: buildStudentReferralLink(fallbackCode)
+        };
+      }
+
+      const { passwordHash: _stripHash, ...safeFound } = found;
+      const accountRole: 'student' | 'teacher' = safeFound.accountRole || preferredRole || 'student';
+      const roleLabel = accountRole === 'teacher' ? 'Teacher' : 'Student';
+
+      const updated: StudentProfile = {
+        ...safeFound,
+        accountRole,
+        firebaseUid: fbUid,
+        isEmailVerified: Boolean(fbRes.user.emailVerified) || Boolean(safeFound.isEmailVerified)
+      };
+
+      // STRICT SINGLE DEVICE SESSION CHECK BEFORE ALLOWING ACCESS
+      const idToken = await fbRes.user.getIdToken().catch(() => undefined);
+      const sessionAttempt = await acquireSingleDeviceSession({
+        userId: updated.id,
+        firebaseUid: fbUid,
+        email: updated.email,
+        studentName: updated.name,
+        accountRole,
+        idToken
+      });
+
+      if (!sessionAttempt.allowed) {
+        await signOutFirebaseUser();
+        clearLocalActiveSessionState();
+        setActiveDeviceSession(null);
+        setCurrentStudent(null);
+        setCurrentUser(null);
+        return {
+          success: false,
+          blockedByActiveDevice: true,
+          message: sessionAttempt.error || SINGLE_DEVICE_BLOCK_MESSAGE
+        };
+      }
+
+      setActiveDeviceSession(sessionAttempt.session || null);
+      setSessionSecurityNotice(null);
+      setStudentsList(prev => {
+        const exists = prev.some(s => s.id === updated.id);
+        return exists ? prev.map(s => (s.id === updated.id ? updated : s)) : [...prev, updated];
+      });
+      localStorage.removeItem('vc_is_logged_out');
+      setCurrentStudent(updated);
+      setCurrentUser({
+        uid: updated.id,
+        email: updated.email,
+        displayName: updated.name,
+        role: accountRole,
+        studentId: updated.id,
+        classLevel: updated.classLevel,
+        isVerified: true
+      });
+      setActiveRole(accountRole);
+      saveStudentProfileToFirestore(updated).catch(() => {});
+
+      return {
+        success: true,
+        message: `Welcome back, ${updated.name}! Signed into ${roleLabel} Portal (${updated.classLevel}).`,
+        student: updated
+      };
+    } finally {
+      isHandlingAuthFlowRef.current = false;
+    }
+  };
+
+  // Lost / Damaged Device Self-Recovery (verifies Firebase email+password + registered 10-digit mobile, logs out prior device)
+  const recoverBlockedDeviceSession = async (params: {
+    email: string;
+    password: string;
+    mobile: string;
+    preferredRole?: 'student' | 'teacher';
+  }): Promise<{ success: boolean; message: string; student?: StudentProfile }> => {
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanMobile = params.mobile.replace(/\D/g, '').slice(-10);
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return { success: false, message: 'Please enter your registered email address.' };
+    }
+    if (!params.password || params.password.length < 6) {
+      return { success: false, message: 'Please enter your registered account password.' };
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
       return {
         success: false,
-        message:
-          fbRes.error ||
-          'Incorrect email or password. Please verify your credentials or click "Forgot Password?" below to reset it.'
+        message: 'Please enter the valid 10-digit mobile number linked to your account.'
       };
     }
 
-    const fbUid = fbRes.user.uid;
-    let found =
-      studentsList.find(s => s.firebaseUid === fbUid || s.id === fbUid || s.email.trim().toLowerCase() === cleanEmail) ||
-      (await fetchStudentProfileFromFirestore(fbUid, cleanEmail).catch(() => null));
+    isHandlingAuthFlowRef.current = true;
+    try {
+      const fbRes = await loginFirebaseEmailUser(cleanEmail, params.password);
+      if (!fbRes.success || !fbRes.user) {
+        return {
+          success: false,
+          message: fbRes.error || 'Incorrect email or password.'
+        };
+      }
 
-    if (!found) {
-      // Authenticated Firebase user whose Firestore profile hasn't synced locally yet — restore safe base profile
-      const fallbackCode = generateUniqueStudentReferralCode(fbUid, fbRes.user.displayName || cleanEmail);
-      const roleFallback: 'student' | 'teacher' = preferredRole || 'student';
-      found = {
-        id: fbUid,
-        name: fbRes.user.displayName || cleanEmail.split('@')[0] || 'Student',
-        accountRole: roleFallback,
-        parentName: roleFallback === 'teacher' ? 'Teacher Portal Account' : 'Parent / Guardian',
-        mobile: '',
-        email: cleanEmail,
-        classLevel: 'Class 5',
-        schoolName: '',
-        parentConsent: true,
-        registeredAt: new Date().toISOString(),
-        points: 100,
-        coins: 50,
-        level: 1,
-        streakDays: 1,
-        lastActiveDate: new Date().toISOString(),
-        badges: ['badge-first-quiz'],
-        plan: 'free',
-        avatar: roleFallback === 'teacher' ? '👩‍🏫' : '🌟',
-        attemptedQuestionIds: [],
-        attemptedPuzzleIds: [],
-        completedStoryIds: [],
-        classChangeLogs: [],
+      const fbUid = fbRes.user.uid;
+      let found =
+        studentsList.find(s => s.firebaseUid === fbUid || s.id === fbUid || s.email.trim().toLowerCase() === cleanEmail) ||
+        (await fetchStudentProfileFromFirestore(fbUid, cleanEmail).catch(() => null));
+
+      if (!found) {
+        const fallbackCode = generateUniqueStudentReferralCode(fbUid, fbRes.user.displayName || cleanEmail);
+        const roleFallback: 'student' | 'teacher' = params.preferredRole || 'student';
+        found = {
+          id: fbUid,
+          name: fbRes.user.displayName || cleanEmail.split('@')[0] || 'Student',
+          accountRole: roleFallback,
+          parentName: roleFallback === 'teacher' ? 'Teacher Portal Account' : 'Parent / Guardian',
+          mobile: cleanMobile,
+          email: cleanEmail,
+          classLevel: 'Class 5',
+          schoolName: '',
+          parentConsent: true,
+          registeredAt: new Date().toISOString(),
+          points: 100,
+          coins: 50,
+          level: 1,
+          streakDays: 1,
+          lastActiveDate: new Date().toISOString(),
+          badges: ['badge-first-quiz'],
+          plan: 'free',
+          avatar: roleFallback === 'teacher' ? '👩‍🏫' : '🌟',
+          attemptedQuestionIds: [],
+          attemptedPuzzleIds: [],
+          completedStoryIds: [],
+          classChangeLogs: [],
+          firebaseUid: fbUid,
+          isEmailVerified: Boolean(fbRes.user.emailVerified),
+          referralCode: fallbackCode,
+          referralLink: buildStudentReferralLink(fallbackCode)
+        };
+      }
+
+      const storedDigits = (found.mobile || '').replace(/\D/g, '').slice(-10);
+      if (storedDigits.length === 10 && storedDigits !== cleanMobile) {
+        await signOutFirebaseUser();
+        return {
+          success: false,
+          message: 'Entered mobile number does not match the registered mobile number on this account.'
+        };
+      }
+
+      const { passwordHash: _stripHash, ...safeFound } = found;
+      const accountRole: 'student' | 'teacher' = safeFound.accountRole || params.preferredRole || 'student';
+      const idToken = await fbRes.user.getIdToken().catch(() => undefined);
+
+      const recRes = await recoverSingleDeviceSession({
+        userId: safeFound.id,
         firebaseUid: fbUid,
-        isEmailVerified: Boolean(fbRes.user.emailVerified),
-        referralCode: fallbackCode,
-        referralLink: buildStudentReferralLink(fallbackCode)
+        email: cleanEmail,
+        mobile: cleanMobile,
+        studentName: safeFound.name,
+        accountRole,
+        idToken
+      });
+
+      if (!recRes.success || !recRes.session) {
+        await signOutFirebaseUser();
+        return {
+          success: false,
+          message: recRes.error || 'Could not complete device recovery. Please verify your details and try again.'
+        };
+      }
+
+      const updated: StudentProfile = {
+        ...safeFound,
+        accountRole,
+        firebaseUid: fbUid,
+        mobile: safeFound.mobile || cleanMobile
       };
+
+      setActiveDeviceSession(recRes.session);
+      setSessionSecurityNotice(null);
+      setStudentsList(prev => {
+        const exists = prev.some(s => s.id === updated.id);
+        return exists ? prev.map(s => (s.id === updated.id ? updated : s)) : [...prev, updated];
+      });
+      localStorage.removeItem('vc_is_logged_out');
+      setCurrentStudent(updated);
+      setCurrentUser({
+        uid: updated.id,
+        email: updated.email,
+        displayName: updated.name,
+        role: accountRole,
+        studentId: updated.id,
+        classLevel: updated.classLevel,
+        isVerified: true
+      });
+      setActiveRole(accountRole);
+
+      return {
+        success: true,
+        message: 'Previous device signed out and this device is now active!',
+        student: updated
+      };
+    } finally {
+      isHandlingAuthFlowRef.current = false;
     }
-
-    const { passwordHash: _stripHash, ...safeFound } = found;
-    const accountRole: 'student' | 'teacher' = safeFound.accountRole || preferredRole || 'student';
-    const roleLabel = accountRole === 'teacher' ? 'Teacher' : 'Student';
-
-    const updated: StudentProfile = {
-      ...safeFound,
-      accountRole,
-      firebaseUid: fbUid,
-      isEmailVerified: Boolean(fbRes.user.emailVerified) || Boolean(safeFound.isEmailVerified)
-    };
-
-    setStudentsList(prev => {
-      const exists = prev.some(s => s.id === updated.id);
-      return exists ? prev.map(s => (s.id === updated.id ? updated : s)) : [...prev, updated];
-    });
-    localStorage.removeItem('vc_is_logged_out');
-    setCurrentStudent(updated);
-    setCurrentUser({
-      uid: updated.id,
-      email: updated.email,
-      displayName: updated.name,
-      role: accountRole,
-      studentId: updated.id,
-      classLevel: updated.classLevel,
-      isVerified: true
-    });
-    setActiveRole(accountRole);
-    saveStudentProfileToFirestore(updated).catch(() => {});
-
-    return {
-      success: true,
-      message: `Welcome back, ${updated.name}! Signed into ${roleLabel} Portal (${updated.classLevel}).`,
-      student: updated
-    };
   };
 
   // Teacher Login helper (Requires real email + verified password)
   const loginAsTeacher = async (
     identifier: string,
     password?: string
-  ): Promise<{ success: boolean; message: string; teacher?: StudentProfile }> => {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    teacher?: StudentProfile;
+    blockedByActiveDevice?: boolean;
+  }> => {
     const cleanInput = identifier.trim();
     let emailToUse = cleanInput.toLowerCase();
     if (!cleanInput.includes('@')) {
@@ -1140,7 +1511,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       success: res.success,
       message: res.message,
-      teacher: res.student
+      teacher: res.student,
+      blockedByActiveDevice: res.blockedByActiveDevice
     };
   };
 
@@ -1277,16 +1649,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Proper Logout Functionality - Firebase signOut, clear session, stay signed out cleanly
+  // Proper Logout Functionality - Release Single Device Session BEFORE Firebase signOut so new device can log in immediately
   const logout = async (): Promise<void> => {
+    try {
+      const activeId = currentStudent?.id;
+      const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+      await releaseSingleDeviceSession(activeId, idToken, 'User signed out');
+    } catch (e) {
+      console.warn('Device session release notice:', e);
+    }
     try {
       await signOutFirebaseUser();
     } catch (e) {
       console.warn('Firebase signOut notice:', e);
     }
+    clearLocalActiveSessionState();
     localStorage.removeItem('vc_current_student');
     localStorage.removeItem('vc_current_user');
     localStorage.setItem('vc_is_logged_out', 'true');
+    setActiveDeviceSession(null);
     setCurrentStudent(null);
     setCurrentUser(null);
     setActiveRole('student');
@@ -1589,12 +1970,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const verifyLocalDeviceBeforeProtectedAction = (): boolean => {
+    if (!currentStudent || currentUser?.role === 'admin') return true;
+    const localSess = getLocalActiveSessionState();
+    if (localSess && !verifyLocalSessionNotCopied(currentStudent.id).valid) {
+      forceInvalidateSessionState(SINGLE_DEVICE_BLOCK_MESSAGE);
+      return false;
+    }
+    return true;
+  };
+
   // Switch Active Class (Strictly permitted ONLY to the account's Free Base class or ACTIVE paid ₹99 classes)
   const switchActiveClass = async (
     targetClass: ClassLevel
   ): Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }> => {
     if (!currentStudent) {
       return { success: false, message: 'Please sign in first.', needsPurchase: true };
+    }
+    if (!verifyLocalDeviceBeforeProtectedAction()) {
+      return { success: false, message: SINGLE_DEVICE_BLOCK_MESSAGE };
     }
     const normalizedTarget = normalizeClassLevelValue(targetClass) || currentStudent.classLevel;
     const accessCheck = canSwitchToClass(currentStudent, normalizedTarget);
@@ -2443,6 +2837,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         switchRole,
         loginAsTeacher,
         loginAsAdmin,
+        activeDeviceSession,
+        sessionSecurityNotice,
+        clearSessionSecurityNotice: () => setSessionSecurityNotice(null),
+        acquireSessionAfterRegistration,
+        recoverBlockedDeviceSession,
 
         checkAccountForMultiClassRegistration,
         registerStudent,

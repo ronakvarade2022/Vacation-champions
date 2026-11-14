@@ -1,4 +1,5 @@
 import { ClassLevel, PaymentTransaction, StudentProfile } from '../types';
+import { getLocalSessionHeaders } from './deviceSessionService';
 
 export interface RazorpayConfigResponse {
   success: boolean;
@@ -153,8 +154,17 @@ async function fetchPaymentApi(
     .trim()
     .replace(/\/+$/, '');
 
+  const sessionHeaders = getLocalSessionHeaders();
+  const mergedOptions: RequestInit = {
+    ...options,
+    headers: {
+      ...sessionHeaders,
+      ...((options.headers as Record<string, string>) || {})
+    }
+  };
+
   const primaryUrl = `${envBase}/api${subpath}`;
-  const res = await fetchWithTimeout(primaryUrl, options, timeoutMs);
+  const res = await fetchWithTimeout(primaryUrl, mergedOptions, timeoutMs);
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
   // If primary /api/... route returned 404 or a static HTML fallback page, retry /.netlify/functions/api/...
@@ -164,7 +174,7 @@ async function fetchPaymentApi(
       `[Razorpay API] ${primaryUrl} returned HTTP ${res.status} (${contentType || 'no content-type'}); retrying serverless route ${netlifyUrl}...`
     );
     try {
-      const fallbackRes = await fetchWithTimeout(netlifyUrl, options, timeoutMs);
+      const fallbackRes = await fetchWithTimeout(netlifyUrl, mergedOptions, timeoutMs);
       const fallbackType = (
         fallbackRes.headers.get('content-type') || ''
       ).toLowerCase();

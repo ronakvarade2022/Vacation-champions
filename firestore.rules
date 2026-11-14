@@ -340,5 +340,68 @@ service cloud.firestore {
         incoming().questionId is string && incoming().questionId.size() > 0 && incoming().questionId.size() <= 128;
       allow update, delete: if isAdmin();
     }
+
+    // DeviceSession Schema Validator
+    function isValidDeviceSession(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.activeSessionId is string && data.activeSessionId.size() >= 8 && data.activeSessionId.size() <= 128 &&
+             data.deviceId is string && data.deviceId.size() >= 6 && data.deviceId.size() <= 128 &&
+             data.hardwareSignature is string && data.hardwareSignature.size() >= 8 && data.hardwareSignature.size() <= 128 &&
+             data.deviceSignature is string && data.deviceSignature.size() >= 8 && data.deviceSignature.size() <= 128 &&
+             data.status in ['ACTIVE', 'TERMINATED', 'EXPIRED'] &&
+             data.loginAt is string && data.loginAt.size() <= 50 &&
+             data.expiresAtMs is number &&
+             (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() <= 120)) &&
+             (!('browser' in data) || (data.browser is string && data.browser.size() <= 60)) &&
+             (!('os' in data) || (data.os is string && data.os.size() <= 60)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('studentName' in data) || (data.studentName is string && data.studentName.size() <= 100));
+    }
+
+    // 12. Collection: /device_sessions/{userId}
+    // Enforces strict Single Device Login at the database layer:
+    // - A second device cannot overwrite or delete an active, unexpired session owned by another device.
+    // - Only the active device (matching activeSessionId & hardwareSignature) can heartbeat or log out.
+    // - Admins can inspect and terminate any session.
+    match /device_sessions/{userId} {
+      allow get: if isValidId(userId) && (isStudentDocOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.firebaseUid == request.auth.uid));
+      allow create: if isValidId(userId) && isValidDeviceSession(incoming()) && (
+        isAdmin() || (
+          (isOwner(userId) || (isSignedIn() && incoming().get('firebaseUid', '') == request.auth.uid)) &&
+          incoming().userId == userId &&
+          incoming().status == 'ACTIVE'
+        )
+      );
+      allow update: if isValidId(userId) && isValidDeviceSession(incoming()) && (
+        isAdmin() || (
+          (isStudentDocOwner(userId) || (isSignedIn() && existing().get('firebaseUid', '') == request.auth.uid)) &&
+          incoming().userId == existing().userId &&
+          (
+            // Case 1: Active session heartbeat or explicit logout release on the EXACT SAME authorized session + hardware
+            (
+              existing().status == 'ACTIVE' &&
+              incoming().activeSessionId == existing().activeSessionId &&
+              incoming().deviceId == existing().deviceId &&
+              incoming().hardwareSignature == existing().hardwareSignature &&
+              incoming().deviceSignature == existing().deviceSignature &&
+              incoming().status in ['ACTIVE', 'TERMINATED']
+            ) ||
+            // Case 2: Re-acquiring when prior session was terminated/logged out or expired
+            (
+              (existing().status != 'ACTIVE' || existing().expiresAtMs <= request.time.toMillis()) &&
+              incoming().status == 'ACTIVE'
+            ) ||
+            // Case 3: Safe browser close/reopen resume on the EXACT SAME physical device & browser
+            (
+              incoming().deviceId == existing().deviceId &&
+              incoming().hardwareSignature == existing().hardwareSignature &&
+              incoming().status == 'ACTIVE'
+            )
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
   }
 }

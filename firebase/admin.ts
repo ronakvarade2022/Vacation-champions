@@ -416,6 +416,34 @@ export async function serverQueryEqualsLimit1(
   return { id: d.id, data: d.data() as Record<string, any> };
 }
 
+/**
+ * Lists documents from a collection via Admin SDK when configured (or fallback client SDK).
+ */
+export async function serverListCollection(
+  collectionName: string,
+  maxLimit: number = 500
+): Promise<{ id: string; data: Record<string, any> }[]> {
+  const adminDb = getAdminFirestore();
+  if (adminDb) {
+    const snap = await adminDb.collection(collectionName).limit(maxLimit).get();
+    return snap.docs.map((d) => ({
+      id: d.id,
+      data: d.data() as Record<string, any>
+    }));
+  }
+
+  const clientDb = getFallbackClientDb();
+  const q = clientQuery(
+    clientCollection(clientDb, collectionName),
+    clientLimit(maxLimit)
+  );
+  const snap = await clientGetDocs(q);
+  return snap.docs.map((d) => ({
+    id: d.id,
+    data: d.data() as Record<string, any>
+  }));
+}
+
 export interface BearerAuthResult {
   valid: boolean;
   statusCode: number;

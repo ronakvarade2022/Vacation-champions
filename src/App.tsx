@@ -36,7 +36,7 @@ import {
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage
 } from './utils/subscriptionAccess';
-import { Trophy, GraduationCap, Lock, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, CheckCircle2, Play, LogIn, UserPlus, ShieldCheck } from 'lucide-react';
+import { Trophy, GraduationCap, Lock, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, CheckCircle2, Play, LogIn, UserPlus, ShieldCheck, ShieldAlert, X } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -59,6 +59,8 @@ const AppContent: React.FC = () => {
     currentStudent,
     isAuthModalOpen,
     setIsAuthModalOpen,
+    sessionSecurityNotice,
+    clearSessionSecurityNotice,
   } = useApp();
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -207,6 +209,44 @@ const AppContent: React.FC = () => {
 
       {/* Main Content Arena */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 pb-12">
+        {sessionSecurityNotice && (
+          <div className="mb-6 rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs font-black uppercase tracking-wider text-rose-900">
+                  Single-Device Session Notice
+                </p>
+                <p className="text-xs sm:text-sm font-bold text-rose-800 leading-snug">
+                  {sessionSecurityNotice}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  clearSessionSecurityNotice();
+                  openAuthModalWithTab(activeRole === 'teacher' ? 'teacher' : 'login');
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-black text-xs cursor-pointer transition-colors"
+              >
+                Sign In Again
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss session notice"
+                onClick={clearSessionSecurityNotice}
+                className="p-2 rounded-xl text-rose-700 hover:bg-rose-100 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Live Interactive Visitor DEMO Playground (All Classes 1st–10th preview, zero DB writes) */}
         {currentTab === 'demo' ? (
           <DemoSectionView
