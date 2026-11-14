@@ -204,10 +204,18 @@ const AppContent: React.FC = () => {
     }
   }, [activeRole, currentUser?.role]);
 
-  // Keep browser tab title consistent
+  // Keep browser tab title dynamic and professional for each portal
   useEffect(() => {
-    document.title = 'mystudyzone.in - Visitor Demo Dashboard';
-  }, [currentTab]);
+    if (currentTab === 'admin' || (activeRole === 'admin' && currentUser?.role === 'admin')) {
+      document.title = 'MyStudyZone – Admin Portal (mystudyzone.in)';
+    } else if (currentStudent?.accountRole === 'teacher') {
+      document.title = 'MyStudyZone – Teacher Portal (mystudyzone.in)';
+    } else if (currentStudent) {
+      document.title = `MyStudyZone – Student Portal • ${activeBoard} ${currentStudent.classLevel}`;
+    } else {
+      document.title = 'MyStudyZone (mystudyzone.in) – Classes 1 to 10 Online Learning Platform';
+    }
+  }, [currentTab, activeRole, currentUser?.role, currentStudent?.id, currentStudent?.accountRole, currentStudent?.classLevel, activeBoard]);
 
   // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=...)
   useEffect(() => {

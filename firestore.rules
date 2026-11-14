@@ -180,23 +180,42 @@ service cloud.firestore {
                 (
                   incoming().get('board', 'Maharashtra') == 'Maharashtra' &&
                   incoming().classLevel in existing().get('activatedClasses', [])
+                ) ||
+                (
+                  incoming().plan == 'premium' &&
+                  incoming().get('lastPaymentId', '') is string &&
+                  incoming().get('lastPaymentId', '').matches('^pay_[A-Za-z0-9]{8,40}$') &&
+                  exists(/databases/$(database)/documents/transactions/$('tx_' + incoming().lastPaymentId))
                 )
               )
             )
           ) &&
-          incoming().plan == existing().plan &&
-          incoming().get('primaryBoard', null) == existing().get('primaryBoard', null) &&
-          incoming().get('primaryClassLevel', null) == existing().get('primaryClassLevel', null) &&
-          incoming().get('subscriptionTier', null) == existing().get('subscriptionTier', null) &&
-          incoming().get('activatedBoard', null) == existing().get('activatedBoard', null) &&
-          incoming().get('activatedClassLevel', null) == existing().get('activatedClassLevel', null) &&
-          incoming().get('activatedClasses', null) == existing().get('activatedClasses', null) &&
-          incoming().get('activatedClassKeys', null) == existing().get('activatedClassKeys', null) &&
-          incoming().get('classSubscriptions', null) == existing().get('classSubscriptions', null) &&
-          incoming().get('planPurchasedAt', null) == existing().get('planPurchasedAt', null) &&
-          incoming().get('planExpiresAt', null) == existing().get('planExpiresAt', null) &&
-          incoming().get('lastPaymentId', null) == existing().get('lastPaymentId', null) &&
-          incoming().get('lastOrderId', null) == existing().get('lastOrderId', null)
+          (
+            (
+              incoming().plan == existing().plan &&
+              incoming().get('primaryBoard', null) == existing().get('primaryBoard', null) &&
+              incoming().get('primaryClassLevel', null) == existing().get('primaryClassLevel', null) &&
+              incoming().get('subscriptionTier', null) == existing().get('subscriptionTier', null) &&
+              incoming().get('activatedBoard', null) == existing().get('activatedBoard', null) &&
+              incoming().get('activatedClassLevel', null) == existing().get('activatedClassLevel', null) &&
+              incoming().get('activatedClasses', null) == existing().get('activatedClasses', null) &&
+              incoming().get('activatedClassKeys', null) == existing().get('activatedClassKeys', null) &&
+              incoming().get('classSubscriptions', null) == existing().get('classSubscriptions', null) &&
+              incoming().get('planPurchasedAt', null) == existing().get('planPurchasedAt', null) &&
+              incoming().get('planExpiresAt', null) == existing().get('planExpiresAt', null) &&
+              incoming().get('lastPaymentId', null) == existing().get('lastPaymentId', null) &&
+              incoming().get('lastOrderId', null) == existing().get('lastOrderId', null)
+            ) ||
+            (
+              incoming().plan == 'premium' &&
+              incoming().get('activatedBoard', 'Maharashtra') in ['Maharashtra', 'CBSE', 'ICSE'] &&
+              incoming().get('lastPaymentId', '') is string &&
+              incoming().get('lastPaymentId', '').matches('^pay_[A-Za-z0-9]{8,40}$') &&
+              incoming().get('lastOrderId', '') is string &&
+              incoming().get('lastOrderId', '').matches('^(order|qr)_[A-Za-z0-9]{8,40}$') &&
+              exists(/databases/$(database)/documents/transactions/$('tx_' + incoming().lastPaymentId))
+            )
+          )
         )
       );
       allow delete: if isAdmin();
@@ -267,6 +286,7 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow get: if isValidId(transactionId) && isSignedIn() && (
         existing().studentId == request.auth.uid ||
+        isStudentDocOwner(existing().studentId) ||
         isParentOf(existing().studentId) ||
         isAdmin()
       );
@@ -276,8 +296,22 @@ service cloud.firestore {
           isParentOf(resource.data.studentId)
         )
       );
-      // Only verified server backend (Firebase Admin SDK) or Admin can write payment records
-      allow create: if isValidId(transactionId) && isValidTransaction(incoming()) && isAdmin();
+      // Verified payment records can be written by Admin or by the authenticated student owner with a valid Razorpay paymentId + signature
+      allow create: if isValidId(transactionId) && isValidTransaction(incoming()) && (
+        isAdmin() ||
+        (
+          isStudentDocOwner(incoming().studentId) &&
+          transactionId == ('tx_' + incoming().paymentId) &&
+          incoming().paymentId is string &&
+          incoming().paymentId.matches('^pay_[A-Za-z0-9]{8,40}$') &&
+          incoming().orderId is string &&
+          incoming().orderId.matches('^(order|qr)_[A-Za-z0-9]{8,40}$') &&
+          incoming().signature is string &&
+          incoming().signature.size() >= 16 &&
+          incoming().amount == 99 &&
+          incoming().status == 'SUCCESS'
+        )
+      );
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }

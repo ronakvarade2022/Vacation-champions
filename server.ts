@@ -204,7 +204,8 @@ app.post('/api/razorpay/create-order', async (req: Request, res: Response) => {
   try {
     const rawPlan = req.body.planId || req.body.plan || 'premium';
     const planId = rawPlan === 'premium' ? 'premium' : null;
-    const { studentId, studentName, email, mobile, selectedClass, classLevel, referralCode } = req.body;
+    const { studentId, studentName, email, mobile, selectedBoard, board, selectedClass, classLevel, referralCode } = req.body;
+    const normalizedBoard = normalizeBackendBoard(selectedBoard || board);
     const normalizedClass = normalizeBackendClassLevel(selectedClass || classLevel) || undefined;
 
     if (!studentId) {
@@ -222,11 +223,12 @@ app.post('/api/razorpay/create-order', async (req: Request, res: Response) => {
         studentName,
         email,
         mobile,
+        selectedBoard: normalizedBoard,
         selectedClass: normalizedClass,
         referralCode: referralCode ? String(referralCode).trim() : undefined
       });
       console.log(
-        `[Razorpay ${orderPayload.mode}] Created order: ${orderPayload.orderId} for student ${studentId} (${normalizedClass || 'default'}) (₹${orderPayload.amountRupees} / ${orderPayload.amount} paise)`
+        `[Razorpay ${orderPayload.mode}] Created order: ${orderPayload.orderId} for student ${studentId} (${normalizedBoard} • ${normalizedClass || 'default'}) (₹${orderPayload.amountRupees} / ${orderPayload.amount} paise)`
       );
       return res.json(orderPayload);
     } catch (rzpError: any) {
@@ -247,7 +249,8 @@ app.post('/api/razorpay/create-qr', async (req: Request, res: Response) => {
   try {
     const rawPlan = req.body.planId || req.body.plan || 'premium';
     const planId = rawPlan === 'premium' ? 'premium' : null;
-    const { studentId, studentName, email, mobile, selectedClass, classLevel, referralCode } = req.body;
+    const { studentId, studentName, email, mobile, selectedBoard, board, selectedClass, classLevel, referralCode } = req.body;
+    const normalizedBoard = normalizeBackendBoard(selectedBoard || board);
     const normalizedClass = normalizeBackendClassLevel(selectedClass || classLevel) || undefined;
 
     if (!studentId) {
@@ -264,11 +267,12 @@ app.post('/api/razorpay/create-qr', async (req: Request, res: Response) => {
       studentName,
       email,
       mobile,
+      selectedBoard: normalizedBoard,
       selectedClass: normalizedClass,
       referralCode: referralCode ? String(referralCode).trim() : undefined
     });
 
-    console.log(`[Razorpay QR] Dynamic QR code created: ${qrPayload.qrId} for student ${studentId} (${normalizedClass || 'default'}) (₹${qrPayload.amountRupees})`);
+    console.log(`[Razorpay QR] Dynamic QR code created: ${qrPayload.qrId} for student ${studentId} (${normalizedBoard} • ${normalizedClass || 'default'}) (₹${qrPayload.amountRupees})`);
     return res.json(qrPayload);
   } catch (error: any) {
     console.error('[Create QR Error]:', error);
@@ -741,19 +745,24 @@ app.post('/api/razorpay/verify-payment', async (req: Request, res: Response) => 
 app.post('/api/razorpay/payment-failed', (req: Request, res: Response) => {
   try {
     const {
-      orderId = `order_failed_${Date.now()}`,
-      paymentId = `pay_failed_${Date.now()}`,
+      orderId = `order_cancelled_${Date.now()}`,
+      paymentId = `pay_cancelled_${Date.now()}`,
       planId = 'premium',
       studentId = 'unknown_student',
       studentName = 'Student',
       email = '',
       mobile = '',
-      method = 'RAZORPAY',
-      reason = 'Payment failed or cancelled by user'
+      selectedBoard,
+      board,
+      selectedClass,
+      classLevel,
+      method = 'RAZORPAY'
     } = req.body || {};
 
     const validPlanId: 'premium' = 'premium';
     const amount = 99;
+    const normalizedBoard = normalizeBackendBoard(selectedBoard || board);
+    const normalizedClass = normalizeBackendClassLevel(selectedClass || classLevel) || undefined;
 
     const failedRecord: ServerTransaction = {
       id: `tx_failed_${Date.now()}`,
@@ -762,8 +771,12 @@ app.post('/api/razorpay/payment-failed', (req: Request, res: Response) => {
       studentName: String(studentName),
       parentEmail: String(email),
       parentMobile: String(mobile),
+      selectedBoard: normalizedBoard,
+      selectedClass: normalizedClass,
       planId: validPlanId,
-      planTitle: 'PREMIUM PLAN – ₹99 – 365 Days (1 Year)',
+      planTitle: normalizedClass
+        ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹99 – 365 Days (1 Year)`
+        : `PREMIUM PLAN (${normalizedBoard}) – ₹99 – 365 Days (1 Year)`,
       amount,
       currency: 'INR',
       orderId: String(orderId),
@@ -774,8 +787,9 @@ app.post('/api/razorpay/payment-failed', (req: Request, res: Response) => {
       createdAt: new Date().toISOString()
     };
 
-    transactionLedger.unshift(failedRecord);
-    console.log(`[Payment Failed/Cancelled] Student: ${studentId} | Plan: ${validPlanId} | Reason: ${reason}`);
+    if (String(studentId) !== 'guest_audit') {
+      transactionLedger.unshift(failedRecord);
+    }
 
     return res.json({
       success: true,

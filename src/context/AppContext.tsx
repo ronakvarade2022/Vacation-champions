@@ -3383,19 +3383,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     setTransactions(prev => [txWithBoardClass, ...prev.filter(t => t.paymentId !== txWithBoardClass.paymentId)]);
 
-    saveTransactionToFirestore(txWithBoardClass).catch(() => {});
-    saveStudentProfileToFirestore(updatedStudent).catch(() => {});
-    saveSubscriptionToFirestore(updatedStudent.id, {
-      plan: txWithBoardClass.planId,
-      selectedBoard: targetBoard,
-      selectedClass: targetClass,
-      planPurchasedAt: resolvedPurchasedAt,
-      planExpiresAt: resolvedExpiresAt,
-      currentExpiresAt: targetExistingExpiry,
-      paymentId: txWithBoardClass.paymentId,
-      orderId: txWithBoardClass.orderId,
-      amountInr: txWithBoardClass.amount
-    }).catch(() => {});
+    (async () => {
+      try {
+        await saveTransactionToFirestore(txWithBoardClass);
+      } catch {
+        // Ignore if already saved by backend
+      }
+      try {
+        await saveStudentProfileToFirestore(updatedStudent);
+      } catch {
+        // Non-blocking
+      }
+      try {
+        await saveSubscriptionToFirestore(updatedStudent.id, {
+          plan: txWithBoardClass.planId,
+          selectedBoard: targetBoard,
+          selectedClass: targetClass,
+          planPurchasedAt: resolvedPurchasedAt,
+          planExpiresAt: resolvedExpiresAt,
+          currentExpiresAt: targetExistingExpiry,
+          paymentId: txWithBoardClass.paymentId,
+          orderId: txWithBoardClass.orderId,
+          amountInr: txWithBoardClass.amount
+        });
+      } catch {
+        // Non-blocking
+      }
+    })();
 
     (async () => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
