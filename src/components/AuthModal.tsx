@@ -25,6 +25,8 @@ interface AuthModalProps {
   onClose: () => void;
   defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot';
   initialEmail?: string;
+  initialBoard?: EducationBoard;
+  initialClass?: ClassLevel;
   onSuccess?: () => void;
   onExistingAccountProceedToSubscription?: (targetClass: ClassLevel, targetBoard?: EducationBoard) => void;
 }
@@ -49,6 +51,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   defaultTab = 'login',
   initialEmail = '',
+  initialBoard,
+  initialClass,
   onSuccess,
   onExistingAccountProceedToSubscription,
 }) => {
@@ -144,6 +148,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setLoginEmail(initialEmail);
       setResetEmail(initialEmail);
     }
+    if (initialBoard) {
+      setRegBoard(initialBoard);
+    }
+    if (initialClass) {
+      setRegClass(initialClass);
+    }
     try {
       const params = new URLSearchParams(window.location.search);
       const urlRef = sanitizeReferralCode(
@@ -161,7 +171,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setExistingAccountPassword('');
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
-  }, [defaultTab, initialEmail, isOpen]);
+  }, [defaultTab, initialEmail, initialBoard, initialClass, isOpen]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {

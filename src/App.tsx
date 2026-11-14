@@ -59,6 +59,12 @@ const WorksheetsView = lazy(() =>
 const StudyMaterialsView = lazy(() =>
   import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
 );
+const PublicHomeDashboard = lazy(() =>
+  import('./components/PublicHomeDashboard').then((m) => ({ default: m.PublicHomeDashboard }))
+);
+const PublicZoneExplorerView = lazy(() =>
+  import('./components/PublicZoneExplorerView').then((m) => ({ default: m.PublicZoneExplorerView }))
+);
 
 const PortalLoadingCard: React.FC = () => (
   <div className="bg-white rounded-3xl p-8 border border-amber-200/80 shadow-xs space-y-4 animate-pulse">
@@ -72,6 +78,9 @@ const PortalLoadingCard: React.FC = () => (
   </div>
 );
 import { ClassLevel, EducationBoard, SubjectName, QuizLevel } from './types';
+import { MainMenuId, NavSubActionId } from './data/navigationConfig';
+import type { HomeScrollTarget } from './components/PublicHomeDashboard';
+import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
 import {
   canAccessFeature,
   canAccessSubject,
@@ -81,7 +90,7 @@ import {
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage
 } from './utils/subscriptionAccess';
-import { Trophy, GraduationCap, Lock, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, CheckCircle2, Play, LogIn, UserPlus, ShieldCheck, ShieldAlert, X } from 'lucide-react';
+import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -100,6 +109,7 @@ const FEATURE_TITLES: Record<string, string> = {
 const AppContent: React.FC = () => {
   const {
     activeRole,
+    switchRole,
     currentUser,
     currentStudent,
     activeBoard,
@@ -122,8 +132,70 @@ const AppContent: React.FC = () => {
   const [membershipTargetClass, setMembershipTargetClass] = useState<ClassLevel | undefined>(undefined);
   const [membershipTargetBoard, setMembershipTargetBoard] = useState<EducationBoard | undefined>(undefined);
 
+  // Public Home Dashboard & Navigation Explorer State
+  const [publicBoard, setPublicBoard] = useState<EducationBoard>('Maharashtra');
+  const [publicClass, setPublicClass] = useState<ClassLevel>('Class 5');
+  const [homeScrollTarget, setHomeScrollTarget] = useState<HomeScrollTarget>(null);
+  const [demoInitialTab, setDemoInitialTab] = useState<
+    'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles'
+  >('overview');
+  const [explorerZone, setExplorerZone] = useState<ExplorerZoneType>('study-material');
+  const [explorerSubFocus, setExplorerSubFocus] = useState<string>('notes');
+
+  // Desktop Site / Mobile View preference (persisted in localStorage)
+  const [viewMode, setViewMode] = useState<'auto' | 'desktop'>(() => {
+    try {
+      return localStorage.getItem('mystudyzone_view_mode') === 'desktop' ? 'desktop' : 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mystudyzone_view_mode', viewMode);
+    } catch {
+      // Ignore storage errors
+    }
+
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('desktop-site-active', viewMode === 'desktop');
+      const metaViewport = document.querySelector('meta[name="viewport"]');
+      if (metaViewport) {
+        const isSmallHardware =
+          typeof window !== 'undefined' &&
+          window.screen?.width > 0 &&
+          window.screen.width < 1024;
+        metaViewport.setAttribute(
+          'content',
+          viewMode === 'desktop'
+            ? isSmallHardware
+              ? 'width=1280, user-scalable=yes, viewport-fit=cover'
+              : 'width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover'
+            : 'width=device-width, initial-scale=1.0, viewport-fit=cover'
+        );
+      }
+    }
+  }, [viewMode]);
+
   const isLearningPortal = activeRole === 'student' || activeRole === 'teacher';
   const isTeacherPortal = activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
+
+  useEffect(() => {
+    if (currentStudent) {
+      setPublicBoard(activeBoard);
+      setPublicClass(currentStudent.classLevel);
+      if (currentTab === 'public-home' || currentTab === 'explore-zone') {
+        setCurrentTab('dashboard');
+      }
+    }
+  }, [currentStudent?.id, activeBoard]);
+
+  useEffect(() => {
+    if (activeRole === 'admin' && currentUser?.role === 'admin' && (currentTab === 'public-home' || currentTab === 'explore-zone' || currentTab === 'dashboard')) {
+      setCurrentTab('admin');
+    }
+  }, [activeRole, currentUser?.role]);
 
   // Keep browser tab title consistent
   useEffect(() => {
@@ -191,8 +263,8 @@ const AppContent: React.FC = () => {
     targetBoard?: EducationBoard
   ) => {
     setMembershipInitialPlan('premium');
-    setMembershipTargetClass(targetClass || currentStudent?.classLevel);
-    setMembershipTargetBoard(targetBoard || activeBoard);
+    setMembershipTargetClass(targetClass || currentStudent?.classLevel || publicClass);
+    setMembershipTargetBoard(targetBoard || (currentStudent ? activeBoard : publicBoard));
     setIsMembershipOpen(true);
   };
 
@@ -201,10 +273,18 @@ const AppContent: React.FC = () => {
     setIsAuthModalOpen(true);
   };
 
+  const openDemoWithTab = (
+    tab: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles' = 'overview'
+  ) => {
+    setDemoInitialTab(tab);
+    setCurrentTab('demo');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
     const alwaysOpenTabs = new Set([
-      'demo', 'dashboard', 'profile', 'account', 'subscription', 'worksheets',
-      'study-materials', 'study-material',
+      'demo', 'dashboard', 'public-home', 'explore-zone', 'profile', 'account', 'subscription',
+      'worksheets', 'study-materials', 'study-material',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin'
     ]);
@@ -252,6 +332,229 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleMenuAction = (actionId: NavSubActionId) => {
+    const isSignedInLearner = Boolean(isLearningPortal && currentStudent);
+
+    switch (actionId) {
+      // HOME
+      case 'home-overview': {
+        setHomeScrollTarget('home-overview');
+        setCurrentTab('dashboard');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      case 'home-how-it-works': {
+        setHomeScrollTarget('home-how-it-works');
+        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+        return;
+      }
+      case 'home-why-choose-us': {
+        setHomeScrollTarget('home-why-choose-us');
+        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+        return;
+      }
+
+      // COURSES
+      case 'course-maharashtra':
+      case 'course-cbse':
+      case 'course-icse': {
+        const targetBoard: EducationBoard =
+          actionId === 'course-cbse'
+            ? 'CBSE'
+            : actionId === 'course-icse'
+            ? 'ICSE'
+            : 'Maharashtra';
+        setPublicBoard(targetBoard);
+        setHomeScrollTarget('courses-section');
+        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+        return;
+      }
+
+      // STUDY MATERIAL
+      case 'sm-notes':
+      case 'sm-important-questions':
+      case 'sm-textbook-learning':
+      case 'sm-question-banks': {
+        if (isSignedInLearner) {
+          handleNavigateTab(actionId === 'sm-question-banks' ? 'quizzes' : 'study-materials');
+        } else {
+          setExplorerZone('study-material');
+          setExplorerSubFocus(actionId);
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+
+      // PRACTICE ZONE
+      case 'pz-mcq':
+      case 'pz-chapter':
+      case 'pz-worksheets':
+      case 'pz-daily': {
+        if (isSignedInLearner) {
+          if (actionId === 'pz-worksheets') handleNavigateTab('worksheets');
+          else if (actionId === 'pz-daily') handleNavigateTab('cricket');
+          else handleNavigateTab('quizzes');
+        } else {
+          setExplorerZone('practice-zone');
+          setExplorerSubFocus(actionId);
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+
+      // EXAM ZONE
+      case 'ez-mock-tests':
+      case 'ez-model-papers':
+      case 'ez-chapter-tests':
+      case 'ez-exam-practice': {
+        if (isSignedInLearner) {
+          if (actionId === 'ez-mock-tests' || actionId === 'ez-exam-practice') {
+            handleNavigateTab('scholarship');
+          } else {
+            handleNavigateTab('quizzes');
+          }
+        } else {
+          setExplorerZone('exam-zone');
+          setExplorerSubFocus(actionId);
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+
+      // PERFORMANCE
+      case 'perf-tracking':
+      case 'perf-results':
+      case 'perf-analysis': {
+        if (isSignedInLearner) {
+          if (actionId === 'perf-results') handleNavigateTab('certificates');
+          else if (actionId === 'perf-analysis') handleNavigateTab('profile');
+          else handleNavigateTab('dashboard');
+        } else {
+          setExplorerZone('performance');
+          setExplorerSubFocus(actionId);
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+
+      // PLANS & PRICING
+      case 'plan-maharashtra':
+      case 'plan-cbse':
+      case 'plan-icse': {
+        const targetBoard: EducationBoard =
+          actionId === 'plan-cbse'
+            ? 'CBSE'
+            : actionId === 'plan-icse'
+            ? 'ICSE'
+            : 'Maharashtra';
+        setPublicBoard(targetBoard);
+        setHomeScrollTarget('plans-pricing');
+        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+        return;
+      }
+
+      // MY ACCOUNT
+      case 'acc-login': {
+        if (isSignedInLearner) {
+          handleNavigateTab('profile');
+        } else {
+          openAuthModalWithTab(activeRole === 'teacher' ? 'teacher' : 'login');
+        }
+        return;
+      }
+      case 'acc-register': {
+        openAuthModalWithTab('register');
+        return;
+      }
+      case 'acc-classes': {
+        if (isSignedInLearner) {
+          handleNavigateTab('profile');
+        } else {
+          openAuthModalWithTab('login');
+        }
+        return;
+      }
+      case 'acc-subscription': {
+        if (isSignedInLearner && currentStudent) {
+          openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard);
+        } else {
+          setExplorerZone('plans');
+          setExplorerSubFocus('subscription');
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+    }
+  };
+
+  const getActiveMenuId = (): MainMenuId => {
+    if (currentTab === 'explore-zone') {
+      if (explorerZone === 'study-material') return 'study-material';
+      if (explorerZone === 'practice-zone') return 'practice-zone';
+      if (explorerZone === 'exam-zone') return 'exam-zone';
+      if (explorerZone === 'performance') return 'performance';
+      if (explorerZone === 'plans') return 'plans';
+    }
+    if (currentTab === 'study-materials') return 'study-material';
+    if (currentTab === 'worksheets' || currentTab === 'quizzes' || currentTab === 'cricket' || currentTab === 'puzzles' || currentTab === 'sudoku') {
+      return 'practice-zone';
+    }
+    if (currentTab === 'scholarship') return 'exam-zone';
+    if (currentTab === 'certificates' || currentTab === 'leaderboard') return 'performance';
+    if (currentTab === 'profile' || currentTab === 'account' || currentTab === 'subscription') {
+      return 'account';
+    }
+    if ((currentTab === 'dashboard' || currentTab === 'public-home') && homeScrollTarget === 'courses-section') {
+      return 'courses';
+    }
+    if ((currentTab === 'dashboard' || currentTab === 'public-home') && homeScrollTarget === 'plans-pricing') {
+      return 'plans';
+    }
+    return 'home';
+  };
+
+  const handleOpenRolePanel = (
+    panel: 'student' | 'teacher' | 'admin',
+    intent: 'login' | 'register' = 'login'
+  ) => {
+    if (panel === 'admin') {
+      if (currentUser?.role === 'admin') {
+        switchRole('admin');
+        setCurrentTab('admin');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      openAuthModalWithTab('admin');
+      return;
+    }
+
+    if (panel === 'teacher') {
+      if (currentStudent && currentStudent.accountRole === 'teacher') {
+        switchRole('teacher');
+        setCurrentTab('dashboard');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      openAuthModalWithTab('teacher');
+      return;
+    }
+
+    if (activeRole !== 'student') {
+      switchRole('student');
+    }
+    if (currentStudent && intent === 'login') {
+      setCurrentTab('dashboard');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    openAuthModalWithTab(intent === 'register' ? 'register' : 'login');
+  };
+
   const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
   const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
 
@@ -261,12 +564,25 @@ const AppContent: React.FC = () => {
       <Header
         currentTab={currentTab}
         setCurrentTab={(tab) => handleNavigateTab(tab)}
+        onMenuAction={handleMenuAction}
+        activeMenuId={getActiveMenuId()}
         onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
+        onOpenPanel={handleOpenRolePanel}
         onOpenMembership={(targetClass, targetBoard) => openMembershipWithPlan('premium', targetClass, targetBoard)}
+        viewMode={viewMode}
+        onToggleViewMode={() =>
+          setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))
+        }
       />
 
       {/* Main Content Arena */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 pb-12">
+      <main
+        className={`flex-1 w-full mx-auto pt-6 pb-12 ${
+          viewMode === 'desktop'
+            ? 'max-w-[1680px] px-5 sm:px-8'
+            : 'max-w-7xl px-4 sm:px-6'
+        }`}
+      >
         {sessionSecurityNotice && (
           <div className="mb-6 rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -309,10 +625,83 @@ const AppContent: React.FC = () => {
         <Suspense fallback={<PortalLoadingCard />}>
           {currentTab === 'demo' ? (
             <DemoSectionView
-              onUpgradeClick={() => openMembershipWithPlan('premium')}
+              onUpgradeClick={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
               onRegisterClick={() => openAuthModalWithTab('register')}
               onSignInClick={() => openAuthModalWithTab('login')}
               isAuthenticated={Boolean(currentStudent)}
+              initialBoard={currentStudent ? activeBoard : publicBoard}
+              initialClass={currentStudent ? currentStudent.classLevel : publicClass}
+              initialInteractiveTab={demoInitialTab}
+              onBoardSelectionChange={setPublicBoard}
+              onClassSelectionChange={setPublicClass}
+            />
+          ) : currentTab === 'explore-zone' ? (
+            <PublicZoneExplorerView
+              zone={explorerZone}
+              subFocus={explorerSubFocus}
+              selectedBoard={publicBoard}
+              selectedClass={publicClass}
+              onSelectBoard={setPublicBoard}
+              onSelectClass={setPublicClass}
+              onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
+              onOpenAuth={(tab) => openAuthModalWithTab(tab)}
+              onOpenMembership={(targetClass, targetBoard) =>
+                openMembershipWithPlan('premium', targetClass, targetBoard)
+              }
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'public-home' : 'dashboard');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          ) : currentTab === 'public-home' ? (
+            <PublicHomeDashboard
+              selectedBoard={publicBoard}
+              selectedClass={publicClass}
+              onSelectBoard={setPublicBoard}
+              onSelectClass={setPublicClass}
+              scrollTarget={homeScrollTarget}
+              onClearScrollTarget={() => setHomeScrollTarget(null)}
+              onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
+              onNavigateZone={(tab, subSection, subject) => {
+                if (isLearningPortal && currentStudent) {
+                  if (tab === 'performance') {
+                    handleNavigateTab('dashboard');
+                  } else {
+                    handleNavigateTab(tab, subject);
+                  }
+                } else {
+                  if (tab === 'faqs') {
+                    handleNavigateTab('faqs');
+                    return;
+                  }
+                  if (tab === 'study-materials') setExplorerZone('study-material');
+                  else if (tab === 'worksheets' || tab === 'quizzes' || tab === 'cricket') {
+                    setExplorerZone('practice-zone');
+                  } else if (tab === 'scholarship') {
+                    setExplorerZone('exam-zone');
+                  } else if (tab === 'performance') {
+                    setExplorerZone('performance');
+                  } else if (tab === 'stories') {
+                    openDemoWithTab('overview');
+                    return;
+                  } else {
+                    setExplorerZone('study-material');
+                  }
+                  setExplorerSubFocus(subSection || 'overview');
+                  setCurrentTab('explore-zone');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              onOpenAuth={(tab) => openAuthModalWithTab(tab)}
+              onOpenPanel={handleOpenRolePanel}
+              onOpenMembership={(targetClass, targetBoard) =>
+                openMembershipWithPlan('premium', targetClass, targetBoard)
+              }
+              isAuthenticated={Boolean(currentStudent || currentUser?.role === 'admin')}
+              currentRole={activeRole}
+              currentUserName={currentStudent?.name || currentUser?.displayName}
+              isDesktopMode={viewMode === 'desktop'}
             />
           ) : currentTab === 'referrals' ? (
             <ReferralHubView
@@ -352,138 +741,47 @@ const AppContent: React.FC = () => {
           />
         ) : (
           <>
-            {/* Signed-Out Public Welcome Screen (Explore Demo + Sign In + Register) */}
+            {/* Signed-Out Public Home Dashboard */}
             {isLearningPortal && !currentStudent && (
-              <div className="space-y-8 animate-in fade-in duration-200">
-                <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-amber-950 text-white p-7 sm:p-10 shadow-2xl border border-amber-400/20">
-                  <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                    <div className="lg:col-span-7 space-y-4">
-                      <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-300 text-xs font-black uppercase tracking-wider">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Standards 1st to 10th • Maharashtra • CBSE • ICSE Boards</span>
-                      </span>
-                      <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-black leading-tight tracking-tight">
-                        MyStudyZone
-                        <span className="block text-amber-300 text-xl sm:text-2xl font-extrabold mt-1">
-                          Learn, Practice, Explore and Achieve Excellence.
-                        </span>
-                      </h1>
-                      <p className="text-sm sm:text-base text-slate-200 leading-relaxed max-w-2xl">
-                        Explore interactive quizzes across every subject, chapter-wise online worksheets, 95 English &amp; Marathi audio stories, Sudoku, brain riddles, Drawing Studio, Cricket quizzes, and MSCE Scholarship preparation — all before you decide to register or subscribe.
-                      </p>
-
-                      {/* Primary Visitor Actions */}
-                      <div className="flex flex-wrap items-center gap-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleNavigateTab('demo')}
-                          className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black text-sm shadow-lg transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <Play className="w-4 h-4 fill-current" />
-                          <span>Explore Demo (Classes 1st–10th)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openAuthModalWithTab('register')}
-                          className="px-5 py-3.5 rounded-2xl bg-white hover:bg-amber-50 text-slate-950 font-black text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <UserPlus className="w-4 h-4 text-indigo-700" />
-                          <span>Register Free Account</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openAuthModalWithTab(activeRole === 'teacher' ? 'teacher' : 'login')}
-                          className="px-5 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/25 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <LogIn className="w-4 h-4" />
-                          <span>Sign In ({activeRole === 'teacher' ? 'Teacher' : 'Student'})</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Right Quick Overview Card */}
-                    <div className="lg:col-span-5 bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/15 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black uppercase tracking-wider text-amber-300">
-                          What You Can Try in Demo Mode
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-[10px] font-black">
-                          100% Free Preview
-                        </span>
-                      </div>
-                      <ul className="space-y-2.5 text-xs text-slate-100 font-semibold">
-                        <li className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Switch &amp; preview any class from Standard 1st to 10th</span>
-                        </li>
-                        <li className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Try live English &amp; Mathematics sample worksheets</span>
-                        </li>
-                        <li className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Play 4-Level quizzes, 4×4 Sudoku &amp; Brain Riddles</span>
-                        </li>
-                        <li className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Listen to English &amp; Marathi stories with speed control</span>
-                        </li>
-                        <li className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Preview Dashboard &amp; Student Progress Analytics</span>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Two Simple Membership Plans Overview */}
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4">
-                    <div className="space-y-2">
-                      <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black uppercase tracking-wider">
-                        Free Plan • Lifetime
-                      </span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-900">₹0</span>
-                        <span className="text-xs font-bold text-emerald-700">/ Forever</span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                        Every registered Student &amp; Teacher gets lifetime access to 2 Demo Worksheets (English &amp; Mathematics for their selected class), English &amp; Mathematics 4-level quizzes, Brain Puzzles, and Sudoku.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAuthModalWithTab('register')}
-                      className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs cursor-pointer transition-all"
-                    >
-                      Create Free Account
-                    </button>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-amber-50 via-white to-orange-50 rounded-3xl p-6 border-2 border-amber-400 shadow-sm flex flex-col justify-between space-y-4">
-                    <div className="space-y-2">
-                      <span className="inline-block px-3 py-1 rounded-full bg-amber-500 text-slate-950 text-[11px] font-black uppercase tracking-wider">
-                        Premium Plan • 365 Days (1 Year)
-                      </span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-amber-700">₹99</span>
-                        <span className="text-xs font-bold text-slate-600">/ 365 Days from verified purchase</span>
-                      </div>
-                      <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                        Unlocks all worksheets &amp; subjects for your registered class, 45 Story World + 50 Shivaji Maharaj audio stories, Drawing Studio, Cricket Quizzes, MSCE Scholarship Prep, AI Skills Academy, Certificates &amp; ₹5 Referral Wallet.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleNavigateTab('demo')}
-                      className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs cursor-pointer shadow-xs transition-all"
-                    >
-                      Try Live Demo Before Subscribing →
-                    </button>
-                  </div>
-                </section>
-              </div>
+              <PublicHomeDashboard
+                selectedBoard={publicBoard}
+                selectedClass={publicClass}
+                onSelectBoard={setPublicBoard}
+                onSelectClass={setPublicClass}
+                scrollTarget={homeScrollTarget}
+                onClearScrollTarget={() => setHomeScrollTarget(null)}
+                onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
+                onNavigateZone={(tab, subSection) => {
+                  if (tab === 'faqs') {
+                    handleNavigateTab('faqs');
+                    return;
+                  }
+                  if (tab === 'study-materials') setExplorerZone('study-material');
+                  else if (tab === 'worksheets' || tab === 'quizzes' || tab === 'cricket') {
+                    setExplorerZone('practice-zone');
+                  } else if (tab === 'scholarship') {
+                    setExplorerZone('exam-zone');
+                  } else if (tab === 'performance') {
+                    setExplorerZone('performance');
+                  } else if (tab === 'stories') {
+                    openDemoWithTab('overview');
+                    return;
+                  } else {
+                    setExplorerZone('study-material');
+                  }
+                  setExplorerSubFocus(subSection || 'overview');
+                  setCurrentTab('explore-zone');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onOpenAuth={(tab) => openAuthModalWithTab(tab)}
+                onOpenPanel={handleOpenRolePanel}
+                onOpenMembership={(targetClass, targetBoard) =>
+                  openMembershipWithPlan('premium', targetClass, targetBoard)
+                }
+                isAuthenticated={false}
+                currentRole={activeRole}
+                isDesktopMode={viewMode === 'desktop'}
+              />
             )}
 
             {/* Authenticated Student Portal & Teacher Portal Content */}
@@ -739,6 +1037,8 @@ const AppContent: React.FC = () => {
         isOpen={isAuthModalOpen || isAuthOpen}
         defaultTab={authDefaultTab}
         initialEmail={authInitialEmail}
+        initialBoard={publicBoard}
+        initialClass={publicClass}
         onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
           openMembershipWithPlan('premium', targetClass, targetBoard);
         }}
@@ -772,47 +1072,146 @@ const AppContent: React.FC = () => {
         }}
       />
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-amber-200/80 py-8 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 space-y-3">
-          <div className="flex items-center justify-center gap-2 font-display font-bold text-amber-900 text-sm">
-            <Trophy className="w-4 h-4 text-amber-600" />
-            <span>MyStudyZone – An Interactive Learning Platform for Students</span>
-          </div>
-          <p className="text-amber-800 font-bold text-xs">
-            Learn, Practice, Explore and Achieve Excellence.
-          </p>
-          <p className="text-slate-600 text-xs">
-            Interactive learning platform for Classes 1st to 10th • All Subjects • 4 Quiz Levels • Online Worksheets • Scholarship Prep • 45 Audio Stories • Drawing &amp; Cricket Quizzes.
-          </p>
+      {/* Professional Education Platform Footer */}
+      <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-12 pb-8 text-xs">
+        <div
+          className={`mx-auto space-y-10 ${
+            viewMode === 'desktop'
+              ? 'max-w-[1680px] w-full px-5 sm:px-8'
+              : 'max-w-7xl px-4 sm:px-6'
+          }`}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Brand Column */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 font-display font-extrabold text-white text-base">
+                <span className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center">
+                  <Trophy className="w-4 h-4" />
+                </span>
+                <span>MyStudyZone.in</span>
+              </div>
+              <p className="text-slate-400 leading-relaxed">
+                Complete school learning platform for Standards 1st to 10th across Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE).
+              </p>
+              <p className="text-[11px] font-bold text-amber-300">
+                Learn, Practice, Explore and Achieve Excellence.
+              </p>
+            </div>
 
-          {/* Quick Informational & Compliance Links */}
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pt-2 text-[11px] text-slate-600 font-bold border-t border-slate-100">
-            <button type="button" onClick={() => handleNavigateTab('about')} className="hover:text-amber-800 cursor-pointer">About Us</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('contact')} className="hover:text-amber-800 cursor-pointer">Contact Us</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('help-support')} className="hover:text-amber-800 cursor-pointer">Help &amp; Support</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('faqs')} className="hover:text-amber-800 cursor-pointer">FAQs</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('grievance')} className="hover:text-amber-800 cursor-pointer">Grievance Redressal</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('terms')} className="hover:text-amber-800 cursor-pointer">Terms &amp; Conditions</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('privacy')} className="hover:text-amber-800 cursor-pointer">Privacy Policy</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('refund')} className="hover:text-amber-800 cursor-pointer">Refund Policy</button>
-            <span>•</span>
-            <button type="button" onClick={() => handleNavigateTab('disclaimer')} className="hover:text-amber-800 cursor-pointer">Educational Disclaimer</button>
+            {/* Education Boards Column */}
+            <div className="space-y-3">
+              <h3 className="text-white font-display font-extrabold uppercase tracking-wider text-[11px]">
+                Education Boards (Classes 1–10)
+              </h3>
+              <ul className="space-y-2 text-slate-400 font-semibold">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('course-maharashtra')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    Maharashtra State Board (SSC)
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('course-cbse')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    CBSE Board (NCERT / NCF-SE)
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('course-icse')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    ICSE Board (CISCE Curriculum)
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => openDemoWithTab('live-quiz')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    Free Interactive Visitor Demo (2 Qs/Class)
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Learning Zones & Plans Column */}
+            <div className="space-y-3">
+              <h3 className="text-white font-display font-extrabold uppercase tracking-wider text-[11px]">
+                Learning Zones &amp; Plans
+              </h3>
+              <ul className="space-y-2 text-slate-400 font-semibold">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('sm-notes')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    Study Material &amp; Chapter Notes
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('pz-worksheets')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    Practice Zone &amp; Worksheets
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('ez-mock-tests')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    Exam Zone &amp; Mock Tests
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleMenuAction('plan-maharashtra')}
+                    className="hover:text-amber-300 cursor-pointer transition-colors"
+                  >
+                    Plans &amp; Pricing (Free ₹0 · Premium ₹99/Yr)
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Support & Policies Column */}
+            <div className="space-y-3">
+              <h3 className="text-white font-display font-extrabold uppercase tracking-wider text-[11px]">
+                Support &amp; Compliance
+              </h3>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-slate-400 font-semibold">
+                <button type="button" onClick={() => handleNavigateTab('about')} className="text-left hover:text-amber-300 cursor-pointer">About Us</button>
+                <button type="button" onClick={() => handleNavigateTab('contact')} className="text-left hover:text-amber-300 cursor-pointer">Contact Us</button>
+                <button type="button" onClick={() => handleNavigateTab('help-support')} className="text-left hover:text-amber-300 cursor-pointer">Help &amp; Support</button>
+                <button type="button" onClick={() => handleNavigateTab('faqs')} className="text-left hover:text-amber-300 cursor-pointer">FAQs</button>
+                <button type="button" onClick={() => handleNavigateTab('grievance')} className="text-left hover:text-amber-300 cursor-pointer">Grievance</button>
+                <button type="button" onClick={() => handleNavigateTab('terms')} className="text-left hover:text-amber-300 cursor-pointer">Terms</button>
+                <button type="button" onClick={() => handleNavigateTab('privacy')} className="text-left hover:text-amber-300 cursor-pointer">Privacy Policy</button>
+                <button type="button" onClick={() => handleNavigateTab('refund')} className="text-left hover:text-amber-300 cursor-pointer">Refund Policy</button>
+                <button type="button" onClick={() => handleNavigateTab('disclaimer')} className="text-left hover:text-amber-300 cursor-pointer col-span-2">Educational Disclaimer</button>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-1 text-[11px] text-slate-400 font-medium">
-            <span>FREE PLAN – ₹0 – Lifetime</span>
-            <span>•</span>
-            <span>PREMIUM PLAN – ₹99 – 365 Days (1 Year)</span>
-            <span>•</span>
-            <span>English &amp; Marathi Female Story Voices</span>
+          <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
+            <p>
+              FREE PLAN – ₹0 Lifetime · PREMIUM PLAN – ₹99 / 365 Days per Board &amp; Class · Single-Device Session Protection
+            </p>
+            <p>© {new Date().getFullYear()} MyStudyZone.in. All rights reserved.</p>
           </div>
         </div>
       </footer>

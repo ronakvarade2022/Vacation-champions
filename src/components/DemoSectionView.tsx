@@ -27,6 +27,11 @@ interface DemoSectionViewProps {
   onRegisterClick?: () => void;
   onSignInClick?: () => void;
   isAuthenticated?: boolean;
+  initialBoard?: EducationBoard;
+  initialClass?: ClassLevel;
+  initialInteractiveTab?: InteractiveDemoTab;
+  onBoardSelectionChange?: (board: EducationBoard) => void;
+  onClassSelectionChange?: (cls: ClassLevel) => void;
 }
 
 type InteractiveDemoTab =
@@ -146,16 +151,47 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
   onUpgradeClick,
   onRegisterClick,
   onSignInClick,
-  isAuthenticated = false
+  isAuthenticated = false,
+  initialBoard,
+  initialClass,
+  initialInteractiveTab,
+  onBoardSelectionChange,
+  onClassSelectionChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<InteractiveDemoTab>('overview');
+  const [activeTab, setActiveTab] = useState<InteractiveDemoTab>(initialInteractiveTab || 'overview');
 
   // --- 0. Visitor Board & Class Preview (Maharashtra, CBSE, ICSE • Standards 1st to 10th) ---
-  const [selectedDemoBoard, setSelectedDemoBoard] = useState<EducationBoard>('Maharashtra');
-  const [selectedDemoClass, setSelectedDemoClass] = useState<ClassLevel>('Class 1');
+  const [selectedDemoBoard, setSelectedDemoBoard] = useState<EducationBoard>(initialBoard || 'Maharashtra');
+  const [selectedDemoClass, setSelectedDemoClass] = useState<ClassLevel>(initialClass || 'Class 1');
   const [activeDemoWorksheet, setActiveDemoWorksheet] = useState<OnlineWorksheet | null>(null);
   const [wsAnswers, setWsAnswers] = useState<Record<string, number>>({});
   const [wsSubmitted, setWsSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (initialBoard) {
+      setSelectedDemoBoard(initialBoard);
+      setWsAnswers({});
+      setWsSubmitted(false);
+      setQuizAnswers({});
+      setQuizSubmitted(false);
+    }
+  }, [initialBoard]);
+
+  useEffect(() => {
+    if (initialClass) {
+      setSelectedDemoClass(initialClass);
+      setWsAnswers({});
+      setWsSubmitted(false);
+      setQuizAnswers({});
+      setQuizSubmitted(false);
+    }
+  }, [initialClass]);
+
+  useEffect(() => {
+    if (initialInteractiveTab) {
+      setActiveTab(initialInteractiveTab);
+    }
+  }, [initialInteractiveTab]);
 
   const demoSubjects = useMemo(
     () => getSubjectsForClass(selectedDemoClass, selectedDemoBoard),
@@ -188,6 +224,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
 
   const handleSelectDemoBoard = (board: EducationBoard) => {
     setSelectedDemoBoard(board);
+    onBoardSelectionChange?.(board);
     if (activeDemoWorksheet) {
       const nextWorksheets = getVisitorDemoWorksheetsForClass(selectedDemoClass, board);
       const matchingSubjectWs = nextWorksheets.find(
@@ -208,6 +245,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
 
   const handleSelectDemoClass = (cls: ClassLevel) => {
     setSelectedDemoClass(cls);
+    onClassSelectionChange?.(cls);
     if (activeDemoWorksheet) {
       const nextWorksheets = getVisitorDemoWorksheetsForClass(cls, selectedDemoBoard);
       const matchingSubjectWs = nextWorksheets.find(

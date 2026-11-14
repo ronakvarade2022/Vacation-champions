@@ -4,13 +4,34 @@
   html, body {
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   #root {
-    max-width: 100vw;
-    overflow-x: hidden;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  /* Full-Width Landscape Desktop Site Mode */
+  @media (max-width: 1023px) {
+    html.desktop-site-active,
+    html.desktop-site-active body,
+    html.desktop-site-active #root {
+      min-width: 1200px;
+      max-width: none;
+      overflow-x: auto;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    html.desktop-site-active,
+    html.desktop-site-active body,
+    html.desktop-site-active #root {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: clip;
+    }
   }
 
   body {
@@ -21,9 +42,11 @@
     font-family: 'Fredoka', 'Plus Jakarta Sans', cursive, sans-serif;
   }
 
-  /* Prevent automatic mobile screen zoom when inputs are focused or on login/logout */
+  /* Prevent automatic mobile screen zoom when inputs are focused in Mobile View */
   @media (max-width: 768px) {
-    input, select, textarea {
+    html:not(.desktop-site-active) input,
+    html:not(.desktop-site-active) select,
+    html:not(.desktop-site-active) textarea {
       font-size: 16px !important;
     }
   }
