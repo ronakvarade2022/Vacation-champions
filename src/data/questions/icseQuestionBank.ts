@@ -1,5 +1,9 @@
 import { ClassLevel, QuizLevel, SubjectName } from '../../types';
-import { RawQuizSpec } from './subject40BankPart1';
+import { ICSE_CURRICULUM_BY_CLASS } from '../boards/icseCurriculumConfig';
+import { getPart1SubjectQuestions, RawQuizSpec } from './subject40BankPart1';
+import { getPart2SubjectQuestions } from './subject40BankPart2';
+import { getPart3SubjectQuestions } from './subject40BankPart3';
+import { getPart4SubjectQuestions } from './subject40BankPart4';
 
 const CISCE_STAGE_TAG: Record<number, string> = {
   1: 'CISCE Primary Grade 1',
@@ -18,19 +22,69 @@ function clsNum(classLevel: ClassLevel): number {
   return parseInt(String(classLevel).replace('Class ', ''), 10) || 4;
 }
 
+function lookupMasterSubjectSpecs(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel
+): RawQuizSpec[] {
+  const c = clsNum(classLevel);
+  if ((subject === 'Computer Studies' || subject === 'Computer Knowledge') && c <= 5) {
+    return getPart4SubjectQuestions(classLevel, 'Computer Studies', level) || [];
+  }
+  return (
+    getPart1SubjectQuestions(classLevel, subject, level) ||
+    getPart2SubjectQuestions(classLevel, subject, level) ||
+    getPart3SubjectQuestions(classLevel, subject, level) ||
+    getPart4SubjectQuestions(classLevel, subject, level) ||
+    []
+  );
+}
+
+function contextualizeIcseSpecs(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel,
+  rawSpecs: RawQuizSpec[]
+): RawQuizSpec[] {
+  const c = clsNum(classLevel);
+  const tag = CISCE_STAGE_TAG[c];
+  const boardChapters = ICSE_CURRICULUM_BY_CLASS[classLevel]?.chaptersBySubject?.[subject] || [];
+
+  return rawSpecs.slice(0, 10).map((spec, idx) => {
+    const chapterName =
+      boardChapters.length > 0 ? boardChapters[(level - 1 + idx) % boardChapters.length] : spec.topic;
+    const baseText = spec.text.trim();
+    const lower = baseText.toLowerCase();
+    const hasClass = lower.includes(`class ${c}`) || lower.includes(`grade ${c}`);
+    const hasSubject = lower.includes(subject.toLowerCase());
+    const text =
+      hasClass && hasSubject
+        ? baseText
+        : `[${tag} • ${classLevel} ${subject}] ${baseText}`;
+
+    return {
+      ...spec,
+      text,
+      topic: spec.topic || chapterName
+    };
+  });
+}
+
 function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
   const tag = CISCE_STAGE_TAG[c];
 
   if (c <= 2) {
     const x = c * 13 + level * 4;
     const y = c * 6 + level * 3;
-    const diff = 90 + c * 15 - (level * 7);
+    const diff = 90 + c * 15 - level * 7;
     const take = 20 + level * 5;
     const grp = c + level + 2;
     const per = level + 3;
     const hundreds = c + level;
-    const tens = (level * 3 + c) % 8 + 1;
-    const ones = (level + c * 2) % 9 + 1;
+    const tens = ((level * 2 + c) % 7) + 1;
+    const rawOnes = ((level * 3 + c * 2) % 8) + 1;
+    const ones = rawOnes === tens ? (rawOnes % 8) + 1 : rawOnes;
+    const num3d = hundreds * 100 + tens * 10 + ones;
 
     return [
       {
@@ -50,13 +104,13 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
       {
         text: `Write the standard 3-digit numeral for ${hundreds} hundreds, ${tens} tens, and ${ones} ones (${tag} Level ${level}).`,
         options: [
-          `${hundreds * 100 + ones * 10 + tens}`,
-          `${hundreds * 100 + tens * 10 + ones}`,
-          `${tens * 100 + hundreds * 10 + ones}`,
-          `${hundreds + tens + ones}`
+          `${num3d - 9}`,
+          `${num3d}`,
+          `${num3d + 10}`,
+          `${num3d + 100}`
         ],
         correctIndex: 1,
-        explanation: `${hundreds}00 + ${tens}0 + ${ones} = ${hundreds * 100 + tens * 10 + ones}.`,
+        explanation: `${hundreds}00 + ${tens}0 + ${ones} = ${num3d}.`,
         topic: 'Hundreds Tens Ones'
       },
       {
@@ -186,21 +240,21 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
       },
       {
         text: `Subtract decimal ${level}.25 from ${c + level + 4}.75 in CISCE Class ${c} Level ${level}.`,
-        options: [
-          `${c + 4}.25`,
-          `${c + 4}.50`,
-          `${c + 5}.50`,
-          `${c + 3}.75`
-        ],
+        options: [`${c + 4}.25`, `${c + 4}.50`, `${c + 5}.50`, `${c + 3}.75`],
         correctIndex: 1,
         explanation: `${c + level + 4}.75 − ${level}.25 = ${c + 4}.50.`,
         topic: 'Decimal Operations'
       },
       {
-        text: `What is the Least Common Multiple (LCM) of ${c + 3} and ${(c + 3) * 2} in Class ${c} Level ${level}?`,
-        options: [`${c + 3}`, `${(c + 3) * 2}`, `${(c + 3) * 3}`, `${(c + 3) * 4}`],
+        text: `What is the Least Common Multiple (LCM) of ${c + level + 2} and ${(c + level + 2) * 2} in Class ${c} Level ${level}?`,
+        options: [
+          `${c + level + 2}`,
+          `${(c + level + 2) * 2}`,
+          `${(c + level + 2) * 3}`,
+          `${(c + level + 2) * 4}`
+        ],
         correctIndex: 1,
-        explanation: `Since ${(c + 3) * 2} is a direct multiple of ${c + 3}, their LCM is ${(c + 3) * 2}.`,
+        explanation: `Since ${(c + level + 2) * 2} is a direct multiple of ${c + level + 2}, their LCM is ${(c + level + 2) * 2}.`,
         topic: 'LCM Practice'
       },
       {
@@ -270,7 +324,7 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
           `(x + ${level})(x + ${level + 3})`,
           `(x − ${level})(x + ${level + 3})`,
           `(x + ${level + 1})(x + ${level + 2})`,
-          `(x + 1)(x + ${level * (level + 3)})`
+          `(x − ${level})(x − ${level + 3})`
         ],
         correctIndex: 0,
         explanation: `Sum = ${level} + ${level + 3} = ${2 * level + 3} and product = ${level * (level + 3)}.`,
@@ -341,16 +395,18 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
   const rdMonths = 12 + (c === 10 ? 12 : 0);
   const rdNProd = (rdMonths * (rdMonths + 1)) / 2;
   const matR = level + 1;
+  const innerDim = level + 3;
+  const matC = level + 5;
   const xMid = 2 * level;
   const yMid = 3 * level;
   const secVal = level * 4;
   const secPart = 2;
-  const tangLen = Math.sqrt(secVal * secPart);
+  const kVal = 4 + level;
 
   return [
     {
       text: `In ${tag} Commercial Mathematics Level ${level}, an item marked ₹${price} is billed intrastate with 18% GST. Compute the CGST (9%) amount.`,
-      options: [`₹${cgst9 / 2}`, `₹${cgst9}`, `₹${cgst9 * 2}`, `₹${cgst9 + 180}`],
+      options: [`₹${cgst9 / 2}`, `₹${cgst9}`, `₹${cgst9 * 2}`, `₹${cgst9 + 250}`],
       correctIndex: 1,
       explanation: `CGST = 9% of ₹${price} = ₹${cgst9}.`,
       topic: 'GST Commercial Mathematics'
@@ -363,22 +419,22 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
       topic: 'Banking (Recurring Deposit)'
     },
     {
-      text: `Given matrices A (order ${matR} × 3) and B (order 3 × ${matR + 1}) in ICSE Class ${c} Level ${level}, state the order of product matrix AB:`,
+      text: `Given matrices A (order ${matR} × ${innerDim}) and B (order ${innerDim} × ${matC}) in ICSE Class ${c} Level ${level}, state the order of product matrix AB:`,
       options: [
-        `3 × 3`,
-        `${matR} × ${matR + 1}`,
-        `${matR + 1} × ${matR}`,
-        `3 × ${matR + 1}`
+        `${innerDim} × ${innerDim}`,
+        `${matR} × ${matC}`,
+        `${matC} × ${matR}`,
+        `${matR} × ${innerDim}`
       ],
       correctIndex: 1,
-      explanation: `Multiplying (${matR}×3) by (3×${matR + 1}) yields (${matR} × ${matR + 1}).`,
+      explanation: `Multiplying (${matR} × ${innerDim}) by (${innerDim} × ${matC}) yields order (${matR} × ${matC}).`,
       topic: 'Matrices'
     },
     {
       text: `Using ICSE Factor Theorem (Class ${c} Level ${level}), find k if (x − 2) divides f(x) = x³ − kx + ${2 * level} exactly.`,
-      options: [`${(8 + 2 * level) / 2 - 1}`, `${(8 + 2 * level) / 2}`, `${8 + level}`, `${2 * level}`],
+      options: [`${kVal - 2}`, `${kVal}`, `${kVal + 2}`, `${kVal + 4}`],
       correctIndex: 1,
-      explanation: `f(2) = 0 ⇒ 8 − 2k + ${2 * level} = 0 ⇒ k = ${(8 + 2 * level) / 2}.`,
+      explanation: `f(2) = 0 ⇒ 8 − 2k + ${2 * level} = 0 ⇒ k = ${kVal}.`,
       topic: 'Remainder & Factor Theorem'
     },
     {
@@ -391,19 +447,11 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
     {
       text: `From an external point P (Class ${c} Level ${level} Circle Tangents), secant PAB meets at PA = ${secPart} cm and PB = ${secVal * 2} cm. Length of tangent PT equals:`,
       options: [
-        `√${secVal * 4} = ${(Math.sqrt(secVal * 4)).toFixed(1)} cm (if tang²=PA·PB)`,
-        `2√${tangLen * tangLen / 2} cm`,
+        `√(${secPart * secVal * 2}) = ${Math.sqrt(secPart * secVal * 2).toFixed(2)} cm`,
         `${secVal + secPart} cm`,
-        `Wait: calculate √(${secPart}×${secVal * 2}) = ${Math.sqrt(secPart * secVal * 2).toFixed(2)} cm`
-      ].map((opt, idx) =>
-        idx === 0
-          ? `√(${secPart * secVal * 2}) = ${Math.sqrt(secPart * secVal * 2).toFixed(2)} cm`
-          : idx === 1
-            ? `${secVal + secPart} cm`
-            : idx === 2
-              ? `${secVal * secPart} cm`
-              : `${secVal} cm`
-      ) as [string, string, string, string],
+        `${secVal * secPart} cm`,
+        `${secVal} cm`
+      ],
       correctIndex: 0,
       explanation: `PT² = PA × PB = ${secPart} × ${secVal * 2} = ${secPart * secVal * 2}, so PT = √${secPart * secVal * 2} ≈ ${Math.sqrt(secPart * secVal * 2).toFixed(2)} cm.`,
       topic: 'Circle Tangent-Secant Theorem'
@@ -441,7 +489,12 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
     },
     {
       text: `In ICSE Class ${c} Level ${level} Probability, a spinner numbered 1 to ${8 + level} is spun once. Probability of landing on 1 is:`,
-      options: [`1/${8 + level}`, `2/${8 + level}`, `1/${7 + level}`, `${level}/${8 + level}`],
+      options: [
+        `1/${8 + level}`,
+        `3/${8 + level}`,
+        `5/${8 + level}`,
+        `7/${8 + level}`
+      ],
       correctIndex: 0,
       explanation: `One favourable sector out of ${8 + level} equal sectors gives 1/${8 + level}.`,
       topic: 'Probability'
@@ -449,24 +502,43 @@ function makeIcseMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
   ];
 }
 
-function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel): RawQuizSpec[] {
+function makeIcseScienceSpecs(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel
+): RawQuizSpec[] {
+  const c = clsNum(classLevel);
   const tag = CISCE_STAGE_TAG[c];
+
+  // For Science, Environmental Studies, Environmental Education (all levels) or Physics/Chemistry/Biology Levels 2–4:
+  // use the verified 40-question subject-pure master banks
+  if (
+    level >= 2 ||
+    subject === 'Science' ||
+    subject === 'Environmental Studies' ||
+    subject === 'Environmental Education'
+  ) {
+    const raw = lookupMasterSubjectSpecs(classLevel, subject, level);
+    return contextualizeIcseSpecs(classLevel, subject, level, raw);
+  }
+
   const densityMass = (level + 2) * 39;
   const densityVol = 5 * (level + 2);
   const fForce = 15 * level;
   const distM = c <= 7 ? 2 : 3;
 
   if (subject === 'Physics') {
+    const echoDist = ((level + 1) * 0.5 * 340) / 2;
     return [
       {
-        text: `In ${tag} Physics Level ${level}, a metal block of mass ${densityMass} g displaces ${densityVol} cm³ of water. Compute its density.`,
+        text: `In ${tag} Physics, a metal block of mass ${densityMass} g displaces ${densityVol} cm³ of water. Compute its density.`,
         options: [`7.8 g/cm³`, `5.4 g/cm³`, `9.2 g/cm³`, `3.9 g/cm³`],
         correctIndex: 0,
         explanation: `Density = Mass / Volume = ${densityMass} / ${densityVol} = 7.8 g/cm³.`,
         topic: 'Density & Physical Quantities'
       },
       {
-        text: `Calculate turning moment (torque) of a ${fForce} N perpendicular force applied at ${distM} m from pivot in CISCE Class ${c} Physics Level ${level}:`,
+        text: `Calculate turning moment (torque) of a ${fForce} N perpendicular force applied at ${distM} m from pivot in CISCE Class ${c} Physics:`,
         options: [
           `${fForce * distM - 5} N·m`,
           `${fForce * distM} N·m`,
@@ -478,38 +550,38 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Moment of Force'
       },
       {
-        text: `A swimmer hears her echo from a cliff ${(level + 1) * 0.5} seconds after shouting at sound speed 340 m/s (ICSE Class ${c} Level ${level} Physics). Distance to cliff is:`,
+        text: `A swimmer hears her echo from a cliff ${(level + 1) * 0.5} seconds after shouting at sound speed 340 m/s (ICSE Class ${c} Physics). Distance to cliff is:`,
         options: [
-          `${((level + 1) * 0.5 * 340) / 2 - 20} m`,
-          `${((level + 1) * 0.5 * 340) / 2} m`,
-          `${(level + 1) * 0.5 * 340} m`,
-          `340 m`
+          `${echoDist - 35} m`,
+          `${echoDist} m`,
+          `${echoDist + 45} m`,
+          `${echoDist + 90} m`
         ],
         correctIndex: 1,
-        explanation: `Distance d = (v × t) / 2 = (340 × ${(level + 1) * 0.5}) / 2 = ${((level + 1) * 0.5 * 340) / 2} m.`,
+        explanation: `Distance d = (v × t) / 2 = (340 × ${(level + 1) * 0.5}) / 2 = ${echoDist} m.`,
         topic: 'Sound Waves & Echo'
       },
       {
-        text: `In ICSE Class ${c} Physics Level ${level}, how much heat energy Q raises ${level} kg of water (c = 4200 J/kg·K) by 10 K?`,
+        text: `In ICSE Class ${c} Physics, how much heat energy Q raises ${c - 4} kg of water (c = 4200 J/kg·K) by 10 K?`,
         options: [
-          `${level * 42000 - 4200} J`,
-          `${level * 42000} J`,
-          `${level * 4200} J`,
-          `${level * 84000} J`
+          `${(c - 4) * 42000 - 4200} J`,
+          `${(c - 4) * 42000} J`,
+          `${(c - 4) * 4200} J`,
+          `${(c - 4) * 84000} J`
         ],
         correctIndex: 1,
-        explanation: `Q = m c ΔT = ${level} × 4200 × 10 = ${level * 42000} J.`,
+        explanation: `Q = m c ΔT = ${c - 4} × 4200 × 10 = ${(c - 4) * 42000} J.`,
         topic: 'Calorimetry'
       },
       {
-        text: `According to CISCE Class ${c} Level ${level} Electricity, an appliance rated 1000 W running for ${level + 1} hours consumes how many kWh units?`,
-        options: [`${level}`, `${level + 1} kWh`, `${(level + 1) * 10} kWh`, `0.5 kWh`],
+        text: `According to CISCE Class ${c} Electricity, an appliance rated 1000 W running for ${c - 3} hours consumes how many kWh units?`,
+        options: [`${c - 4} kWh`, `${c - 3} kWh`, `${(c - 3) * 10} kWh`, `0.5 kWh`],
         correctIndex: 1,
-        explanation: `1000 W = 1 kW. Energy = 1 kW × ${level + 1} h = ${level + 1} kWh.`,
+        explanation: `1000 W = 1 kW. Energy = 1 kW × ${c - 3} h = ${c - 3} kWh.`,
         topic: 'Household Electricity'
       },
       {
-        text: `Under ICSE Class ${c} Level ${level} Optics, why does a swimming pool bottom appear shallower than its real depth?`,
+        text: `Under ICSE Class ${c} Optics, why does a swimming pool bottom appear shallower than its real depth?`,
         options: [
           'Refraction of light bending away from the normal from water to air',
           'Total black absorption inside chlorine water',
@@ -521,7 +593,7 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Refraction of Light'
       },
       {
-        text: `Which ideal mechanical machine law holds true for an ICSE Class ${c} Level ${level} pulley system with Velocity Ratio ${level + 1}?`,
+        text: `Which ideal mechanical machine law holds true for an ICSE Class ${c} pulley system with Velocity Ratio ${c - 3}?`,
         options: [
           'Efficiency = Mechanical Advantage / Velocity Ratio',
           'Effort always exceeds Load infinitely',
@@ -533,7 +605,7 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Simple Machines & Pulleys'
       },
       {
-        text: `In CISCE Class ${c} Physics Level ${level}, Fleming’s Left-Hand Rule predicts the direction of:`,
+        text: `In CISCE Class ${c} Physics, Fleming’s Left-Hand Rule predicts the direction of:`,
         options: [
           'Mechanical force acting on a current-carrying conductor in a magnetic field',
           'Gravitational orbital period of planets',
@@ -545,14 +617,19 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Electromagnetism'
       },
       {
-        text: `Convert speed of ${18 * (level + 1)} km/h to m/s for ICSE Class ${c} Physics Level ${level} kinematics:`,
-        options: [`${5 * (level + 1) - 2} m/s`, `${5 * (level + 1)} m/s`, `${10 * (level + 1)} m/s`, `${18 * (level + 1)} m/s`],
+        text: `Convert speed of ${18 * (c - 3)} km/h to m/s for ICSE Class ${c} Physics kinematics:`,
+        options: [
+          `${5 * (c - 3) - 2} m/s`,
+          `${5 * (c - 3)} m/s`,
+          `${10 * (c - 3)} m/s`,
+          `${18 * (c - 3)} m/s`
+        ],
         correctIndex: 1,
-        explanation: `Multiply km/h by 5/18: ${18 * (level + 1)} × (5/18) = ${5 * (level + 1)} m/s.`,
+        explanation: `Multiply km/h by 5/18: ${18 * (c - 3)} × (5/18) = ${5 * (c - 3)} m/s.`,
         topic: 'Motion & Speed'
       },
       {
-        text: `During beta (β⁻) radioactive emission in ICSE Class ${c} Physics Level ${level}, the daughter nucleus atomic number Z:`,
+        text: `During beta (β⁻) radioactive emission in ICSE Class ${c} Physics, the daughter nucleus atomic number Z:`,
         options: [
           'Increases by +1 while mass number A remains unchanged',
           'Decreases by −2 while A drops by 4',
@@ -567,16 +644,17 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
   }
 
   if (subject === 'Chemistry') {
+    const moles = c - 4;
     return [
       {
-        text: `In ${tag} Chemistry Level ${level}, compute molecular weight of CaCO₃ or Na₂CO₃ variant: molar mass of ${level} mole(s) of CO₂ (C=12, O=16) is:`,
-        options: [`${44 * level - 12} g`, `${44 * level} g`, `${28 * level} g`, `${60 * level} g`],
+        text: `In ${tag} Chemistry, compute the mass of ${moles} mole(s) of CO₂ (where C = 12, O = 16):`,
+        options: [`${44 * moles - 12} g`, `${44 * moles} g`, `${28 * moles} g`, `${60 * moles} g`],
         correctIndex: 1,
-        explanation: `Molar mass of CO₂ = 12 + 2(16) = 44 g/mol; ${level} mol = ${44 * level} g.`,
+        explanation: `Molar mass of CO₂ = 12 + 2(16) = 44 g/mol; ${moles} mol = ${44 * moles} g.`,
         topic: 'Mole Concept & Stoichiometry'
       },
       {
-        text: `Under ICSE Class ${c} Level ${level} Analytical Chemistry, adding NH₄OH in excess to CuSO₄ solution forms a:`,
+        text: `Under ICSE Class ${c} Analytical Chemistry, adding NH₄OH in excess to CuSO₄ solution forms a:`,
         options: [
           'Deep inky-blue soluble tetraamminecopper(II) complex solution',
           'Chalky yellow insoluble slag',
@@ -588,14 +666,14 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Analytical Chemistry'
       },
       {
-        text: `Which industrial CISCE process studied in Class ${c} Chemistry Level ${level} synthesises ammonia (NH₃) from N₂ and H₂ over finely divided iron catalyst?`,
+        text: `Which industrial CISCE process studied in Class ${c} Chemistry synthesises ammonia (NH₃) from N₂ and H₂ over finely divided iron catalyst?`,
         options: ['Haber’s Process', 'Contact Process', 'Ostwald Process', 'Bayer’s Process'],
         correctIndex: 0,
         explanation: `Haber’s Process reacts N₂ + 3H₂ ⇌ 2NH₃ at 450°C and 200 atm over Fe catalyst.`,
         topic: 'Study of Compounds (NH₃)'
       },
       {
-        text: `Identify the electrolyte acid added in trace drops during ICSE Class ${c} Level ${level} electrolysis of acidulated water:`,
+        text: `Identify the electrolyte acid added in trace drops during ICSE Class ${c} electrolysis of acidulated water:`,
         options: [
           'Dilute sulphuric acid (H₂SO₄)',
           'Kerosene oil',
@@ -607,7 +685,7 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Electrolysis'
       },
       {
-        text: `In CISCE Class ${c} Level ${level} Periodic Table trends, moving left to right across Period 2 (Li to F), atomic radius steadily:`,
+        text: `In CISCE Class ${c} Periodic Table trends, moving left to right across Period 2 (Li to F), atomic radius steadily:`,
         options: [
           'Decreases due to stronger nuclear pull on the same valence shell',
           'Doubles every atomic step',
@@ -619,7 +697,7 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Periodic Properties'
       },
       {
-        text: `What organic homologous series carries functional group −COOH in ICSE Class ${c} Chemistry Level ${level}?`,
+        text: `What organic homologous series carries functional group −COOH in ICSE Class ${c} Chemistry?`,
         options: [
           'Carboxylic acids (suffix -oic acid)',
           'Alkanes',
@@ -631,14 +709,14 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Organic Chemistry IUPAC'
       },
       {
-        text: `In Class ${c} ICSE Chemistry Level ${level}, which fountain-experiment gas turns moist red litmus paper sharply BLUE?`,
+        text: `In Class ${c} ICSE Chemistry, which fountain-experiment gas turns moist red litmus paper sharply BLUE?`,
         options: ['Ammonia gas (NH₃)', 'Hydrogen chloride (HCl)', 'Sulphur dioxide (SO₂)', 'Chlorine gas'],
         correctIndex: 0,
         explanation: `Ammonia is strongly alkaline in water (NH₄OH), turning red litmus blue.`,
         topic: 'Alkaline Gases'
       },
       {
-        text: `State the chemical composition of rust formed on moist iron bars studied in CISCE Class ${c} Chemistry Level ${level}:`,
+        text: `State the chemical composition of rust formed on moist iron bars studied in CISCE Class ${c} Chemistry:`,
         options: [
           'Hydrated iron(III) oxide (Fe₂O₃ · xH₂O)',
           'Pure copper carbonate',
@@ -650,14 +728,14 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
         topic: 'Metallurgy & Corrosion'
       },
       {
-        text: `According to Boyles’ and Charles’ Gas Laws in ICSE Class ${c} Level ${level}, absolute zero temperature equals:`,
+        text: `According to Boyle’s and Charles’ Gas Laws in ICSE Class ${c} Chemistry, absolute zero temperature equals:`,
         options: ['0 K (−273.15°C)', '273 K', '−100°C', '100 K'],
         correctIndex: 0,
         explanation: `0 Kelvin corresponds to −273.15°C where ideal gas volume extrapolates to zero.`,
         topic: 'Gas Laws'
       },
       {
-        text: `Which type of coordinate bond forms when an H⁺ ion accepts a lone electron pair from water (H₂O) to yield hydronium (H₃O⁺) in Class ${c} Level ${level}?`,
+        text: `Which type of coordinate bond forms when an H⁺ ion accepts a lone electron pair from water (H₂O) to yield hydronium (H₃O⁺) in Class ${c} Chemistry?`,
         options: [
           'Dative (coordinate covalent) bond',
           'Ionic transfer bond',
@@ -671,188 +749,194 @@ function makeIcseScienceSpecs(c: number, subject: SubjectName, level: QuizLevel)
     ];
   }
 
-  if (subject === 'Biology') {
-    return [
-      {
-        text: `In ${tag} Biology Level ${level}, which specialised water-conducting vascular tissue carries dissolved mineral sap from root hairs up to green leaves?`,
-        options: ['Xylem vessels', 'Sieve tubes of phloem', 'Collenchyma cortex', 'Cuticle epidermis'],
-        correctIndex: 0,
-        explanation: `Xylem transports water and mineral ions upward via transpiration pull.`,
-        topic: 'Absorption by Roots'
-      },
-      {
-        text: `Under CISCE Class ${c} Level ${level} Genetics, Mendel’s dihybrid F₂ generation phenotypic ratio is:`,
-        options: ['9 : 3 : 3 : 1', '3 : 1', '1 : 2 : 1', '2 : 1'],
-        correctIndex: 0,
-        explanation: `Independent assortment of two traits yields 9:3:3:1 phenotypic ratio in F₂.`,
-        topic: 'Genetics & Mendel Laws'
-      },
-      {
-        text: `In ICSE Class ${c} Biology Level ${level}, during which phase of mitosis do sister chromatids align squarely along the equatorial metaphase plate?`,
-        options: ['Metaphase', 'Anaphase', 'Telophase', 'Interphase G1'],
-        correctIndex: 0,
-        explanation: `Chromosomes line up on the equator during Metaphase before separating in Anaphase.`,
-        topic: 'Cell Cycle & Mitosis'
-      },
-      {
-        text: `Which light-independent dark reaction cycle studied in CISCE Class ${c} Biology Level ${level} fixes CO₂ into glucose inside chloroplast stroma?`,
-        options: ['Calvin Cycle', 'Krebs Oxidation', 'Glycolysis', 'Ornithine Urea Cycle'],
-        correctIndex: 0,
-        explanation: `Calvin cycle reactions reduce CO₂ to sugar inside chloroplast stroma.`,
-        topic: 'Photosynthesis'
-      },
-      {
-        text: `In ICSE Class ${c} Biology Level ${level}, which heart valve prevents backflow of oxygenated blood from the left ventricle into the left atrium?`,
-        options: [
-          'Bicuspid (Mitral) valve',
-          'Tricuspid valve',
-          'Pulmonary semilunar valve',
-          'Epiglottis flap'
-        ],
-        correctIndex: 0,
-        explanation: `The left atrioventricular opening is guarded by the bicuspid (mitral) valve.`,
-        topic: 'Human Circulatory System'
-      },
-      {
-        text: `Which pituitary endocrine hormone studied in CISCE Class ${c} Level ${level} increases water reabsorption in kidney distal tubules?`,
-        options: ['ADH (Vasopressin)', 'Glucagon', 'Calcitonin', 'Melatonin'],
-        correctIndex: 0,
-        explanation: `Antidiuretic hormone (ADH) regulates urine concentration and water balance.`,
-        topic: 'Endocrine & Excretory System'
-      },
-      {
-        text: `How is the fluid filling the eyeball behind the lens labelled in ICSE Class ${c} Sense Organs Level ${level}?`,
-        options: ['Vitreous humour', 'Synovial fluid', 'Pericardial lymph', 'Bile emulsion'],
-        correctIndex: 0,
-        explanation: `Vitreous humour maintains spherical shape and presses retina evenly against choroid.`,
-        topic: 'Human Eye & Nervous System'
-      },
-      {
-        text: `In Class ${c} ICSE Biology Level ${level}, plasmolysis occurs when a turgid plant cell is placed inside a:`,
-        options: [
-          'Concentrated hypertonic salt/sugar solution causing exosmosis',
-          'Distilled hypotonic pure water bath',
-          'Warm sunlight vacuum chamber',
-          'Isotonic nutrient broth'
-        ],
-        correctIndex: 0,
-        explanation: `Water moves outward by exosmosis, shrinking protoplast away from cell wall.`,
-        topic: 'Osmosis & Turgidity'
-      },
-      {
-        text: `Which outer double membrane envelops human lungs inside the thoracic cavity (ICSE Class ${c} Biology Level ${level})?`,
-        options: ['Pleura', 'Pericardium', 'Meninges', 'Periosteum'],
-        correctIndex: 0,
-        explanation: `Pleural membranes with pleural fluid cushion lung expansion.`,
-        topic: 'Respiration'
-      },
-      {
-        text: `In CISCE Class ${c} Biology Level ${level}, red blood cell iron-protein molecule that binds oxygen reversibly is:`,
-        options: ['Haemoglobin', 'Fibrinogen', 'Keratin', 'Myosin'],
-        correctIndex: 0,
-        explanation: `Haemoglobin forms oxyhaemoglobin in alveolar capillaries.`,
-        topic: 'Blood Physiology'
-      }
-    ];
-  }
-
-  // General Science / EVS / EnvEd ICSE
-  return Array.from({ length: 10 }, (_, idx) => ({
-    text: `${tag} ${subject} Level ${level} (Module ${idx + 1}): Which scientific observation matches CISCE Class ${c} experimental guidelines?`,
-    options: [
-      `Observing measurable cause-effect variables accurately during ${subject} Task ${idx + 1}`,
-      `Guessing results before measuring mass or temperature`,
-      `Skipping laboratory safety precautions around glassware`,
-      `Mixing unlabelled reagents without instructions`
-    ],
-    correctIndex: 0,
-    explanation: `CISCE Class ${c} ${subject} emphasises precise observation and safety.`,
-    topic: `${subject} Foundations`
-  }));
+  // Biology Level 1 (Classes 6–10)
+  return [
+    {
+      text: `In ${tag} Biology, which specialised water-conducting vascular tissue carries dissolved mineral sap from root hairs up to green leaves?`,
+      options: ['Xylem vessels', 'Sieve tubes of phloem', 'Collenchyma cortex', 'Cuticle epidermis'],
+      correctIndex: 0,
+      explanation: `Xylem transports water and mineral ions upward via transpiration pull.`,
+      topic: 'Absorption by Roots'
+    },
+    {
+      text: `Under CISCE Class ${c} Genetics, Mendel’s dihybrid F₂ generation phenotypic ratio is:`,
+      options: ['9 : 3 : 3 : 1', '3 : 1', '1 : 2 : 1', '2 : 1'],
+      correctIndex: 0,
+      explanation: `Independent assortment of two traits yields 9:3:3:1 phenotypic ratio in F₂.`,
+      topic: 'Genetics & Mendel Laws'
+    },
+    {
+      text: `In ICSE Class ${c} Biology, during which phase of mitosis do sister chromatids align squarely along the equatorial metaphase plate?`,
+      options: ['Metaphase', 'Anaphase', 'Telophase', 'Interphase G1'],
+      correctIndex: 0,
+      explanation: `Chromosomes line up on the equator during Metaphase before separating in Anaphase.`,
+      topic: 'Cell Cycle & Mitosis'
+    },
+    {
+      text: `Which light-independent dark reaction cycle studied in CISCE Class ${c} Biology fixes CO₂ into glucose inside chloroplast stroma?`,
+      options: ['Calvin Cycle', 'Krebs Oxidation', 'Glycolysis', 'Ornithine Urea Cycle'],
+      correctIndex: 0,
+      explanation: `Calvin cycle reactions reduce CO₂ to sugar inside chloroplast stroma.`,
+      topic: 'Photosynthesis'
+    },
+    {
+      text: `In ICSE Class ${c} Biology, which heart valve prevents backflow of oxygenated blood from the left ventricle into the left atrium?`,
+      options: [
+        'Bicuspid (Mitral) valve',
+        'Tricuspid valve',
+        'Pulmonary semilunar valve',
+        'Epiglottis flap'
+      ],
+      correctIndex: 0,
+      explanation: `The left atrioventricular opening is guarded by the bicuspid (mitral) valve.`,
+      topic: 'Human Circulatory System'
+    },
+    {
+      text: `Which pituitary endocrine hormone studied in CISCE Class ${c} Biology increases water reabsorption in kidney distal tubules?`,
+      options: ['ADH (Vasopressin)', 'Glucagon', 'Calcitonin', 'Melatonin'],
+      correctIndex: 0,
+      explanation: `Antidiuretic hormone (ADH) regulates urine concentration and water balance.`,
+      topic: 'Endocrine & Excretory System'
+    },
+    {
+      text: `How is the fluid filling the eyeball behind the lens labelled in ICSE Class ${c} Biology Sense Organs?`,
+      options: ['Vitreous humour', 'Synovial fluid', 'Pericardial lymph', 'Bile emulsion'],
+      correctIndex: 0,
+      explanation: `Vitreous humour maintains spherical shape and presses retina evenly against choroid.`,
+      topic: 'Human Eye & Nervous System'
+    },
+    {
+      text: `In Class ${c} ICSE Biology, plasmolysis occurs when a turgid plant cell is placed inside a:`,
+      options: [
+        'Concentrated hypertonic salt/sugar solution causing exosmosis',
+        'Distilled hypotonic pure water bath',
+        'Warm sunlight vacuum chamber',
+        'Isotonic nutrient broth'
+      ],
+      correctIndex: 0,
+      explanation: `Water moves outward by exosmosis, shrinking protoplast away from cell wall.`,
+      topic: 'Osmosis & Turgidity'
+    },
+    {
+      text: `Which outer double membrane envelops human lungs inside the thoracic cavity (ICSE Class ${c} Biology)?`,
+      options: ['Pleura', 'Pericardium', 'Meninges', 'Periosteum'],
+      correctIndex: 0,
+      explanation: `Pleural membranes with pleural fluid cushion lung expansion.`,
+      topic: 'Respiration'
+    },
+    {
+      text: `In CISCE Class ${c} Biology, the red blood cell iron-protein molecule that binds oxygen reversibly is:`,
+      options: ['Haemoglobin', 'Fibrinogen', 'Keratin', 'Myosin'],
+      correctIndex: 0,
+      explanation: `Haemoglobin forms oxyhaemoglobin in alveolar capillaries.`,
+      topic: 'Blood Physiology'
+    }
+  ];
 }
 
-function makeGenericIcseSpecs(c: number, subject: SubjectName, level: QuizLevel): RawQuizSpec[] {
+function makeGenericIcseSpecs(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel
+): RawQuizSpec[] {
+  const c = clsNum(classLevel);
   const tag = CISCE_STAGE_TAG[c];
 
-  if (subject === 'Computer Applications' || subject === 'Computer Studies' || subject === 'Computer Knowledge' || subject === 'Information Technology') {
+  // Primary classes (1 to 5) Computer Studies -> use age-appropriate Primary Computer Studies bank
+  if ((subject === 'Computer Studies' || subject === 'Computer Knowledge') && c <= 5) {
+    const raw = lookupMasterSubjectSpecs(classLevel, 'Computer Studies', level);
+    return contextualizeIcseSpecs(classLevel, subject, level, raw);
+  }
+
+  // Levels 2–4 for all subjects, plus all 4 levels of History & Civics, Social Studies, Geography, Economics,
+  // Commercial Studies, General Knowledge, Logical Reasoning, Moral Education, Vocabulary and Grammar,
+  // Drawing and Creative Activities, Physical Education -> use the 40-question subject-pure master banks
+  if (
+    level >= 2 ||
+    (subject !== 'Computer Applications' &&
+      subject !== 'Computer Studies' &&
+      subject !== 'English' &&
+      subject !== 'Hindi')
+  ) {
+    const raw = lookupMasterSubjectSpecs(classLevel, subject, level);
+    return contextualizeIcseSpecs(classLevel, subject, level, raw);
+  }
+
+  if (subject === 'Computer Applications' || subject === 'Computer Studies') {
     const numA = c + level * 2;
     const numB = level + 2;
+    const rem = (numA * numB) % 5;
     return [
       {
-        text: `In ${tag} ${subject} Level ${level}, evaluate the Java arithmetic expression: (${numA} * ${numB}) % 5`,
-        options: [
-          `${(numA * numB) % 5}`,
-          `${Math.floor((numA * numB) / 5)}`,
-          `${((numA * numB) % 5) + 1}`,
-          `${numA + numB}`
-        ],
+        text: `In ${tag} ${subject}, evaluate the Java arithmetic remainder expression: (${numA} * ${numB}) % 5`,
+        options: [`${rem}`, `${rem + 1}`, `${rem + 2}`, `${rem + 3}`],
         correctIndex: 0,
-        explanation: `Modulus operator % returns the integer remainder of (${numA} × ${numB}) = ${numA * numB} divided by 5 → ${(numA * numB) % 5}.`,
+        explanation: `Modulus operator % returns the integer remainder of (${numA} × ${numB}) = ${numA * numB} divided by 5 → ${rem}.`,
         topic: 'Operators & Expressions'
       },
       {
-        text: `How many bytes of memory does Java primitive "double" occupy in ICSE Class ${c} Level ${level} ${subject}?`,
+        text: `How many bytes of memory does Java primitive "double" occupy in ICSE Class ${c} ${subject}?`,
         options: ['8 bytes (64 bits)', '2 bytes (16 bits)', '4 bytes (32 bits)', '1 byte (8 bits)'],
         correctIndex: 0,
         explanation: `Java double stores 64-bit IEEE 754 floating-point values (8 bytes).`,
         topic: 'Java Data Types'
       },
       {
-        text: `In CISCE Class ${c} ${subject} Level ${level}, which Java OOP keyword creates a dynamic object instance of a Class in heap memory?`,
+        text: `In CISCE Class ${c} ${subject}, which Java OOP keyword creates a dynamic object instance of a Class in heap memory?`,
         options: ['new', 'static', 'void', 'break'],
         correctIndex: 0,
         explanation: `The "new" operator allocates memory and invokes the class constructor.`,
         topic: 'Classes & Objects'
       },
       {
-        text: `Determine the return value of Math.ceil(${level + 0.2}) in ICSE Class ${c} Java Library Methods Level ${level}:`,
-        options: [`${level + 1}.0`, `${level}.0`, `${level + 0.5}`, `${level + 2}.0`],
+        text: `Determine the return value of Math.ceil(${c + 0.2}) in ICSE Class ${c} ${subject} Library Methods:`,
+        options: [`${c + 1}.0`, `${c}.0`, `${c + 0.5}`, `${c + 2}.0`],
         correctIndex: 0,
-        explanation: `Math.ceil() rounds upward to the smallest integer ≥ argument: ${level + 1}.0.`,
+        explanation: `Math.ceil() rounds upward to the smallest mathematical integer ≥ argument: ${c + 1}.0.`,
         topic: 'Java Math Class'
       },
       {
-        text: `What does Java String expression "CISCE_ICSE".length() return in Grade ${c} Level ${level} ${subject}?`,
+        text: `What does Java String expression "CISCE_ICSE".length() return in Grade ${c} ${subject}?`,
         options: ['10', '9', '8', '11'],
         correctIndex: 0,
         explanation: `C-I-S-C-E-_-I-C-S-E contains 10 characters.`,
         topic: 'String Manipulation'
       },
       {
-        text: `Which access specifier in ICSE Class ${c} Java Level ${level} restricts class data fields so external classes cannot alter them directly?`,
+        text: `Which access specifier in ICSE Class ${c} ${subject} restricts class data fields so external classes cannot alter them directly?`,
         options: ['private', 'public', 'global', 'open'],
         correctIndex: 0,
         explanation: `Marking instance variables "private" enforces strict data hiding / encapsulation.`,
         topic: 'Access Specifiers'
       },
       {
-        text: `In a Java single-dimensional array int a[] = new int[${5 + level}] (ICSE Class ${c} Level ${level}), what is the valid index range?`,
-        options: [`0 to ${4 + level}`, `1 to ${5 + level}`, `0 to ${5 + level}`, `−1 to ${4 + level}`],
+        text: `In a Java single-dimensional array int a[] = new int[${5 + c}] (ICSE Class ${c} ${subject}), what is the valid index range?`,
+        options: [`0 to ${4 + c}`, `1 to ${5 + c}`, `0 to ${5 + c}`, `−1 to ${4 + c}`],
         correctIndex: 0,
-        explanation: `Zero-based indexing runs from 0 through length − 1 (${4 + level}).`,
+        explanation: `Zero-based indexing runs from 0 through length − 1 (${4 + c}).`,
         topic: 'Arrays & Indexing'
       },
       {
-        text: `Which loop executes its body AT LEAST ONCE before evaluating the termination condition (Class ${c} Level ${level} ${subject})?`,
+        text: `Which loop executes its body AT LEAST ONCE before evaluating the termination condition (Class ${c} ${subject})?`,
         options: ['do-while loop', 'while loop', 'for loop', 'if-else block'],
         correctIndex: 0,
         explanation: `do-while is an exit-controlled loop running once before condition testing.`,
         topic: 'Iterative Loops'
       },
       {
-        text: `What binary representation matches decimal integer ${8 + level + (c % 4)} in ICSE Class ${c} Computer Level ${level}?`,
+        text: `What binary representation matches decimal integer ${8 + c} in ICSE Class ${c} ${subject}?`,
         options: [
-          `(${(8 + level + (c % 4)).toString(2)})₂`,
+          `(${(8 + c).toString(2)})₂`,
           `(11111)₂`,
           `(100001)₂`,
           `(0101)₂`
         ],
         correctIndex: 0,
-        explanation: `Converting ${8 + level + (c % 4)} base-10 by repeated division by 2 yields ${(8 + level + (c % 4)).toString(2)}.`,
+        explanation: `Converting ${8 + c} base-10 by repeated division by 2 yields ${(8 + c).toString(2)}.`,
         topic: 'Number Systems'
       },
       {
-        text: `In CISCE Class ${c} Level ${level} Java Overloading, two constructors or methods share the same name inside one class by differing in:`,
+        text: `In CISCE Class ${c} ${subject} Overloading, two constructors or methods share the same name inside one class by differing in:`,
         options: [
           'Number, order, or data types of parameters (signature)',
           'Brace indentation colour only',
@@ -866,59 +950,156 @@ function makeGenericIcseSpecs(c: number, subject: SubjectName, level: QuizLevel)
     ];
   }
 
-  if (subject === 'English' || subject === 'Vocabulary and Grammar') {
-    const paperTitle = subject === 'Vocabulary and Grammar' ? 'Vocabulary and Grammar Paper' : 'English Paper 1';
-    return Array.from({ length: 10 }, (_, idx) => ({
-      text: `${tag} ${paperTitle} Level ${level} (Drill ${idx + 1}): Choose the sentence demonstrating accurate CISCE Class ${c} ${['synthesis with Despite', 'preposition usage', 'tense sequence', 'reported speech', 'conditional inversion', 'active-passive voice', 'question tag rule', 'bare infinitive', 'concord agreement', 'correct idiom'][idx]}:`,
-      options: [
-        [
+  if (subject === 'English') {
+    return [
+      {
+        text: `${tag} English Paper 1 (Drill 1): Choose the sentence demonstrating accurate CISCE Class ${c} synthesis with "Despite":`,
+        options: [
           `Despite heavy monsoon showers, the Class ${c} science symposium proceeded on schedule.`,
+          `Despite of heavy monsoon showers, the science symposium proceeded.`,
+          `Despite that heavy monsoon showers, the symposium was proceeded.`,
+          `Despite heavy showers, yet the symposium proceeded on schedule.`
+        ],
+        correctIndex: 0,
+        explanation: `"Despite" is never followed by "of" or paired with "yet".`,
+        topic: 'Sentence Transformation'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 2): Choose the sentence demonstrating accurate CISCE Class ${c} preposition usage with "accustomed":`,
+        options: [
           `Our Grade ${c} debating society is accustomed to rigorous parliamentary rebuttals.`,
-          `By the time the examiner arrived, every candidate had verified their roll number.`,
-          `The principal reminded candidates that they were to submit neat scripts.`,
-          `Had he revised the ICSE specimen paper thoroughly, he would have scored full marks.`,
-          `Valuable historical artefacts were preserved carefully by the museum curator.`,
-          `None of the spectators left the auditorium early, did they?`,
-          `The coach watched the sprinters cross the finish ribbon cleanly.`,
-          `Neither the captain nor her teammates are forfeiting tomorrow’s tie.`,
-          `Winning the inter-school trophy was a feather in her cap.`
-        ][idx],
-        `Despite of heavy monsoon showers, everything failed completely.`,
-        `Despite that heavy rain, the symposium doesn't proceeded.`,
-        `Heavy rain caused us forgetting grammar rules.`
-      ],
-      correctIndex: 0,
-      explanation: `Follows strict CISCE Paper 1 standard English transformation and syntax conventions.`,
-      topic: 'CISCE English Grammar'
-    }));
+          `Our debating society is accustomed with rigorous parliamentary rebuttals.`,
+          `Our debating society is accustomed from rigorous rebuttals.`,
+          `Our debating society is accustomed by rigorous rebuttals.`
+        ],
+        correctIndex: 0,
+        explanation: `The adjective "accustomed" takes the preposition "to".`,
+        topic: 'Prepositions'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 3): Choose the sentence demonstrating accurate CISCE Class ${c} past perfect tense sequence:`,
+        options: [
+          `By the time the examiner arrived, every Class ${c} candidate had verified their roll number.`,
+          `By the time the examiner arrived, every candidate has verify their roll number.`,
+          `By the time the examiner arrives, every candidate had verifying roll numbers.`,
+          `By the time the examiner arrived, every candidate will have verify their roll number.`
+        ],
+        correctIndex: 0,
+        explanation: `An action completed before another past action uses the Past Perfect ("had verified").`,
+        topic: 'Sequence of Tenses'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 4): Choose the sentence demonstrating accurate CISCE Class ${c} indirect/reported speech:`,
+        options: [
+          `The principal reminded the Class ${c} candidates that they were to submit neat scripts.`,
+          `The principal reminded the candidates that you are submitting neat scripts tomorrow.`,
+          `The principal reminded to candidates that they must submitted neat scripts.`,
+          `The principal told that candidates are to submitted neat scripts.`
+        ],
+        correctIndex: 0,
+        explanation: `Reported speech shifts pronouns and present tense verbs into the corresponding past form.`,
+        topic: 'Direct & Indirect Speech'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 5): Choose the sentence demonstrating accurate CISCE Class ${c} conditional inversion ("Had..."):`,
+        options: [
+          `Had he revised the Class ${c} specimen paper thoroughly, he would have scored full marks.`,
+          `Had he revised the specimen paper, he will score full marks.`,
+          `Had he revise the specimen paper, he would have scoring full marks.`,
+          `If had he revised the specimen paper, he would scored full marks.`
+        ],
+        correctIndex: 0,
+        explanation: `Third conditional inversion ("Had + subject + past participle") pairs with "would have + past participle".`,
+        topic: 'Conditional Sentences'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 6): Choose the sentence demonstrating accurate CISCE Class ${c} passive voice construction:`,
+        options: [
+          `Valuable historical artefacts were preserved carefully by the Class ${c} museum club.`,
+          `Valuable historical artefacts was preserving carefully by the museum club.`,
+          `Valuable historical artefacts were preserve by the museum club.`,
+          `Valuable historical artefacts has been preserved by the museum club.`
+        ],
+        correctIndex: 0,
+        explanation: `Plural subject "artefacts" takes "were + past participle (preserved)" in past passive.`,
+        topic: 'Active & Passive Voice'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 7): Choose the sentence demonstrating an accurate CISCE Class ${c} question tag:`,
+        options: [
+          `None of the Class ${c} spectators left the auditorium early, did they?`,
+          `None of the spectators left the auditorium early, didn't they?`,
+          `None of the spectators left the auditorium early, isn't it?`,
+          `None of the spectators left the auditorium early, did he?`
+        ],
+        correctIndex: 0,
+        explanation: `A negative pronoun ("None") in the main clause takes a positive question tag ("did they?").`,
+        topic: 'Question Tags'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 8): Choose the sentence demonstrating accurate CISCE Class ${c} bare infinitive usage after a verb of perception:`,
+        options: [
+          `The Class ${c} coach watched the sprinters cross the finish ribbon cleanly.`,
+          `The coach watched the sprinters to crossed the finish ribbon cleanly.`,
+          `The coach watched the sprinters for crossing the finish ribbon.`,
+          `The coach watched the sprinters had crossed the finish ribbon.`
+        ],
+        correctIndex: 0,
+        explanation: `Verbs of perception ("watch", "see", "hear") take the bare infinitive ("cross") for a complete action.`,
+        topic: 'Infinitives & Participles'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 9): Choose the sentence demonstrating accurate CISCE Class ${c} subject-verb concord with "Neither...nor":`,
+        options: [
+          `Neither the Class ${c} captain nor her teammates are forfeiting tomorrow’s tie.`,
+          `Neither the captain nor her teammates is forfeiting tomorrow’s tie.`,
+          `Neither the captain or her teammates was forfeiting tomorrow’s tie.`,
+          `Neither the captain nor her teammates has forfeiting tomorrow’s tie.`
+        ],
+        correctIndex: 0,
+        explanation: `With "Neither...nor", the verb agrees in number with the nearer subject ("teammates" → "are").`,
+        topic: 'Subject-Verb Agreement'
+      },
+      {
+        text: `${tag} English Paper 1 (Drill 10): Choose the sentence using the idiom "a feather in one's cap" accurately for CISCE Class ${c}:`,
+        options: [
+          `Winning the Class ${c} inter-school literary shield was a feather in her cap.`,
+          `Losing the notebook carelessly was a feather in her cap.`,
+          `Postponing the examination due to rain was a feather in the cap.`,
+          `Breaking the laboratory beaker was a feather in her cap.`
+        ],
+        correctIndex: 0,
+        explanation: `"A feather in one's cap" means a proud achievement or honour to be proud of.`,
+        topic: 'Idioms & Phrasal Verbs'
+      }
+    ];
   }
 
-  if (subject === 'Hindi') {
-    return Array.from({ length: 10 }, (_, idx) => ({
-      text: `${tag} हिंदी पाठ्यक्रम स्तर ${level} (अभ्यास ${idx + 1}): कक्षा ${c} ICSE मानक के अनुसार "${['ईमानदारी', 'विद्वान', 'शीतल', 'उन्नति', 'प्रकाश', 'दयालु', 'प्राचीन', 'मधुर', 'साहसी', 'स्वच्छ'][idx]}" शब्द का सटीक व्याकरणिक रूप चुनिए:`,
-      options: [
-        ['भाववाचक संज्ञा (ईमानदार से निर्मित)', 'विदुषी (स्त्रीलिंग रूप)', 'उष्ण (विलोम शब्द)', 'अवनति (विलोम शब्द)', 'अंधकार (विपरीतार्थक)', 'निर्दय (विलोम)', 'नवीन / अर्वाचीन (विलोम)', 'कटु / कर्कश (विलोम)', 'कायर (विलोम)', 'निर्मल (समानार्थी)'][idx],
-        'अशुद्ध वर्तनी रूप',
-        'विदेशी असंगत क्रियापद',
-        'गलत लिंग-वचन प्रयोग'
-      ],
-      correctIndex: 0,
-      explanation: `ICSE हिंदी व्याकरण कक्षा ${c} के मानकों के अनुरूप यह पूर्णतः शुद्ध उत्तर है।`,
-      topic: 'हिंदी भाषा एवं व्याकरण'
-    }));
-  }
-
-  return Array.from({ length: 10 }, (_, idx) => ({
-    text: `${tag} ${subject} Level ${level} (Topic ${idx + 1}): Identify the verified CISCE Class ${c} concept for "${subject}" Unit ${idx + 1}:`,
+  // Hindi Level 1
+  const words = ['ईमानदारी', 'विद्वान', 'शीतल', 'उन्नति', 'प्रकाश', 'दयालु', 'प्राचीन', 'मधुर', 'साहसी', 'स्वच्छ'];
+  const correctAns = [
+    'भाववाचक संज्ञा (ईमानदार विशेषण से निर्मित)',
+    'विदुषी (शुद्ध स्त्रीलिंग रूप)',
+    'उष्ण (सटीक विलोम शब्द)',
+    'अवनति (सटीक विलोम शब्द)',
+    'अंधकार (विपरीतार्थक शब्द)',
+    'निर्दय / क्रूर (विलोम शब्द)',
+    'नवीन / अर्वाचीन (विलोम शब्द)',
+    'कटु / कर्कश (विलोम शब्द)',
+    'कायर / भीरु (विलोम शब्द)',
+    'निर्मल / साफ़ (पर्यायवाची शब्द)'
+  ];
+  return words.map((word, idx) => ({
+    text: `${tag} हिंदी पाठ्यक्रम (अभ्यास ${idx + 1}): कक्षा ${c} ICSE मानक के अनुसार "${word}" शब्द का सटीक व्याकरणिक रूप चुनिए:`,
     options: [
-      `Core CISCE ${subject} principle #${idx + 1} tailored for Class ${c} Level ${level} mastery`,
-      `Unverified assumption contradicting CISCE Class ${c} textbooks`,
-      `Incorrect historical or economic interpretation`,
-      `Out-of-syllabus distraction option`
+      correctAns[idx],
+      `अशुद्ध वर्तनी रूप (${word}-ता)`,
+      `असंगत क्रिया-विशेषण प्रयोग`,
+      `त्रुटिपूर्ण कारक-विभक्ति रूप`
     ],
     correctIndex: 0,
-    explanation: `Verified against official CISCE Class ${c} ${subject} syllabus guidelines.`,
-    topic: `${subject} CISCE Module ${idx + 1}`
+    explanation: `ICSE हिंदी व्याकरण कक्षा ${c} के मानकों के अनुसार "${word}" के लिए "${correctAns[idx]}" पूर्णतः शुद्ध उत्तर है।`,
+    topic: 'हिंदी भाषा एवं व्याकरण'
   }));
 }
 
@@ -939,7 +1120,7 @@ export function getIcseSubjectQuestions(
     subject === 'Environmental Studies' ||
     subject === 'Environmental Education'
   ) {
-    return makeIcseScienceSpecs(c, subject, level);
+    return makeIcseScienceSpecs(classLevel, subject, level);
   }
-  return makeGenericIcseSpecs(c, subject, level);
+  return makeGenericIcseSpecs(classLevel, subject, level);
 }

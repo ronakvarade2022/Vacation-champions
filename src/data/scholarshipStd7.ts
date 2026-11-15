@@ -3733,61 +3733,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 12:",
-      "Marathi": "१२ आणि 12 यांचा लसावि किती?",
-      "Hindi": "१२ और 12 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 12:",
-      "Gujarati": "१२ और 12 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 12:",
-      "Kannada": "Find the LCM of 12 and 12:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 18:",
+      "Marathi": "12 आणि 18 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 18 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 18:",
+      "Gujarati": "12 और 18 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 18:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 18:"
     },
     "options": {
       "English": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ],
       "Marathi": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ],
       "Hindi": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ],
       "Urdu": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ],
       "Gujarati": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ],
       "Telugu": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ],
       "Kannada": [
-        "12",
-        "24",
-        "6",
+        "36",
+        "72",
+        "48",
         "24"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 18 is 36.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -3963,45 +3963,45 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ],
       "Marathi": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ],
       "Hindi": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ],
       "Urdu": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ],
       "Gujarati": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ],
       "Telugu": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ],
       "Kannada": [
         "5 cm",
+        "6 cm",
         "7 cm",
-        "4 cm",
-        "7 cm"
+        "8 cm"
       ]
     },
     "correctIndex": 0,
@@ -4036,50 +4036,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "140°",
-        "130°",
-        "160°",
-        "90°"
+        "125°",
+        "155°",
+        "165°"
       ],
       "Marathi": [
         "140°",
-        "130°",
-        "160°",
-        "९०°"
+        "125°",
+        "155°",
+        "165°"
       ],
       "Hindi": [
         "140°",
-        "130°",
-        "160°",
-        "९०°"
+        "125°",
+        "155°",
+        "165°"
       ],
       "Urdu": [
         "140°",
-        "130°",
-        "160°",
-        "90°"
+        "125°",
+        "155°",
+        "165°"
       ],
       "Gujarati": [
         "140°",
-        "130°",
-        "160°",
-        "९०°"
+        "125°",
+        "155°",
+        "165°"
       ],
       "Telugu": [
         "140°",
-        "130°",
-        "160°",
-        "90°"
+        "125°",
+        "155°",
+        "165°"
       ],
       "Kannada": [
         "140°",
-        "130°",
-        "160°",
-        "90°"
+        "125°",
+        "155°",
+        "165°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 40 = 140°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 40° = 140°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 40 = 140°.",
       "Hindi": "१८० - 40 = 140°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 40 = 140°.",
@@ -4463,61 +4463,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 18:",
-      "Marathi": "१२ आणि 18 यांचा लसावि किती?",
-      "Hindi": "१२ और 18 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 18:",
-      "Gujarati": "१२ और 18 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 18:",
-      "Kannada": "Find the LCM of 12 and 18:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 24:",
+      "Marathi": "12 आणि 24 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 24 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 24:",
+      "Gujarati": "12 और 24 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 24:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 24:"
     },
     "options": {
       "English": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ],
       "Marathi": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ],
       "Hindi": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ],
       "Urdu": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ],
       "Gujarati": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ],
       "Telugu": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ],
       "Kannada": [
         "24",
         "48",
-        "12",
-        "36"
+        "36",
+        "12"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 24 is 24.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -4766,50 +4766,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "130°",
-        "120°",
-        "150°",
-        "90°"
+        "115°",
+        "145°",
+        "155°"
       ],
       "Marathi": [
         "130°",
-        "120°",
-        "150°",
-        "९०°"
+        "115°",
+        "145°",
+        "155°"
       ],
       "Hindi": [
         "130°",
-        "120°",
-        "150°",
-        "९०°"
+        "115°",
+        "145°",
+        "155°"
       ],
       "Urdu": [
         "130°",
-        "120°",
-        "150°",
-        "90°"
+        "115°",
+        "145°",
+        "155°"
       ],
       "Gujarati": [
         "130°",
-        "120°",
-        "150°",
-        "९०°"
+        "115°",
+        "145°",
+        "155°"
       ],
       "Telugu": [
         "130°",
-        "120°",
-        "150°",
-        "90°"
+        "115°",
+        "145°",
+        "155°"
       ],
       "Kannada": [
         "130°",
-        "120°",
-        "150°",
-        "90°"
+        "115°",
+        "145°",
+        "155°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 50 = 130°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 50° = 130°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 50 = 130°.",
       "Hindi": "१८० - 50 = 130°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 50 = 130°.",
@@ -5193,61 +5193,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 24:",
-      "Marathi": "१२ आणि 24 यांचा लसावि किती?",
-      "Hindi": "१२ और 24 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 24:",
-      "Gujarati": "१२ और 24 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 24:",
-      "Kannada": "Find the LCM of 12 and 24:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 30:",
+      "Marathi": "12 आणि 30 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 30 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 30:",
+      "Gujarati": "12 और 30 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 30:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 30:"
     },
     "options": {
       "English": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ],
       "Marathi": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ],
       "Hindi": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ],
       "Urdu": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ],
       "Gujarati": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ],
       "Telugu": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ],
       "Kannada": [
-        "36",
+        "60",
+        "120",
         "72",
-        "18",
         "48"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 30 is 60.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -5496,50 +5496,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "120°",
-        "110°",
-        "140°",
-        "90°"
+        "105°",
+        "135°",
+        "145°"
       ],
       "Marathi": [
         "120°",
-        "110°",
-        "140°",
-        "९०°"
+        "105°",
+        "135°",
+        "145°"
       ],
       "Hindi": [
         "120°",
-        "110°",
-        "140°",
-        "९०°"
+        "105°",
+        "135°",
+        "145°"
       ],
       "Urdu": [
         "120°",
-        "110°",
-        "140°",
-        "90°"
+        "105°",
+        "135°",
+        "145°"
       ],
       "Gujarati": [
         "120°",
-        "110°",
-        "140°",
-        "९०°"
+        "105°",
+        "135°",
+        "145°"
       ],
       "Telugu": [
         "120°",
-        "110°",
-        "140°",
-        "90°"
+        "105°",
+        "135°",
+        "145°"
       ],
       "Kannada": [
         "120°",
-        "110°",
-        "140°",
-        "90°"
+        "105°",
+        "135°",
+        "145°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 60 = 120°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 60° = 120°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 60 = 120°.",
       "Hindi": "१८० - 60 = 120°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 60 = 120°.",
@@ -5923,61 +5923,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 30:",
-      "Marathi": "१२ आणि 30 यांचा लसावि किती?",
-      "Hindi": "१२ और 30 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 30:",
-      "Gujarati": "१२ और 30 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 30:",
-      "Kannada": "Find the LCM of 12 and 30:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 36:",
+      "Marathi": "12 आणि 36 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 36 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 36:",
+      "Gujarati": "12 और 36 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 36:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 36:"
     },
     "options": {
       "English": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ],
       "Marathi": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ],
       "Hindi": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ],
       "Urdu": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ],
       "Gujarati": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ],
       "Telugu": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ],
       "Kannada": [
+        "36",
+        "72",
         "48",
-        "96",
-        "24",
-        "60"
+        "24"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 36 is 36.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -6226,50 +6226,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "110°",
-        "100°",
-        "130°",
-        "90°"
+        "95°",
+        "125°",
+        "135°"
       ],
       "Marathi": [
         "110°",
-        "100°",
-        "130°",
-        "९०°"
+        "95°",
+        "125°",
+        "135°"
       ],
       "Hindi": [
         "110°",
-        "100°",
-        "130°",
-        "९०°"
+        "95°",
+        "125°",
+        "135°"
       ],
       "Urdu": [
         "110°",
-        "100°",
-        "130°",
-        "90°"
+        "95°",
+        "125°",
+        "135°"
       ],
       "Gujarati": [
         "110°",
-        "100°",
-        "130°",
-        "९०°"
+        "95°",
+        "125°",
+        "135°"
       ],
       "Telugu": [
         "110°",
-        "100°",
-        "130°",
-        "90°"
+        "95°",
+        "125°",
+        "135°"
       ],
       "Kannada": [
         "110°",
-        "100°",
-        "130°",
-        "90°"
+        "95°",
+        "125°",
+        "135°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 70 = 110°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 70° = 110°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 70 = 110°.",
       "Hindi": "१८० - 70 = 110°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 70 = 110°.",
@@ -6653,61 +6653,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 36:",
-      "Marathi": "१२ आणि 36 यांचा लसावि किती?",
-      "Hindi": "१२ और 36 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 36:",
-      "Gujarati": "१२ और 36 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 36:",
-      "Kannada": "Find the LCM of 12 and 36:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 42:",
+      "Marathi": "12 आणि 42 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 42 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 42:",
+      "Gujarati": "12 और 42 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 42:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 42:"
     },
     "options": {
       "English": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ],
       "Marathi": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ],
       "Hindi": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ],
       "Urdu": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ],
       "Gujarati": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ],
       "Telugu": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ],
       "Kannada": [
-        "60",
-        "120",
-        "30",
+        "84",
+        "168",
+        "96",
         "72"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 42 is 84.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -6956,50 +6956,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "100°",
-        "90°",
-        "120°",
-        "90°"
+        "85°",
+        "115°",
+        "125°"
       ],
       "Marathi": [
         "100°",
-        "90°",
-        "120°",
-        "९०°"
+        "85°",
+        "115°",
+        "125°"
       ],
       "Hindi": [
         "100°",
-        "90°",
-        "120°",
-        "९०°"
+        "85°",
+        "115°",
+        "125°"
       ],
       "Urdu": [
         "100°",
-        "90°",
-        "120°",
-        "90°"
+        "85°",
+        "115°",
+        "125°"
       ],
       "Gujarati": [
         "100°",
-        "90°",
-        "120°",
-        "९०°"
+        "85°",
+        "115°",
+        "125°"
       ],
       "Telugu": [
         "100°",
-        "90°",
-        "120°",
-        "90°"
+        "85°",
+        "115°",
+        "125°"
       ],
       "Kannada": [
         "100°",
-        "90°",
-        "120°",
-        "90°"
+        "85°",
+        "115°",
+        "125°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 80 = 100°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 80° = 100°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 80 = 100°.",
       "Hindi": "१८० - 80 = 100°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 80 = 100°.",
@@ -7383,61 +7383,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 42:",
-      "Marathi": "१२ आणि 42 यांचा लसावि किती?",
-      "Hindi": "१२ और 42 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 42:",
-      "Gujarati": "१२ और 42 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 42:",
-      "Kannada": "Find the LCM of 12 and 42:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 48:",
+      "Marathi": "12 आणि 48 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 48 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 48:",
+      "Gujarati": "12 और 48 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 48:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 48:"
     },
     "options": {
       "English": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ],
       "Marathi": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ],
       "Hindi": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ],
       "Urdu": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ],
       "Gujarati": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ],
       "Telugu": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ],
       "Kannada": [
-        "72",
-        "144",
-        "36",
-        "84"
+        "48",
+        "96",
+        "60",
+        "36"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 48 is 48.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -7686,50 +7686,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "90°",
-        "80°",
-        "110°",
-        "90°"
+        "75°",
+        "105°",
+        "115°"
       ],
       "Marathi": [
         "90°",
-        "80°",
-        "110°",
-        "९०°"
+        "75°",
+        "105°",
+        "115°"
       ],
       "Hindi": [
         "90°",
-        "80°",
-        "110°",
-        "९०°"
+        "75°",
+        "105°",
+        "115°"
       ],
       "Urdu": [
         "90°",
-        "80°",
-        "110°",
-        "90°"
+        "75°",
+        "105°",
+        "115°"
       ],
       "Gujarati": [
         "90°",
-        "80°",
-        "110°",
-        "९०°"
+        "75°",
+        "105°",
+        "115°"
       ],
       "Telugu": [
         "90°",
-        "80°",
-        "110°",
-        "90°"
+        "75°",
+        "105°",
+        "115°"
       ],
       "Kannada": [
         "90°",
-        "80°",
-        "110°",
-        "90°"
+        "75°",
+        "105°",
+        "115°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 90 = 90°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 90° = 90°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 90 = 90°.",
       "Hindi": "१८० - 90 = 90°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 90 = 90°.",
@@ -8113,61 +8113,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 48:",
-      "Marathi": "१२ आणि 48 यांचा लसावि किती?",
-      "Hindi": "१२ और 48 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 48:",
-      "Gujarati": "१२ और 48 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 48:",
-      "Kannada": "Find the LCM of 12 and 48:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 54:",
+      "Marathi": "12 आणि 54 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 54 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 54:",
+      "Gujarati": "12 और 54 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 54:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 54:"
     },
     "options": {
       "English": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ],
       "Marathi": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ],
       "Hindi": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ],
       "Urdu": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ],
       "Gujarati": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ],
       "Telugu": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ],
       "Kannada": [
-        "84",
-        "168",
-        "42",
+        "108",
+        "216",
+        "120",
         "96"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 54 is 108.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -8416,50 +8416,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "80°",
-        "70°",
-        "100°",
-        "90°"
+        "65°",
+        "95°",
+        "105°"
       ],
       "Marathi": [
         "80°",
-        "70°",
-        "100°",
-        "९०°"
+        "65°",
+        "95°",
+        "105°"
       ],
       "Hindi": [
         "80°",
-        "70°",
-        "100°",
-        "९०°"
+        "65°",
+        "95°",
+        "105°"
       ],
       "Urdu": [
         "80°",
-        "70°",
-        "100°",
-        "90°"
+        "65°",
+        "95°",
+        "105°"
       ],
       "Gujarati": [
         "80°",
-        "70°",
-        "100°",
-        "९०°"
+        "65°",
+        "95°",
+        "105°"
       ],
       "Telugu": [
         "80°",
-        "70°",
-        "100°",
-        "90°"
+        "65°",
+        "95°",
+        "105°"
       ],
       "Kannada": [
         "80°",
-        "70°",
-        "100°",
-        "90°"
+        "65°",
+        "95°",
+        "105°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 100 = 80°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 100° = 80°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 100 = 80°.",
       "Hindi": "१८० - 100 = 80°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 100 = 80°.",
@@ -8843,61 +8843,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 54:",
-      "Marathi": "१२ आणि 54 यांचा लसावि किती?",
-      "Hindi": "१२ और 54 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 54:",
-      "Gujarati": "१२ और 54 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 54:",
-      "Kannada": "Find the LCM of 12 and 54:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 60:",
+      "Marathi": "12 आणि 60 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 60 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 60:",
+      "Gujarati": "12 और 60 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 60:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 60:"
     },
     "options": {
       "English": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ],
       "Marathi": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ],
       "Hindi": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ],
       "Urdu": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ],
       "Gujarati": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ],
       "Telugu": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ],
       "Kannada": [
-        "96",
-        "192",
-        "48",
-        "108"
+        "60",
+        "120",
+        "72",
+        "48"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 60 is 60.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -9146,50 +9146,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "70°",
-        "60°",
-        "90°",
-        "90°"
+        "55°",
+        "85°",
+        "95°"
       ],
       "Marathi": [
         "70°",
-        "60°",
-        "90°",
-        "९०°"
+        "55°",
+        "85°",
+        "95°"
       ],
       "Hindi": [
         "70°",
-        "60°",
-        "90°",
-        "९०°"
+        "55°",
+        "85°",
+        "95°"
       ],
       "Urdu": [
         "70°",
-        "60°",
-        "90°",
-        "90°"
+        "55°",
+        "85°",
+        "95°"
       ],
       "Gujarati": [
         "70°",
-        "60°",
-        "90°",
-        "९०°"
+        "55°",
+        "85°",
+        "95°"
       ],
       "Telugu": [
         "70°",
-        "60°",
-        "90°",
-        "90°"
+        "55°",
+        "85°",
+        "95°"
       ],
       "Kannada": [
         "70°",
-        "60°",
-        "90°",
-        "90°"
+        "55°",
+        "85°",
+        "95°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 110 = 70°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 110° = 70°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 110 = 70°.",
       "Hindi": "१८० - 110 = 70°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 110 = 70°.",
@@ -9573,61 +9573,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 60:",
-      "Marathi": "१२ आणि 60 यांचा लसावि किती?",
-      "Hindi": "१२ और 60 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 60:",
-      "Gujarati": "१२ और 60 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 60:",
-      "Kannada": "Find the LCM of 12 and 60:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 66:",
+      "Marathi": "12 आणि 66 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 66 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 66:",
+      "Gujarati": "12 और 66 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 66:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 66:"
     },
     "options": {
       "English": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ],
       "Marathi": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ],
       "Hindi": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ],
       "Urdu": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ],
       "Gujarati": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ],
       "Telugu": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ],
       "Kannada": [
-        "108",
-        "216",
-        "54",
+        "132",
+        "264",
+        "144",
         "120"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 66 is 132.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -9876,50 +9876,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "60°",
-        "50°",
-        "80°",
-        "90°"
+        "45°",
+        "75°",
+        "85°"
       ],
       "Marathi": [
         "60°",
-        "50°",
-        "80°",
-        "९०°"
+        "45°",
+        "75°",
+        "85°"
       ],
       "Hindi": [
         "60°",
-        "50°",
-        "80°",
-        "९०°"
+        "45°",
+        "75°",
+        "85°"
       ],
       "Urdu": [
         "60°",
-        "50°",
-        "80°",
-        "90°"
+        "45°",
+        "75°",
+        "85°"
       ],
       "Gujarati": [
         "60°",
-        "50°",
-        "80°",
-        "९०°"
+        "45°",
+        "75°",
+        "85°"
       ],
       "Telugu": [
         "60°",
-        "50°",
-        "80°",
-        "90°"
+        "45°",
+        "75°",
+        "85°"
       ],
       "Kannada": [
         "60°",
-        "50°",
-        "80°",
-        "90°"
+        "45°",
+        "75°",
+        "85°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 120 = 60°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 120° = 60°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 120 = 60°.",
       "Hindi": "१८० - 120 = 60°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 120 = 60°.",
@@ -10303,61 +10303,61 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "moderate",
     "type": "lcm_hcf",
     "questionText": {
-      "English": "Find the LCM of 12 and 66:",
-      "Marathi": "१२ आणि 66 यांचा लसावि किती?",
-      "Hindi": "१२ और 66 का ल.स.प. क्या होगा?",
-      "Urdu": "Find the LCM of 12 and 66:",
-      "Gujarati": "१२ और 66 का ल.स.प. क्या होगा?",
-      "Telugu": "Find the LCM of 12 and 66:",
-      "Kannada": "Find the LCM of 12 and 66:"
+      "English": "Find the Least Common Multiple (LCM) of 12 and 72:",
+      "Marathi": "12 आणि 72 यांचा लसावि (LCM) काढा:",
+      "Hindi": "12 और 72 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Urdu": "Find the Least Common Multiple (LCM) of 12 and 72:",
+      "Gujarati": "12 और 72 का लघुत्तम समापवर्त्य (LCM) ज्ञात कीजिए:",
+      "Telugu": "Find the Least Common Multiple (LCM) of 12 and 72:",
+      "Kannada": "Find the Least Common Multiple (LCM) of 12 and 72:"
     },
     "options": {
       "English": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ],
       "Marathi": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ],
       "Hindi": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ],
       "Urdu": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ],
       "Gujarati": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ],
       "Telugu": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ],
       "Kannada": [
-        "120",
-        "240",
-        "60",
-        "132"
+        "72",
+        "144",
+        "84",
+        "60"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "LCM calculation by prime factorization.",
+      "English": "The smallest positive integer divisible by both 12 and 72 is 72.",
       "Marathi": "मूळ अवयव पद्धतीने लसावि काढला.",
       "Hindi": "ल.स.प. विधि।",
       "Urdu": "LCM calculation by prime factorization.",
@@ -10606,50 +10606,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "50°",
-        "40°",
-        "70°",
-        "90°"
+        "35°",
+        "65°",
+        "75°"
       ],
       "Marathi": [
         "50°",
-        "40°",
-        "70°",
-        "९०°"
+        "35°",
+        "65°",
+        "75°"
       ],
       "Hindi": [
         "50°",
-        "40°",
-        "70°",
-        "९०°"
+        "35°",
+        "65°",
+        "75°"
       ],
       "Urdu": [
         "50°",
-        "40°",
-        "70°",
-        "90°"
+        "35°",
+        "65°",
+        "75°"
       ],
       "Gujarati": [
         "50°",
-        "40°",
-        "70°",
-        "९०°"
+        "35°",
+        "65°",
+        "75°"
       ],
       "Telugu": [
         "50°",
-        "40°",
-        "70°",
-        "90°"
+        "35°",
+        "65°",
+        "75°"
       ],
       "Kannada": [
         "50°",
-        "40°",
-        "70°",
-        "90°"
+        "35°",
+        "65°",
+        "75°"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Supplementary angles add up to 180°: 180 - 130 = 50°.",
+      "English": "Supplementary angles sum to 180°. Therefore, 180° - 130° = 50°.",
       "Marathi": "पूरककोनांची बेरीज १८०° असते: १८० - 130 = 50°.",
       "Hindi": "१८० - 130 = 50°।",
       "Urdu": "Supplementary angles add up to 180°: 180 - 130 = 50°.",
@@ -15279,49 +15279,49 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
       "English": [
         "30th",
         "29th",
-        "31th",
-        "29th"
+        "31st",
+        "32nd"
       ],
       "Marathi": [
         "30 वा",
         "29 वा",
         "31 वा",
-        "29 वा"
+        "32 वा"
       ],
       "Hindi": [
         "30 वां",
         "29 वां",
         "31 वां",
-        "29 वां"
+        "32 वां"
       ],
       "Urdu": [
         "30th",
         "29th",
-        "31th",
-        "29th"
+        "31st",
+        "32nd"
       ],
       "Gujarati": [
         "30 वां",
         "29 वां",
         "31 वां",
-        "29 वां"
+        "32 वां"
       ],
       "Telugu": [
         "30th",
         "29th",
-        "31th",
-        "29th"
+        "31st",
+        "32nd"
       ],
       "Kannada": [
         "30th",
         "29th",
-        "31th",
-        "29th"
+        "31st",
+        "32nd"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 41 - 12 + 1 = 30th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 41 - 12 + 1 = 30th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 41 - 12 + १ = 30 वा.",
       "Hindi": "नीचे से स्थान = 41 - 12 + १ = 30।",
       "Urdu": "Bottom rank = Total - Top + 1 = 41 - 12 + 1 = 30th.",
@@ -16007,51 +16007,51 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "31th",
+        "31st",
         "30th",
-        "32th",
-        "30th"
+        "32nd",
+        "33rd"
       ],
       "Marathi": [
         "31 वा",
         "30 वा",
         "32 वा",
-        "30 वा"
+        "33 वा"
       ],
       "Hindi": [
         "31 वां",
         "30 वां",
         "32 वां",
-        "30 वां"
+        "33 वां"
       ],
       "Urdu": [
-        "31th",
+        "31st",
         "30th",
-        "32th",
-        "30th"
+        "32nd",
+        "33rd"
       ],
       "Gujarati": [
         "31 वां",
         "30 वां",
         "32 वां",
-        "30 वां"
+        "33 वां"
       ],
       "Telugu": [
-        "31th",
+        "31st",
         "30th",
-        "32th",
-        "30th"
+        "32nd",
+        "33rd"
       ],
       "Kannada": [
-        "31th",
+        "31st",
         "30th",
-        "32th",
-        "30th"
+        "32nd",
+        "33rd"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 42 - 12 + 1 = 31th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 42 - 12 + 1 = 31st.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 42 - 12 + १ = 31 वा.",
       "Hindi": "नीचे से स्थान = 42 - 12 + १ = 31।",
       "Urdu": "Bottom rank = Total - Top + 1 = 42 - 12 + 1 = 31th.",
@@ -16737,51 +16737,51 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "32th",
-        "31th",
-        "33th",
-        "31th"
+        "32nd",
+        "31st",
+        "33rd",
+        "34th"
       ],
       "Marathi": [
         "32 वा",
         "31 वा",
         "33 वा",
-        "31 वा"
+        "34 वा"
       ],
       "Hindi": [
         "32 वां",
         "31 वां",
         "33 वां",
-        "31 वां"
+        "34 वां"
       ],
       "Urdu": [
-        "32th",
-        "31th",
-        "33th",
-        "31th"
+        "32nd",
+        "31st",
+        "33rd",
+        "34th"
       ],
       "Gujarati": [
         "32 वां",
         "31 वां",
         "33 वां",
-        "31 वां"
+        "34 वां"
       ],
       "Telugu": [
-        "32th",
-        "31th",
-        "33th",
-        "31th"
+        "32nd",
+        "31st",
+        "33rd",
+        "34th"
       ],
       "Kannada": [
-        "32th",
-        "31th",
-        "33th",
-        "31th"
+        "32nd",
+        "31st",
+        "33rd",
+        "34th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 43 - 12 + 1 = 32th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 43 - 12 + 1 = 32nd.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 43 - 12 + १ = 32 वा.",
       "Hindi": "नीचे से स्थान = 43 - 12 + १ = 32।",
       "Urdu": "Bottom rank = Total - Top + 1 = 43 - 12 + 1 = 32th.",
@@ -17467,51 +17467,51 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "33th",
-        "32th",
+        "33rd",
+        "32nd",
         "34th",
-        "32th"
+        "35th"
       ],
       "Marathi": [
         "33 वा",
         "32 वा",
         "34 वा",
-        "32 वा"
+        "35 वा"
       ],
       "Hindi": [
         "33 वां",
         "32 वां",
         "34 वां",
-        "32 वां"
+        "35 वां"
       ],
       "Urdu": [
-        "33th",
-        "32th",
+        "33rd",
+        "32nd",
         "34th",
-        "32th"
+        "35th"
       ],
       "Gujarati": [
         "33 वां",
         "32 वां",
         "34 वां",
-        "32 वां"
+        "35 वां"
       ],
       "Telugu": [
-        "33th",
-        "32th",
+        "33rd",
+        "32nd",
         "34th",
-        "32th"
+        "35th"
       ],
       "Kannada": [
-        "33th",
-        "32th",
+        "33rd",
+        "32nd",
         "34th",
-        "32th"
+        "35th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 44 - 12 + 1 = 33th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 44 - 12 + 1 = 33rd.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 44 - 12 + १ = 33 वा.",
       "Hindi": "नीचे से स्थान = 44 - 12 + १ = 33।",
       "Urdu": "Bottom rank = Total - Top + 1 = 44 - 12 + 1 = 33th.",
@@ -18198,50 +18198,50 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "34th",
-        "33th",
+        "33rd",
         "35th",
-        "33th"
+        "36th"
       ],
       "Marathi": [
         "34 वा",
         "33 वा",
         "35 वा",
-        "33 वा"
+        "36 वा"
       ],
       "Hindi": [
         "34 वां",
         "33 वां",
         "35 वां",
-        "33 वां"
+        "36 वां"
       ],
       "Urdu": [
         "34th",
-        "33th",
+        "33rd",
         "35th",
-        "33th"
+        "36th"
       ],
       "Gujarati": [
         "34 वां",
         "33 वां",
         "35 वां",
-        "33 वां"
+        "36 वां"
       ],
       "Telugu": [
         "34th",
-        "33th",
+        "33rd",
         "35th",
-        "33th"
+        "36th"
       ],
       "Kannada": [
         "34th",
-        "33th",
+        "33rd",
         "35th",
-        "33th"
+        "36th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 45 - 12 + 1 = 34th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 45 - 12 + 1 = 34th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 45 - 12 + १ = 34 वा.",
       "Hindi": "नीचे से स्थान = 45 - 12 + १ = 34।",
       "Urdu": "Bottom rank = Total - Top + 1 = 45 - 12 + 1 = 34th.",
@@ -18930,48 +18930,48 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
         "35th",
         "34th",
         "36th",
-        "34th"
+        "37th"
       ],
       "Marathi": [
         "35 वा",
         "34 वा",
         "36 वा",
-        "34 वा"
+        "37 वा"
       ],
       "Hindi": [
         "35 वां",
         "34 वां",
         "36 वां",
-        "34 वां"
+        "37 वां"
       ],
       "Urdu": [
         "35th",
         "34th",
         "36th",
-        "34th"
+        "37th"
       ],
       "Gujarati": [
         "35 वां",
         "34 वां",
         "36 वां",
-        "34 वां"
+        "37 वां"
       ],
       "Telugu": [
         "35th",
         "34th",
         "36th",
-        "34th"
+        "37th"
       ],
       "Kannada": [
         "35th",
         "34th",
         "36th",
-        "34th"
+        "37th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 46 - 12 + 1 = 35th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 46 - 12 + 1 = 35th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 46 - 12 + १ = 35 वा.",
       "Hindi": "नीचे से स्थान = 46 - 12 + १ = 35।",
       "Urdu": "Bottom rank = Total - Top + 1 = 46 - 12 + 1 = 35th.",
@@ -19660,48 +19660,48 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
         "36th",
         "35th",
         "37th",
-        "35th"
+        "38th"
       ],
       "Marathi": [
         "36 वा",
         "35 वा",
         "37 वा",
-        "35 वा"
+        "38 वा"
       ],
       "Hindi": [
         "36 वां",
         "35 वां",
         "37 वां",
-        "35 वां"
+        "38 वां"
       ],
       "Urdu": [
         "36th",
         "35th",
         "37th",
-        "35th"
+        "38th"
       ],
       "Gujarati": [
         "36 वां",
         "35 वां",
         "37 वां",
-        "35 वां"
+        "38 वां"
       ],
       "Telugu": [
         "36th",
         "35th",
         "37th",
-        "35th"
+        "38th"
       ],
       "Kannada": [
         "36th",
         "35th",
         "37th",
-        "35th"
+        "38th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 47 - 12 + 1 = 36th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 47 - 12 + 1 = 36th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 47 - 12 + १ = 36 वा.",
       "Hindi": "नीचे से स्थान = 47 - 12 + १ = 36।",
       "Urdu": "Bottom rank = Total - Top + 1 = 47 - 12 + 1 = 36th.",
@@ -20390,48 +20390,48 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
         "37th",
         "36th",
         "38th",
-        "36th"
+        "39th"
       ],
       "Marathi": [
         "37 वा",
         "36 वा",
         "38 वा",
-        "36 वा"
+        "39 वा"
       ],
       "Hindi": [
         "37 वां",
         "36 वां",
         "38 वां",
-        "36 वां"
+        "39 वां"
       ],
       "Urdu": [
         "37th",
         "36th",
         "38th",
-        "36th"
+        "39th"
       ],
       "Gujarati": [
         "37 वां",
         "36 वां",
         "38 वां",
-        "36 वां"
+        "39 वां"
       ],
       "Telugu": [
         "37th",
         "36th",
         "38th",
-        "36th"
+        "39th"
       ],
       "Kannada": [
         "37th",
         "36th",
         "38th",
-        "36th"
+        "39th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 48 - 12 + 1 = 37th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 48 - 12 + 1 = 37th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 48 - 12 + १ = 37 वा.",
       "Hindi": "नीचे से स्थान = 48 - 12 + १ = 37।",
       "Urdu": "Bottom rank = Total - Top + 1 = 48 - 12 + 1 = 37th.",
@@ -21120,48 +21120,48 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
         "38th",
         "37th",
         "39th",
-        "37th"
+        "40th"
       ],
       "Marathi": [
         "38 वा",
         "37 वा",
         "39 वा",
-        "37 वा"
+        "40 वा"
       ],
       "Hindi": [
         "38 वां",
         "37 वां",
         "39 वां",
-        "37 वां"
+        "40 वां"
       ],
       "Urdu": [
         "38th",
         "37th",
         "39th",
-        "37th"
+        "40th"
       ],
       "Gujarati": [
         "38 वां",
         "37 वां",
         "39 वां",
-        "37 वां"
+        "40 वां"
       ],
       "Telugu": [
         "38th",
         "37th",
         "39th",
-        "37th"
+        "40th"
       ],
       "Kannada": [
         "38th",
         "37th",
         "39th",
-        "37th"
+        "40th"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 49 - 12 + 1 = 38th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 49 - 12 + 1 = 38th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 49 - 12 + १ = 38 वा.",
       "Hindi": "नीचे से स्थान = 49 - 12 + १ = 38।",
       "Urdu": "Bottom rank = Total - Top + 1 = 49 - 12 + 1 = 38th.",
@@ -21850,48 +21850,48 @@ export const ALL_STD7_QUESTIONS: ScholarshipQuestion[] = [
         "39th",
         "38th",
         "40th",
-        "38th"
+        "41st"
       ],
       "Marathi": [
         "39 वा",
         "38 वा",
         "40 वा",
-        "38 वा"
+        "41 वा"
       ],
       "Hindi": [
         "39 वां",
         "38 वां",
         "40 वां",
-        "38 वां"
+        "41 वां"
       ],
       "Urdu": [
         "39th",
         "38th",
         "40th",
-        "38th"
+        "41st"
       ],
       "Gujarati": [
         "39 वां",
         "38 वां",
         "40 वां",
-        "38 वां"
+        "41 वां"
       ],
       "Telugu": [
         "39th",
         "38th",
         "40th",
-        "38th"
+        "41st"
       ],
       "Kannada": [
         "39th",
         "38th",
         "40th",
-        "38th"
+        "41st"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Bottom rank = Total - Top + 1 = 50 - 12 + 1 = 39th.",
+      "English": "Rank from bottom = Total - Rank from top + 1 = 50 - 12 + 1 = 39th.",
       "Marathi": "खालून क्रमांक = एकूण - वरून + १ = 50 - 12 + १ = 39 वा.",
       "Hindi": "नीचे से स्थान = 50 - 12 + १ = 39।",
       "Urdu": "Bottom rank = Total - Top + 1 = 50 - 12 + 1 = 39th.",

@@ -4,6 +4,7 @@ import { randomizeQuizQuestions } from './answerRandomizerService';
 import { getPart1SubjectQuestions, RawQuizSpec } from '../data/questions/subject40BankPart1';
 import { getPart2SubjectQuestions } from '../data/questions/subject40BankPart2';
 import { getPart3SubjectQuestions } from '../data/questions/subject40BankPart3';
+import { getPart4SubjectQuestions } from '../data/questions/subject40BankPart4';
 import { getCbseSubjectQuestions } from '../data/questions/cbseQuestionBank';
 import { getIcseSubjectQuestions } from '../data/questions/icseQuestionBank';
 import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConfig';
@@ -93,10 +94,15 @@ function fetchRawSpecsForLevel(
   subject: SubjectName,
   level: QuizLevel
 ): RawQuizSpec[] {
+  const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 4;
+  if (subject === 'Computer Knowledge' && cNum <= 5) {
+    return getPart4SubjectQuestions(classLevel, 'Computer Studies', level) || [];
+  }
   return (
     getPart1SubjectQuestions(classLevel, subject, level) ||
     getPart2SubjectQuestions(classLevel, subject, level) ||
     getPart3SubjectQuestions(classLevel, subject, level) ||
+    getPart4SubjectQuestions(classLevel, subject, level) ||
     []
   );
 }

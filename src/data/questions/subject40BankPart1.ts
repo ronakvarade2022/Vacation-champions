@@ -124,7 +124,7 @@ export function getPart1SubjectQuestions(
         },
         {
           text: `Fill in the blank: If ${7 * c} sweets are shared equally among 7 children, each child receives _____ sweets.`,
-          options: [`${c - 1}`, `${c}`, `${c + 2}`, `${c * 2}`],
+          options: [`${c - 1}`, `${c}`, `${c + 1}`, `${c + 3}`],
           correctIndex: 1,
           explanation: `Dividing ${7 * c} ÷ 7 equals ${c} sweets per child.`,
           topic: 'Division as Equal Sharing'
@@ -166,7 +166,7 @@ export function getPart1SubjectQuestions(
         },
         {
           text: `Meera bought 3 notebooks for ₹${20 * c} each and a geometry box for ₹${35 * c}. How much did she spend in total?`,
-          options: [`₹${85 * c}`, `${95 * c}`, `₹${95 * c}`, `₹${105 * c}`].map((v, i) => i === 1 ? `₹${95 * c}` : i === 0 ? `₹${75 * c}` : v) as [string, string, string, string],
+          options: [`₹${75 * c}`, `₹${95 * c}`, `₹${85 * c}`, `₹${105 * c}`],
           correctIndex: 1,
           explanation: `Cost of 3 notebooks = 3 × ₹${20 * c} = ₹${60 * c}. Adding ₹${35 * c} gives ₹${95 * c}.`,
           topic: 'Money Word Problems'
@@ -248,10 +248,10 @@ export function getPart1SubjectQuestions(
           topic: 'Lines and Angles'
         },
         {
-          text: `A train travels at a constant speed of 60 km/h. How much distance will it cover in ${c} hours?`,
-          options: [`${60 * c - 30} km`, `${60 * c} km`, `${60 * c + 40} km`, `${30 * c} km`],
+          text: `A train travels at a constant speed of 60 km/h. How much distance will it cover in ${c + 1} hours?`,
+          options: [`${60 * (c + 1) - 20} km`, `${60 * (c + 1)} km`, `${60 * (c + 1) + 30} km`, `${30 * (c + 1)} km`],
           correctIndex: 1,
-          explanation: `Distance = Speed × Time = 60 km/h × ${c} hours = ${60 * c} km.`,
+          explanation: `Distance = Speed × Time = 60 km/h × ${c + 1} hours = ${60 * (c + 1)} km.`,
           topic: 'Speed, Distance and Time'
         },
         {
@@ -272,8 +272,83 @@ export function getPart1SubjectQuestions(
       ];
     }
 
-    // LEVEL 4: ADVANCED (10 Completely Different Questions)
+    // LEVEL 4: ADVANCED (10 Completely Different Questions, calibrated for Primary c<=5 vs Middle/Secondary c>=6)
     const xVal = c + 4;
+    if (c <= 5) {
+      return [
+        {
+          text: `Find the missing number in the equation: 5 × _____ - 8 = ${5 * xVal - 8}`,
+          options: [`${xVal - 2}`, `${xVal}`, `${xVal + 2}`, `${xVal + 5}`],
+          correctIndex: 1,
+          explanation: `Since 5 × ${xVal} = ${5 * xVal}, subtracting 8 gives ${5 * xVal - 8}. So the missing number is ${xVal}.`,
+          topic: 'Multi-Step Number Sentences'
+        },
+        {
+          text: `Fill in the blank: The Greatest Common Factor (HCF) that divides both 36 and 48 without remainder is _____.`,
+          options: ['6', '12', '18', '24'],
+          correctIndex: 1,
+          explanation: '36 = 12 × 3 and 48 = 12 × 4. Thus, 12 is the greatest common factor.',
+          topic: 'Factors & Common Divisors'
+        },
+        {
+          text: `True or False: A rectangle has 4 right-angle corners (90° each) and its opposite sides are equal in length.`,
+          options: ['True', 'False', 'Only 2 corners are equal', 'All 4 sides must be unequal'],
+          correctIndex: 0,
+          explanation: 'Every rectangle has 4 right angles and equal opposite sides.',
+          topic: 'Properties of 2D Shapes'
+        },
+        {
+          text: `Simplify the fraction ${15 * c}/${20 * c} to its lowest form:`,
+          options: ['2/3', '3/4', '4/5', '5/6'],
+          correctIndex: 1,
+          explanation: `Dividing numerator and denominator by ${5 * c} gives 3/4.`,
+          topic: 'Equivalent & Simplest Fractions'
+        },
+        {
+          text: `A school bag costs ₹${200 * c}. During a book fair, a student gets a ₹${40 * c} discount. What is the final price paid?`,
+          options: [`₹${150 * c}`, `₹${160 * c}`, `₹${170 * c}`, `₹${180 * c}`],
+          correctIndex: 1,
+          explanation: `Final price = ₹${200 * c} - ₹${40 * c} = ₹${160 * c}.`,
+          topic: 'Money & Savings Word Problems'
+        },
+        {
+          text: `Identify the INCORRECT statement about multiplication and division below:`,
+          options: ['12 × 5 = 60', '45 ÷ 9 = 5', '8 × 8 = 64', '7 × 9 = 72'],
+          correctIndex: 3,
+          explanation: '7 × 9 = 63 ( whereas 8 × 9 = 72). Therefore "7 × 9 = 72" is incorrect.',
+          topic: 'Multiplication & Division Verification'
+        },
+        {
+          text: `Complete the statement: The distance around the circular boundary of a wheel or coin is called its _____.`,
+          options: ['Diameter', 'Circumference', 'Centre', 'Corner'],
+          correctIndex: 1,
+          explanation: 'The outer boundary length of a circle is called its circumference.',
+          topic: 'Parts of a Circle'
+        },
+        {
+          text: `Evaluate the two-step calculation: (${25 * c} + ${15 * c}) - ${12 * c} = ?`,
+          options: [`${26 * c}`, `${28 * c}`, `${30 * c}`, `${32 * c}`],
+          correctIndex: 1,
+          explanation: `${25 * c} + ${15 * c} = ${40 * c}, and ${40 * c} - ${12 * c} = ${28 * c}.`,
+          topic: 'Combined Addition & Subtraction'
+        },
+        {
+          text: `Look at the chart icon 🥧. If a pizza is cut into 5 equal slices and 1 slice is eaten, what fraction of the pizza is eaten?`,
+          options: ['1/4', '1/5', '2/5', '1/3'],
+          correctIndex: 1,
+          diagramEmoji: '🥧',
+          explanation: '1 slice out of 5 equal slices represents the fraction 1/5.',
+          topic: 'Fractions of a Whole'
+        },
+        {
+          text: `Find the next term in the square-number pattern: 1, 4, 9, 16, 25, 36, ___`,
+          options: ['42', '49', '48', '64'],
+          correctIndex: 1,
+          explanation: 'The sequence represents 1×1, 2×2, 3×3, 4×4, 5×5, 6×6. The next term is 7×7 = 49.',
+          topic: 'Number Patterns & Squares'
+        }
+      ];
+    }
     return [
       {
         text: `Solve the linear equation for x: 5x - 8 = ${5 * xVal - 8}`,
@@ -386,7 +461,7 @@ export function getPart1SubjectQuestions(
         {
           text: `Choose the sentence with correct punctuation and capitalization:`,
           options: [
-            'india is a beautiful country.',
+            'india is a beautiful country without a full stop',
             'India is a beautiful country.',
             'India is a Beautiful Country?',
             'india Is A Beautiful Country!'

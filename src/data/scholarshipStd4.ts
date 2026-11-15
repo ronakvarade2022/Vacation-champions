@@ -5120,13 +5120,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 33457, what is the place value of digit 3?",
-      "Marathi": "33457 या संख्येत 3 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "33457 में 3 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 33457, what is the place value of digit 3?",
-      "Gujarati": "33457 में 3 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 33457, what is the place value of digit 3?",
-      "Kannada": "In the number 33457, what is the place value of digit 3?"
+      "English": "In the number 32457, what is the place value of digit 3?",
+      "Marathi": "32457 या संख्येतील 3 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 32457 में अंक 3 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 32457, what is the place value of digit 3?",
+      "Gujarati": "संख्या 32457 में अंक 3 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 32457, what is the place value of digit 3?",
+      "Kannada": "In the number 32457, what is the place value of digit 3?"
     },
     "options": {
       "English": [
@@ -5172,9 +5172,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "3"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 1,
     "explanation": {
-      "English": "Digit 3 is in the specified place.",
+      "English": "Digit 3 is in the ten-thousands place, so its place value is 30000.",
       "Marathi": "3 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 3 is in the specified place.",
@@ -5204,50 +5204,50 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ],
       "Marathi": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ],
       "Hindi": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ],
       "Urdu": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ],
       "Gujarati": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ],
       "Telugu": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ],
       "Kannada": [
         "XXIII",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIV"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 3 in Roman numerals added gives 23 = XXIII.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -5318,7 +5318,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "5620"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "3750 + 1920 = 5670.",
       "Marathi": "3750 + 1920 = 5670.",
@@ -5391,7 +5391,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1875"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 1,
     "explanation": {
       "English": "Difference is 1905.",
       "Marathi": "फरक 1905 येतो.",
@@ -5464,7 +5464,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "300"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "Product is 315.",
       "Marathi": "गुणाकार 315 येतो.",
@@ -5537,7 +5537,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1"
       ]
     },
-    "correctIndex": 0,
+    "correctIndex": 1,
     "explanation": {
       "English": "Remainder is 5.",
       "Marathi": "बाकी ५ उरते.",
@@ -5559,8 +5559,8 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "type": "fractions",
     "questionText": {
       "English": "What is 1/3 of 72?",
-      "Marathi": "72 चा १/3 भाग म्हणजे किती?",
-      "Hindi": "72 का १/3 भाग क्या होगा?",
+      "Marathi": "72 च्या 1/3 म्हणजे किती?",
+      "Hindi": "72 का 1/3 कितना होगा?",
       "Urdu": "What is 1/3 of 72?",
       "Gujarati": "72 का १/3 भाग क्या होगा?",
       "Telugu": "What is 1/3 of 72?",
@@ -5569,50 +5569,50 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
         "24",
-        "26",
-        "22",
-        "30"
+        "28",
+        "20",
+        "32"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "72 ÷ 3 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -5683,7 +5683,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1500 g"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 kg = 1000 g. Total = 3150 g.",
       "Marathi": "१ किग्रॅ = १००० ग्रॅ. एकूण 3150 ग्रॅम.",
@@ -5756,7 +5756,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "40 cm"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "4 × (9) = 36 cm.",
       "Marathi": "४ × (9) = 36 सेमी.",
@@ -5850,13 +5850,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 43457, what is the place value of digit 4?",
-      "Marathi": "43457 या संख्येत 4 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "43457 में 4 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 43457, what is the place value of digit 4?",
-      "Gujarati": "43457 में 4 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 43457, what is the place value of digit 4?",
-      "Kannada": "In the number 43457, what is the place value of digit 4?"
+      "English": "In the number 42457, what is the place value of digit 4?",
+      "Marathi": "42457 या संख्येतील 4 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 42457 में अंक 4 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 42457, what is the place value of digit 4?",
+      "Gujarati": "संख्या 42457 में अंक 4 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 42457, what is the place value of digit 4?",
+      "Kannada": "In the number 42457, what is the place value of digit 4?"
     },
     "options": {
       "English": [
@@ -5902,9 +5902,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "4"
       ]
     },
-    "correctIndex": 0,
+    "correctIndex": 1,
     "explanation": {
-      "English": "Digit 4 is in the specified place.",
+      "English": "Digit 4 is in the ten-thousands place, so its place value is 40000.",
       "Marathi": "4 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 4 is in the specified place.",
@@ -5934,50 +5934,50 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
         "XXIV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 4 in Roman numerals added gives 24 = XXIV.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -6048,7 +6048,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "7510"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "5000 + 2560 = 7560.",
       "Marathi": "5000 + 2560 = 7560.",
@@ -6121,7 +6121,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "2510"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 1,
     "explanation": {
       "English": "Difference is 2540.",
       "Marathi": "फरक 2540 येतो.",
@@ -6289,8 +6289,8 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "type": "fractions",
     "questionText": {
       "English": "What is 1/4 of 96?",
-      "Marathi": "96 चा १/4 भाग म्हणजे किती?",
-      "Hindi": "96 का १/4 भाग क्या होगा?",
+      "Marathi": "96 च्या 1/4 म्हणजे किती?",
+      "Hindi": "96 का 1/4 कितना होगा?",
       "Urdu": "What is 1/4 of 96?",
       "Gujarati": "96 का १/4 भाग क्या होगा?",
       "Telugu": "What is 1/4 of 96?",
@@ -6299,50 +6299,50 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
         "24",
-        "26",
-        "22",
-        "40"
+        "28",
+        "20",
+        "32"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "96 ÷ 4 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -6413,7 +6413,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "2000 g"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 kg = 1000 g. Total = 4200 g.",
       "Marathi": "१ किग्रॅ = १००० ग्रॅ. एकूण 4200 ग्रॅम.",
@@ -6559,7 +6559,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "96 mins"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 hour = 60 mins. 4 × 60 = 240 mins.",
       "Marathi": "१ तास = ६० मिनिटे. 4 × ६० = 240 मिनिटे.",
@@ -6580,13 +6580,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 53457, what is the place value of digit 5?",
-      "Marathi": "53457 या संख्येत 5 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "53457 में 5 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 53457, what is the place value of digit 5?",
-      "Gujarati": "53457 में 5 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 53457, what is the place value of digit 5?",
-      "Kannada": "In the number 53457, what is the place value of digit 5?"
+      "English": "In the number 52457, what is the place value of digit 5?",
+      "Marathi": "52457 या संख्येतील 5 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 52457 में अंक 5 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 52457, what is the place value of digit 5?",
+      "Gujarati": "संख्या 52457 में अंक 5 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 52457, what is the place value of digit 5?",
+      "Kannada": "In the number 52457, what is the place value of digit 5?"
     },
     "options": {
       "English": [
@@ -6634,7 +6634,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "correctIndex": 1,
     "explanation": {
-      "English": "Digit 5 is in the specified place.",
+      "English": "Digit 5 is in the ten-thousands place, so its place value is 50000.",
       "Marathi": "5 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 5 is in the specified place.",
@@ -6664,50 +6664,50 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
         "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 5 in Roman numerals added gives 25 = XXV.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -6778,7 +6778,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "9400"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "6250 + 3200 = 9450.",
       "Marathi": "6250 + 3200 = 9450.",
@@ -6851,7 +6851,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "3145"
       ]
     },
-    "correctIndex": 0,
+    "correctIndex": 1,
     "explanation": {
       "English": "Difference is 3175.",
       "Marathi": "फरक 3175 येतो.",
@@ -6924,7 +6924,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "660"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "Product is 675.",
       "Marathi": "गुणाकार 675 येतो.",
@@ -6997,7 +6997,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 1,
     "explanation": {
       "English": "Remainder is 5.",
       "Marathi": "बाकी ५ उरते.",
@@ -7019,8 +7019,8 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "type": "fractions",
     "questionText": {
       "English": "What is 1/5 of 120?",
-      "Marathi": "120 चा १/5 भाग म्हणजे किती?",
-      "Hindi": "120 का १/5 भाग क्या होगा?",
+      "Marathi": "120 च्या 1/5 म्हणजे किती?",
+      "Hindi": "120 का 1/5 कितना होगा?",
       "Urdu": "What is 1/5 of 120?",
       "Gujarati": "120 का १/5 भाग क्या होगा?",
       "Telugu": "What is 1/5 of 120?",
@@ -7029,50 +7029,50 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
         "24",
-        "26",
-        "22",
-        "50"
+        "28",
+        "20",
+        "32"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "120 ÷ 5 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -7216,7 +7216,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "48 cm"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "4 × (11) = 44 cm.",
       "Marathi": "४ × (11) = 44 सेमी.",
@@ -7289,7 +7289,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "120 mins"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 hour = 60 mins. 5 × 60 = 300 mins.",
       "Marathi": "१ तास = ६० मिनिटे. 5 × ६० = 300 मिनिटे.",
@@ -7310,13 +7310,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 63457, what is the place value of digit 6?",
-      "Marathi": "63457 या संख्येत 6 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "63457 में 6 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 63457, what is the place value of digit 6?",
-      "Gujarati": "63457 में 6 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 63457, what is the place value of digit 6?",
-      "Kannada": "In the number 63457, what is the place value of digit 6?"
+      "English": "In the number 62457, what is the place value of digit 6?",
+      "Marathi": "62457 या संख्येतील 6 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 62457 में अंक 6 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 62457, what is the place value of digit 6?",
+      "Gujarati": "संख्या 62457 में अंक 6 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 62457, what is the place value of digit 6?",
+      "Kannada": "In the number 62457, what is the place value of digit 6?"
     },
     "options": {
       "English": [
@@ -7362,9 +7362,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "6"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 1,
     "explanation": {
-      "English": "Digit 6 is in the specified place.",
+      "English": "Digit 6 is in the ten-thousands place, so its place value is 60000.",
       "Marathi": "6 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 6 is in the specified place.",
@@ -7393,51 +7393,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVI",
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 6 in Roman numerals added gives 26 = XXVI.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -7654,7 +7654,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "885"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "Product is 900.",
       "Marathi": "गुणाकार 900 येतो.",
@@ -7727,7 +7727,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 1,
     "explanation": {
       "English": "Remainder is 5.",
       "Marathi": "बाकी ५ उरते.",
@@ -7748,9 +7748,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "fractions",
     "questionText": {
-      "English": "What is 1/4 of 144?",
-      "Marathi": "144 चा १/4 भाग म्हणजे किती?",
-      "Hindi": "144 का १/4 भाग क्या होगा?",
+      "English": "What is 1/6 of 144?",
+      "Marathi": "144 च्या 1/6 म्हणजे किती?",
+      "Hindi": "144 का 1/6 कितना होगा?",
       "Urdu": "What is 1/4 of 144?",
       "Gujarati": "144 का १/4 भाग क्या होगा?",
       "Telugu": "What is 1/4 of 144?",
@@ -7758,51 +7758,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
-        "36",
-        "38",
-        "34",
-        "60"
+        "24",
+        "28",
+        "20",
+        "32"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "144 ÷ 6 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -7873,7 +7873,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "3000 g"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 kg = 1000 g. Total = 6300 g.",
       "Marathi": "१ किग्रॅ = १००० ग्रॅ. एकूण 6300 ग्रॅम.",
@@ -7946,7 +7946,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "52 cm"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "4 × (12) = 48 cm.",
       "Marathi": "४ × (12) = 48 सेमी.",
@@ -8019,7 +8019,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "144 mins"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 hour = 60 mins. 6 × 60 = 360 mins.",
       "Marathi": "१ तास = ६० मिनिटे. 6 × ६० = 360 मिनिटे.",
@@ -8040,13 +8040,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 73457, what is the place value of digit 7?",
-      "Marathi": "73457 या संख्येत 7 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "73457 में 7 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 73457, what is the place value of digit 7?",
-      "Gujarati": "73457 में 7 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 73457, what is the place value of digit 7?",
-      "Kannada": "In the number 73457, what is the place value of digit 7?"
+      "English": "In the number 72457, what is the place value of digit 7?",
+      "Marathi": "72457 या संख्येतील 7 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 72457 में अंक 7 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 72457, what is the place value of digit 7?",
+      "Gujarati": "संख्या 72457 में अंक 7 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 72457, what is the place value of digit 7?",
+      "Kannada": "In the number 72457, what is the place value of digit 7?"
     },
     "options": {
       "English": [
@@ -8092,9 +8092,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "7"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 1,
     "explanation": {
-      "English": "Digit 7 is in the specified place.",
+      "English": "Digit 7 is in the ten-thousands place, so its place value is 70000.",
       "Marathi": "7 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 7 is in the specified place.",
@@ -8123,51 +8123,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 7 in Roman numerals added gives 27 = XXVII.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -8238,7 +8238,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "13180"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "8750 + 4480 = 13230.",
       "Marathi": "8750 + 4480 = 13230.",
@@ -8311,7 +8311,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "4415"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 1,
     "explanation": {
       "English": "Difference is 4445.",
       "Marathi": "फरक 4445 येतो.",
@@ -8384,7 +8384,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1140"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "Product is 1155.",
       "Marathi": "गुणाकार 1155 येतो.",
@@ -8457,7 +8457,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1"
       ]
     },
-    "correctIndex": 0,
+    "correctIndex": 1,
     "explanation": {
       "English": "Remainder is 5.",
       "Marathi": "बाकी ५ उरते.",
@@ -8478,9 +8478,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "fractions",
     "questionText": {
-      "English": "What is 1/4 of 168?",
-      "Marathi": "168 चा १/4 भाग म्हणजे किती?",
-      "Hindi": "168 का १/4 भाग क्या होगा?",
+      "English": "What is 1/7 of 168?",
+      "Marathi": "168 च्या 1/7 म्हणजे किती?",
+      "Hindi": "168 का 1/7 कितना होगा?",
       "Urdu": "What is 1/4 of 168?",
       "Gujarati": "168 का १/4 भाग क्या होगा?",
       "Telugu": "What is 1/4 of 168?",
@@ -8488,51 +8488,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
-        "42",
-        "44",
-        "40",
-        "70"
+        "24",
+        "28",
+        "20",
+        "32"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "168 ÷ 7 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -8603,7 +8603,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "3500 g"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 kg = 1000 g. Total = 7350 g.",
       "Marathi": "१ किग्रॅ = १००० ग्रॅ. एकूण 7350 ग्रॅम.",
@@ -8676,7 +8676,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "56 cm"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "4 × (13) = 52 cm.",
       "Marathi": "४ × (13) = 52 सेमी.",
@@ -8770,13 +8770,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 83457, what is the place value of digit 8?",
-      "Marathi": "83457 या संख्येत 8 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "83457 में 8 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 83457, what is the place value of digit 8?",
-      "Gujarati": "83457 में 8 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 83457, what is the place value of digit 8?",
-      "Kannada": "In the number 83457, what is the place value of digit 8?"
+      "English": "In the number 82457, what is the place value of digit 8?",
+      "Marathi": "82457 या संख्येतील 8 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 82457 में अंक 8 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 82457, what is the place value of digit 8?",
+      "Gujarati": "संख्या 82457 में अंक 8 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 82457, what is the place value of digit 8?",
+      "Kannada": "In the number 82457, what is the place value of digit 8?"
     },
     "options": {
       "English": [
@@ -8822,9 +8822,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "8"
       ]
     },
-    "correctIndex": 0,
+    "correctIndex": 1,
     "explanation": {
-      "English": "Digit 8 is in the specified place.",
+      "English": "Digit 8 is in the ten-thousands place, so its place value is 80000.",
       "Marathi": "8 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 8 is in the specified place.",
@@ -8853,51 +8853,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXVIII",
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 8 in Roman numerals added gives 28 = XXVIII.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -8968,7 +8968,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "15070"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "10000 + 5120 = 15120.",
       "Marathi": "10000 + 5120 = 15120.",
@@ -9041,7 +9041,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "5050"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 1,
     "explanation": {
       "English": "Difference is 5080.",
       "Marathi": "फरक 5080 येतो.",
@@ -9208,9 +9208,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "fractions",
     "questionText": {
-      "English": "What is 1/4 of 192?",
-      "Marathi": "192 चा १/4 भाग म्हणजे किती?",
-      "Hindi": "192 का १/4 भाग क्या होगा?",
+      "English": "What is 1/8 of 192?",
+      "Marathi": "192 च्या 1/8 म्हणजे किती?",
+      "Hindi": "192 का 1/8 कितना होगा?",
       "Urdu": "What is 1/4 of 192?",
       "Gujarati": "192 का १/4 भाग क्या होगा?",
       "Telugu": "What is 1/4 of 192?",
@@ -9218,51 +9218,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
-        "48",
-        "50",
-        "46",
-        "80"
+        "24",
+        "28",
+        "20",
+        "32"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "192 ÷ 8 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -9333,7 +9333,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "4000 g"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 kg = 1000 g. Total = 8400 g.",
       "Marathi": "१ किग्रॅ = १००० ग्रॅ. एकूण 8400 ग्रॅम.",
@@ -9479,7 +9479,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "192 mins"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 hour = 60 mins. 8 × 60 = 480 mins.",
       "Marathi": "१ तास = ६० मिनिटे. 8 × ६० = 480 मिनिटे.",
@@ -9500,13 +9500,13 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 93457, what is the place value of digit 9?",
-      "Marathi": "93457 या संख्येत 9 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "93457 में 9 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 93457, what is the place value of digit 9?",
-      "Gujarati": "93457 में 9 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 93457, what is the place value of digit 9?",
-      "Kannada": "In the number 93457, what is the place value of digit 9?"
+      "English": "In the number 92457, what is the place value of digit 9?",
+      "Marathi": "92457 या संख्येतील 9 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 92457 में अंक 9 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 92457, what is the place value of digit 9?",
+      "Gujarati": "संख्या 92457 में अंक 9 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 92457, what is the place value of digit 9?",
+      "Kannada": "In the number 92457, what is the place value of digit 9?"
     },
     "options": {
       "English": [
@@ -9554,7 +9554,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "correctIndex": 1,
     "explanation": {
-      "English": "Digit 9 is in the specified place.",
+      "English": "Digit 9 is in the ten-thousands place, so its place value is 90000.",
       "Marathi": "9 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 9 is in the specified place.",
@@ -9583,51 +9583,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXIX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 9 in Roman numerals added gives 29 = XXIX.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -9698,7 +9698,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "16960"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "11250 + 5760 = 17010.",
       "Marathi": "11250 + 5760 = 17010.",
@@ -9771,7 +9771,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "5685"
       ]
     },
-    "correctIndex": 0,
+    "correctIndex": 1,
     "explanation": {
       "English": "Difference is 5715.",
       "Marathi": "फरक 5715 येतो.",
@@ -9844,7 +9844,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1740"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "Product is 1755.",
       "Marathi": "गुणाकार 1755 येतो.",
@@ -9917,7 +9917,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 1,
     "explanation": {
       "English": "Remainder is 5.",
       "Marathi": "बाकी ५ उरते.",
@@ -9938,9 +9938,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "fractions",
     "questionText": {
-      "English": "What is 1/4 of 216?",
-      "Marathi": "216 चा १/4 भाग म्हणजे किती?",
-      "Hindi": "216 का १/4 भाग क्या होगा?",
+      "English": "What is 1/9 of 216?",
+      "Marathi": "216 च्या 1/9 म्हणजे किती?",
+      "Hindi": "216 का 1/9 कितना होगा?",
       "Urdu": "What is 1/4 of 216?",
       "Gujarati": "216 का १/4 भाग क्या होगा?",
       "Telugu": "What is 1/4 of 216?",
@@ -9948,51 +9948,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
-        "54",
-        "56",
-        "52",
-        "90"
+        "24",
+        "28",
+        "20",
+        "32"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "216 ÷ 9 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -10136,7 +10136,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "64 cm"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "4 × (15) = 60 cm.",
       "Marathi": "४ × (15) = 60 सेमी.",
@@ -10209,7 +10209,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "216 mins"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 hour = 60 mins. 9 × 60 = 540 mins.",
       "Marathi": "१ तास = ६० मिनिटे. 9 × ६० = 540 मिनिटे.",
@@ -10230,61 +10230,61 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "place_value",
     "questionText": {
-      "English": "In the number 103457, what is the place value of digit 10?",
-      "Marathi": "103457 या संख्येत 10 या अंकाची स्थानिक किंमत किती?",
-      "Hindi": "103457 में 10 का स्थानीय मान क्या है?",
-      "Urdu": "In the number 103457, what is the place value of digit 10?",
-      "Gujarati": "103457 में 10 का स्थानीय मान क्या है?",
-      "Telugu": "In the number 103457, what is the place value of digit 10?",
-      "Kannada": "In the number 103457, what is the place value of digit 10?"
+      "English": "In the number 86,457, what is the place value of digit 6?",
+      "Marathi": "86,457 या संख्येतील 6 या अंकाची स्थानिक किंमत किती?",
+      "Hindi": "संख्या 86,457 में अंक 6 का स्थानीय मान क्या है?",
+      "Urdu": "In the number 86,457, what is the place value of digit 6?",
+      "Gujarati": "संख्या 86,457 में अंक 6 का स्थानीय मान क्या है?",
+      "Telugu": "In the number 86,457, what is the place value of digit 6?",
+      "Kannada": "In the number 86,457, what is the place value of digit 6?"
     },
     "options": {
       "English": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ],
       "Marathi": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ],
       "Hindi": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ],
       "Urdu": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ],
       "Gujarati": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ],
       "Telugu": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ],
       "Kannada": [
-        "10000",
-        "100000",
-        "1000",
-        "10"
+        "600",
+        "6,000",
+        "60,000",
+        "6"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 1,
     "explanation": {
-      "English": "Digit 10 is in the specified place.",
+      "English": "Digit 6 is in the thousands place, so its place value is 6,000.",
       "Marathi": "10 या अंकाचे स्थान ओळखून मान काढला.",
       "Hindi": "स्थानीय मान नियम।",
       "Urdu": "Digit 10 is in the specified place.",
@@ -10313,51 +10313,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Marathi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Hindi": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Urdu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Gujarati": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Telugu": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ],
       "Kannada": [
-        "XXV",
-        "XIX",
-        "XXV",
-        "XX"
+        "XXX",
+        "XXI",
+        "XXII",
+        "XXIII"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
-      "English": "Sum in Roman numerals.",
+      "English": "XX is 20 and 10 in Roman numerals added gives 30 = XXX.",
       "Marathi": "रोमन संख्यांची बेरीज.",
       "Hindi": "रोमन अंकों का जोड़।",
       "Urdu": "Sum in Roman numerals.",
@@ -10574,7 +10574,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "2085"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "Product is 2100.",
       "Marathi": "गुणाकार 2100 येतो.",
@@ -10647,7 +10647,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "1"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 1,
     "explanation": {
       "English": "Remainder is 5.",
       "Marathi": "बाकी ५ उरते.",
@@ -10668,9 +10668,9 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "difficulty": "easy",
     "type": "fractions",
     "questionText": {
-      "English": "What is 1/4 of 240?",
-      "Marathi": "240 चा १/4 भाग म्हणजे किती?",
-      "Hindi": "240 का १/4 भाग क्या होगा?",
+      "English": "What is 1/10 of 240?",
+      "Marathi": "240 च्या 1/10 म्हणजे किती?",
+      "Hindi": "240 का 1/10 कितना होगा?",
       "Urdu": "What is 1/4 of 240?",
       "Gujarati": "240 का १/4 भाग क्या होगा?",
       "Telugu": "What is 1/4 of 240?",
@@ -10678,51 +10678,51 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     },
     "options": {
       "English": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Marathi": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Hindi": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Urdu": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Gujarati": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Telugu": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ],
       "Kannada": [
-        "60",
-        "62",
-        "58",
-        "100"
+        "24",
+        "28",
+        "20",
+        "32"
       ]
     },
     "correctIndex": 0,
     "explanation": {
-      "English": "Fractional calculation.",
+      "English": "240 ÷ 10 = 24.",
       "Marathi": "अपूर्णांकाचा भाग काढला.",
       "Hindi": "भिन्न मान।",
       "Urdu": "Fractional calculation.",
@@ -10793,7 +10793,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "5000 g"
       ]
     },
-    "correctIndex": 1,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 kg = 1000 g. Total = 10500 g.",
       "Marathi": "१ किग्रॅ = १००० ग्रॅ. एकूण 10500 ग्रॅम.",
@@ -10866,7 +10866,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "68 cm"
       ]
     },
-    "correctIndex": 2,
+    "correctIndex": 0,
     "explanation": {
       "English": "4 × (16) = 64 cm.",
       "Marathi": "४ × (16) = 64 सेमी.",
@@ -10939,7 +10939,7 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
         "240 mins"
       ]
     },
-    "correctIndex": 3,
+    "correctIndex": 0,
     "explanation": {
       "English": "1 hour = 60 mins. 10 × 60 = 600 mins.",
       "Marathi": "१ तास = ६० मिनिटे. 10 × ६० = 600 मिनिटे.",
@@ -14329,43 +14329,43 @@ export const ALL_STD4_QUESTIONS: ScholarshipQuestion[] = [
     "options": {
       "English": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ],
       "Marathi": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ],
       "Hindi": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ],
       "Urdu": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ],
       "Gujarati": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ],
       "Telugu": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ],
       "Kannada": [
         "at",
-        "at",
+        "in",
         "from",
         "with"
       ]

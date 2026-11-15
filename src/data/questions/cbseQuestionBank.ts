@@ -1,5 +1,9 @@
 import { ClassLevel, QuizLevel, SubjectName } from '../../types';
-import { RawQuizSpec } from './subject40BankPart1';
+import { CBSE_CURRICULUM_BY_CLASS } from '../boards/cbseCurriculumConfig';
+import { getPart1SubjectQuestions, RawQuizSpec } from './subject40BankPart1';
+import { getPart2SubjectQuestions } from './subject40BankPart2';
+import { getPart3SubjectQuestions } from './subject40BankPart3';
+import { getPart4SubjectQuestions } from './subject40BankPart4';
 
 const NCERT_BOOK_TAG: Record<number, string> = {
   1: 'NCERT Joyful Foundation',
@@ -18,16 +22,71 @@ function clsNum(classLevel: ClassLevel): number {
   return parseInt(String(classLevel).replace('Class ', ''), 10) || 4;
 }
 
+function lookupMasterSubjectSpecs(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel
+): RawQuizSpec[] {
+  const c = clsNum(classLevel);
+  if (subject === 'Computer Knowledge' && c <= 5) {
+    return getPart4SubjectQuestions(classLevel, 'Computer Studies', level) || [];
+  }
+  if (subject === 'Science' && c <= 2) {
+    return (
+      getPart2SubjectQuestions(classLevel, 'Environmental Studies', level) ||
+      getPart1SubjectQuestions(classLevel, 'Science', level) ||
+      []
+    );
+  }
+  return (
+    getPart1SubjectQuestions(classLevel, subject, level) ||
+    getPart2SubjectQuestions(classLevel, subject, level) ||
+    getPart3SubjectQuestions(classLevel, subject, level) ||
+    getPart4SubjectQuestions(classLevel, subject, level) ||
+    []
+  );
+}
+
+function contextualizeCbseSpecs(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  level: QuizLevel,
+  rawSpecs: RawQuizSpec[]
+): RawQuizSpec[] {
+  const c = clsNum(classLevel);
+  const ctx = NCERT_BOOK_TAG[c];
+  const boardChapters = CBSE_CURRICULUM_BY_CLASS[classLevel]?.chaptersBySubject?.[subject] || [];
+
+  return rawSpecs.slice(0, 10).map((spec, idx) => {
+    const chapterName =
+      boardChapters.length > 0 ? boardChapters[(level - 1 + idx) % boardChapters.length] : spec.topic;
+    const baseText = spec.text.trim();
+    const lower = baseText.toLowerCase();
+    const hasClass = lower.includes(`class ${c}`) || lower.includes(`grade ${c}`);
+    const hasSubject = lower.includes(subject.toLowerCase());
+    const text =
+      hasClass && hasSubject
+        ? baseText
+        : `[${ctx} • ${classLevel} ${subject}] ${baseText}`;
+
+    return {
+      ...spec,
+      text,
+      topic: spec.topic || chapterName
+    };
+  });
+}
+
 function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
   const ctx = NCERT_BOOK_TAG[c];
-  const base = (c * 17 + level * 11);
+  const base = c * 17 + level * 11;
 
   if (c <= 2) {
     const a = c * 11 + level * 3;
     const b = c * 5 + level * 2;
     const prod = (c + level + 1) * (level + 2);
     const tens = c + level + 1;
-    const ones = (level * 2 + c) % 9 + 1;
+    const ones = ((level * 2 + c) % 9) + 1;
     const num2d = tens * 10 + ones;
     const step = c + level;
     const seqStart = c * 4 + level * 2;
@@ -59,8 +118,8 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
         options: [
           `${seqStart + step * 3 - 1}`,
           `${seqStart + step * 3}`,
-          `${seqStart + step * 3 + 2}`,
-          `${seqStart + step * 4}`
+          `${seqStart + step * 3 + 1}`,
+          `${seqStart + step * 3 + 3}`
         ],
         correctIndex: 1,
         explanation: `Add ${step} each time: ${seqStart + step * 2} + ${step} = ${seqStart + step * 3}.`,
@@ -130,7 +189,7 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
     const x2 = c * 14 + level * 5;
     const multA = c * 8 + level * 3;
     const multB = level + 4;
-    const fracDen = c + 3;
+    const fracDen = c + level + 5;
     const fracNum = level;
 
     return [
@@ -177,8 +236,8 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
         options: [
           `${fracNum}/${fracDen}`,
           `${fracDen - fracNum}/${fracDen}`,
-          `1/${fracDen}`,
-          `${fracDen - 1}/${fracDen}`
+          `${fracDen - fracNum + 1}/${fracDen}`,
+          `${fracDen - fracNum - 1}/${fracDen}`
         ],
         correctIndex: 1,
         explanation: `Remaining = ${fracDen} − ${fracNum} = ${fracDen - fracNum} out of ${fracDen}.`,
@@ -228,7 +287,7 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
         topic: 'Unitary Money Problems'
       },
       {
-        text: `In Class ${c} Level ${level} angle classification, a corner opening of ${(c * 7 + level * 11) % 40 + 35}° is classified as:`,
+        text: `In Class ${c} Level ${level} angle classification, a corner opening of ${((c * 7 + level * 11) % 40) + 35}° is classified as:`,
         options: ['Obtuse angle', 'Acute angle', 'Right angle', 'Straight angle'],
         correctIndex: 1,
         explanation: `Every angle strictly between 0° and 90° is an acute angle.`,
@@ -248,9 +307,10 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
     const rad = 7 * level;
     const circ = 2 * 22 * level;
     const baseNum = level + 2;
-    const triA = (c * 4 + level * 7) % 50 + 35;
-    const triB = (c * 3 + level * 5) % 40 + 30;
+    const triA = ((c * 4 + level * 7) % 50) + 35;
+    const triB = ((c * 3 + level * 5) % 40) + 30;
     const triC = 180 - triA - triB;
+    const mBase = c + level * 3 + 8;
 
     return [
       {
@@ -332,10 +392,10 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
         topic: 'Prime Time HCF & LCM'
       },
       {
-        text: `What is the mean (average) of four test scores ${c + 10}, ${c + 14}, ${c + 18}, and ${c + 22} in Class ${c} Level ${level}?`,
-        options: [`${c + 14}`, `${c + 16}`, `${c + 18}`, `${c + 20}`],
+        text: `What is the mean (average) of four test scores ${mBase}, ${mBase + 4}, ${mBase + 8}, and ${mBase + 12} in Class ${c} Level ${level}?`,
+        options: [`${mBase + 4}`, `${mBase + 6}`, `${mBase + 8}`, `${mBase + 10}`],
         correctIndex: 1,
-        explanation: `Sum = ${4 * c + 64}; dividing by 4 gives ${c + 16}.`,
+        explanation: `Sum = ${4 * mBase + 24}; dividing by 4 gives ${mBase + 6}.`,
         topic: 'Data Handling & Mean'
       }
     ];
@@ -353,6 +413,7 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
   const ptY = 4 * level;
   const distOrigin = 5 * level;
   const polyVal = 2 * k * k - 3 * k + 5;
+  const trigCoeff = 5 * (k + 1);
 
   return [
     {
@@ -396,15 +457,15 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
       topic: 'Probability'
     },
     {
-      text: `Evaluate 15 sec²A − 15 tan²A in Class ${c} Level ${level} CBSE Trigonometry.`,
-      options: [`0`, `1`, `15`, `30`],
+      text: `Evaluate ${trigCoeff} sec²A − ${trigCoeff} tan²A in Class ${c} Level ${level} CBSE Trigonometry.`,
+      options: [`0`, `1`, `${trigCoeff}`, `${trigCoeff * 2}`],
       correctIndex: 2,
-      explanation: `Since sec²A − tan²A = 1, 15(1) = 15.`,
+      explanation: `Since sec²A − tan²A = 1, ${trigCoeff}(1) = ${trigCoeff}.`,
       topic: 'Trigonometric Identities'
     },
     {
       text: `In Class ${c} Level ${level} Geometry, if a tangent from P to circle of radius ${3 * level} cm has length ${4 * level} cm, distance PO is:`,
-      options: [`${5 * level - 1} cm`, `${5 * level} cm`, `${5 * level + 2} cm`, `${7 * level} cm`],
+      options: [`${5 * level - 1} cm`, `${5 * level} cm`, `${5 * level + 2} cm`, `${5 * level + 4} cm`],
       correctIndex: 1,
       explanation: `By Pythagoras theorem (radius ⊥ tangent), PO = √((3k)² + (4k)²) = 5k = ${5 * level} cm.`,
       topic: 'Circles & Tangents'
@@ -438,387 +499,456 @@ function makeMathSpecs(c: number, level: QuizLevel): RawQuizSpec[] {
   ];
 }
 
-function makeScienceSpecs(c: number, subject: SubjectName, level: QuizLevel): RawQuizSpec[] {
+function makeScienceSpecs(classLevel: ClassLevel, subject: SubjectName, level: QuizLevel): RawQuizSpec[] {
+  const c = clsNum(classLevel);
   const ctx = NCERT_BOOK_TAG[c];
+
+  // Primary classes (1 to 5) or Environmental Studies / Environmental Education -> use dedicated 40-question EVS / EnvEd / Science banks
+  if (
+    c <= 5 ||
+    subject === 'Environmental Studies' ||
+    subject === 'Environmental Education' ||
+    subject === 'Science' ||
+    level >= 2
+  ) {
+    const raw = lookupMasterSubjectSpecs(classLevel, subject, level);
+    return contextualizeCbseSpecs(classLevel, subject, level, raw);
+  }
+
+  // Level 1 custom NCERT Secondary Physics / Chemistry / Biology sets (strictly 100% subject-pure)
   const m = c * 2 + level;
   const acc = level + 2;
   const volts = 12 * level;
   const amps = c <= 8 ? 2 : 3;
 
-  const curatedFacts: { q: string; a: string; f1: string; f2: string; f3: string; exp: string; topic: string }[] =
-    subject === 'Physics' || (subject === 'Science' && c >= 8 && level % 2 === 1)
-      ? [
-          {
-            q: `In ${ctx} Class ${c} Level ${level} ${subject}, compute the force required to accelerate a ${m} kg cart at ${acc} m/s².`,
-            a: `${m * acc} N`,
-            f1: `${m + acc} N`,
-            f2: `${Math.max(1, m - acc)} N`,
-            f3: `${m * acc * 2} N`,
-            exp: `By Newton's Second Law, F = m × a = ${m} × ${acc} = ${m * acc} Newtons.`,
-            topic: 'Laws of Motion'
-          },
-          {
-            q: `A conductor in CBSE Class ${c} Level ${level} carries ${amps} A current under ${volts} V potential difference. Calculate electrical resistance.`,
-            a: `${volts / amps} Ω`,
-            f1: `${volts * amps} Ω`,
-            f2: `${volts + amps} Ω`,
-            f3: `${volts / amps + 3} Ω`,
-            exp: `Ohm's Law gives R = V / I = ${volts} / ${amps} = ${volts / amps} Ω.`,
-            topic: 'Electricity & Ohm Law'
-          },
-          {
-            q: `For Class ${c} Level ${level} ${subject}, find kinetic energy of a 2 kg ball moving at ${level + 3} m/s.`,
-            a: `${(level + 3) ** 2} J`,
-            f1: `${2 * (level + 3)} J`,
-            f2: `${(level + 3) + 2} J`,
-            f3: `${2 * (level + 3) ** 2} J`,
-            exp: `KE = ½ × 2 × (${level + 3})² = ${(level + 3) ** 2} Joules.`,
-            topic: 'Work and Energy'
-          },
-          {
-            q: `What focal length does a convex lens of optical power +${level} Dioptre have in CBSE Class ${c} ${subject}?`,
-            a: `+${(100 / level).toFixed(1)} cm`,
-            f1: `+${level * 50} cm`,
-            f2: `−${(100 / level).toFixed(1)} cm`,
-            f3: `+10 cm`,
-            exp: `f (in m) = 1 / P = 1/${level} m = ${(100 / level).toFixed(1)} cm.`,
-            topic: 'Light & Lenses'
-          },
-          {
-            q: `In NCERT Class ${c} Level ${level} ${subject}, if wave speed is ${330 + c} m/s and frequency is 10 Hz, wavelength equals:`,
-            a: `${((330 + c) / 10).toFixed(1)} m`,
-            f1: `${(330 + c) * 10} m`,
-            f2: `${340 + c} m`,
-            f3: `33.0 m`,
-            exp: `λ = v / ν = (${330 + c}) / 10 = ${((330 + c) / 10).toFixed(1)} m.`,
-            topic: 'Sound Waves'
-          }
-        ]
-      : subject === 'Chemistry'
-        ? [
-            {
-              q: `Compute molecular mass of calcium oxide (CaO) or carbon dioxide step in Class ${c} Level ${level} (using ${m} moles of H₂, M=2g): total grams =`,
-              a: `${m * 2} g`,
-              f1: `${m + 2} g`,
-              f2: `${m * 4} g`,
-              f3: `${m * 16} g`,
-              exp: `Mass = moles × molar mass = ${m} × 2 = ${m * 2} g.`,
-              topic: 'Atoms & Molecules'
-            },
-            {
-              q: `In NCERT Class ${c} Chemistry Level ${level}, which gas evolves with brisk effervescence when dilute HCl reacts with limestone (CaCO₃)?`,
-              a: 'Carbon dioxide (CO₂)',
-              f1: 'Oxygen (O₂)',
-              f2: 'Nitrogen (N₂)',
-              f3: 'Helium (He)',
-              exp: `Carbonates react with acids to liberate CO₂ gas, turning limewater milky.`,
-              topic: 'Acids, Bases & Salts'
-            },
-            {
-              q: `What is the valency of carbon (atomic number 6) studied in CBSE Class ${c} Level ${level} Chemistry?`,
-              a: '4 (tetravalent)',
-              f1: '1 (monovalent)',
-              f2: '2 (divalent)',
-              f3: '6',
-              exp: `Carbon has 4 valence electrons (2, 4) and forms 4 covalent bonds.`,
-              topic: 'Carbon Compounds'
-            },
-            {
-              q: `Under Class ${c} Level ${level} NCERT Metals syllabus, which liquid metal stays molten at standard room temperature?`,
-              a: 'Mercury (Hg)',
-              f1: 'Gallium chloride',
-              f2: 'Sodium crystal',
-              f3: 'Tungsten filament',
-              exp: `Mercury is the only metallic element liquid at normal room temperature.`,
-              topic: 'Metals & Non-Metals'
-            },
-            {
-              q: `According to NCERT Class ${c} Level ${level} pH concepts, distilled neutral water at 25°C measures pH equal to:`,
-              a: '7',
-              f1: '2',
-              f2: '11',
-              f3: '14',
-              exp: `Pure neutral water sits squarely at pH = 7.`,
-              topic: 'pH Scale'
-            }
-          ]
-        : [
-            {
-              q: `In ${ctx} Class ${c} Level ${level} ${subject}, which specialised plant vascular tissue transports dissolved water upward from roots to leaves?`,
-              a: 'Xylem',
-              f1: 'Phloem',
-              f2: 'Cambium bark',
-              f3: 'Guard cell pore',
-              exp: `Xylem vessels conduct water and minerals unidirectionally from roots upward.`,
-              topic: 'Plant Transport'
-            },
-            {
-              q: `Under CBSE Class ${c} Level ${level} ${subject}, which gas is released as a vital by-product during green leaf photosynthesis?`,
-              a: 'Oxygen gas',
-              f1: 'Methane gas',
-              f2: 'Sulphur dioxide',
-              f3: 'Carbon monoxide',
-              exp: `Photosynthesis splits water and liberates oxygen gas into the atmosphere.`,
-              topic: 'Photosynthesis'
-            },
-            {
-              q: `Identify the vitamin deficiency studied in Class ${c} Level ${level} ${subject} that causes bleeding gums (Scurvy):`,
-              a: 'Vitamin C (Ascorbic acid)',
-              f1: 'Vitamin D',
-              f2: 'Vitamin K',
-              f3: 'Vitamin B1',
-              exp: `Citrus fruits rich in Vitamin C prevent scurvy.`,
-              topic: 'Nutrition & Health'
-            },
-            {
-              q: `In NCERT Class ${c} Level ${level} ${subject}, which blood component carries oxygen bound to haemoglobin from lungs to tissues?`,
-              a: 'Red Blood Cells (Erythrocytes)',
-              f1: 'Blood plasma salts only',
-              f2: 'White blood phagocytes',
-              f3: 'Platelet fragments',
-              exp: `Red blood cells contain iron-rich haemoglobin for oxygen transport.`,
-              topic: 'Human Circulation'
-            },
-            {
-              q: `At the Class ${c} Level ${level} CBSE ${subject} stage, why are Leguminous crop roots rotated with cereal crops by farmers?`,
-              a: 'Root-nodule Rhizobium enriches soil with usable nitrates naturally',
-              f1: 'Roots drain underground water reservoirs',
-              f2: 'Legumes turn sandy fields into clay rocks',
-              f3: 'Leaves shade wheat seeds from oxygen',
-              exp: `Nitrogen-fixing Rhizobium replenishes soil nitrate fertility naturally.`,
-              topic: 'Crop & Ecosystem Science'
-            }
-          ];
+  if (subject === 'Physics') {
+    return [
+      {
+        text: `In ${ctx} Class ${c} Physics, compute the force required to accelerate a ${m} kg cart at ${acc} m/s².`,
+        options: [`${m * acc} N`, `${m + acc} N`, `${Math.max(1, m - acc)} N`, `${m * acc * 2} N`],
+        correctIndex: 0,
+        explanation: `By Newton's Second Law, F = m × a = ${m} × ${acc} = ${m * acc} Newtons.`,
+        topic: 'Laws of Motion'
+      },
+      {
+        text: `A conductor in CBSE Class ${c} Physics carries ${amps} A current under ${volts} V potential difference. Calculate electrical resistance.`,
+        options: [`${volts / amps} Ω`, `${volts * amps} Ω`, `${volts + amps} Ω`, `${volts / amps + 3} Ω`],
+        correctIndex: 0,
+        explanation: `Ohm's Law gives R = V / I = ${volts} / ${amps} = ${volts / amps} Ω.`,
+        topic: 'Electricity & Ohm Law'
+      },
+      {
+        text: `For Class ${c} Physics, find the kinetic energy of a 2 kg ball moving at ${level + 3} m/s.`,
+        options: [`${(level + 3) ** 2} J`, `${2 * (level + 3)} J`, `${level + 5} J`, `${2 * (level + 3) ** 2} J`],
+        correctIndex: 0,
+        explanation: `KE = ½ × 2 × (${level + 3})² = ${(level + 3) ** 2} Joules.`,
+        topic: 'Work and Energy'
+      },
+      {
+        text: `What focal length does a convex lens of optical power +2.0 Dioptre have in CBSE Class ${c} Physics?`,
+        options: ['+50.0 cm', '+200.0 cm', '−50.0 cm', '+10.0 cm'],
+        correctIndex: 0,
+        explanation: `f (in m) = 1 / P = 1 / 2.0 = +0.5 m = +50.0 cm.`,
+        topic: 'Light – Reflection and Refraction'
+      },
+      {
+        text: `In NCERT Class ${c} Physics, if wave speed is ${330 + c} m/s and frequency is 10 Hz, the wavelength equals:`,
+        options: [`${((330 + c) / 10).toFixed(1)} m`, `${(330 + c) * 10} m`, `${340 + c} m`, `33.0 m`],
+        correctIndex: 0,
+        explanation: `λ = v / ν = (${330 + c}) / 10 = ${((330 + c) / 10).toFixed(1)} m.`,
+        topic: 'Sound Waves'
+      },
+      {
+        text: `For ${ctx} Class ${c} Physics, what SI unit measures mechanical work and energy?`,
+        options: ['Joule (J)', 'Watt per second', 'Newton per square metre', 'Pascal (Pa)'],
+        correctIndex: 0,
+        explanation: `Work = Force × displacement is measured in Joules (J).`,
+        topic: 'Work and Energy'
+      },
+      {
+        text: `During a Class ${c} Physics experiment, a compass needle deflects near a current-carrying wire because electric current produces:`,
+        options: [
+          'A magnetic field around the conductor',
+          'Ultrasonic sound echoes',
+          'Electrostatic precipitation',
+          'Gravitational lens inversion'
+        ],
+        correctIndex: 0,
+        explanation: `Hans Christian Oersted demonstrated that an electric current produces a magnetic field around the wire.`,
+        topic: 'Magnetic Effects of Electric Current'
+      },
+      {
+        text: `In CBSE Class ${c} Physics (Human Eye and the Colourful World), the splitting of white light into its seven constituent colours through a glass prism is called:`,
+        options: ['Dispersion of light', 'Lateral inversion', 'Echo reflection', 'Rectilinear propagation'],
+        correctIndex: 0,
+        explanation: `Different wavelengths of white light bend at slightly different angles inside a glass prism, producing the VIBGYOR spectrum.`,
+        topic: 'Human Eye and Colourful World'
+      },
+      {
+        text: `According to the Universal Law of Gravitation in NCERT Class ${c} Physics, if the distance between two masses is doubled, the gravitational force between them becomes:`,
+        options: [
+          'One-fourth (1/4) of the original force',
+          'Four times the original force',
+          'Double the original force',
+          'Unchanged'
+        ],
+        correctIndex: 0,
+        explanation: `Since F ∝ 1/r², doubling distance r reduces the gravitational attraction to 1/(2²) = 1/4.`,
+        topic: 'Gravitation'
+      },
+      {
+        text: `In CBSE Class ${c} Physics, an electric bulb rated 220 V and 100 W operates at 220 V. Which formula relates electric power (P), potential difference (V), and current (I)?`,
+        options: ['P = V × I', 'P = V / I²', 'P = I / V', 'P = V + I'],
+        correctIndex: 0,
+        explanation: `Electrical power equals the product of voltage and current: P = V × I.`,
+        topic: 'Electricity'
+      }
+    ];
+  }
 
-  const extraPool: { q: string; a: string; f1: string; f2: string; f3: string; exp: string; topic: string }[] = [
+  if (subject === 'Chemistry') {
+    return [
+      {
+        text: `In ${ctx} Class ${c} Chemistry, calculate the mass of ${m} moles of hydrogen gas (H₂, molar mass = 2 g/mol):`,
+        options: [`${m * 2} g`, `${m + 2} g`, `${m * 4} g`, `${m * 16} g`],
+        correctIndex: 0,
+        explanation: `Mass = number of moles × molar mass = ${m} × 2 = ${m * 2} g.`,
+        topic: 'Atoms and Molecules'
+      },
+      {
+        text: `In NCERT Class ${c} Chemistry, which gas evolves with brisk effervescence when dilute HCl reacts with limestone (CaCO₃)?`,
+        options: ['Carbon dioxide (CO₂)', 'Oxygen (O₂)', 'Nitrogen (N₂)', 'Helium (He)'],
+        correctIndex: 0,
+        explanation: `Metal carbonates react with dilute acids to liberate CO₂ gas, which turns lime water milky.`,
+        topic: 'Acids, Bases and Salts'
+      },
+      {
+        text: `What is the valency of carbon (atomic number 6) studied in CBSE Class ${c} Chemistry?`,
+        options: ['4 (tetravalent)', '1 (monovalent)', '2 (divalent)', '6 (hexavalent)'],
+        correctIndex: 0,
+        explanation: `Carbon has electronic configuration (2, 4) and shares 4 valence electrons to form covalent bonds.`,
+        topic: 'Carbon and its Compounds'
+      },
+      {
+        text: `Under Class ${c} NCERT Metals and Non-Metals, which metal remains in the liquid state at standard room temperature?`,
+        options: ['Mercury (Hg)', 'Magnesium (Mg)', 'Aluminium (Al)', 'Tungsten (W)'],
+        correctIndex: 0,
+        explanation: `Mercury (Hg) is the only metallic element that is liquid at standard room temperature.`,
+        topic: 'Metals and Non-Metals'
+      },
+      {
+        text: `According to NCERT Class ${c} Chemistry pH concepts, pure neutral distilled water at 25°C has a pH value of:`,
+        options: ['7.0', '2.0', '11.0', '14.0'],
+        correctIndex: 0,
+        explanation: `Pure neutral water at 25°C has equal H⁺ and OH⁻ concentrations, giving pH = 7.0.`,
+        topic: 'Acids, Bases and Salts'
+      },
+      {
+        text: `In Class ${c} Chemistry, converting 100°C boiling water into water vapour at constant temperature absorbs:`,
+        options: [
+          'Latent heat of vaporisation',
+          'Latent heat of fusion',
+          'Specific gravity',
+          'Magnetic flux'
+        ],
+        correctIndex: 0,
+        explanation: `Latent heat of vaporisation overcomes intermolecular forces during the liquid-to-gas phase transition without raising temperature.`,
+        topic: 'Matter in Our Surroundings'
+      },
+      {
+        text: `In CBSE Class ${c} Chemical Reactions, why are potato chip packets flushed with unreactive Nitrogen (N₂) gas before sealing?`,
+        options: [
+          'To prevent oxidation of fats and oils (rancidity)',
+          'To make the chips dissolve in water',
+          'To increase acidic corrosion of the wrapper',
+          'To convert starch into metallic sodium'
+        ],
+        correctIndex: 0,
+        explanation: `Nitrogen displaces oxygen inside the packet, preventing oxidative rancidity of oils and fats.`,
+        topic: 'Chemical Reactions and Equations'
+      },
+      {
+        text: `What is the chemical formula of Baking Soda studied in NCERT Class ${c} Chemistry?`,
+        options: [
+          'NaHCO₃ (Sodium hydrogencarbonate)',
+          'NaOH (Sodium hydroxide)',
+          'CaSO₄ · 2H₂O (Gypsum)',
+          'NaCl (Sodium chloride)'
+        ],
+        correctIndex: 0,
+        explanation: `Baking soda is sodium hydrogencarbonate (NaHCO₃), a mild non-corrosive basic salt.`,
+        topic: 'Acids, Bases and Salts'
+      },
+      {
+        text: `According to Rutherford's alpha-particle scattering experiment in Class ${c} Chemistry, most alpha particles passed straight through the gold foil because:`,
+        options: [
+          'Most of the space inside an atom is empty',
+          'The nucleus occupies 99% of atomic volume',
+          'Electrons are heavier than alpha particles',
+          'Gold atoms have no protons'
+        ],
+        correctIndex: 0,
+        explanation: `Rutherford concluded that the positive charge and mass are concentrated in a tiny nucleus while most of the atom is empty space.`,
+        topic: 'Structure of the Atom'
+      },
+      {
+        text: `In NCERT Class ${c} Metals and Non-Metals, the process of applying a protective coating of Zinc (Zn) over iron articles to prevent rusting is called:`,
+        options: ['Galvanisation', 'Sublimation', 'Esterification', 'Saponification'],
+        correctIndex: 0,
+        explanation: `Galvanisation coats iron or steel with a thin layer of zinc to protect it from moisture and oxygen.`,
+        topic: 'Metals and Non-Metals'
+      }
+    ];
+  }
+
+  // Biology Level 1 (Classes 6–10)
+  return [
     {
-      q: `For ${ctx} Class ${c} Level ${level} ${subject}, what SI unit measures mechanical work and energy?`,
-      a: 'Joule (J)',
-      f1: 'Watt-hour only',
-      f2: 'Newton per square metre',
-      f3: 'Kelvin degree',
-      exp: `Work = Force × distance is measured in Joules (J).`,
-      topic: 'Physical Units'
+      text: `In ${ctx} Class ${c} Biology, which specialised plant vascular tissue transports dissolved water and minerals upward from roots to leaves?`,
+      options: ['Xylem', 'Phloem', 'Cambium', 'Cuticle'],
+      correctIndex: 0,
+      explanation: `Xylem vessels and tracheids conduct water and dissolved minerals unidirectionally from roots to aerial parts.`,
+      topic: 'Life Processes – Transport in Plants'
     },
     {
-      q: `In Class ${c} Level ${level} ${subject}, converting 100°C boiling water into water vapour at constant temperature absorbs:`,
-      a: 'Latent heat of vaporisation',
-      f1: 'Specific gravity',
-      f2: 'Static buoyancy',
-      f3: 'Magnetic flux',
-      exp: `Latent heat drives the phase transition from liquid to gas without temperature rise.`,
-      topic: 'States of Matter'
+      text: `Under CBSE Class ${c} Biology, which gas is released as a vital by-product during green leaf photosynthesis?`,
+      options: ['Oxygen (O₂)', 'Methane (CH₄)', 'Sulphur dioxide (SO₂)', 'Carbon monoxide (CO)'],
+      correctIndex: 0,
+      explanation: `During the photolysis of water in photosynthesis, oxygen gas is liberated into the atmosphere through stomata.`,
+      topic: 'Autotrophic Nutrition'
     },
     {
-      q: `Identify the primary waste-filtering organ system in CBSE Class ${c} Level ${level} ${subject} biology:`,
-      a: 'Excretory system (Kidneys)',
-      f1: 'Auditory ossicles',
-      f2: 'Olfactory bulb',
-      f3: 'Thyroid cartilage',
-      exp: `Kidneys excrete urea and excess water as urine.`,
-      topic: 'Life Processes'
+      text: `Identify the vitamin deficiency studied in Class ${c} Biology that causes bleeding gums and delayed wound healing (Scurvy):`,
+      options: [
+        'Vitamin C (Ascorbic acid)',
+        'Vitamin D (Calciferol)',
+        'Vitamin K',
+        'Vitamin B12'
+      ],
+      correctIndex: 0,
+      explanation: `Vitamin C found in citrus fruits and amla is essential for collagen synthesis and healthy gums.`,
+      topic: 'Nutrition and Health'
     },
     {
-      q: `In NCERT Class ${c} Level ${level} ${subject}, which planet rotates cleanly between Earth and Jupiter in our Solar System?`,
-      a: 'Mars',
-      f1: 'Mercury',
-      f2: 'Neptune',
-      f3: 'Venus',
-      exp: `Order from Sun: Mercury, Venus, Earth, Mars, Jupiter.`,
-      topic: 'Solar System'
+      text: `In NCERT Class ${c} Biology, which blood component carries oxygen bound to haemoglobin from the lungs to body tissues?`,
+      options: [
+        'Red Blood Cells (Erythrocytes)',
+        'Blood platelets (Thrombocytes)',
+        'Lymphatic valves',
+        'Blood fibrinogen only'
+      ],
+      correctIndex: 0,
+      explanation: `Red blood cells contain the iron-rich respiratory pigment haemoglobin, which binds oxygen to form oxyhaemoglobin.`,
+      topic: 'Human Circulatory System'
     },
     {
-      q: `During a Class ${c} Level ${level} ${subject} experiment, a compass needle deflects near a current-carrying wire because electric current creates:`,
-      a: 'A magnetic field around the wire',
-      f1: 'Ultrasonic echoes',
-      f2: 'Electrostatic rainwater',
-      f3: 'Gravitational lens inversion',
-      exp: `Oersted discovered that moving charges produce surrounding magnetic fields.`,
-      topic: 'Electromagnetism'
+      text: `In CBSE Class ${c} Biology, why are leguminous crop roots rotated with cereal crops by farmers?`,
+      options: [
+        'Root-nodule Rhizobium bacteria fix atmospheric nitrogen into usable soil nitrates',
+        'Legumes remove all minerals from topsoil',
+        'Roots turn loamy fields into granite rocks',
+        'Leaves block sunlight from reaching soil microbes'
+      ],
+      correctIndex: 0,
+      explanation: `Symbiotic Rhizobium bacteria in root nodules replenish soil nitrogen fertility naturally.`,
+      topic: 'Improvement in Food Resources'
+    },
+    {
+      text: `Identify the primary nitrogenous waste-filtering organ system in CBSE Class ${c} Human Biology:`,
+      options: [
+        'Excretory system (Kidneys and Nephrons)',
+        'Auditory ossicles of the middle ear',
+        'Olfactory epithelium',
+        'Thyroid cartilage'
+      ],
+      correctIndex: 0,
+      explanation: `Millions of nephrons inside the kidneys filter urea, uric acid, and excess water from blood to form urine.`,
+      topic: 'Excretion in Humans'
+    },
+    {
+      text: `In NCERT Class ${c} Biology (The Fundamental Unit of Life), which cell organelle is known as the "Powerhouse of the Cell" because it synthesises ATP energy currency?`,
+      options: ['Mitochondria', 'Golgi apparatus', 'Ribosome', 'Lysosome'],
+      correctIndex: 0,
+      explanation: `Mitochondria carry out aerobic cellular respiration and store energy in Adenosine Triphosphate (ATP) molecules.`,
+      topic: 'Fundamental Unit of Life'
+    },
+    {
+      text: `Which plant hormone studied in CBSE Class ${c} Control and Coordination promotes cell elongation at shoot tips and phototropic bending toward light?`,
+      options: ['Auxin', 'Abscisic acid', 'Insulin', 'Adrenaline'],
+      correctIndex: 0,
+      explanation: `Auxin diffuses to the shaded side of the shoot tip, stimulating cells to grow longer and bend the stem toward light.`,
+      topic: 'Control and Coordination'
+    },
+    {
+      text: `In NCERT Class ${c} Biology, the microscopic gap between the axon terminal of one neuron and the dendrite of the next neuron is called a:`,
+      options: ['Synapse', 'Nephron', 'Villus', 'Alveolus'],
+      correctIndex: 0,
+      explanation: `Nerve impulses cross the synapse via chemical neurotransmitters released from the axon terminal.`,
+      topic: 'Nervous System'
+    },
+    {
+      text: `According to Mendel's Law of Segregation in CBSE Class ${c} Heredity, what is the phenotypic ratio of tall to dwarf pea plants in the monohybrid F₂ generation?`,
+      options: ['3 : 1', '1 : 1', '9 : 3 : 3 : 1', '2 : 3'],
+      correctIndex: 0,
+      explanation: `Self-pollination of F₁ heterozygous tall (Tt × Tt) plants yields 3 Tall (TT, 2 Tt) : 1 Dwarf (tt) in F₂.`,
+      topic: 'Heredity and Evolution'
     }
   ];
-
-  const combined = [...curatedFacts, ...extraPool];
-  return combined.map((item, idx) => {
-    const hasClass = item.q.includes(`Class ${c}`);
-    const hasSubj = item.q.toLowerCase().includes(subject.toLowerCase());
-    const text =
-      hasClass && hasSubj
-        ? item.q
-        : `CBSE Class ${c} Level ${level} (${subject} Q${idx + 1}): ${item.q}`;
-    return {
-      text,
-      options: [item.a, item.f1, item.f2, item.f3],
-      correctIndex: 0,
-      explanation: item.exp,
-      topic: item.topic
-    };
-  });
 }
 
-function makeGenericCbseSpecs(c: number, subject: SubjectName, level: QuizLevel): RawQuizSpec[] {
+function makeGenericCbseSpecs(classLevel: ClassLevel, subject: SubjectName, level: QuizLevel): RawQuizSpec[] {
+  const c = clsNum(classLevel);
   const ctx = NCERT_BOOK_TAG[c];
-  const pairs: { q: string; a: string; f1: string; f2: string; f3: string; exp: string; topic: string }[] =
-    subject === 'English' || subject === 'Vocabulary and Grammar'
-      ? [
-          {
-            q: `In ${ctx} Class ${c} Level ${level} ${subject}, pick the proper tense: "Yesterday evening, the astronomy club ___ Saturn’s rings."`,
-            a: 'observed',
-            f1: 'observes',
-            f2: 'will observing',
-            f3: 'have observe',
-            exp: `"Yesterday evening" specifies completed past time, requiring simple past "observed".`,
-            topic: 'Tenses & Verbs'
-          },
-          {
-            q: `Choose the correctly punctuated CBSE Class ${c} Level ${level} sentence using possessive apostrophe:`,
-            a: `The children’s science models stood neatly along Hall ${c}.`,
-            f1: `The childrens’ science models stood neatly.`,
-            f2: `The child’s are standing neat along hall.`,
-            f3: `The children science’s models stands.`,
-            exp: `Plural noun "children" forms possession by adding ’s: children’s.`,
-            topic: 'Punctuation'
-          },
-          {
-            q: `Select an accurate synonym for the word "diligent" taught in NCERT Class ${c} Level ${level} ${subject}:`,
-            a: 'Hardworking and careful',
-            f1: 'Negligent and hasty',
-            f2: 'Drowsy and absent',
-            f3: 'Loud and boastful',
-            exp: `"Diligent" describes steady, conscientious effort.`,
-            topic: 'Vocabulary Synonyms'
-          },
-          {
-            q: `Fill the right preposition for Class ${c} Level ${level} ${subject}: "Our team congratulated Priya ___ her mathematics Olympiad medal."`,
-            a: 'on',
-            f1: 'for',
-            f2: 'with',
-            f3: 'against',
-            exp: `Standard collocation: "congratulate someone on an achievement".`,
-            topic: 'Prepositions'
-          },
-          {
-            q: `Convert to passive voice (CBSE Class ${c} Level ${level} Set): "The librarian catalogued forty new encyclopaedias."`,
-            a: 'Forty new encyclopaedias were catalogued by the librarian.',
-            f1: 'Forty new encyclopaedias was cataloguing by librarian.',
-            f2: 'The librarian was catalogued by forty encyclopaedias.',
-            f3: 'Forty new encyclopaedias are catalogue today.',
-            exp: `Plural past passive uses "were + past participle".`,
-            topic: 'Voice Transformation'
-          },
-          {
-            q: `Pick the antonym of "scarce" for NCERT Class ${c} Level ${level} ${subject} word building:`,
-            a: 'Abundant',
-            f1: 'Rare',
-            f2: 'Insufficient',
-            f3: 'Fragile',
-            exp: `Abundant (plentiful) is opposite in meaning to scarce.`,
-            topic: 'Antonyms'
-          },
-          {
-            q: `Identify the modal expressing polite advice in CBSE Class ${c} Level ${level} grammar: "Students ___ check every unit before submitting."`,
-            a: 'should',
-            f1: 'ought not never',
-            f2: 'mustn’t ever',
-            f3: 'has to',
-            exp: `"Should" conveys sensible recommendation or duty.`,
-            topic: 'Modals'
-          },
-          {
-            q: `Which literary figure of speech appears in Class ${c} Level ${level} verse: "The silver moon sailed silently across velvet clouds"?`,
-            a: 'Metaphor / Alliteration',
-            f1: 'Hyperbole of numbers',
-            f2: 'Arithmetic pun',
-            f3: 'Exclamatory rhyme break',
-            exp: `Repeated "s" sound ("silver...sailed silently") creates musical alliteration alongside imagery.`,
-            topic: 'Poetic Devices'
-          },
-          {
-            q: `Spot the collective noun matching Grade ${c} Level ${level} ${subject}: "A ___ of ships anchored safely in Kochi harbour."`,
-            a: 'fleet',
-            f1: 'troop',
-            f2: 'hive',
-            f3: 'bundle',
-            exp: `A group of ships sailing or docked together is a fleet.`,
-            topic: 'Collective Nouns'
-          },
-          {
-            q: `In Class ${c} Level ${level} reading skill, a concise paragraph stating the central message without personal opinion is a:`,
-            a: 'Summary',
-            f1: 'Soliloquy',
-            f2: 'Hyperlink',
-            f3: 'Anagram',
-            exp: `Summaries capture key points objectively and briefly.`,
-            topic: 'Comprehension Skills'
-          }
-        ]
-      : subject === 'Hindi' || subject === 'Sanskrit'
-        ? Array.from({ length: 10 }, (_, idx) => ({
-            q:
-              subject === 'Sanskrit'
-                ? `${ctx} कक्षा ${c} स्तर ${level} संस्कृत (प्रश्न ${idx + 1}): "${['पठति', 'गच्छति', 'लिखति', 'वदति', 'हसति', 'नमति', 'धावति', 'पश्यति', 'पिबति', 'क्रीडति'][idx]}" धातु-रूप किस लकार व पुरुष का उदाहरण है?`
-                : `${ctx} कक्षा ${c} स्तर ${level} हिंदी (प्रश्न ${idx + 1}): "${['सूर्य', 'पृथ्वी', 'जल', 'वायु', 'आकाश', 'मित्र', 'परिश्रम', 'सत्य', 'ज्ञान', 'प्रकृति'][idx]}" शब्द के शुद्ध व्याकरण व शब्द-भंडार का चयन कीजिए:`,
-            a:
-              subject === 'Sanskrit'
-                ? 'लट् लकार (वर्तमान काल), प्रथम पुरुष एकवचन'
-                : ['रवि / भास्कर (समानार्थी)', 'धरा / वसुंधरा', 'नीर / सलिल', 'पवन / समीर', 'गगन / नभ', 'सखा / सुहृद', 'मेहनत / उद्यम', 'असत्य (विलोम)', 'अज्ञान (विलोम)', 'कुदरत / नैसर्गिक'][idx],
-            f1: subject === 'Sanskrit' ? 'लृट् लकार, उत्तम पुरुष बहुवचन' : 'असंगत तद्भव अशुद्ध रूप',
-            f2: subject === 'Sanskrit' ? 'लङ् लकार, मध्यम पुरुष' : 'विपरीत संधि-विच्छेद भ्रम',
-            f3: subject === 'Sanskrit' ? 'लोट् लकार आज्ञार्थक बहुवचन' : 'केवल अकारांत प्रत्यय त्रुटि',
-            exp:
-              subject === 'Sanskrit'
-                ? `तीसरे गण/प्रथम पुरुष एकवचन तिङ् प्रत्यय "-ति" लट् लकार का संकेत है।`
-                : `NCERT हिंदी व्याकरण कक्षा ${c} के अनुसार यह सही पर्यायवाची/विलोम रूप है।`,
-            topic: subject === 'Sanskrit' ? 'लकार व शब्द रूपाणि' : 'शब्द-भंडार एवं व्याकरण'
-          }))
-        : Array.from({ length: 10 }, (_, idx) => {
-            const topicNames = [
-              'Constitutional Governance',
-              'Geographical Features',
-              'Historical Heritage',
-              'Computational Thinking',
-              'Analytical Reasoning',
-              'Scientific Curiosity',
-              'Civic Ethics & Values',
-              'Data Interpretation',
-              'Resource Conservation',
-              'Global Knowledge'
-            ];
-            const ansBank = [
-              'Democratic Parliamentary Accountability & Fundamental Rights',
-              'Plateau, River Basin & Monsoon Climate Patterns',
-              'Archaeological Primary Sources & Freedom Struggle Chronology',
-              'Stepwise Algorithm Design, Binary Logic & Cyber Hygiene',
-              'Pattern Recognition, Deductive Syllogism & Verification',
-              'Experimental Observation, Hypothesis Testing & Conclusion',
-              'Empathy, Civic Discipline & Environmental Stewardship',
-              'Reading Bar Graphs, Pie Charts & Scaled Coordinate Tables',
-              'Rainwater Harvesting, Renewable Solar Grids & Afforestation',
-              'UN Specialized Agencies, Space Missions & Olympic Heritage'
-            ];
-            return {
-              q: `${ctx} Class ${c} Level ${level} (${subject} • Unit ${idx + 1}): Which principle is core to "${topicNames[idx]}" in this NCERT syllabus module?`,
-              a: ansBank[idx],
-              f1: `Ignoring primary evidence in ${subject} Unit ${idx + 1}`,
-              f2: `Unverified memorisation without conceptual reasoning`,
-              f3: `Disregarding textbook syllabus guidelines for Class ${c}`,
-              exp: `Unit ${idx + 1} in CBSE Class ${c} ${subject} builds mastery in ${topicNames[idx]}.`,
-              topic: topicNames[idx]
-            };
-          });
 
-  return pairs.map((item) => {
-    const needsSubjTag =
-      (subject === 'English' || subject === 'Vocabulary and Grammar') &&
-      !item.q.toLowerCase().includes(subject.toLowerCase());
-    return {
-      text: needsSubjTag ? `CBSE ${subject}: ${item.q}` : item.q,
-      options: [item.a, item.f1, item.f2, item.f3],
+  // For Levels 2, 3, and 4 of all subjects, and all 4 levels of Social Studies, Social Science, History, Geography,
+  // Political Science, Economics, Computer Knowledge, Information Technology, General Knowledge, Logical Reasoning,
+  // Moral Education, Vocabulary and Grammar, Drawing and Creative Activities, Physical Education -> use the 40-question subject-pure master banks
+  if (
+    level >= 2 ||
+    (subject !== 'English' && subject !== 'Hindi' && subject !== 'Sanskrit')
+  ) {
+    const raw = lookupMasterSubjectSpecs(classLevel, subject, level);
+    return contextualizeCbseSpecs(classLevel, subject, level, raw);
+  }
+
+  if (subject === 'English') {
+    return [
+      {
+        text: `In ${ctx} Class ${c} English, pick the proper tense: "Yesterday evening, the astronomy club ___ Saturn’s rings."`,
+        options: ['observed', 'observes', 'will observing', 'have observe'],
+        correctIndex: 0,
+        explanation: `"Yesterday evening" specifies completed past time, requiring simple past "observed".`,
+        topic: 'Tenses & Verbs'
+      },
+      {
+        text: `Choose the correctly punctuated CBSE Class ${c} English sentence using a possessive apostrophe:`,
+        options: [
+          `The children’s science models stood neatly along Hall ${c}.`,
+          `The childrens’ science models stood neatly.`,
+          `The child’s are standing neat along hall.`,
+          `The children science’s models stands.`
+        ],
+        correctIndex: 0,
+        explanation: `Plural noun "children" forms possession by adding ’s: children’s.`,
+        topic: 'Punctuation'
+      },
+      {
+        text: `Select an accurate synonym for the word "diligent" taught in NCERT Class ${c} English:`,
+        options: [
+          'Hardworking and careful',
+          'Negligent and hasty',
+          'Drowsy and absent',
+          'Loud and boastful'
+        ],
+        correctIndex: 0,
+        explanation: `"Diligent" describes steady, conscientious effort.`,
+        topic: 'Vocabulary Synonyms'
+      },
+      {
+        text: `Fill the right preposition for Class ${c} English: "Our team congratulated Priya ___ her mathematics Olympiad medal."`,
+        options: ['on', 'for', 'with', 'against'],
+        correctIndex: 0,
+        explanation: `Standard collocation: "congratulate someone on an achievement".`,
+        topic: 'Prepositions'
+      },
+      {
+        text: `Convert to passive voice (CBSE Class ${c} English): "The librarian catalogued forty new encyclopaedias."`,
+        options: [
+          'Forty new encyclopaedias were catalogued by the librarian.',
+          'Forty new encyclopaedias was cataloguing by librarian.',
+          'The librarian was catalogued by forty encyclopaedias.',
+          'Forty new encyclopaedias are catalogue today.'
+        ],
+        correctIndex: 0,
+        explanation: `Plural past passive uses "were + past participle".`,
+        topic: 'Voice Transformation'
+      },
+      {
+        text: `Pick the antonym of "scarce" for NCERT Class ${c} English word building:`,
+        options: ['Abundant', 'Rare', 'Insufficient', 'Fragile'],
+        correctIndex: 0,
+        explanation: `Abundant (plentiful) is opposite in meaning to scarce.`,
+        topic: 'Antonyms'
+      },
+      {
+        text: `Identify the modal expressing polite advice in CBSE Class ${c} English grammar: "Students ___ check every unit before submitting."`,
+        options: ['should', 'ought not never', 'mustn’t ever', 'has to'],
+        correctIndex: 0,
+        explanation: `"Should" conveys sensible recommendation or duty.`,
+        topic: 'Modals'
+      },
+      {
+        text: `Which literary figure of speech appears in Class ${c} English verse: "The silver moon sailed silently across velvet clouds"?`,
+        options: [
+          'Metaphor / Alliteration',
+          'Hyperbole of numbers',
+          'Arithmetic pun',
+          'Exclamatory rhyme break'
+        ],
+        correctIndex: 0,
+        explanation: `Repeated "s" sound ("silver...sailed silently") creates musical alliteration alongside imagery.`,
+        topic: 'Poetic Devices'
+      },
+      {
+        text: `Spot the collective noun matching Grade ${c} English: "A ___ of ships anchored safely in Kochi harbour."`,
+        options: ['fleet', 'troop', 'hive', 'bundle'],
+        correctIndex: 0,
+        explanation: `A group of ships sailing or docked together is a fleet.`,
+        topic: 'Collective Nouns'
+      },
+      {
+        text: `In Class ${c} English reading skills, a concise paragraph stating the central message without personal opinion is a:`,
+        options: ['Summary', 'Soliloquy', 'Hyperlink', 'Anagram'],
+        correctIndex: 0,
+        explanation: `Summaries capture key points objectively and briefly.`,
+        topic: 'Comprehension Skills'
+      }
+    ];
+  }
+
+  if (subject === 'Hindi') {
+    const words = ['सूर्य', 'पृथ्वी', 'जल', 'वायु', 'आकाश', 'मित्र', 'परिश्रम', 'सत्य', 'ज्ञान', 'प्रकृति'];
+    const correctAns = [
+      'रवि / भास्कर (समानार्थी)',
+      'धरा / वसुंधरा (समानार्थी)',
+      'नीर / सलिल (समानार्थी)',
+      'पवन / समीर (समानार्थी)',
+      'गगन / नभ (समानार्थी)',
+      'सखा / सहचर (समानार्थी)',
+      'मेहनत / उद्यम (समानार्थी)',
+      'असत्य (विलोम शब्द)',
+      'अज्ञान (विलोम शब्द)',
+      'कुदरत / नैसर्गिक (समानार्थी)'
+    ];
+    return words.map((word, idx) => ({
+      text: `${ctx} कक्षा ${c} हिंदी (प्रश्न ${idx + 1}): "${word}" शब्द के शुद्ध व्याकरणिक पर्यायवाची/विलोम रूप का चयन कीजिए:`,
+      options: [
+        correctAns[idx],
+        `असंगत तद्भव रूप (${word}-हीन)`,
+        `विपरीत संधि-विच्छेद भ्रम`,
+        `अशुद्ध कारक प्रत्यय प्रयोग`
+      ],
       correctIndex: 0,
-      explanation: item.exp,
-      topic: item.topic
-    };
-  });
+      explanation: `NCERT हिंदी व्याकरण कक्षा ${c} के अनुसार "${word}" के लिए "${correctAns[idx]}" सही उत्तर है।`,
+      topic: 'शब्द-भंडार एवं व्याकरण'
+    }));
+  }
+
+  // Sanskrit Level 1
+  const dhatus = ['पठति', 'गच्छति', 'लिखति', 'वदति', 'हसति', 'नमति', 'धावति', 'पश्यति', 'पिबति', 'क्रीडति'];
+  const meanings = ['पढ़ता है', 'जाता है', 'लिखता है', 'बोलता है', 'हँसता है', 'नमस्कार करता है', 'दौड़ता है', 'देखता है', 'पीता है', 'खेलता है'];
+  return dhatus.map((dhatu, idx) => ({
+    text: `${ctx} कक्षा ${c} संस्कृत (प्रश्न ${idx + 1}): "${dhatu}" (${meanings[idx]}) धातु-रूप किस लकार, पुरुष व वचन का उदाहरण है?`,
+    options: [
+      `लट् लकार (वर्तमान काल), प्रथम पुरुष एकवचन (${dhatu})`,
+      'लृट् लकार (भविष्यत् काल), उत्तम पुरुष बहुवचन',
+      'लङ् लकार (भूतकाल), मध्यम पुरुष द्विवचन',
+      'लोट् लकार (आज्ञार्थक), उत्तम पुरुष एकवचन'
+    ],
+    correctIndex: 0,
+    explanation: `संस्कृत व्याकरण में "${dhatu}" लट् लकार (वर्तमान काल), प्रथम पुरुष एकवचन का रूप है।`,
+    topic: 'लकार व धातु-रूपाणि'
+  }));
 }
 
 export function getCbseSubjectQuestions(
@@ -838,7 +968,7 @@ export function getCbseSubjectQuestions(
     subject === 'Environmental Studies' ||
     subject === 'Environmental Education'
   ) {
-    return makeScienceSpecs(c, subject, level);
+    return makeScienceSpecs(classLevel, subject, level);
   }
-  return makeGenericCbseSpecs(c, subject, level);
+  return makeGenericCbseSpecs(classLevel, subject, level);
 }
