@@ -61,15 +61,25 @@ import {
 } from '../data/classCurriculumConfig';
 import { getAllWorksheetsForClass } from '../data/worksheetsData';
 import { FileText, GraduationCap } from 'lucide-react';
+import { NavSubActionId } from '../data/navigationConfig';
+import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
   onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
+  viewMode?: 'auto' | 'desktop';
+  onToggleViewMode?: () => void;
+  onMenuAction?: (actionId: NavSubActionId) => void;
+  onOpenDemo?: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onNavigateTab,
-  onOpenMembership
+  onOpenMembership,
+  viewMode = 'desktop',
+  onToggleViewMode,
+  onMenuAction,
+  onOpenDemo
 }) => {
   const { 
     currentStudent, 
@@ -160,8 +170,51 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const drawingsCount = savedDrawings.filter(d => d.studentId === currentStudent.id).length;
   const puzzlesSolvedCount = currentStudent.attemptedPuzzleIds.length;
 
+  // Real student course & progress summary for the ReferenceShowcaseSections panel
+  const masteredSubjectsCount = activeClassSubjects.filter((subj) => {
+    const prog = getSubjectLevelProgress(subj.name, currentStudent.classLevel, activeBoard);
+    return prog && prog.completedLevels && prog.completedLevels.length > 0;
+  }).length;
+  const overallProgressPercent = Math.min(
+    100,
+    Math.max(
+      levelProgress,
+      activeClassSubjects.length > 0
+        ? Math.round((masteredSubjectsCount / activeClassSubjects.length) * 100)
+        : 0
+    )
+  );
+
   return (
     <div className="space-y-8 pb-16">
+      {/* COMPLETE REFERENCE-MATCHED EDUCATIONAL DASHBOARD SHOWCASE */}
+      <ReferenceShowcaseSections
+        selectedBoard={activeBoard}
+        selectedClass={currentStudent.classLevel}
+        onOpenDemo={(tab) => {
+          if (onOpenDemo) onOpenDemo(tab || 'live-quiz');
+          else onNavigateTab('quizzes');
+        }}
+        onNavigateTab={(tab, _subSection, subject) => onNavigateTab(tab, subject)}
+        onMenuAction={onMenuAction}
+        onOpenAuth={() => onNavigateTab('profile')}
+        onOpenMembership={(targetClass, targetBoard) =>
+          onOpenMembership('premium', targetClass || currentStudent.classLevel, targetBoard || activeBoard)
+        }
+        onStartLearningClick={() => onNavigateTab('quizzes')}
+        viewMode={viewMode}
+        onToggleViewMode={onToggleViewMode}
+        progressMetrics={{
+          isLoggedIn: true,
+          studentName: currentStudent.name,
+          coursesCompleted: masteredSubjectsCount,
+          practiceTests: totalQuizzes + completedWorksheetsCount,
+          achievements: (currentStudent.badges || []).length,
+          progressPercent: overallProgressPercent,
+          badgesList: currentStudent.badges || [],
+        }}
+      />
+
       {/* Hero Welcome Banner */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-6 sm:p-8 shadow-lg shadow-amber-500/15">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">

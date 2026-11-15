@@ -41,6 +41,8 @@ import {
   getBoardDisplayName,
   getBoardShortLabel,
 } from '../utils/subscriptionAccess';
+import { NavSubActionId } from '../data/navigationConfig';
+import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 
 export type HomeScrollTarget =
   | 'home-overview'
@@ -68,6 +70,8 @@ interface PublicHomeDashboardProps {
   currentRole?: 'student' | 'teacher' | 'admin';
   currentUserName?: string;
   isDesktopMode?: boolean;
+  onToggleViewMode?: () => void;
+  onMenuAction?: (actionId: NavSubActionId) => void;
 }
 
 const IllustrationCard: React.FC<{
@@ -163,6 +167,8 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   currentRole = 'student',
   currentUserName,
   isDesktopMode = false,
+  onToggleViewMode,
+  onMenuAction,
 }) => {
   const { isSectionVisible, learningPrograms } = useApp();
   const [expandedFaqId, setExpandedFaqId] = useState<string>('faq-1');
@@ -309,175 +315,108 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   const boardAccent = BOARD_ACCENT_STYLES[selectedBoard];
 
   return (
-    <div className={`${isDesktopMode ? 'space-y-10' : 'space-y-14'} pb-12`}>
-      {/* 1. WELCOME HERO BANNER */}
-      <section
-        id="home-overview"
-        className="relative overflow-hidden rounded-3xl bg-slate-950 text-white border border-slate-800 shadow-2xl"
-      >
-        <div
-          aria-hidden="true"
-          className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-amber-500/15 blur-3xl pointer-events-none"
+    <div className={`${isDesktopMode ? 'space-y-8' : 'space-y-10'} pb-12`}>
+      {/* 1. COMPLETE REFERENCE-MATCHED EDUCATIONAL DASHBOARD SHOWCASE */}
+      <div id="home-overview">
+        <ReferenceShowcaseSections
+          selectedBoard={selectedBoard}
+          selectedClass={selectedClass}
+          onOpenDemo={(tab) => onOpenDemo(tab || 'live-quiz')}
+          onNavigateTab={(tab, subSection, subject) => onNavigateZone(tab, subSection || 'overview', subject)}
+          onMenuAction={onMenuAction}
+          onOpenAuth={onOpenAuth}
+          onOpenMembership={(targetClass, targetBoard) =>
+            onOpenMembership(targetClass || selectedClass, targetBoard || selectedBoard)
+          }
+          onStartLearningClick={() => {
+            const el = document.getElementById('courses-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            else onOpenDemo('live-quiz');
+          }}
+          viewMode={isDesktopMode ? 'desktop' : 'auto'}
+          onToggleViewMode={onToggleViewMode}
+          progressMetrics={{
+            isLoggedIn: false,
+            coursesCompleted: 0,
+            practiceTests: 0,
+            achievements: 0,
+            progressPercent: 0,
+          }}
         />
-        <div
-          aria-hidden="true"
-          className="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-blue-500/15 blur-3xl pointer-events-none"
-        />
+      </div>
 
-        <div className="relative z-10 p-6 sm:p-10 lg:p-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-stretch">
-          {/* Left Hero Copy & Primary Actions */}
-          <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
-            <div className="space-y-4">
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-300">
-                Maharashtra State Board · CBSE (NCERT) · ICSE (CISCE) · Standards 1st to 10th
-              </p>
-
-              <h1
-                className="text-3xl sm:text-4xl lg:text-[2.85rem] font-display font-extrabold leading-[1.14] tracking-tight text-white"
-                style={{ textWrap: 'balance' }}
+      {/* QUICK BOARD & CLASS 1-10 BAR + TRUST HIGHLIGHTS */}
+      <section className="rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-5 sm:p-6 border border-indigo-400/30 shadow-lg">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+          <div className="lg:col-span-6 space-y-2">
+            <p className="text-[11px] font-extrabold uppercase tracking-widest text-amber-300">
+              Maharashtra State Board · CBSE (NCERT) · ICSE (CISCE) · Standards 1st to 10th
+            </p>
+            <h2 className="text-xl sm:text-2xl font-display font-black text-white">
+              Quick Board &amp; Standard Selector ({activeBoardMeta.shortLabel} · {selectedClassMeta.shortLabel})
+            </h2>
+            <p className="text-xs sm:text-sm text-indigo-100 leading-relaxed">
+              Switch between Maharashtra State Board, CBSE, and ICSE across Classes 1 to 10 below. Unlock 365 days of full board + class access for just ₹99 one-time payment.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => onOpenDemo('live-quiz')}
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                Your Complete Learning Destination – Classes 1 to 10
-              </h1>
-
-              <p className="text-lg sm:text-xl font-display font-bold text-amber-300">
-                Learn Smarter, Practise Better and Achieve Higher Marks.
-              </p>
-
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl">
-                Study strictly aligned board syllabi with chapter-wise notes, textbook question banks, interactive worksheets, timed mock exams, audio stories, and progress analytics. Start with a free class-wise demo and unlock a full year of access for ₹99.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {/* Primary CTA Buttons */}
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const el = document.getElementById('courses-section');
-                    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }}
-                  className="min-h-[44px] px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm shadow-lg transition-colors flex items-center gap-2 cursor-pointer"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  <span>Explore Courses</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onOpenDemo('live-quiz')}
-                  className="min-h-[44px] px-6 py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-950 font-extrabold text-sm shadow-md transition-colors flex items-center gap-2 cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-current text-indigo-700" />
-                  <span>
-                    Start Free Demo ({getBoardShortLabel(selectedBoard)} · {selectedClassMeta.shortLabel})
-                  </span>
-                </button>
-
-                {!isAuthenticated ? (
-                  <button
-                    type="button"
-                    onClick={() => onOpenAuth('register')}
-                    className="min-h-[44px] px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-sm transition-colors flex items-center gap-2 cursor-pointer"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Register Free</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onOpenMembership(selectedClass, selectedBoard)}
-                    className="min-h-[44px] px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-amber-200 border border-amber-300/30 font-bold text-sm transition-colors flex items-center gap-2 cursor-pointer"
-                  >
-                    <Crown className="w-4 h-4" />
-                    <span>Unlock {getBoardShortLabel(selectedBoard)} {selectedClass} (₹99)</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Clean Trust Highlights */}
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3 border-t border-white/10 text-xs text-slate-300 font-medium">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Zero Cross-Board Mixing</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>2-Question Free Demo + Class Worksheets</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>₹99 / 365 Days Full Class Access</span>
-                </span>
-              </div>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Try Free Demo ({getBoardShortLabel(selectedBoard)} · {selectedClassMeta.shortLabel})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenMembership(selectedClass, selectedBoard)}
+                className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-300" />
+                <span>Unlock {getBoardShortLabel(selectedBoard)} {selectedClass} (₹99 / 365 Days)</span>
+              </button>
             </div>
           </div>
 
-          {/* Right: Educational Classroom Hero Visual + Instant Board/Class Selector */}
-          <div className="lg:col-span-5 flex flex-col justify-between gap-4 bg-slate-900/90 rounded-2xl p-4 sm:p-5 border border-slate-700/80">
-            <div className="relative rounded-xl overflow-hidden aspect-[16/9] border border-slate-700">
-              <IllustrationCard
-                src={EDUCATION_ILLUSTRATIONS.heroClassroom.src}
-                alt={EDUCATION_ILLUSTRATIONS.heroClassroom.alt}
-                aspectClass="aspect-[16/9]"
-                eager
-                fallbackLabel="MyStudyZone Smart Classroom"
-              />
-              <div
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent p-3 flex items-end justify-between"
-              >
-                <span className="text-[11px] font-bold text-amber-200">
-                  {activeBoardMeta.shortLabel} · Standard {formatStandardOrdinal(selectedClass)}
-                </span>
-                <span className="text-[11px] font-bold text-emerald-300">
-                  {selectedClassSubjects.length} Subjects Ready
-                </span>
-              </div>
+          <div className="lg:col-span-6 space-y-2.5 bg-slate-900/80 p-4 rounded-2xl border border-indigo-400/25">
+            <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              {BOARD_META_LIST.map((b) => {
+                const isActive = selectedBoard === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => onSelectBoard(b.id)}
+                    className={`py-2 px-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer truncate ${
+                      isActive
+                        ? 'bg-amber-400 text-slate-950 shadow-xs'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
+                    }`}
+                  >
+                    {getBoardShortLabel(b.id)}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Quick Board & Class Selector */}
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                {BOARD_META_LIST.map((b) => {
-                  const isActive = selectedBoard === b.id;
-                  return (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => onSelectBoard(b.id)}
-                      className={`py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
-                        isActive
-                          ? 'bg-amber-400 text-slate-950 shadow-xs'
-                          : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
-                      }`}
-                    >
-                      {getBoardShortLabel(b.id)}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-5 gap-1.5">
-                {ALL_10_CLASSES_META.map((c) => {
-                  const isActive = selectedClass === c.classLevel;
-                  return (
-                    <button
-                      key={c.classLevel}
-                      type="button"
-                      onClick={() => onSelectClass(c.classLevel)}
-                      className={`py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
-                        isActive
-                          ? 'bg-white text-slate-950 shadow-xs'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-                      }`}
-                    >
-                      {c.shortLabel.replace('Std ', '')}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+              {ALL_10_CLASSES_META.map((c) => {
+                const isActive = selectedClass === c.classLevel;
+                return (
+                  <button
+                    key={c.classLevel}
+                    type="button"
+                    onClick={() => onSelectClass(c.classLevel)}
+                    className={`py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-white text-slate-950 shadow-xs'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    {c.shortLabel.replace('Std ', '')}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

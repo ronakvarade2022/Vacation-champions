@@ -978,6 +978,8 @@ const AppContent: React.FC = () => {
                 isAuthenticated={false}
                 currentRole={activeRole}
                 isDesktopMode={viewMode === 'desktop'}
+                onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
+                onMenuAction={handleMenuAction}
               />
             )}
 
@@ -1114,6 +1116,10 @@ const AppContent: React.FC = () => {
                   <StudentDashboard
                     onNavigateTab={handleNavigateTab}
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
+                    viewMode={viewMode}
+                    onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
+                    onMenuAction={handleMenuAction}
+                    onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
                   />
                 )}
 

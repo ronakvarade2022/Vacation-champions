@@ -48,6 +48,7 @@ import {
   getClassSubscriptionInfo,
   getStudentPlanInfo,
 } from '../utils/subscriptionAccess';
+import { BrandBookCapLogo } from './DashboardIllustrations';
 
 interface HeaderProps {
   currentTab: string;
@@ -301,7 +302,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Main Header Row */}
       <div className={`${containerWidthClass} px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-3`}>
-        {/* Brand Logo */}
+        {/* Brand Logo (Reference-matched Orange Cap-Book Icon + Two-Tone MyStudyZone + Learn • Practice • Grow) */}
         <button
           type="button"
           onClick={() => {
@@ -310,17 +311,16 @@ export const Header: React.FC<HeaderProps> = ({
             if (activeRole === 'admin') handleRoleChange('student');
             onMenuAction('home-overview');
           }}
-          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group shrink-0 text-left"
+          className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group shrink-0 text-left"
         >
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
-            <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="leading-tight">
-            <span className="font-display font-extrabold text-base sm:text-xl tracking-tight text-slate-900 block">
-              MyStudyZone
+          <BrandBookCapLogo className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
+          <div className="leading-none">
+            <span className="font-display font-black text-lg sm:text-2xl tracking-tight block">
+              <span className="text-slate-900">MyStudy</span>
+              <span className="text-orange-600">Zone</span>
             </span>
-            <span className="text-[10px] font-bold text-slate-500 hidden sm:block">
-              Interactive Education Platform
+            <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-700 tracking-wide block mt-0.5">
+              Learn • Practice • Grow
             </span>
           </div>
         </button>
