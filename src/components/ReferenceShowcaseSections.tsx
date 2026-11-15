@@ -403,99 +403,132 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </div>
 
       {/* =====================================================================
-          2. MAIN HERO BANNER WITH INTEGRATED 3 EDUCATION BOARDS ROW
+          2. MAIN EDUCATIONAL HERO BANNER (Uploaded Banner + Interactive Board Cards)
           ===================================================================== */}
       <section
-        aria-label="Welcome to MyStudyZone Hero Banner"
-        className="relative overflow-hidden rounded-3xl border-2 border-[#0284c7]/60 shadow-xl bg-gradient-to-b from-[#38bdf8] via-[#7dd3fc] to-[#cffafe]"
+        aria-label="Welcome to MyStudyZone Educational Hero Banner"
+        className="rounded-3xl bg-white border-2 border-sky-200/80 shadow-xl overflow-hidden"
       >
-        {/* Soft Sky Clouds & Meadow Horizon */}
-        <div
-          aria-hidden="true"
-          className="absolute -top-12 left-1/4 w-72 h-36 bg-white/45 rounded-full blur-2xl pointer-events-none"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute top-12 right-10 w-56 h-28 bg-white/35 rounded-full blur-2xl pointer-events-none"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-r from-[#22c55e]/85 via-[#4ade80]/85 to-[#16a34a]/85 rounded-t-[40%] pointer-events-none"
-        />
+        {/* Full Uncropped Uploaded Banner Image with Separate Interactive Clickable Elements */}
+        <div className="relative w-full">
+          <img
+            src="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.png"
+            alt="Welcome to MyStudyZone – Your Learning World (Classes 1 to 10) – Select Your Education Board: Maharashtra State Board, CBSE Board, ICSE Board"
+            width={2172}
+            height={724}
+            fetchPriority="high"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="w-full h-auto block select-none"
+          />
 
-        <div className="relative z-10 p-4 sm:p-6 lg:p-7 space-y-5">
-          {/* Top Hero Split: Welcome Copy + Start Learning CTA (Left) & Student Illustrations (Right) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-center">
-            <div className="lg:col-span-5 flex flex-col items-center lg:items-start text-center lg:text-left space-y-2.5">
-              {/* MyStudyZone Branding Lockup Inside Banner */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-2xl bg-white/90 border border-sky-300 shadow-xs">
-                <BrandBookCapLogo className="w-6 h-6 shrink-0" />
-                <span className="text-xs sm:text-sm font-display font-black tracking-tight text-[#0f2952]">
-                  MyStudy<span className="text-[#ea580c]">Zone</span>
-                </span>
-                <span aria-hidden="true" className="text-slate-300">|</span>
-                <span className="text-[11px] font-extrabold text-[#0369a1]">
-                  India&apos;s Learning World
-                </span>
-              </div>
+          {/* Interactive Clickable Element: ▶ START LEARNING Button */}
+          <button
+            type="button"
+            onClick={onStartLearningClick}
+            aria-label="Start Learning – Open Student Learning Courses"
+            title="Start Learning"
+            style={{
+              left: '7.1%',
+              top: '46.8%',
+              width: '15.0%',
+              height: '11.2%',
+            }}
+            className="absolute z-10 rounded-full cursor-pointer transition-all duration-150 hover:ring-4 hover:ring-white/80 hover:bg-white/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
+          >
+            <span className="sr-only">START LEARNING</span>
+          </button>
 
-              {/* Large Heading: WELCOME TO MyStudyZone! */}
-              <div className="space-y-0.5">
-                <span className="block text-sm sm:text-base lg:text-lg font-display font-black uppercase tracking-wider text-[#0f2952]">
-                  WELCOME TO
-                </span>
-                <h1 className="text-3xl sm:text-4xl lg:text-[2.75rem] font-display font-black tracking-tight leading-none drop-shadow-xs">
-                  <span className="text-[#0f2952]">MyStudy</span>
-                  <span className="text-[#ea580c]">Zone!</span>
-                </h1>
-              </div>
+          {/* Interactive Clickable Element 1: MAHARASHTRA STATE BOARD Card & Explore Button */}
+          <button
+            type="button"
+            onClick={() => triggerSubAction('course-maharashtra')}
+            aria-label="Maharashtra State Board – Classes 1 to 10 – State Syllabus – Explore"
+            title="Explore Maharashtra State Board (Classes 1 to 10)"
+            style={{
+              left: '8.1%',
+              top: '69.2%',
+              width: '27.6%',
+              height: '16.5%',
+            }}
+            className={`absolute z-10 rounded-2xl cursor-pointer transition-all duration-150 hover:ring-3 hover:ring-[#1d4ed8] hover:bg-blue-500/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1d4ed8] ${
+              selectedBoard === 'Maharashtra' ? 'ring-2 ring-[#1e3a8a]/60' : ''
+            }`}
+          >
+            <span className="sr-only">
+              MAHARASHTRA STATE BOARD – Classes 1 to 10 · State Syllabus – Explore
+            </span>
+          </button>
 
-              {/* Golden Ribbon Subtitle: Your Learning World – Classes 1 to 10 */}
-              <div className="inline-block px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-[#fef08a] via-[#facc15] to-[#f59e0b] border-2 border-[#ca8a04] shadow-sm">
-                <span className="text-xs sm:text-base lg:text-lg font-display font-black text-[#0f2952] tracking-tight">
-                  Your Learning World – Classes 1 to 10
-                </span>
-              </div>
+          {/* Interactive Clickable Element 2: CBSE BOARD Card & Explore Button */}
+          <button
+            type="button"
+            onClick={() => triggerSubAction('course-cbse')}
+            aria-label="CBSE Board – Classes 1 to 10 – NCERT Syllabus – Explore"
+            title="Explore CBSE Board (Classes 1 to 10)"
+            style={{
+              left: '36.3%',
+              top: '69.2%',
+              width: '27.6%',
+              height: '16.5%',
+            }}
+            className={`absolute z-10 rounded-2xl cursor-pointer transition-all duration-150 hover:ring-3 hover:ring-[#15803d] hover:bg-emerald-500/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#15803d] ${
+              selectedBoard === 'CBSE' ? 'ring-2 ring-[#14532d]/60' : ''
+            }`}
+          >
+            <span className="sr-only">
+              CBSE BOARD – Classes 1 to 10 · NCERT Syllabus – Explore
+            </span>
+          </button>
 
-              {/* Tagline: Learn • Practice • Excel */}
-              <p className="text-sm sm:text-base lg:text-lg font-display font-black text-[#0f2952] tracking-wide">
-                Learn &bull; Practice &bull; Excel
-              </p>
+          {/* Interactive Clickable Element 3: ICSE BOARD Card & Explore Button */}
+          <button
+            type="button"
+            onClick={() => triggerSubAction('course-icse')}
+            aria-label="ICSE Board – Classes 1 to 10 – CISCE Syllabus – Explore"
+            title="Explore ICSE Board (Classes 1 to 10)"
+            style={{
+              left: '64.5%',
+              top: '69.2%',
+              width: '27.6%',
+              height: '16.5%',
+            }}
+            className={`absolute z-10 rounded-2xl cursor-pointer transition-all duration-150 hover:ring-3 hover:ring-[#ea580c] hover:bg-orange-500/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ea580c] ${
+              selectedBoard === 'ICSE' ? 'ring-2 ring-[#7c2d12]/60' : ''
+            }`}
+          >
+            <span className="sr-only">
+              ICSE BOARD – Classes 1 to 10 · CISCE Syllabus – Explore
+            </span>
+          </button>
+        </div>
 
-              {/* Prominent Orange Button: ▶ START LEARNING */}
-              <div className="pt-0.5">
-                <button
-                  type="button"
-                  onClick={onStartLearningClick}
-                  className="px-6 sm:px-8 py-3 sm:py-3.5 rounded-full bg-gradient-to-b from-[#fb923c] via-[#f97316] to-[#ea580c] hover:brightness-110 text-white font-display font-black text-sm sm:text-base lg:text-lg shadow-lg shadow-orange-600/40 border-2 border-white/90 flex items-center gap-2.5 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white text-[#ea580c] flex items-center justify-center shadow-xs shrink-0">
-                    <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
-                  </span>
-                  <span>START LEARNING</span>
-                </button>
-              </div>
-            </div>
+        {/* Mobile-Friendly Vertical Interactive Controls (Visible on Mobile Screens so buttons & board cards are large and easy to tap) */}
+        {viewMode !== 'desktop' && (
+          <div className="md:hidden px-3.5 pb-4 pt-2 bg-gradient-to-b from-white to-sky-50/70 border-t border-slate-100 space-y-3">
+            {/* Mobile Start Learning Button */}
+            <button
+              type="button"
+              onClick={onStartLearningClick}
+              className="w-full min-h-[46px] py-2.5 px-5 rounded-full bg-gradient-to-b from-[#fb923c] via-[#f97316] to-[#ea580c] hover:brightness-105 text-white font-display font-black text-sm shadow-md shadow-orange-600/30 border-2 border-white flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+            >
+              <span className="w-6 h-6 rounded-full bg-white text-[#ea580c] flex items-center justify-center shadow-2xs shrink-0">
+                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+              </span>
+              <span>START LEARNING</span>
+            </button>
 
-            {/* Right: Happy Indian Schoolchildren, Books, Graduation Cap, Trophy & Stars */}
-            <div className="lg:col-span-7 flex items-center justify-center">
-              <HeroSchoolchildrenIllustration className="w-full max-w-[540px] h-auto drop-shadow-md" />
-            </div>
-          </div>
-
-          {/* Integrated 3 Education Boards Row Inside Main Hero Banner */}
-          <div className="rounded-2xl bg-white/90 backdrop-blur-xs border-2 border-white shadow-lg p-2.5 sm:p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2 px-1">
-              <p className="text-[11px] sm:text-xs font-display font-black uppercase tracking-wider text-[#0f2952]">
+              <p className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
                 Select Your Education Board (Classes 1 to 10)
               </p>
-              <span className="hidden sm:inline text-[11px] font-extrabold text-[#ea580c]">
-                Click Any Board to Explore Classes &amp; Subjects →
+              <span className="text-[10px] font-extrabold text-[#ea580c]">
+                Tap to Explore →
               </span>
             </div>
 
-            {/* Always 3 Equal Columns in One Horizontal Row (Mobile & Desktop) */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3.5 lg:gap-4">
+            {/* Vertically Arranged Board Cards on Mobile */}
+            <div className="grid grid-cols-1 gap-2.5">
               {heroEducationBoards.map((boardCard) => {
                 const isSelected = selectedBoard === boardCard.id;
 
@@ -504,25 +537,25 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                     key={boardCard.id}
                     type="button"
                     onClick={() => triggerSubAction(boardCard.actionId)}
-                    className={`group rounded-2xl bg-gradient-to-b ${boardCard.cardBg} border-2 ${
+                    className={`group w-full rounded-2xl bg-gradient-to-r ${boardCard.cardBg} border-2 ${
                       boardCard.borderClass
                     } ${boardCard.shadowClass} ${
                       isSelected ? 'ring-2 ring-offset-1 ring-[#0f2952]' : ''
-                    } p-2 sm:p-3.5 lg:p-4 text-center sm:text-left transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0.5 cursor-pointer flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 justify-between`}
+                    } p-3 text-left transition-all duration-150 active:translate-y-0.5 cursor-pointer flex items-center justify-between gap-3`}
                   >
-                    <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 min-w-0 w-full">
+                    <div className="flex items-center gap-3 min-w-0">
                       <HeroBoardEmblemIcon
                         board={boardCard.id}
-                        className="w-10 h-10 sm:w-13 sm:h-13 lg:w-14 lg:h-14 shrink-0 drop-shadow-xs group-hover:scale-105 transition-transform"
+                        className="w-11 h-11 shrink-0 drop-shadow-xs"
                       />
-                      <div className="min-w-0 flex-1 text-center sm:text-left">
+                      <div className="min-w-0">
                         <span
-                          className={`block font-display font-black text-[10px] sm:text-xs lg:text-base leading-tight tracking-tight ${boardCard.titleColor}`}
+                          className={`block font-display font-black text-xs sm:text-sm leading-tight tracking-tight ${boardCard.titleColor}`}
                         >
                           {boardCard.title}
                         </span>
                         <span
-                          className={`hidden sm:block text-[11px] font-bold mt-0.5 truncate ${boardCard.subtitleColor}`}
+                          className={`block text-[11px] font-bold mt-0.5 ${boardCard.subtitleColor}`}
                         >
                           {boardCard.subtitle}
                         </span>
@@ -530,17 +563,17 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                     </div>
 
                     <span
-                      className={`mt-1 sm:mt-0 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl font-display font-black text-[9px] sm:text-xs whitespace-nowrap shrink-0 flex items-center justify-center gap-1 shadow-2xs ${boardCard.ctaBg}`}
+                      className={`px-3.5 py-2 rounded-full font-display font-black text-xs whitespace-nowrap shrink-0 flex items-center justify-center gap-1 shadow-xs ${boardCard.ctaBg}`}
                     >
                       <span>Explore</span>
-                      <ArrowRight className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" />
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </span>
                   </button>
                 );
               })}
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* =====================================================================
