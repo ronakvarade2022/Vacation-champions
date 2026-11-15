@@ -121,6 +121,26 @@ export const HeroSchoolchildrenIllustration: React.FC<{ className?: string }> = 
       </text>
     </g>
 
+    {/* Left Stack of Books, Notebooks, Pencil Cup & Graduation Cap */}
+    <g transform="translate(8, 128)">
+      {/* Pencil Cup */}
+      <rect x="14" y="18" width="28" height="34" rx="5" fill="#F97316" stroke="#FFFFFF" strokeWidth="2" />
+      <rect x="18" y="4" width="6" height="18" rx="2" fill="#EF4444" />
+      <rect x="26" y="2" width="6" height="20" rx="2" fill="#22C55E" />
+      <rect x="34" y="6" width="6" height="16" rx="2" fill="#3B82F6" />
+      {/* 3D Stacked Books & Notebooks */}
+      <rect x="2" y="96" width="76" height="18" rx="5" fill="#EA580C" stroke="#FFFFFF" strokeWidth="2" />
+      <rect x="8" y="100" width="64" height="10" rx="2" fill="#FFFBEB" />
+      <rect x="6" y="78" width="70" height="18" rx="5" fill="#16A34A" stroke="#FFFFFF" strokeWidth="2" />
+      <rect x="12" y="82" width="58" height="10" rx="2" fill="#F0FDF4" />
+      <rect x="10" y="60" width="64" height="18" rx="5" fill="#0284C7" stroke="#FFFFFF" strokeWidth="2" />
+      <rect x="16" y="64" width="52" height="10" rx="2" fill="#E0F2FE" />
+      {/* Graduation Cap Perched Above Books */}
+      <polygon points="42,38 14,49 42,60 70,49" fill="#0F2952" stroke="#FACC15" strokeWidth="1.8" />
+      <path d="M64 51V63" stroke="#FACC15" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="64" cy="64" r="2.5" fill="#EA580C" />
+    </g>
+
     {/* Indian Schoolboy Character (Left) */}
     <g transform="translate(72, 42)">
       {/* Backpack */}
@@ -708,3 +728,438 @@ export const ScholarshipChampionBannerSvg: React.FC<{ className?: string }> = ({
     </g>
   </svg>
 );
+
+export const SchoolHeaderCapGraphic: React.FC<{ className?: string }> = ({
+  className = 'w-12 h-12',
+}) => (
+  <svg viewBox="0 0 80 80" fill="none" className={className} aria-hidden="true">
+    <defs>
+      <linearGradient id="capBadgeGrad" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#1E3A8A" />
+        <stop offset="100%" stopColor="#0F2952" />
+      </linearGradient>
+    </defs>
+    <circle cx="40" cy="40" r="36" fill="url(#capBadgeGrad)" stroke="#FACC15" strokeWidth="3" />
+    {/* Open Golden Book Base */}
+    <path
+      d="M18 46C18 42 28 40 40 45C52 40 62 42 62 46V58C62 58 52 54 40 59C28 54 18 58 18 58V46Z"
+      fill="#FEF08A"
+      stroke="#F59E0B"
+      strokeWidth="2"
+    />
+    <path d="M40 45V59" stroke="#D97706" strokeWidth="2.5" strokeLinecap="round" />
+    {/* 3D Graduation Cap */}
+    <polygon points="40,14 12,26 40,38 68,26" fill="#FACC15" stroke="#FFFFFF" strokeWidth="1.5" />
+    <path d="M24 31V40C24 43 31 46 40 46C49 46 56 43 56 40V31" fill="#F59E0B" />
+    <path d="M62 28.5V42" stroke="#FEF08A" strokeWidth="3" strokeLinecap="round" />
+    <circle cx="62" cy="43" r="3" fill="#EA580C" />
+  </svg>
+);
+
+/**
+ * CARD 1 – MAHARASHTRA STATE BOARD
+ * Attractive Maharashtra school illustration with school building, heritage arch, flag, and textbooks.
+ */
+export const MaharashtraBoardIllustration: React.FC<{ className?: string }> = ({
+  className = 'w-full h-36',
+}) => (
+  <svg viewBox="0 0 320 155" fill="none" className={className} aria-hidden="true">
+    <defs>
+      <linearGradient id="mhSky" x1="0" y1="0" x2="320" y2="155" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#FFF7ED" />
+        <stop offset="55%" stopColor="#FFEDD5" />
+        <stop offset="100%" stopColor="#FED7AA" />
+      </linearGradient>
+      <linearGradient id="mhSchoolWall" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#FDBA74" />
+        <stop offset="100%" stopColor="#EA580C" />
+      </linearGradient>
+      <linearGradient id="mhRoof" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#DC2626" />
+        <stop offset="100%" stopColor="#991B1B" />
+      </linearGradient>
+    </defs>
+
+    {/* Soft Scenic Backdrop */}
+    <rect width="320" height="155" rx="20" fill="url(#mhSky)" />
+    <circle cx="268" cy="36" r="24" fill="#FDE047" fillOpacity="0.65" />
+    <path d="M0 132Q80 118 160 130T320 126V155H0V132Z" fill="#22C55E" fillOpacity="0.35" />
+    <path d="M0 140Q110 128 210 138T320 135V155H0V140Z" fill="#16A34A" fillOpacity="0.55" />
+
+    {/* Maharashtra School Building with Heritage Dome & Arch */}
+    <g transform="translate(88, 22)">
+      {/* Flagpole & Saffron/Tricolour Pennant */}
+      <line x1="72" y1="0" x2="72" y2="24" stroke="#78350F" strokeWidth="3" strokeLinecap="round" />
+      <path d="M72 2L102 9L72 16Z" fill="#EA580C" />
+      <circle cx="72" cy="2" r="3" fill="#FACC15" />
+
+      {/* Central Heritage Dome & Pediment */}
+      <path d="M46 38C46 16 98 16 98 38Z" fill="#F59E0B" stroke="#FFFFFF" strokeWidth="2" />
+      <polygon points="16,42 72,18 128,42" fill="url(#mhRoof)" stroke="#FFFFFF" strokeWidth="2" />
+
+      {/* Main School Building Facade */}
+      <rect
+        x="22"
+        y="42"
+        width="100"
+        height="76"
+        rx="6"
+        fill="url(#mhSchoolWall)"
+        stroke="#FFFFFF"
+        strokeWidth="2.5"
+      />
+
+      {/* School Clock / Emblem */}
+      <circle cx="72" cy="56" r="9" fill="#FFFBEB" stroke="#9A3412" strokeWidth="2" />
+      <path d="M72 51V56L75 58" stroke="#9A3412" strokeWidth="2" strokeLinecap="round" />
+
+      {/* Windows Left & Right */}
+      <rect x="32" y="52" width="16" height="20" rx="4" fill="#FEF08A" stroke="#9A3412" strokeWidth="1.5" />
+      <rect x="96" y="52" width="16" height="20" rx="4" fill="#FEF08A" stroke="#9A3412" strokeWidth="1.5" />
+      <rect x="32" y="80" width="16" height="20" rx="4" fill="#FEF08A" stroke="#9A3412" strokeWidth="1.5" />
+      <rect x="96" y="80" width="16" height="20" rx="4" fill="#FEF08A" stroke="#9A3412" strokeWidth="1.5" />
+
+      {/* Traditional Entrance Arch */}
+      <path
+        d="M58 118V86C58 76 86 76 86 86V118H58Z"
+        fill="#7C2D12"
+        stroke="#FDE68A"
+        strokeWidth="2"
+      />
+      <rect x="14" y="116" width="116" height="7" rx="3.5" fill="#9A3412" />
+    </g>
+
+    {/* Left Foreground: 3D Stack of Maharashtra Curriculum Textbooks */}
+    <g transform="translate(16, 68)">
+      {/* Bottom Book (Green) */}
+      <rect x="0" y="50" width="76" height="16" rx="5" fill="#16A34A" stroke="#FFFFFF" strokeWidth="1.5" />
+      <rect x="6" y="54" width="64" height="8" rx="2" fill="#DCFCE7" />
+      {/* Middle Book (Blue) */}
+      <rect x="4" y="34" width="72" height="16" rx="5" fill="#2563EB" stroke="#FFFFFF" strokeWidth="1.5" />
+      <rect x="10" y="38" width="60" height="8" rx="2" fill="#DBEAFE" />
+      {/* Top Book (Saffron/Orange) */}
+      <rect x="8" y="18" width="68" height="16" rx="5" fill="#EA580C" stroke="#FFFFFF" strokeWidth="1.5" />
+      <text x="42" y="30" textAnchor="middle" fill="#FFFFFF" fontWeight="900" fontSize="9" fontFamily="sans-serif">
+        मराठी • MATHS
+      </text>
+      {/* Glowing Knowledge Diya / Lamp on Top */}
+      <path d="M30 16C32 22 52 22 54 16H30Z" fill="#B45309" />
+      <path d="M42 3C37 9 39 14 42 16C45 14 47 9 42 3Z" fill="#FACC15" stroke="#EA580C" strokeWidth="1" />
+    </g>
+
+    {/* Right Foreground: Open Book, Pencil & Trophy Star */}
+    <g transform="translate(232, 66)">
+      <path
+        d="M6 52C18 48 30 50 40 55C50 50 62 48 74 52V68C62 64 50 66 40 71C30 66 18 64 6 68V52Z"
+        fill="#FFFFFF"
+        stroke="#EA580C"
+        strokeWidth="2.5"
+      />
+      <path d="M40 55V71" stroke="#EA580C" strokeWidth="2.5" />
+      {/* Graduation Cap Floating Above Open Book */}
+      <polygon points="40,14 14,25 40,36 66,25" fill="#0F2952" stroke="#FACC15" strokeWidth="1.5" />
+      <path d="M25 29V37C25 40 32 42 40 42C48 42 55 40 55 37V29" fill="#1E3A8A" />
+      <circle cx="60" cy="34" r="2.5" fill="#FACC15" />
+    </g>
+  </svg>
+);
+
+/**
+ * CARD 2 – CBSE BOARD
+ * Attractive 3D-style globe, happy schoolchildren, and educational books illustration.
+ */
+export const CbseBoardIllustration: React.FC<{ className?: string }> = ({
+  className = 'w-full h-36',
+}) => (
+  <svg viewBox="0 0 320 155" fill="none" className={className} aria-hidden="true">
+    <defs>
+      <linearGradient id="cbseSky" x1="0" y1="0" x2="320" y2="155" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#F0F9FF" />
+        <stop offset="55%" stopColor="#E0F2FE" />
+        <stop offset="100%" stopColor="#BAE6FD" />
+      </linearGradient>
+      <linearGradient id="globeOcean" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#38BDF8" />
+        <stop offset="100%" stopColor="#0284C7" />
+      </linearGradient>
+    </defs>
+
+    {/* Backdrop */}
+    <rect width="320" height="155" rx="20" fill="url(#cbseSky)" />
+    <circle cx="46" cy="34" r="20" fill="#FEF08A" fillOpacity="0.7" />
+    <path d="M0 134Q90 120 175 132T320 128V155H0V134Z" fill="#38BDF8" fillOpacity="0.25" />
+
+    {/* Center-Left: Large 3D Educational World Globe */}
+    <g transform="translate(96, 18)">
+      {/* Globe Stand & Meridian Arc */}
+      <path
+        d="M64 8C96 8 118 32 118 60C118 88 96 112 64 112"
+        stroke="#F59E0B"
+        strokeWidth="5"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <rect x="56" y="110" width="16" height="14" rx="3" fill="#D97706" />
+      <rect x="38" y="120" width="52" height="8" rx="4" fill="#B45309" />
+
+      {/* 3D Globe Sphere */}
+      <circle
+        cx="64"
+        cy="60"
+        r="44"
+        fill="url(#globeOcean)"
+        stroke="#FFFFFF"
+        strokeWidth="3"
+      />
+      {/* Continents */}
+      <path
+        d="M42 36C52 30 68 34 74 44C78 52 68 66 56 64C44 62 36 44 42 36Z"
+        fill="#4ADE80"
+      />
+      <path
+        d="M72 68C82 64 94 70 92 82C90 92 76 96 68 88C64 82 66 72 72 68Z"
+        fill="#22C55E"
+      />
+      {/* Latitude & Longitude Grid Lines */}
+      <ellipse cx="64" cy="60" rx="44" ry="16" stroke="#E0F2FE" strokeWidth="1.5" strokeOpacity="0.75" fill="none" />
+      <ellipse cx="64" cy="60" rx="20" ry="44" stroke="#E0F2FE" strokeWidth="1.5" strokeOpacity="0.75" fill="none" />
+    </g>
+
+    {/* Left: Happy Indian Schoolboy with CBSE Science/Maths Book */}
+    <g transform="translate(18, 42)">
+      <circle cx="38" cy="34" r="22" fill="#FDBA74" />
+      <path d="M16 30C16 14 32 8 48 12C58 14 62 24 58 32C50 22 36 20 22 24Z" fill="#1E293B" />
+      <circle cx="31" cy="34" r="3" fill="#0F172A" />
+      <circle cx="45" cy="34" r="3" fill="#0F172A" />
+      <path d="M31 43Q38 50 45 43" stroke="#991B1B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <path d="M16 62C16 54 26 50 38 50C50 50 60 54 60 62V104H16V62Z" fill="#2563EB" />
+      <polygon points="30,50 38,62 46,50" fill="#FFFFFF" />
+      {/* Held Book */}
+      <rect x="22" y="68" width="44" height="32" rx="5" fill="#FACC15" stroke="#FFFFFF" strokeWidth="2" />
+      <text x="44" y="88" textAnchor="middle" fill="#0F2952" fontWeight="900" fontSize="10" fontFamily="sans-serif">
+        CBSE
+      </text>
+    </g>
+
+    {/* Right: Happy Indian Schoolgirl + Stacked Books */}
+    <g transform="translate(216, 40)">
+      <circle cx="40" cy="34" r="21" fill="#FDBA74" />
+      <path d="M19 30C19 14 34 8 50 12C60 14 63 24 60 32C52 22 38 20 24 24Z" fill="#1E293B" />
+      <circle cx="33" cy="34" r="3" fill="#0F172A" />
+      <circle cx="47" cy="34" r="3" fill="#0F172A" />
+      <path d="M33 43Q40 49 47 43" stroke="#991B1B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <path d="M18 60C18 53 28 49 40 49C52 49 62 53 62 60V104H18V60Z" fill="#0284C7" />
+      {/* Stack of Books */}
+      <rect x="8" y="82" width="72" height="13" rx="4" fill="#16A34A" stroke="#FFFFFF" strokeWidth="1.5" />
+      <rect x="12" y="69" width="64" height="13" rx="4" fill="#EA580C" stroke="#FFFFFF" strokeWidth="1.5" />
+      <text x="44" y="79" textAnchor="middle" fill="#FFFFFF" fontWeight="900" fontSize="8.5" fontFamily="sans-serif">
+        NCERT • STEM
+      </text>
+    </g>
+  </svg>
+);
+
+/**
+ * CARD 3 – ICSE BOARD
+ * Attractive library, stacked encyclopedias/books, and classic school pillars illustration.
+ */
+export const IcseBoardIllustration: React.FC<{ className?: string }> = ({
+  className = 'w-full h-36',
+}) => (
+  <svg viewBox="0 0 320 155" fill="none" className={className} aria-hidden="true">
+    <defs>
+      <linearGradient id="icseSky" x1="0" y1="0" x2="320" y2="155" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#ECFDF5" />
+        <stop offset="55%" stopColor="#D1FAE5" />
+        <stop offset="100%" stopColor="#A7F3D0" />
+      </linearGradient>
+      <linearGradient id="icseRoof" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#059669" />
+        <stop offset="100%" stopColor="#065F46" />
+      </linearGradient>
+    </defs>
+
+    {/* Backdrop */}
+    <rect width="320" height="155" rx="20" fill="url(#icseSky)" />
+    <circle cx="272" cy="34" r="22" fill="#FEF08A" fillOpacity="0.65" />
+    <path d="M0 134Q100 120 190 132T320 128V155H0V134Z" fill="#10B981" fillOpacity="0.28" />
+
+    {/* Center: Classical ICSE Library & Academy Hall with Columns & Bookshelves */}
+    <g transform="translate(86, 18)">
+      {/* Classical Triangular Pediment Roof */}
+      <polygon
+        points="8,42 74,10 140,42"
+        fill="url(#icseRoof)"
+        stroke="#FFFFFF"
+        strokeWidth="2.5"
+      />
+      <circle cx="74" cy="29" r="7" fill="#FEF08A" stroke="#065F46" strokeWidth="2" />
+
+      {/* Library Main Hall */}
+      <rect
+        x="16"
+        y="42"
+        width="116"
+        height="78"
+        rx="6"
+        fill="#FFFFFF"
+        stroke="#059669"
+        strokeWidth="2.5"
+      />
+
+      {/* Library Arched Bookcase Windows Showing Colourful Books */}
+      <g transform="translate(28, 50)">
+        <rect x="0" y="0" width="26" height="58" rx="5" fill="#FEF3C7" stroke="#D97706" strokeWidth="1.5" />
+        <rect x="4" y="8" width="5" height="16" rx="1" fill="#EF4444" />
+        <rect x="10" y="6" width="5" height="18" rx="1" fill="#3B82F6" />
+        <rect x="16" y="9" width="5" height="15" rx="1" fill="#10B981" />
+        <line x1="2" y1="26" x2="24" y2="26" stroke="#B45309" strokeWidth="2" />
+        <rect x="4" y="32" width="6" height="18" rx="1" fill="#8B5CF6" />
+        <rect x="11" y="34" width="5" height="16" rx="1" fill="#F97316" />
+        <rect x="17" y="31" width="5" height="19" rx="1" fill="#0284C7" />
+      </g>
+
+      <g transform="translate(61, 50)">
+        <rect x="0" y="0" width="26" height="58" rx="5" fill="#FEF3C7" stroke="#D97706" strokeWidth="1.5" />
+        <rect x="4" y="7" width="5" height="17" rx="1" fill="#10B981" />
+        <rect x="10" y="9" width="6" height="15" rx="1" fill="#EC4899" />
+        <rect x="17" y="6" width="5" height="18" rx="1" fill="#2563EB" />
+        <line x1="2" y1="26" x2="24" y2="26" stroke="#B45309" strokeWidth="2" />
+        <rect x="4" y="33" width="5" height="17" rx="1" fill="#F59E0B" />
+        <rect x="10" y="31" width="6" height="19" rx="1" fill="#059669" />
+        <rect x="17" y="34" width="5" height="16" rx="1" fill="#7C3AED" />
+      </g>
+
+      <g transform="translate(94, 50)">
+        <rect x="0" y="0" width="26" height="58" rx="5" fill="#FEF3C7" stroke="#D97706" strokeWidth="1.5" />
+        <rect x="4" y="8" width="5" height="16" rx="1" fill="#2563EB" />
+        <rect x="10" y="6" width="5" height="18" rx="1" fill="#16A34A" />
+        <rect x="16" y="9" width="5" height="15" rx="1" fill="#EA580C" />
+        <line x1="2" y1="26" x2="24" y2="26" stroke="#B45309" strokeWidth="2" />
+        <rect x="4" y="32" width="6" height="18" rx="1" fill="#DC2626" />
+        <rect x="11" y="34" width="5" height="16" rx="1" fill="#0284C7" />
+        <rect x="17" y="31" width="5" height="19" rx="1" fill="#9333EA" />
+      </g>
+
+      {/* Library Steps */}
+      <rect x="10" y="118" width="128" height="7" rx="3.5" fill="#047857" />
+    </g>
+
+    {/* Left Foreground: Open Literature & Science Tome + Quill Badge */}
+    <g transform="translate(14, 66)">
+      <path
+        d="M6 48C18 44 32 46 42 52C52 46 66 44 78 48V66C66 62 52 64 42 70C32 64 18 62 6 66V48Z"
+        fill="#FFFFFF"
+        stroke="#047857"
+        strokeWidth="2.5"
+      />
+      <path d="M42 52V70" stroke="#047857" strokeWidth="2.5" />
+      {/* Golden Academic Shield Above Book */}
+      <path
+        d="M28 12H56V26C56 36 42 42 42 42C42 42 28 36 28 26V12Z"
+        fill="#FACC15"
+        stroke="#FFFFFF"
+        strokeWidth="2"
+      />
+      <text x="42" y="29" textAnchor="middle" fill="#064E3B" fontWeight="900" fontSize="9" fontFamily="sans-serif">
+        ICSE
+      </text>
+    </g>
+
+    {/* Right Foreground: Stacked Encyclopedias & Graduation Cap */}
+    <g transform="translate(226, 68)">
+      <rect x="4" y="50" width="74" height="15" rx="4" fill="#0F766E" stroke="#FFFFFF" strokeWidth="1.5" />
+      <rect x="8" y="35" width="66" height="15" rx="4" fill="#7C3AED" stroke="#FFFFFF" strokeWidth="1.5" />
+      <rect x="12" y="20" width="58" height="15" rx="4" fill="#EA580C" stroke="#FFFFFF" strokeWidth="1.5" />
+      <polygon points="41,4 16,14 41,24 66,14" fill="#0F2952" stroke="#FACC15" strokeWidth="1.5" />
+    </g>
+  </svg>
+);
+
+export const HeroBoardEmblemIcon: React.FC<{
+  board: 'Maharashtra' | 'CBSE' | 'ICSE';
+  className?: string;
+}> = ({ board, className = 'w-11 h-11 sm:w-14 sm:h-14' }) => {
+  if (board === 'Maharashtra') {
+    return (
+      <svg viewBox="0 0 72 72" fill="none" className={className} aria-hidden="true">
+        <defs>
+          <linearGradient id="mhEmblemBg" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#1D4ED8" />
+          </linearGradient>
+        </defs>
+        <rect width="72" height="72" rx="18" fill="url(#mhEmblemBg)" stroke="#FFFFFF" strokeWidth="2.5" />
+        {/* School Building & Heritage Dome */}
+        <polygon points="14,30 36,16 58,30" fill="#FACC15" stroke="#FFFFFF" strokeWidth="1.5" />
+        <rect x="18" y="30" width="36" height="24" rx="3" fill="#FFFBEB" />
+        <rect x="23" y="35" width="7" height="8" rx="1.5" fill="#2563EB" />
+        <rect x="42" y="35" width="7" height="8" rx="1.5" fill="#2563EB" />
+        <path d="M32 54V41C32 37 40 37 40 41V54H32Z" fill="#EA580C" />
+        {/* Open Book in Foreground */}
+        <path
+          d="M14 52C22 49 30 51 36 55C42 51 50 49 58 52V61C50 58 42 60 36 64C30 60 22 58 14 61V52Z"
+          fill="#FEF08A"
+          stroke="#CA8A04"
+          strokeWidth="1.5"
+        />
+      </svg>
+    );
+  }
+
+  if (board === 'CBSE') {
+    return (
+      <svg viewBox="0 0 72 72" fill="none" className={className} aria-hidden="true">
+        <defs>
+          <linearGradient id="cbseEmblemBg" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#22C55E" />
+            <stop offset="100%" stopColor="#15803D" />
+          </linearGradient>
+        </defs>
+        <rect width="72" height="72" rx="18" fill="url(#cbseEmblemBg)" stroke="#FFFFFF" strokeWidth="2.5" />
+        {/* 3D Globe + Graduation Cap + Book */}
+        <circle cx="36" cy="34" r="16" fill="#38BDF8" stroke="#FFFFFF" strokeWidth="2" />
+        <path d="M27 28C32 24 40 26 43 32C45 36 39 43 31 41C26 39 24 32 27 28Z" fill="#4ADE80" />
+        <ellipse cx="36" cy="34" rx="16" ry="6" stroke="#E0F2FE" strokeWidth="1.2" fill="none" />
+        <polygon points="36,10 18,18 36,25 54,18" fill="#0F2952" stroke="#FACC15" strokeWidth="1.2" />
+        <path
+          d="M16 52C24 49 31 51 36 55C41 51 48 49 56 52V60C48 57 41 59 36 63C31 59 24 57 16 60V52Z"
+          fill="#FFFFFF"
+          stroke="#15803D"
+          strokeWidth="1.5"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 72 72" fill="none" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="icseEmblemBg" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FB923C" />
+          <stop offset="100%" stopColor="#EA580C" />
+        </linearGradient>
+      </defs>
+      <rect width="72" height="72" rx="18" fill="url(#icseEmblemBg)" stroke="#FFFFFF" strokeWidth="2.5" />
+      {/* Classical Library Shield, Stacked Books & Star Crest */}
+      <path
+        d="M22 14H50V30C50 42 36 49 36 49C36 49 22 42 22 30V14Z"
+        fill="#FFFBEB"
+        stroke="#FACC15"
+        strokeWidth="2"
+      />
+      <polygon
+        points="36,19 39,26 46,27 41,32 42,39 36,35 30,39 31,32 26,27 33,26"
+        fill="#EA580C"
+      />
+      <path
+        d="M15 51C23 48 31 50 36 54C41 50 49 48 57 51V60C49 57 41 59 36 63C31 59 23 57 15 60V51Z"
+        fill="#FEF08A"
+        stroke="#FFFFFF"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+};
+
+

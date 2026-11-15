@@ -1008,6 +1008,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     <img
                       src={qrData.imageUrl}
                       alt="Razorpay Dynamic UPI QR Code for ₹99 Premium Plan"
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-contain"
                     />
                   ) : (

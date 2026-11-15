@@ -17,7 +17,22 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, arrayUnion, collection, getDocs, query, where, limit } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  setLogLevel,
+  doc,
+  getDoc,
+  getDocFromServer,
+  setDoc,
+  updateDoc,
+  arrayUnion,
+  collection,
+  getDocs,
+  query,
+  where,
+  limit,
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { BoardClassKey, ClassLevel, ClassSubscriptionRecord, EducationBoard, StudentProfile } from '../types';
 import {
@@ -36,10 +51,31 @@ import {
   parseBoardClassKey,
 } from '../utils/subscriptionAccess';
 
+// Silence noisy internal @firebase/firestore WebChannel retry logs in iframe/proxy environments
+try {
+  setLogLevel('silent');
+} catch {
+  // Ignore if unsupported
+}
+
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 /* CRITICAL: The app will break without specifying firestoreDatabaseId */
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+function initFirestoreInstance() {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalAutoDetectLongPolling: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = initFirestoreInstance();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export type { ConfirmationResult, User, RecaptchaVerifier };
@@ -93,11 +129,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Connection test on boot
 export async function testFirestoreConnection() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return;
+  }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore connection notice: Client is offline or network restricted.');
+      console.warn('Firestore connection notice: Client is operating in offline cache mode.');
     }
   }
 }

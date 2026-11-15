@@ -50,6 +50,7 @@ import {
 } from '../utils/referralCoding';
 import { ALL_10_CLASSES, ALL_10_CLASSES_META, getSubjectsForClass } from '../data/classCurriculumConfig';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
+import { SectionOrientationGuide } from './SectionOrientationGuide';
 
 interface StudentProfileViewProps {
   onOpenMembership: (plan?: 'basic' | 'premium', targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
@@ -131,7 +132,51 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const activeBoardLabel = getBoardShortLabel(activeBoard);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20 animate-in fade-in duration-200">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 animate-in fade-in duration-200">
+      {/* SECTION 9: 3-QUESTION ORIENTATION GUIDE */}
+      <SectionOrientationGuide
+        sectionNumber="Section 9 · My Account"
+        sectionTitle="Student Profile, Purchases, Courses, Settings & Support"
+        whatIsThis="Your personal student account hub for profile details, purchased courses, password security, and help desk."
+        whatCanILearn="Manage your Student Profile, Personal Information, My Purchases, My Courses, Account Settings, Password & Support."
+        whatShouldIClick="Use the 7 Account Quick-Jump buttons below to manage your profile, switch classes, or contact support."
+        accentTheme="purple"
+      />
+
+      {/* 7-ITEM MY ACCOUNT ORGANISATION BAR */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+        {[
+          { label: '1. Student Profile', icon: User, onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
+          { label: '2. Personal Info', icon: Mail, onClick: () => window.scrollTo({ top: 280, behavior: 'smooth' }) },
+          {
+            label: '3. My Purchases',
+            icon: Crown,
+            onClick: () => onOpenMembership('premium', currentStudent.classLevel, activeBoard),
+          },
+          { label: '4. My Courses', icon: BookOpen, onClick: () => onNavigateTab('all-courses') },
+          { label: '5. Account Settings', icon: ShieldCheck, onClick: () => window.scrollTo({ top: 650, behavior: 'smooth' }) },
+          { label: '6. Password', icon: Lock, onClick: () => openAuthModal() },
+          { label: '7. Help & Support', icon: LifeBuoy, onClick: () => onNavigateTab('help-support') },
+        ].map((item) => {
+          const IconComp = item.icon;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.onClick}
+              className="p-3 rounded-2xl bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 shadow-2xs flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer transition-all"
+            >
+              <span className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center">
+                <IconComp className="w-4 h-4" />
+              </span>
+              <span className="text-[11px] font-display font-extrabold text-slate-900 leading-tight">
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* 1. Clear Profile Title Header with Icon & Direct Sign Out Button */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border-2 border-amber-300 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

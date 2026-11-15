@@ -192,7 +192,7 @@ const AppContent: React.FC = () => {
     if (currentStudent) {
       setPublicBoard(activeBoard);
       setPublicClass(currentStudent.classLevel);
-      if (currentTab === 'public-home' || currentTab === 'explore-zone') {
+      if (currentTab === 'public-home') {
         setCurrentTab('dashboard');
       }
     }
@@ -353,25 +353,17 @@ const AppContent: React.FC = () => {
     const isSignedInLearner = Boolean(isLearningPortal && currentStudent);
 
     switch (actionId) {
-      // HOME
-      case 'home-overview': {
+      // SECTION 1: HOME DASHBOARD
+      case 'home-overview':
+      case 'home-how-it-works':
+      case 'home-why-choose-us': {
         setHomeScrollTarget('home-overview');
         setCurrentTab('dashboard');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
-      case 'home-how-it-works': {
-        setHomeScrollTarget('home-how-it-works');
-        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
-        return;
-      }
-      case 'home-why-choose-us': {
-        setHomeScrollTarget('home-why-choose-us');
-        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
-        return;
-      }
 
-      // COURSES
+      // SECTION 2: COURSES (Dedicated Courses Directory Page)
       case 'course-all': {
         handleNavigateTab('all-courses');
         return;
@@ -386,12 +378,11 @@ const AppContent: React.FC = () => {
             ? 'ICSE'
             : 'Maharashtra';
         setPublicBoard(targetBoard);
-        setHomeScrollTarget('courses-section');
-        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+        handleNavigateTab('all-courses');
         return;
       }
 
-      // SPECIAL LEARNING
+      // SECTION 3: SPECIAL LEARNING (Dedicated Enrichment Studio Pages)
       case 'sl-scholarship': {
         handleNavigateTab('scholarship');
         return;
@@ -400,7 +391,8 @@ const AppContent: React.FC = () => {
         handleNavigateTab('drawing');
         return;
       }
-      case 'sl-stories': {
+      case 'sl-stories':
+      case 'sl-moral': {
         handleNavigateTab('stories');
         return;
       }
@@ -412,131 +404,143 @@ const AppContent: React.FC = () => {
         handleNavigateTab('cricket');
         return;
       }
-      case 'sl-creative': {
-        handleNavigateTab('puzzles');
+      case 'sl-ai-academy': {
+        handleNavigateTab('future-skills');
         return;
       }
+      case 'sl-creative':
       case 'sl-programs': {
         handleNavigateTab('other-programs');
         return;
       }
 
-      // STUDY MATERIAL
+      // SECTION 4: STUDY MATERIAL (Notes, Worksheets, Summaries, PDFs, Question Banks, Study Guides)
       case 'sm-notes':
+      case 'sm-worksheets':
+      case 'sm-summaries':
+      case 'sm-pdfs':
+      case 'sm-question-banks':
+      case 'sm-guides':
       case 'sm-important-questions':
-      case 'sm-textbook-learning':
-      case 'sm-question-banks': {
-        if (isSignedInLearner) {
-          handleNavigateTab(actionId === 'sm-question-banks' ? 'quizzes' : 'study-materials');
-        } else {
-          setExplorerZone('study-material');
-          setExplorerSubFocus(actionId);
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+      case 'sm-textbook-learning': {
+        if (actionId === 'sm-worksheets' && isSignedInLearner) {
+          handleNavigateTab('worksheets');
+          return;
         }
+        setExplorerZone('study-material');
+        setExplorerSubFocus(actionId);
+        setCurrentTab('explore-zone');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // PRACTICE ZONE
+      // SECTION 5: PRACTICE ZONE (Maths, English, Science, Reasoning, Brain Puzzles, Sudoku, Vocabulary, Memory Games)
+      case 'pz-puzzles':
+      case 'pz-memory': {
+        handleNavigateTab('puzzles');
+        return;
+      }
+      case 'pz-sudoku': {
+        handleNavigateTab('sudoku');
+        return;
+      }
+      case 'pz-worksheets': {
+        handleNavigateTab('worksheets');
+        return;
+      }
+      case 'pz-maths':
+      case 'pz-english':
+      case 'pz-science':
+      case 'pz-reasoning':
+      case 'pz-vocabulary':
       case 'pz-mcq':
       case 'pz-chapter':
-      case 'pz-worksheets':
       case 'pz-daily': {
-        if (isSignedInLearner) {
-          if (actionId === 'pz-worksheets') handleNavigateTab('worksheets');
-          else if (actionId === 'pz-daily') handleNavigateTab('cricket');
-          else handleNavigateTab('quizzes');
-        } else {
-          setExplorerZone('practice-zone');
-          setExplorerSubFocus(actionId);
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        setExplorerZone('practice-zone');
+        setExplorerSubFocus(actionId);
+        setCurrentTab('explore-zone');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // EXAM ZONE
-      case 'ez-mock-tests':
-      case 'ez-model-papers':
+      // SECTION 6: EXAM ZONE (Chapter Tests, Subject Tests, Full Syllabus, Scholarship Mocks, Competitive, Timed)
+      case 'ez-mock-tests': {
+        handleNavigateTab('scholarship');
+        return;
+      }
       case 'ez-chapter-tests':
+      case 'ez-subject-tests':
+      case 'ez-full-syllabus':
+      case 'ez-competitive':
+      case 'ez-timed':
+      case 'ez-model-papers':
       case 'ez-exam-practice': {
-        if (isSignedInLearner) {
-          if (actionId === 'ez-mock-tests' || actionId === 'ez-exam-practice') {
-            handleNavigateTab('scholarship');
-          } else {
-            handleNavigateTab('quizzes');
-          }
-        } else {
-          setExplorerZone('exam-zone');
-          setExplorerSubFocus(actionId);
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        setExplorerZone('exam-zone');
+        setExplorerSubFocus(actionId);
+        setCurrentTab('explore-zone');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // PERFORMANCE
+      // SECTION 7: PERFORMANCE (Personal Test Results, Marks, Accuracy, Courses, Certificates, Achievements)
+      case 'perf-certificates': {
+        if (isSignedInLearner) {
+          handleNavigateTab('certificates');
+          return;
+        }
+        setExplorerZone('performance');
+        setExplorerSubFocus(actionId);
+        setCurrentTab('explore-zone');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
       case 'perf-tracking':
       case 'perf-results':
+      case 'perf-marks':
       case 'perf-analysis': {
-        if (isSignedInLearner) {
-          if (actionId === 'perf-results') handleNavigateTab('certificates');
-          else if (actionId === 'perf-analysis') handleNavigateTab('profile');
-          else handleNavigateTab('dashboard');
-        } else {
-          setExplorerZone('performance');
-          setExplorerSubFocus(actionId);
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        setExplorerZone('performance');
+        setExplorerSubFocus(actionId);
+        setCurrentTab('explore-zone');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // PLANS & PRICING
+      // SECTION 8: PLANS & PRICING (Free, Maharashtra, CBSE, ICSE, Special, Purchased Content)
+      case 'plan-free':
       case 'plan-maharashtra':
       case 'plan-cbse':
-      case 'plan-icse': {
-        const targetBoard: EducationBoard =
-          actionId === 'plan-cbse'
-            ? 'CBSE'
-            : actionId === 'plan-icse'
-            ? 'ICSE'
-            : 'Maharashtra';
-        setPublicBoard(targetBoard);
-        setHomeScrollTarget('plans-pricing');
-        setCurrentTab(isSignedInLearner ? 'public-home' : 'dashboard');
+      case 'plan-icse':
+      case 'plan-special':
+      case 'plan-purchased': {
+        if (actionId === 'plan-cbse') setPublicBoard('CBSE');
+        else if (actionId === 'plan-icse') setPublicBoard('ICSE');
+        else if (actionId === 'plan-maharashtra') setPublicBoard('Maharashtra');
+        setExplorerZone('plans');
+        setExplorerSubFocus(actionId);
+        setCurrentTab('explore-zone');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // MY ACCOUNT
-      case 'acc-login': {
-        if (isSignedInLearner) {
-          handleNavigateTab('profile');
-        } else {
-          openAuthModalWithTab(activeRole === 'teacher' ? 'teacher' : 'login');
-        }
+      // SECTION 9: MY ACCOUNT (Profile, Personal Info, Purchases, Courses, Settings, Password, Help & Support)
+      case 'acc-support': {
+        handleNavigateTab('help-support');
         return;
       }
       case 'acc-register': {
         openAuthModalWithTab('register');
         return;
       }
-      case 'acc-classes': {
+      case 'acc-profile':
+      case 'acc-purchases':
+      case 'acc-classes':
+      case 'acc-settings':
+      case 'acc-login':
+      case 'acc-subscription': {
         if (isSignedInLearner) {
           handleNavigateTab('profile');
         } else {
-          openAuthModalWithTab('login');
-        }
-        return;
-      }
-      case 'acc-subscription': {
-        if (isSignedInLearner && currentStudent) {
-          openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard);
-        } else {
-          setExplorerZone('plans');
-          setExplorerSubFocus('subscription');
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          openAuthModalWithTab(activeRole === 'teacher' ? 'teacher' : 'login');
         }
         return;
       }
@@ -704,8 +708,8 @@ const AppContent: React.FC = () => {
             <PublicZoneExplorerView
               zone={explorerZone}
               subFocus={explorerSubFocus}
-              selectedBoard={publicBoard}
-              selectedClass={publicClass}
+              selectedBoard={currentStudent ? activeBoard : publicBoard}
+              selectedClass={currentStudent ? currentStudent.classLevel : publicClass}
               onSelectBoard={setPublicBoard}
               onSelectClass={setPublicClass}
               onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
@@ -713,9 +717,10 @@ const AppContent: React.FC = () => {
               onOpenMembership={(targetClass, targetBoard) =>
                 openMembershipWithPlan('premium', targetClass, targetBoard)
               }
+              onNavigateTab={handleNavigateTab}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
-                setCurrentTab(isLearningPortal && currentStudent ? 'public-home' : 'dashboard');
+                setCurrentTab('dashboard');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
@@ -815,8 +820,8 @@ const AppContent: React.FC = () => {
           />
           ) : currentTab === 'all-courses' ? (
             <AllCoursesExplorerView
-              selectedBoard={currentStudent ? activeBoard : publicBoard}
-              selectedClass={currentStudent ? currentStudent.classLevel : publicClass}
+              selectedBoard={publicBoard}
+              selectedClass={publicClass}
               onSelectBoard={setPublicBoard}
               onSelectClass={setPublicClass}
               onOpenSubjectPractice={(board, cls, subj, mode) => {
