@@ -66,7 +66,7 @@ function initFirestoreInstance() {
     return initializeFirestore(
       app,
       {
-        experimentalAutoDetectLongPolling: true,
+        experimentalForceLongPolling: true,
       },
       firebaseConfig.firestoreDatabaseId
     );

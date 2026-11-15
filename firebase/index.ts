@@ -2,13 +2,19 @@ import crypto from 'crypto';
 import fs from 'fs';
 import Razorpay from 'razorpay';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, setLogLevel } from 'firebase/firestore';
 import { serverGetDoc, serverSetDoc } from './admin.ts';
 import {
   computeSubscriptionActivationDates,
   evaluateSubscriptionValidity,
   PAID_SUBSCRIPTION_VALIDITY_DAYS
 } from '../src/utils/subscriptionDateUtils.ts';
+
+try {
+  setLogLevel('silent');
+} catch {
+  // Ignore if unsupported
+}
 
 const firebaseConfig = JSON.parse(
   fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')

@@ -20,6 +20,7 @@ import {
 } from 'firebase/app';
 import {
   getFirestore as getClientFirestore,
+  setLogLevel as setClientFirestoreLogLevel,
   doc as clientDoc,
   getDoc as clientGetDoc,
   setDoc as clientSetDoc,
@@ -33,6 +34,12 @@ import {
 } from 'firebase/firestore';
 
 dotenv.config();
+
+try {
+  setClientFirestoreLogLevel('silent');
+} catch {
+  // Ignore if unsupported
+}
 
 const ADMIN_APP_NAME = 'mystudyzone-admin';
 const AUTHORIZED_ADMIN_EMAIL = 'ronakvarade2022@gmail.com';
