@@ -189,12 +189,12 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </button>
 
-        {/* Desktop Navigation Bar with Sub-Menu Dropdowns (including 🎓 Special Learning) */}
+        {/* Desktop Navigation Bar (Direct Main Section Tabs — No Cluttered Hover Dropdowns) */}
         {isLearningRole && (
           <nav
             ref={navContainerRef}
             aria-label="Primary Navigation"
-            className="hidden xl:flex items-center gap-0.5 overflow-visible"
+            className="hidden xl:flex items-center gap-1 overflow-visible"
           >
             {MAIN_NAV_MENUS.map((menu) => {
               const visibleItems = menu.items.filter(
@@ -202,102 +202,33 @@ export const Header: React.FC<HeaderProps> = ({
               );
               if (visibleItems.length === 0) return null;
 
-              const isOpen = openDropdownMenu === menu.id;
               const isActive = activeMenuId === menu.id;
               const isSpecialTab = menu.id === 'special-learning';
               return (
-                <div
+                <button
                   key={menu.id}
-                  className="relative"
-                  onMouseEnter={() => handleMouseEnterMenu(menu.id)}
-                  onMouseLeave={handleMouseLeaveMenu}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOpenDropdownMenu(isOpen ? null : menu.id)
+                  type="button"
+                  onClick={() => {
+                    setOpenDropdownMenu(null);
+                    const secEl = document.getElementById(`main-sec-${menu.id}`);
+                    if (secEl) {
+                      secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                      handleTriggerSubAction(menu.defaultActionId);
                     }
-                    aria-expanded={isOpen}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
-                      isSpecialTab
-                        ? isOpen || isActive
-                          ? 'bg-amber-500 text-slate-950 shadow-xs'
-                          : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200 border border-amber-300'
-                        : isOpen || isActive
-                        ? 'text-amber-800 bg-amber-50'
-                        : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100/70'
-                    }`}
-                  >
-                    <span>{menu.label}</span>
-                    <ChevronDown
-                      className={`w-3 h-3 transition-transform duration-150 ${
-                        isOpen ? 'rotate-180 text-amber-700' : isSpecialTab ? 'text-amber-800' : 'text-slate-400'
-                      }`}
-                    />
-                  </button>
-
-                  {isOpen && (
-                    <div
-                      onMouseEnter={() => handleMouseEnterMenu(menu.id)}
-                      onMouseLeave={handleMouseLeaveMenu}
-                      className={`absolute top-full mt-1.5 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-150 ${
-                        menu.id === 'account' || menu.id === 'plans'
-                          ? 'right-0'
-                          : 'left-0'
-                      }`}
-                    >
-                      <div className="px-3 py-1.5 border-b border-slate-100 mb-1 flex items-center justify-between">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                          {menu.label}
-                        </span>
-                        {currentStudent && menu.id === 'account' && (
-                          <span className="text-[10px] font-bold text-emerald-700">
-                            Signed in: {currentStudent.name.split(' ')[0]}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-0.5 max-h-[70vh] overflow-y-auto">
-                        {visibleItems.map((sub) => {
-                          let displayLabel = sub.label;
-                          let displayDesc = sub.description;
-                          if (currentStudent && sub.id === 'acc-login') {
-                            displayLabel = 'My Profile Dashboard';
-                            displayDesc = `Signed in as ${currentStudent.name} (${currentStudent.classLevel})`;
-                          } else if (currentStudent && sub.id === 'acc-register') {
-                            displayLabel = 'Add Board / Another Class';
-                            displayDesc = 'Register an additional class using your existing mobile & email';
-                          }
-
-                          return (
-                            <button
-                              key={sub.id}
-                              type="button"
-                              onClick={() => handleTriggerSubAction(sub.id)}
-                              className="w-full px-3 py-2.5 rounded-xl hover:bg-amber-50/90 text-left transition-colors cursor-pointer group flex items-start justify-between gap-2"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-xs font-extrabold text-slate-900 group-hover:text-amber-800 flex items-center gap-1.5">
-                                  <span>{displayLabel}</span>
-                                </p>
-                                <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                                  {displayDesc}
-                                </p>
-                              </div>
-                              {sub.badgeText ? (
-                                <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded shrink-0 mt-0.5">
-                                  {sub.badgeText}
-                                </span>
-                              ) : (
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-700 shrink-0 mt-1" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+                    isSpecialTab
+                      ? isActive
+                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                        : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200 border border-amber-300'
+                      : isActive
+                      ? 'text-amber-800 bg-amber-50 border border-amber-200'
+                      : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <span>{menu.label}</span>
+                </button>
               );
             })}
           </nav>
@@ -835,106 +766,64 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Collapsible Accordion Navigation Categories */}
-          <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
-            {MAIN_NAV_MENUS.map((menu) => {
+          {/* Vertical Main Sections with Horizontal Subsections Directly Underneath */}
+          <div className="space-y-3">
+            {MAIN_NAV_MENUS.map((menu, idx) => {
               const visibleItems = menu.items.filter(
                 (sub) => !sub.sectionVisibilityKey || isSectionVisible(sub.sectionVisibilityKey)
               );
               if (visibleItems.length === 0) return null;
-              const isExpanded = expandedMobileMenu === menu.id;
               return (
-                <div key={menu.id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedMobileMenu(isExpanded ? null : menu.id)
-                    }
-                    aria-expanded={isExpanded}
-                    className={`w-full min-h-[46px] px-4 py-3 flex items-center justify-between text-left cursor-pointer ${
-                      menu.id === 'special-learning'
-                        ? 'bg-amber-50 hover:bg-amber-100/80'
-                        : 'bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
-                      {menu.label}
+                <div
+                  key={menu.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-display font-black uppercase tracking-wider text-[#0f2952]">
+                      {idx + 1}. {menu.label}
                     </span>
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-amber-700" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerSubAction(menu.defaultActionId)}
+                      className="text-[11px] font-extrabold text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Open</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
 
-                  {isExpanded && (
-                    <div className="bg-slate-50/80 px-3 py-2 space-y-1 border-t border-slate-100">
-                      {visibleItems.map((sub) => {
-                        let label = sub.label;
-                        if (currentStudent && sub.id === 'acc-login') {
-                          label = 'My Profile Dashboard';
-                        } else if (currentStudent && sub.id === 'acc-register') {
-                          label = 'Add Board / Class';
-                        }
-                        return (
-                          <button
-                            key={sub.id}
-                            type="button"
-                            onClick={() => handleTriggerSubAction(sub.id)}
-                            className="w-full min-h-[44px] px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200/80 text-left flex items-center justify-between gap-2 cursor-pointer"
-                          >
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">{label}</p>
-                              <p className="text-[11px] text-slate-500">{sub.description}</p>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {/* Horizontal Scrollable Row of Subsections Directly Below Main Section */}
+                  <div className="flex items-stretch gap-2 overflow-x-auto pb-1.5">
+                    {visibleItems.map((sub) => {
+                      let label = sub.label;
+                      if (currentStudent && sub.id === 'acc-login') {
+                        label = 'My Profile Dashboard';
+                      } else if (currentStudent && sub.id === 'acc-register') {
+                        label = 'Add Board / Class';
+                      }
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => handleTriggerSubAction(sub.id)}
+                          className="min-w-[155px] shrink-0 px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200/90 text-left flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-slate-900 truncate">
+                              {label}
+                            </p>
+                            <p className="text-[10px] font-bold text-amber-800 truncate mt-0.5">
+                              {sub.badgeText || 'Open'}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
-          </div>
-
-          {/* Special Learning & Championship Studios Quick Bar (Accessible to Visitors & Students) */}
-          <div className="space-y-2 pt-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 px-1 block">
-              Special Learning &amp; Enrichment Studios
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                { tab: 'scholarship', label: 'Scholarship Corner', icon: Trophy, visKey: 'scholarship' as const },
-                { tab: 'drawing', label: 'Drawing Studio', icon: Palette, visKey: 'drawing' as const },
-                { tab: 'stories', label: 'Story World (45)', icon: BookOpen, visKey: 'stories' as const },
-                { tab: 'shivaji', label: 'Shivaji Stories (50)', icon: Crown, visKey: 'shivaji' as const },
-                { tab: 'cricket', label: 'Cricket & GK', icon: Activity, visKey: 'gk_cricket' as const },
-                { tab: 'puzzles', label: 'Brain Puzzles', icon: Puzzle, visKey: 'creative_activities' as const },
-                { tab: 'sudoku', label: 'Sudoku Game', icon: Grid3X3, visKey: 'creative_activities' as const },
-                { tab: 'future-skills', label: 'AI & Skills', icon: Bot, visKey: 'future_skills' as const },
-                { tab: 'other-programs', label: 'Other Programs', icon: Sparkles, visKey: 'future_skills' as const },
-                { tab: 'all-courses', label: 'All Courses (1–10)', icon: GraduationCap, visKey: 'all_courses' as const },
-              ]
-                .filter((studio) => isSectionVisible(studio.visKey))
-                .map((studio) => {
-                  const Icon = studio.icon;
-                  return (
-                    <button
-                      key={studio.tab}
-                      type="button"
-                      onClick={() => {
-                        setCurrentTab(studio.tab);
-                        setMobileMenuOpen(false);
-                      }}
-                      className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-left font-bold text-slate-800 flex items-center gap-2 cursor-pointer"
-                    >
-                      <Icon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                      <span className="truncate">{studio.label}</span>
-                    </button>
-                  );
-                })}
-            </div>
           </div>
 
           {/* Account Bottom Row (Profile Shortcut Only when Signed In — No Duplicate Login/Logout) */}

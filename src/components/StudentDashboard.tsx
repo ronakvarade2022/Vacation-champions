@@ -96,10 +96,23 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   return (
     <div className="space-y-8 pb-16">
-      {/* SECTION 1: FOCUSED HOME DASHBOARD (Welcome Banner, 3-Question Guide, Main Categories, Popular Programmes, Progress & Daily Challenge, Announcements & Quick Access) */}
+      {/* SECTION 1: FOCUSED HOME DASHBOARD */}
       <ReferenceShowcaseSections
         selectedBoard={activeBoard}
         selectedClass={currentStudent.classLevel}
+        onSelectBoard={(board) => {
+          setSelectedCurriculumBoard(board);
+          const cInfo = getBoardClassSubscriptionInfo(currentStudent, board, currentStudent.classLevel);
+          if (cInfo.isAccessible) {
+            void switchActiveBoardAndClass(board, currentStudent.classLevel);
+          }
+        }}
+        onSelectClass={(cls) => {
+          const cInfo = getBoardClassSubscriptionInfo(currentStudent, activeBoard, cls);
+          if (cInfo.isAccessible) {
+            void switchActiveBoardAndClass(activeBoard, cls);
+          }
+        }}
         onOpenDemo={(tab) => {
           if (onOpenDemo) onOpenDemo(tab || 'live-quiz');
           else onNavigateTab('quizzes');

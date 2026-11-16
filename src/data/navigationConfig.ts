@@ -282,6 +282,18 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         description: 'Subject-wise preparation strategies, marking schemes & study checklists',
         badgeText: 'Exam Tips',
       },
+      {
+        id: 'sm-important-questions',
+        label: 'Important Questions',
+        description: 'High-weightage board & school exam questions for every chapter',
+        badgeText: 'Must Revise',
+      },
+      {
+        id: 'sm-textbook-learning',
+        label: 'Textbook Learning',
+        description: 'Structured chapter-by-chapter textbook companion & concept guide',
+        badgeText: 'Textbook',
+      },
     ],
   },
   {
@@ -340,6 +352,18 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         description: 'Visual concentration, pattern recall & memory match challenges',
         badgeText: 'Brain Boost',
       },
+      {
+        id: 'pz-mcq',
+        label: '4-Level MCQ Practice',
+        description: 'Easy, Intermediate, Advanced & Expert progressive subject quizzes',
+        badgeText: '4 Levels',
+      },
+      {
+        id: 'pz-chapter',
+        label: 'Chapter-Wise Practice',
+        description: 'Targeted chapter-by-chapter interactive practice drills',
+        badgeText: 'By Chapter',
+      },
     ],
   },
   {
@@ -385,6 +409,18 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         label: 'Timed Assessments',
         description: '15 Questions · 15 Mins · Rapid speed & accuracy challenge',
         badgeText: '15 Qs · 15m',
+      },
+      {
+        id: 'ez-model-papers',
+        label: 'Model Question Papers',
+        description: 'Board-pattern model examination papers with marking schemes',
+        badgeText: 'Model Papers',
+      },
+      {
+        id: 'ez-exam-practice',
+        label: 'Exam Practice Sets',
+        description: 'Full-length practice examination sets for school & board prep',
+        badgeText: 'Exam Prep',
       },
     ],
   },
@@ -475,9 +511,9 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
     id: 'account',
     label: 'My Account',
     defaultActionId: 'acc-profile',
-    whatIsThis: 'Your personal student profile, purchased courses, settings, and help desk.',
-    whatCanILearn: 'Manage your personal info, active boards/classes, password, and support tickets.',
-    whatShouldIClick: 'Sign in, update your profile details, switch unlocked classes, or contact support.',
+    whatIsThis: 'Your personal student profile, purchased courses, settings, referrals, and help desk.',
+    whatCanILearn: 'Manage your personal info, active boards/classes, referral rewards, password, and support.',
+    whatShouldIClick: 'Open your profile, switch unlocked classes, share your referral link, or contact support.',
     items: [
       {
         id: 'acc-profile',
@@ -502,6 +538,12 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         label: 'Account Settings & Password',
         description: 'Password management & single-device security',
         badgeText: 'Security',
+      },
+      {
+        id: 'acc-referrals',
+        label: '🎁 Refer & Earn',
+        description: 'Share your referral link via WhatsApp & earn ₹5 cashback rewards',
+        badgeText: '₹5 Cashback',
       },
       {
         id: 'acc-support',

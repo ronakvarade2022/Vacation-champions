@@ -2,19 +2,16 @@ import React from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  Award,
   BarChart3,
   BookOpen,
   ClipboardCheck,
   Crown,
   Gift,
   GraduationCap,
-  Headphones,
   Home,
   Star,
   Target,
   TrendingUp,
-  Trophy,
   User,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard } from '../types';
@@ -26,36 +23,6 @@ import {
 } from './DashboardIllustrations';
 
 export type ExtendedSectionId = MainMenuId | 'referrals';
-
-export interface SectionIconCardItem {
-  id: string;
-  label: string;
-  subtitle: string;
-  badgeText?: string;
-  illustrationType?:
-    | 'drawing'
-    | 'stories'
-    | 'shivaji'
-    | 'puzzles'
-    | 'sudoku'
-    | 'cricket'
-    | 'ai'
-    | 'scholarship'
-    | 'courses'
-    | 'maths'
-    | 'english'
-    | 'gk'
-    | 'memory'
-    | 'moral'
-    | 'writing';
-  boardEmblem?: EducationBoard;
-  lucideIcon?: React.FC<{ className?: string }>;
-  emojiIcon?: string;
-  cardGradient: string;
-  borderClass: string;
-  iconBg?: string;
-  onClick: () => void;
-}
 
 export const SECTION_BADGE_ICONS: Record<
   ExtendedSectionId,
@@ -93,133 +60,82 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
   selectedBoard,
   selectedClass,
   onSelectSection,
+  onTriggerSubAction,
   onNavigateTab,
   onReturnHome,
 }) => {
-  const orderedSections: Array<{
-    id: ExtendedSectionId;
-    label: string;
-    onClick: () => void;
-  }> = [
-    ...MAIN_NAV_MENUS.map((m) => ({
-      id: m.id as ExtendedSectionId,
-      label: m.label,
-      onClick: () => onSelectSection(m.id),
-    })),
-    {
-      id: 'referrals',
-      label: '🎁 Refer & Earn',
-      onClick: () => onNavigateTab('referrals'),
-    },
-  ];
+  const effectiveMenuId: MainMenuId =
+    activeSectionId === 'referrals' ? 'account' : activeSectionId;
 
-  const horizontalQuickIcons: SectionIconCardItem[] = [
-    {
-      id: 'quick-home',
-      label: 'Home',
-      subtitle: 'Main Dashboard',
-      lucideIcon: Home,
-      iconBg: 'bg-blue-600 text-white',
-      cardGradient: 'from-[#e0f2fe] to-[#bae6fd]',
-      borderClass: 'border-sky-300',
-      onClick: onReturnHome,
-    },
-    {
-      id: 'quick-courses',
-      label: 'Courses (Classes 1–10)',
-      subtitle: `${getBoardShortLabel(selectedBoard)} · ${selectedClass}`,
-      illustrationType: 'courses',
-      cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8]',
-      borderClass: 'border-[#0284c7]/40',
-      onClick: () => onNavigateTab('all-courses'),
-    },
-    {
-      id: 'quick-drawing',
-      label: 'Drawing Studio',
-      subtitle: '120+ Templates',
-      illustrationType: 'drawing',
-      cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
-      borderClass: 'border-[#9333ea]/40',
-      onClick: () => onNavigateTab('drawing'),
-    },
-    {
-      id: 'quick-stories',
-      label: 'Story World',
-      subtitle: '45+ Audio Stories',
-      illustrationType: 'stories',
-      cardGradient: 'from-[#d9f99d] via-[#a3e635] to-[#84cc16]',
-      borderClass: 'border-[#4d7c0f]/40',
-      onClick: () => onNavigateTab('stories'),
-    },
-    {
-      id: 'quick-shivaji',
-      label: 'Shivaji Stories',
-      subtitle: '50 Chapters',
-      illustrationType: 'shivaji',
-      cardGradient: 'from-[#fde68a] via-[#fcd34d] to-[#f59e0b]',
-      borderClass: 'border-[#d97706]/40',
-      onClick: () => onNavigateTab('shivaji'),
-    },
-    {
-      id: 'quick-scholarship',
-      label: 'Scholarship Corner',
-      subtitle: 'Std 4th & 7th',
-      illustrationType: 'scholarship',
-      cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#86efac]',
-      borderClass: 'border-[#15803d]/40',
-      onClick: () => onNavigateTab('scholarship'),
-    },
-    {
-      id: 'quick-puzzles',
-      label: 'Brain Puzzles',
-      subtitle: '52+ Logic Riddles',
-      illustrationType: 'puzzles',
-      cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#60a5fa]',
-      borderClass: 'border-[#2563eb]/40',
-      onClick: () => onNavigateTab('puzzles'),
-    },
-    {
-      id: 'quick-sudoku',
-      label: 'Sudoku Game',
-      subtitle: '4×4, 6×6 & 9×9',
-      illustrationType: 'sudoku',
-      cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
-      borderClass: 'border-[#16a34a]/40',
-      onClick: () => onNavigateTab('sudoku'),
-    },
-    {
-      id: 'quick-cricket',
-      label: 'Cricket & GK',
-      subtitle: 'Daily GK Arena',
-      illustrationType: 'cricket',
-      cardGradient: 'from-[#bfdbfe] via-[#93c5fd] to-[#60a5fa]',
-      borderClass: 'border-[#1d4ed8]/40',
-      onClick: () => onNavigateTab('cricket'),
-    },
-    {
-      id: 'quick-ai',
-      label: 'AI Learning Academy',
-      subtitle: '8 Modules · 24 Lessons',
-      illustrationType: 'ai',
-      cardGradient: 'from-[#f5d0fe] via-[#e879f9] to-[#c084fc]',
-      borderClass: 'border-[#9333ea]/40',
-      onClick: () => onNavigateTab('future-skills'),
-    },
-    {
-      id: 'quick-referrals',
-      label: 'Refer & Earn',
-      subtitle: '₹5 Cashback Hub',
-      emojiIcon: '🎁',
-      iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white',
-      cardGradient: 'from-[#fef08a] via-[#fde047] to-[#facc15]',
-      borderClass: 'border-amber-500',
-      onClick: () => onNavigateTab('referrals'),
-    },
-  ];
+  const activeMenu =
+    MAIN_NAV_MENUS.find((m) => m.id === effectiveMenuId) || MAIN_NAV_MENUS[0];
+  const activeMeta = SECTION_BADGE_ICONS[effectiveMenuId];
+  const ActiveIcon = activeMeta.icon;
+
+  const getSubVisual = (subId: NavSubActionId, menuId: MainMenuId) => {
+    if (subId === 'acc-referrals') {
+      return { emoji: '🎁', bg: 'from-[#fef08a] to-[#facc15]', border: 'border-amber-500' };
+    }
+    if (subId === 'course-maharashtra' || subId === 'plan-maharashtra') {
+      return { board: 'Maharashtra' as EducationBoard, bg: 'from-[#eff6ff] to-[#bfdbfe]', border: 'border-blue-400' };
+    }
+    if (subId === 'course-cbse' || subId === 'plan-cbse') {
+      return { board: 'CBSE' as EducationBoard, bg: 'from-[#f0fdf4] to-[#bbf7d0]', border: 'border-emerald-400' };
+    }
+    if (subId === 'course-icse' || subId === 'plan-icse') {
+      return { board: 'ICSE' as EducationBoard, bg: 'from-[#fff7ed] to-[#fed7aa]', border: 'border-orange-400' };
+    }
+    if (subId === 'sl-drawing') {
+      return { ill: 'drawing' as const, bg: 'from-[#f3e8ff] to-[#d8b4fe]', border: 'border-purple-300' };
+    }
+    if (subId === 'sl-stories') {
+      return { ill: 'stories' as const, bg: 'from-[#ecfccb] to-[#bef264]', border: 'border-lime-300' };
+    }
+    if (subId === 'sl-shivaji') {
+      return { ill: 'shivaji' as const, bg: 'from-[#fef3c7] to-[#fcd34d]', border: 'border-amber-300' };
+    }
+    if (subId === 'sl-moral') {
+      return { ill: 'moral' as const, bg: 'from-[#ffedd5] to-[#fdba74]', border: 'border-orange-300' };
+    }
+    if (subId === 'sl-scholarship' || subId === 'ez-mock-tests') {
+      return { ill: 'scholarship' as const, bg: 'from-[#dcfce7] to-[#86efac]', border: 'border-emerald-300' };
+    }
+    if (subId === 'sl-gk') {
+      return { ill: 'cricket' as const, bg: 'from-[#e0f2fe] to-[#7dd3fc]', border: 'border-sky-300' };
+    }
+    if (subId === 'sl-ai-academy') {
+      return { ill: 'ai' as const, bg: 'from-[#fae8ff] to-[#e879f9]', border: 'border-fuchsia-300' };
+    }
+    if (subId === 'pz-puzzles') {
+      return { ill: 'puzzles' as const, bg: 'from-[#e0f2fe] to-[#7dd3fc]', border: 'border-sky-300' };
+    }
+    if (subId === 'pz-sudoku') {
+      return { ill: 'sudoku' as const, bg: 'from-[#dcfce7] to-[#86efac]', border: 'border-emerald-300' };
+    }
+    if (menuId === 'study-material') {
+      return { ill: 'english' as const, bg: 'from-[#dcfce7] to-[#86efac]', border: 'border-emerald-300' };
+    }
+    if (menuId === 'practice-zone') {
+      return { ill: 'maths' as const, bg: 'from-[#ecfccb] to-[#bef264]', border: 'border-lime-300' };
+    }
+    if (menuId === 'exam-zone') {
+      return { ill: 'gk' as const, bg: 'from-[#fce7f3] to-[#f9a8d4]', border: 'border-pink-300' };
+    }
+    if (menuId === 'performance') {
+      return { ill: 'memory' as const, bg: 'from-[#e0e7ff] to-[#a5b4fc]', border: 'border-indigo-300' };
+    }
+    if (menuId === 'plans') {
+      return { ill: 'moral' as const, bg: 'from-[#ffedd5] to-[#fdba74]', border: 'border-orange-300' };
+    }
+    if (menuId === 'account') {
+      return { ill: 'writing' as const, bg: 'from-[#f3e8ff] to-[#d8b4fe]', border: 'border-purple-300' };
+    }
+    return { ill: 'courses' as const, bg: 'from-[#e0f2fe] to-[#bae6fd]', border: 'border-sky-300' };
+  };
 
   return (
     <div className="mb-6 rounded-3xl bg-white border-2 border-sky-200/90 shadow-md p-3.5 sm:p-4 space-y-3.5">
-      {/* Top Bar: Return to Main Dashboard + Active Class Badge */}
+      {/* Top Bar: Return to Main Dashboard + Active Class Badge + Main Section Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
         <button
           type="button"
@@ -244,100 +160,84 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
         </div>
       </div>
 
-      {/* Split Navigation Strip: Left Section Selector + Right Horizontal Icons */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* Left-Side Vertical Section List */}
-        <div className="lg:col-span-4 xl:col-span-3 bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/90 max-h-56 overflow-y-auto space-y-1.5">
-          <div className="px-2 py-1 text-[10px] font-display font-black uppercase tracking-wider text-slate-500">
-            All Sections (Vertical List)
+      {/* Main Section Heading + Horizontal Subsections Directly Underneath */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`w-8 h-8 rounded-xl ${activeMeta.badgeBg} ${activeMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+            >
+              <ActiveIcon className="w-4 h-4" />
+            </span>
+            <div>
+              <h2 className="text-sm sm:text-base font-display font-black text-[#0f2952]">
+                {activeMenu.label} — Subsections
+              </h2>
+            </div>
           </div>
-          {orderedSections.map((sec) => {
-            const isSelected = activeSectionId === sec.id;
-            const meta = SECTION_BADGE_ICONS[sec.id];
-            const IconComp = meta.icon;
-            return (
-              <button
-                key={sec.id}
-                type="button"
-                onClick={sec.onClick}
-                className={`w-full min-h-[40px] px-3 py-2 rounded-xl flex items-center justify-between gap-2 text-left transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-[#0f2952] text-white font-black shadow-xs ring-2 ring-amber-400'
-                    : 'bg-white hover:bg-amber-50 text-[#0f2952] font-bold border border-slate-200/80'
-                }`}
-              >
-                <span className="flex items-center gap-2.5 min-w-0">
-                  <span
-                    className={`w-6 h-6 rounded-lg ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shrink-0 text-xs`}
-                  >
-                    {meta.emoji ? <span>{meta.emoji}</span> : <IconComp className="w-3.5 h-3.5" />}
-                  </span>
-                  <span className="text-xs truncate">{sec.label.replace('🎓 ', '')}</span>
-                </span>
-                <ArrowRight
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    isSelected ? 'text-amber-300' : 'text-slate-400'
-                  }`}
-                />
-              </button>
-            );
-          })}
-        </div>
 
-        {/* Right-Side Horizontal Icon Display */}
-        <div className="lg:col-span-8 xl:col-span-9 min-w-0 space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
-              Quick Section Icons (Tap Any Icon to Open)
-            </span>
-            <span className="text-[11px] font-bold text-slate-500 hidden sm:inline">
-              Scroll or tap horizontally →
-            </span>
-          </div>
-          <div className="flex items-stretch gap-3 overflow-x-auto pb-2 pt-0.5">
-            {horizontalQuickIcons.map((item) => {
-              const LucideComp = item.lucideIcon;
+          {/* Main Section Switcher Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+            {MAIN_NAV_MENUS.map((m) => {
+              const isCurr = m.id === effectiveMenuId;
+              const mMeta = SECTION_BADGE_ICONS[m.id];
+              const MIcon = mMeta.icon;
               return (
                 <button
-                  key={item.id}
+                  key={m.id}
                   type="button"
-                  onClick={item.onClick}
-                  className={`min-w-[140px] sm:min-w-[155px] shrink-0 rounded-2xl bg-gradient-to-b ${item.cardGradient} border-2 ${item.borderClass} p-2.5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-2.5 text-left`}
+                  onClick={() => onSelectSection(m.id)}
+                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-display font-black whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
+                    isCurr
+                      ? 'bg-[#0f2952] text-white shadow-2xs ring-2 ring-amber-400'
+                      : 'bg-slate-100 hover:bg-amber-50 text-slate-700'
+                  }`}
                 >
-                  {item.illustrationType ? (
-                    <span className="w-11 h-11 shrink-0 flex items-center justify-center">
-                      <SpecialCardIllustration
-                        type={item.illustrationType}
-                        className="w-full h-full drop-shadow-xs"
-                      />
-                    </span>
-                  ) : item.boardEmblem ? (
-                    <HeroBoardEmblemIcon board={item.boardEmblem} className="w-10 h-10 shrink-0" />
-                  ) : (
-                    <span
-                      className={`w-10 h-10 rounded-xl ${
-                        item.iconBg || 'bg-blue-600 text-white'
-                      } flex items-center justify-center shrink-0 shadow-2xs text-base`}
-                    >
-                      {item.emojiIcon ? (
-                        <span>{item.emojiIcon}</span>
-                      ) : LucideComp ? (
-                        <LucideComp className="w-5 h-5" />
-                      ) : null}
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <span className="block font-display font-black text-xs text-[#0f2952] leading-tight truncate">
-                      {item.label}
-                    </span>
-                    <span className="block text-[10px] font-bold text-[#0f2952]/80 truncate mt-0.5">
-                      {item.subtitle}
-                    </span>
-                  </div>
+                  <MIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{m.label.replace('🎓 ', '')}</span>
                 </button>
               );
             })}
           </div>
+        </div>
+
+        {/* Horizontal Row of Subsections Directly Underneath Main Section */}
+        <div className="flex items-stretch gap-3 overflow-x-auto pb-2 pt-0.5">
+          {activeMenu.items.map((sub) => {
+            const vis = getSubVisual(sub.id, activeMenu.id);
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => onTriggerSubAction(sub.id)}
+                className={`min-w-[180px] sm:min-w-[200px] shrink-0 rounded-2xl bg-gradient-to-r ${vis.bg} border-2 ${vis.border} p-2.5 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-2.5 text-left`}
+              >
+                {vis.emoji ? (
+                  <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 text-lg shadow-2xs">
+                    {vis.emoji}
+                  </span>
+                ) : vis.board ? (
+                  <HeroBoardEmblemIcon board={vis.board} className="w-10 h-10 shrink-0" />
+                ) : (
+                  <span className="w-11 h-11 shrink-0 flex items-center justify-center">
+                    <SpecialCardIllustration
+                      type={vis.ill || 'courses'}
+                      className="w-full h-full drop-shadow-xs"
+                    />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <span className="block font-display font-black text-xs text-[#0f2952] leading-tight truncate">
+                    {sub.label}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#0f2952]/80 mt-0.5">
+                    <span>{sub.badgeText || 'Open'}</span>
+                    <ArrowRight className="w-2.5 h-2.5" />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

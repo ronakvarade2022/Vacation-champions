@@ -1,9 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Play,
-  ChevronDown,
-  ChevronUp,
-  ChevronRight,
   CheckCircle2,
   ArrowRight,
   Clock,
@@ -25,9 +22,21 @@ import {
   Smartphone,
   Megaphone,
   GraduationCap,
+  HelpCircle,
+  Info,
+  Phone,
+  ShieldAlert,
+  FileText,
+  Sparkles,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from '../data/navigationConfig';
+import {
+  ALL_10_CLASSES,
+  ALL_10_CLASSES_META,
+  getSubjectMeta,
+  getSubjectsForClass,
+} from '../data/classCurriculumConfig';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import {
   SpecialCardIllustration,
@@ -51,6 +60,8 @@ export interface RealStudentProgressMetrics {
 interface ReferenceShowcaseSectionsProps {
   selectedBoard: EducationBoard;
   selectedClass: ClassLevel;
+  onSelectBoard?: (board: EducationBoard) => void;
+  onSelectClass?: (cls: ClassLevel) => void;
   onOpenDemo: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
   onNavigateTab: (tab: string, subSection?: string, subject?: SubjectName) => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
@@ -62,28 +73,86 @@ interface ReferenceShowcaseSectionsProps {
   progressMetrics: RealStudentProgressMetrics;
 }
 
-const ACCORDION_ICONS: Record<
+export const MAIN_SECTION_ICONS: Record<
   MainMenuId,
   {
     icon: React.FC<{ className?: string }>;
     badgeBg: string;
     iconColor: string;
+    headerGradient: string;
+    borderClass: string;
   }
 > = {
-  home: { icon: Home, badgeBg: 'bg-blue-600', iconColor: 'text-white' },
-  courses: { icon: BookOpen, badgeBg: 'bg-sky-600', iconColor: 'text-white' },
-  'special-learning': { icon: Star, badgeBg: 'bg-amber-500', iconColor: 'text-slate-950' },
-  'study-material': { icon: BarChart3, badgeBg: 'bg-orange-500', iconColor: 'text-white' },
-  'practice-zone': { icon: Target, badgeBg: 'bg-rose-600', iconColor: 'text-white' },
-  'exam-zone': { icon: ClipboardCheck, badgeBg: 'bg-indigo-600', iconColor: 'text-white' },
-  performance: { icon: TrendingUp, badgeBg: 'bg-emerald-600', iconColor: 'text-white' },
-  plans: { icon: Crown, badgeBg: 'bg-red-500', iconColor: 'text-white' },
-  account: { icon: User, badgeBg: 'bg-purple-600', iconColor: 'text-white' },
+  home: {
+    icon: Home,
+    badgeBg: 'bg-blue-600',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#e0f2fe] via-[#f0f9ff] to-[#fef3c7]',
+    borderClass: 'border-sky-200',
+  },
+  courses: {
+    icon: BookOpen,
+    badgeBg: 'bg-sky-600',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#e0f2fe] via-[#bae6fd]/60 to-[#f0f9ff]',
+    borderClass: 'border-sky-300',
+  },
+  'special-learning': {
+    icon: Star,
+    badgeBg: 'bg-amber-500',
+    iconColor: 'text-slate-950',
+    headerGradient: 'from-[#fef3c7] via-[#fffbeb] to-[#fde68a]/60',
+    borderClass: 'border-amber-300',
+  },
+  'study-material': {
+    icon: BarChart3,
+    badgeBg: 'bg-orange-500',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#dcfce7] via-[#f0fdf4] to-[#fef3c7]',
+    borderClass: 'border-emerald-300',
+  },
+  'practice-zone': {
+    icon: Target,
+    badgeBg: 'bg-rose-600',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#ecfccb] via-[#f7fee7] to-[#e0f2fe]',
+    borderClass: 'border-lime-300',
+  },
+  'exam-zone': {
+    icon: ClipboardCheck,
+    badgeBg: 'bg-indigo-600',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#fce7f3] via-[#fdf2f8] to-[#e0e7ff]',
+    borderClass: 'border-pink-300',
+  },
+  performance: {
+    icon: TrendingUp,
+    badgeBg: 'bg-emerald-600',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#e0e7ff] via-[#eef2ff] to-[#dcfce7]',
+    borderClass: 'border-indigo-300',
+  },
+  plans: {
+    icon: Crown,
+    badgeBg: 'bg-red-500',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#ffedd5] via-[#fff7ed] to-[#fef3c7]',
+    borderClass: 'border-orange-300',
+  },
+  account: {
+    icon: User,
+    badgeBg: 'bg-purple-600',
+    iconColor: 'text-white',
+    headerGradient: 'from-[#f3e8ff] via-[#faf5ff] to-[#e0f2fe]',
+    borderClass: 'border-purple-300',
+  },
 };
 
 export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps> = ({
   selectedBoard,
   selectedClass,
+  onSelectBoard,
+  onSelectClass,
   onOpenDemo,
   onNavigateTab,
   onMenuAction,
@@ -94,8 +163,6 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   onToggleViewMode,
   progressMetrics,
 }) => {
-  const [expandedMenu, setExpandedMenu] = useState<MainMenuId | null>('special-learning');
-
   const triggerSubAction = (actionId: NavSubActionId) => {
     if (onMenuAction) {
       onMenuAction(actionId);
@@ -141,7 +208,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     }
   };
 
-  // Three Education Board Cards Inside the Main Hero Banner (1 Horizontal Row: Blue · Green · Orange)
+  // Three Education Board Cards Inside the Main Hero Banner
   const heroEducationBoards = [
     {
       id: 'Maharashtra' as EducationBoard,
@@ -181,179 +248,14 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     },
   ];
 
-  // 8 Main Learning Categories (One Primary Card Per Main Section — Zero Overlap)
-  const mainCategoryCards = [
-    {
-      id: 'cat-courses',
-      sectionBadge: 'Section 2',
-      title: 'Courses (Classes 1–10)',
-      whatInside: 'Maharashtra Board, CBSE & ICSE subject-wise courses & chapter lessons.',
-      buttonLabel: 'Open Courses',
-      illustrationType: 'courses' as const,
-      cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8]',
-      borderClass: 'border-[#0284c7]/40',
-      onClick: () => onNavigateTab('all-courses'),
-    },
-    {
-      id: 'cat-special',
-      sectionBadge: 'Section 3',
-      title: 'Special Learning',
-      whatInside: 'Drawing Studio, Story World, Shivaji Maharaj, Scholarship, Cricket GK & AI.',
-      buttonLabel: 'Open Special Learning',
-      illustrationType: 'scholarship' as const,
-      cardGradient: 'from-[#fde68a] via-[#fcd34d] to-[#fbbf24]',
-      borderClass: 'border-[#d97706]/40',
-      onClick: () => onNavigateTab('other-programs'),
-    },
-    {
-      id: 'cat-study-material',
-      sectionBadge: 'Section 4',
-      title: 'Study Material',
-      whatInside: 'Chapter Notes, Worksheets, Summaries, Practice PDFs, Question Banks & Guides.',
-      buttonLabel: 'Open Study Material',
-      illustrationType: 'english' as const,
-      cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
-      borderClass: 'border-[#16a34a]/40',
-      onClick: () => triggerSubAction('sm-notes'),
-    },
-    {
-      id: 'cat-practice-zone',
-      sectionBadge: 'Section 5',
-      title: 'Practice Zone',
-      whatInside: 'Maths, English, Science, Reasoning, Brain Puzzles, Sudoku & Memory Games.',
-      buttonLabel: 'Open Practice Zone',
-      illustrationType: 'maths' as const,
-      cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#a3e635]',
-      borderClass: 'border-[#65a30d]/40',
-      onClick: () => triggerSubAction('pz-maths'),
-    },
-    {
-      id: 'cat-exam-zone',
-      sectionBadge: 'Section 6',
-      title: 'Exam Zone',
-      whatInside: 'Chapter Tests, Subject Tests, Full Syllabus Tests & Timed Scholarship Mock Exams.',
-      buttonLabel: 'Open Exam Zone',
-      illustrationType: 'gk' as const,
-      cardGradient: 'from-[#fbcfe8] via-[#f9a8d4] to-[#f472b6]',
-      borderClass: 'border-[#db2777]/40',
-      onClick: () => triggerSubAction('ez-chapter-tests'),
-    },
-    {
-      id: 'cat-performance',
-      sectionBadge: 'Section 7',
-      title: 'Performance',
-      whatInside: 'Personal Test Results, Marks, Accuracy %, Completed Courses & Certificates.',
-      buttonLabel: 'Check Performance',
-      illustrationType: 'memory' as const,
-      cardGradient: 'from-[#c7d2fe] via-[#a5b4fc] to-[#818cf8]',
-      borderClass: 'border-[#4f46e5]/40',
-      onClick: () => triggerSubAction('perf-results'),
-    },
-    {
-      id: 'cat-plans',
-      sectionBadge: 'Section 8',
-      title: 'Plans & Pricing',
-      whatInside: 'Free Forever Programmes & ₹99 / 365-Day Board & Class Subscriptions.',
-      buttonLabel: 'View Plans (₹99)',
-      illustrationType: 'moral' as const,
-      cardGradient: 'from-[#fed7aa] via-[#fdba74] to-[#fb923c]',
-      borderClass: 'border-[#ea580c]/40',
-      onClick: () => triggerSubAction('plan-maharashtra'),
-    },
-    {
-      id: 'cat-account',
-      sectionBadge: 'Section 9',
-      title: 'My Account',
-      whatInside: 'Student Profile, Personal Info, My Purchases, My Courses, Settings & Support.',
-      buttonLabel: 'Open My Account',
-      illustrationType: 'writing' as const,
-      cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
-      borderClass: 'border-[#9333ea]/40',
-      onClick: () => triggerSubAction('acc-profile'),
-    },
-  ];
-
-  // Popular Enrichment Programmes (Direct Links to Dedicated Studio Pages — No Duplicated Content)
-  const popularProgrammes = [
-    {
-      id: 'pop-drawing',
-      title: 'Drawing Studio',
-      subtitle: '120+ Templates & Paint Canvas',
-      illustration: 'drawing' as const,
-      gradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
-      border: 'border-[#9333ea]/40',
-      onClick: () => onNavigateTab('drawing'),
-    },
-    {
-      id: 'pop-stories',
-      title: 'Story World',
-      subtitle: '45+ Audio Stories (EN · HI · MR)',
-      illustration: 'stories' as const,
-      gradient: 'from-[#d9f99d] via-[#a3e635] to-[#84cc16]',
-      border: 'border-[#4d7c0f]/40',
-      onClick: () => onNavigateTab('stories'),
-    },
-    {
-      id: 'pop-shivaji',
-      title: 'Shivaji Stories',
-      subtitle: '50 Historical Chapters & Audio',
-      illustration: 'shivaji' as const,
-      gradient: 'from-[#fde68a] via-[#fcd34d] to-[#f59e0b]',
-      border: 'border-[#d97706]/40',
-      onClick: () => onNavigateTab('shivaji'),
-    },
-    {
-      id: 'pop-puzzles',
-      title: 'Brain Puzzles',
-      subtitle: '52+ Logic Riddles (Free Forever)',
-      illustration: 'puzzles' as const,
-      gradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#60a5fa]',
-      border: 'border-[#2563eb]/40',
-      onClick: () => onNavigateTab('puzzles'),
-    },
-    {
-      id: 'pop-sudoku',
-      title: 'Sudoku Game',
-      subtitle: '4×4, 6×6 & 9×9 Number Grids',
-      illustration: 'sudoku' as const,
-      gradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
-      border: 'border-[#16a34a]/40',
-      onClick: () => onNavigateTab('sudoku'),
-    },
-    {
-      id: 'pop-cricket',
-      title: 'Cricket & GK',
-      subtitle: 'Daily Cricket & GK Quiz Arena',
-      illustration: 'cricket' as const,
-      gradient: 'from-[#bfdbfe] via-[#93c5fd] to-[#60a5fa]',
-      border: 'border-[#1d4ed8]/40',
-      onClick: () => onNavigateTab('cricket'),
-    },
-    {
-      id: 'pop-ai',
-      title: 'AI Learning Academy',
-      subtitle: '8 Modules · 24 Interactive Lessons',
-      illustration: 'ai' as const,
-      gradient: 'from-[#f5d0fe] via-[#e879f9] to-[#c084fc]',
-      border: 'border-[#9333ea]/40',
-      onClick: () => onNavigateTab('future-skills'),
-    },
-    {
-      id: 'pop-scholarship',
-      title: 'Scholarship Corner',
-      subtitle: 'Std 4th (PSE) & Std 7th (UPS)',
-      illustration: 'scholarship' as const,
-      gradient: 'from-[#d9f99d] via-[#bef264] to-[#86efac]',
-      border: 'border-[#15803d]/40',
-      onClick: () => onNavigateTab('scholarship'),
-    },
-  ];
-
   // Progress Ring calculation
   const pct = Math.min(100, Math.max(0, progressMetrics.progressPercent));
   const ringRadius = 42;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - (pct / 100) * ringCircumference;
+
+  // Subjects for selected Board & Class (displayed horizontally inside Section 2: Courses)
+  const currentSubjects = getSubjectsForClass(selectedClass, selectedBoard);
 
   // Helper to get existing icon illustration and colour theme for any sub-action item
   const getSubItemIconVisuals = (
@@ -377,9 +279,17 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       | 'moral'
       | 'writing';
     boardEmblem?: EducationBoard;
+    emojiIcon?: string;
     cardGradient: string;
     borderClass: string;
   } => {
+    if (subId === 'acc-referrals') {
+      return {
+        emojiIcon: '🎁',
+        cardGradient: 'from-[#fef08a] via-[#fde047] to-[#facc15]',
+        borderClass: 'border-amber-500',
+      };
+    }
     if (subId === 'course-maharashtra' || subId === 'plan-maharashtra') {
       return {
         boardEmblem: 'Maharashtra',
@@ -541,96 +451,10 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     };
   };
 
-  const activeMenuObj =
-    MAIN_NAV_MENUS.find((m) => m.id === (expandedMenu || 'special-learning')) ||
-    MAIN_NAV_MENUS[2];
-
-  // Ordered sequence of direct sections in the Left-Side Vertical Navigation
-  const directActivityLinks = [
-    {
-      id: 'nav-drawing',
-      label: 'Drawing Studio',
-      badgeBg: 'bg-purple-600',
-      onClick: () => onNavigateTab('drawing'),
-    },
-    {
-      id: 'nav-stories',
-      label: 'Story World',
-      badgeBg: 'bg-lime-600',
-      onClick: () => onNavigateTab('stories'),
-    },
-    {
-      id: 'nav-shivaji',
-      label: 'Shivaji Maharaj Stories',
-      badgeBg: 'bg-amber-600',
-      onClick: () => onNavigateTab('shivaji'),
-    },
-    {
-      id: 'nav-moral',
-      label: 'Moral Stories',
-      badgeBg: 'bg-orange-600',
-      onClick: () => triggerSubAction('sl-moral'),
-    },
-    {
-      id: 'nav-scholarship',
-      label: 'Scholarship Corner',
-      badgeBg: 'bg-emerald-600',
-      onClick: () => onNavigateTab('scholarship'),
-    },
-    {
-      id: 'nav-cricket',
-      label: 'Cricket & GK',
-      badgeBg: 'bg-blue-600',
-      onClick: () => onNavigateTab('cricket'),
-    },
-    {
-      id: 'nav-puzzles',
-      label: 'Brain Puzzles',
-      badgeBg: 'bg-sky-600',
-      onClick: () => onNavigateTab('puzzles'),
-    },
-    {
-      id: 'nav-sudoku',
-      label: 'Sudoku Game',
-      badgeBg: 'bg-green-600',
-      onClick: () => onNavigateTab('sudoku'),
-    },
-    {
-      id: 'nav-ai',
-      label: 'AI Learning Academy',
-      badgeBg: 'bg-fuchsia-600',
-      onClick: () => onNavigateTab('future-skills'),
-    },
-    {
-      id: 'nav-certificates',
-      label: 'Certificates',
-      badgeBg: 'bg-amber-600',
-      onClick: () => triggerSubAction('perf-certificates'),
-    },
-    {
-      id: 'nav-leaderboard',
-      label: 'Leaderboard',
-      badgeBg: 'bg-emerald-600',
-      onClick: () => triggerSubAction('perf-certificates'),
-    },
-    {
-      id: 'nav-support',
-      label: 'Help & Support',
-      badgeBg: 'bg-cyan-600',
-      onClick: () => onNavigateTab('help-support'),
-    },
-    {
-      id: 'nav-referrals',
-      label: '🎁 Refer & Earn',
-      badgeBg: 'bg-emerald-600',
-      onClick: () => onNavigateTab('referrals'),
-    },
-  ];
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {/* =====================================================================
-          1. TOP 4 SHORTCUT TABS (Active Class · Free Demo · Courses · Desktop Site)
+          TOP 4 SHORTCUT TABS (Active Class · Free Demo · Courses · Desktop Site)
           ===================================================================== */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <button
@@ -685,13 +509,12 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </div>
 
       {/* =====================================================================
-          2. MAIN EDUCATIONAL HERO BANNER (Uploaded Banner + Interactive Board Cards)
+          MAIN EDUCATIONAL HERO BANNER (Uploaded Banner + Interactive Board Cards)
           ===================================================================== */}
       <section
         aria-label="Welcome to MyStudyZone Educational Hero Banner"
         className="rounded-3xl bg-white border-2 border-sky-200/80 shadow-xl overflow-hidden"
       >
-        {/* Full Uncropped Uploaded Banner Image with Separate Interactive Clickable Elements */}
         <div className="relative w-full">
           <img
             src="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.png"
@@ -785,10 +608,9 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
           </button>
         </div>
 
-        {/* Mobile-Friendly Vertical Interactive Controls (Visible on Mobile Screens so buttons & board cards are large and easy to tap) */}
+        {/* Mobile-Friendly Vertical Interactive Controls */}
         {viewMode !== 'desktop' && (
           <div className="md:hidden px-3.5 pb-4 pt-2 bg-gradient-to-b from-white to-sky-50/70 border-t border-slate-100 space-y-3">
-            {/* Mobile Start Learning Button */}
             <button
               type="button"
               onClick={onStartLearningClick}
@@ -809,7 +631,6 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
               </span>
             </div>
 
-            {/* Vertically Arranged Board Cards on Mobile */}
             <div className="grid grid-cols-1 gap-2.5">
               {heroEducationBoards.map((boardCard) => {
                 const isSelected = selectedBoard === boardCard.id;
@@ -859,708 +680,693 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </section>
 
       {/* =====================================================================
-          3. SHORT INTRODUCTION & 3-QUESTION STUDENT ORIENTATION GUIDE
+          SHORT INTRODUCTION & ORIENTATION GUIDE
           ===================================================================== */}
       <SectionOrientationGuide
-        sectionNumber="Section 1 · Home Dashboard"
+        sectionNumber="Complete Dashboard Directory"
         sectionTitle="Welcome to MyStudyZone (Classes 1 to 10)"
-        whatIsThis="Your central learning dashboard connecting School Courses, Special Learning Studios, Study Material, Practice Zone, Exam Zone, and Personal Performance."
+        whatIsThis="All main website sections are arranged vertically below, with their related subsections and icons displayed horizontally directly underneath each main heading."
         whatCanILearn={`Complete ${getBoardShortLabel(selectedBoard)} (${selectedClass}) syllabus, 4-level quizzes, worksheets, audio stories, drawing, Sudoku, and scholarship exams.`}
-        whatShouldIClick="Select any section from the Left-Side Vertical Navigation below or click any corresponding icon on the Right Side to open it immediately."
+        whatShouldIClick="Find your Main Section heading below and click any Subsection tab directly underneath it to open that page immediately."
         accentTheme="blue"
       />
 
       {/* =====================================================================
-          4. SYSTEMATIC SPLIT DASHBOARD:
-             - LEFT SIDE: Fixed/Sticky Vertical Navigation List (All Existing Section Names in Separate Rows)
-             - RIGHT SIDE: Horizontal Icon Display & Main Dashboard Content
+          VERTICAL SEQUENCE OF ALL 9 MAIN SECTIONS
+          WITH HORIZONTAL SUBSECTIONS DIRECTLY UNDERNEATH EACH MAIN SECTION
           ===================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* ===================================================================
-            LEFT-SIDE VERTICAL NAVIGATION (Sticky & Scrollable)
-            =================================================================== */}
-        <aside
-          aria-label="Left-Side Vertical Section Navigation"
-          className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto rounded-3xl bg-white border-2 border-sky-200/90 shadow-lg p-3.5 sm:p-4 space-y-3"
-        >
-          {/* Active Class Header inside Left Navigation */}
-          <div className="rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white p-3.5 space-y-2 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-display font-black uppercase tracking-widest text-amber-300">
-                All Dashboard Sections
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-[10px] font-black">
-                {MAIN_NAV_MENUS.length + directActivityLinks.length} Sections
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('all-courses')}
-              className="w-full py-2 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-display font-black text-xs flex items-center justify-between gap-2 cursor-pointer transition-colors"
+      <div className="space-y-8">
+        {MAIN_NAV_MENUS.map((menu, sectionIndex) => {
+          const sectionMeta = MAIN_SECTION_ICONS[menu.id];
+          const MainSectionIcon = sectionMeta.icon;
+
+          // Additional policy & support links under Section 9: My Account so 100% of website pages are included
+          const extraAccountSubsections =
+            menu.id === 'account'
+              ? [
+                  {
+                    id: 'sub-faqs',
+                    label: 'FAQs',
+                    description: 'Frequently asked questions for students & parents',
+                    badgeText: 'FAQs',
+                    icon: HelpCircle,
+                    iconBg: 'bg-amber-500 text-slate-950',
+                    cardGradient: 'from-[#fef3c7] via-[#fde68a] to-[#fcd34d]',
+                    borderClass: 'border-amber-400',
+                    onClick: () => onNavigateTab('faqs'),
+                  },
+                  {
+                    id: 'sub-about',
+                    label: 'About Us',
+                    description: 'Mission, educational vision & platform overview',
+                    badgeText: 'About',
+                    icon: Info,
+                    iconBg: 'bg-sky-600 text-white',
+                    cardGradient: 'from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc]',
+                    borderClass: 'border-sky-400',
+                    onClick: () => onNavigateTab('about'),
+                  },
+                  {
+                    id: 'sub-contact',
+                    label: 'Contact Us',
+                    description: 'Official student & parent support contact details',
+                    badgeText: 'Contact',
+                    icon: Phone,
+                    iconBg: 'bg-emerald-600 text-white',
+                    cardGradient: 'from-[#dcfce7] via-[#bbf7d0] to-[#86efac]',
+                    borderClass: 'border-emerald-400',
+                    onClick: () => onNavigateTab('contact'),
+                  },
+                  {
+                    id: 'sub-grievance',
+                    label: 'Grievance Redressal',
+                    description: 'Dedicated grievance officer & resolution desk',
+                    badgeText: 'Grievance',
+                    icon: ShieldAlert,
+                    iconBg: 'bg-rose-600 text-white',
+                    cardGradient: 'from-[#ffe4e6] via-[#fecdd3] to-[#fda4af]',
+                    borderClass: 'border-rose-400',
+                    onClick: () => onNavigateTab('grievance'),
+                  },
+                  {
+                    id: 'sub-terms',
+                    label: 'Terms, Privacy & Refund Policy',
+                    description: 'Terms of use, privacy policy, refund & educational disclaimer',
+                    badgeText: 'Policies',
+                    icon: FileText,
+                    iconBg: 'bg-indigo-600 text-white',
+                    cardGradient: 'from-[#e0e7ff] via-[#c7d2fe] to-[#a5b4fc]',
+                    borderClass: 'border-indigo-400',
+                    onClick: () => onNavigateTab('terms'),
+                  },
+                ]
+              : [];
+
+          // Extra Leaderboard subsection under Section 7: Performance so Leaderboard & Certificates are both distinct
+          const extraPerformanceSubsections =
+            menu.id === 'performance'
+              ? [
+                  {
+                    id: 'sub-leaderboard',
+                    label: 'Leaderboard & Rankings',
+                    description: 'All-India student XP leaderboard, streaks & hall of fame',
+                    badgeText: 'Leaderboard',
+                    icon: Trophy,
+                    iconBg: 'bg-emerald-600 text-white',
+                    cardGradient: 'from-[#dcfce7] via-[#bbf7d0] to-[#86efac]',
+                    borderClass: 'border-emerald-400',
+                    onClick: () => onNavigateTab('leaderboard'),
+                  },
+                ]
+              : [];
+
+          return (
+            <section
+              key={menu.id}
+              id={`main-sec-${menu.id}`}
+              aria-label={`${menu.label} Main Section`}
+              className={`rounded-3xl bg-white border-2 ${sectionMeta.borderClass} shadow-lg p-4 sm:p-6 space-y-5 scroll-mt-24`}
             >
-              <span className="flex items-center gap-1.5 truncate">
-                <GraduationCap className="w-4 h-4 shrink-0" />
-                <span className="truncate">
-                  Active Class: {selectedClass} ({getBoardShortLabel(selectedBoard)})
-                </span>
-              </span>
-              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
-            </button>
-          </div>
-
-          {/* Primary 9 Sections in Separate Vertical Rows */}
-          <div className="space-y-2">
-            <div className="px-1.5 text-[11px] font-display font-black uppercase tracking-wider text-slate-500">
-              Main Learning Sections
-            </div>
-
-            {MAIN_NAV_MENUS.map((menu, index) => {
-              const isSelected = (expandedMenu || 'special-learning') === menu.id;
-              const iconMeta = ACCORDION_ICONS[menu.id];
-              const IconComp = iconMeta.icon;
-
-              return (
-                <div
-                  key={menu.id}
-                  className={`rounded-2xl border-2 transition-all ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] text-white border-amber-400 shadow-md'
-                      : 'bg-slate-50/90 hover:bg-amber-50/70 text-[#0f2952] border-slate-200/90 hover:border-amber-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 p-2.5 sm:p-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setExpandedMenu(menu.id);
-                        if (menu.id === 'home') {
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }
-                      }}
-                      className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
-                    >
-                      <span
-                        className={`w-8 h-8 rounded-xl ${iconMeta.badgeBg} ${iconMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
-                      >
-                        <IconComp className="w-4 h-4" />
+              {/* -------------------------------------------------------------
+                  MAIN SECTION HEADING (Vertical Sequence Item)
+                  ------------------------------------------------------------- */}
+              <div
+                className={`rounded-2xl bg-gradient-to-r ${sectionMeta.headerGradient} border ${sectionMeta.borderClass} p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl ${sectionMeta.badgeBg} ${sectionMeta.iconColor} flex items-center justify-center shadow-md shrink-0`}
+                  >
+                    <MainSectionIcon className="w-6 h-6" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#0f2952] text-amber-300 font-display font-black text-[10px] uppercase tracking-wider">
+                        Main Section {sectionIndex + 1}
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <span className="block font-display font-black text-xs sm:text-sm leading-tight truncate">
-                          {index + 1}. {menu.label.replace('🎓 ', '')}
-                        </span>
-                        <span
-                          className={`block text-[10px] font-bold truncate mt-0.5 ${
-                            isSelected ? 'text-sky-200' : 'text-slate-500'
-                          }`}
-                        >
-                          {menu.items.length} Activities &bull; Tap to view icons →
-                        </span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => triggerSubAction(menu.defaultActionId)}
-                      className={`px-2.5 py-1.5 rounded-xl font-display font-black text-[11px] shrink-0 flex items-center gap-1 cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
-                          : 'bg-white hover:bg-sky-100 text-[#0f2952] border border-slate-200'
-                      }`}
-                    >
-                      <span>Open</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+                      <h2 className="text-lg sm:text-2xl font-display font-black text-[#0f2952] tracking-tight">
+                        {menu.label}
+                      </h2>
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">
+                      {menu.whatIsThis}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Direct Section & Studio Rows in Separate Vertical Lines */}
-          <div className="pt-2 border-t border-slate-200 space-y-2">
-            <div className="px-1.5 text-[11px] font-display font-black uppercase tracking-wider text-slate-500">
-              Direct Section &amp; Studio Links
-            </div>
+                <button
+                  type="button"
+                  onClick={() => triggerSubAction(menu.defaultActionId)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#1d4ed8] text-white font-display font-black text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer shadow-sm transition-all shrink-0"
+                >
+                  <span>Open {menu.label.replace('🎓 ', '')}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
 
-            {directActivityLinks.map((item) => (
+              {/* -------------------------------------------------------------
+                  SUBSECTIONS – HORIZONTAL ARRANGEMENT DIRECTLY BELOW HEADING
+                  ------------------------------------------------------------- */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <span className="text-[11px] font-display font-black uppercase tracking-wider text-slate-600">
+                    {menu.label.replace('🎓 ', '')} Subsections (Horizontal Row)
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-500">
+                    Swipe or scroll horizontally →
+                  </span>
+                </div>
+
+                <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2.5 pt-0.5">
+                  {menu.items.map((item) => {
+                    const visuals = getSubItemIconVisuals(item.id, menu.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => triggerSubAction(item.id)}
+                        className={`min-w-[235px] sm:min-w-[255px] max-w-[285px] shrink-0 group rounded-2xl bg-gradient-to-r ${visuals.cardGradient} border-2 ${visuals.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                      >
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                          {visuals.emojiIcon ? (
+                            <span className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-sm text-2xl">
+                              {visuals.emojiIcon}
+                            </span>
+                          ) : visuals.boardEmblem ? (
+                            <HeroBoardEmblemIcon
+                              board={visuals.boardEmblem}
+                              className="w-13 h-13 drop-shadow-xs"
+                            />
+                          ) : (
+                            <SpecialCardIllustration
+                              type={visuals.illustrationType || 'courses'}
+                              className="w-full h-full drop-shadow-xs"
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
+                            {item.label}
+                          </span>
+                          <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
+                            {item.description}
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-2 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            <span>{item.badgeText || 'Open'}</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {/* Extra Performance Subsections (Leaderboard) */}
+                  {extraPerformanceSubsections.map((extra) => {
+                    const ExtraIcon = extra.icon;
+                    return (
+                      <button
+                        key={extra.id}
+                        type="button"
+                        onClick={extra.onClick}
+                        className={`min-w-[235px] sm:min-w-[255px] max-w-[285px] shrink-0 group rounded-2xl bg-gradient-to-r ${extra.cardGradient} border-2 ${extra.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                      >
+                        <span
+                          className={`w-13 h-13 rounded-2xl ${extra.iconBg} flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform`}
+                        >
+                          <ExtraIcon className="w-6 h-6" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
+                            {extra.label}
+                          </span>
+                          <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
+                            {extra.description}
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-2 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            <span>{extra.badgeText}</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {/* Extra Account & Support Subsections (FAQs, About, Contact, Grievance, Terms/Privacy) */}
+                  {extraAccountSubsections.map((extra) => {
+                    const ExtraIcon = extra.icon;
+                    return (
+                      <button
+                        key={extra.id}
+                        type="button"
+                        onClick={extra.onClick}
+                        className={`min-w-[235px] sm:min-w-[255px] max-w-[285px] shrink-0 group rounded-2xl bg-gradient-to-r ${extra.cardGradient} border-2 ${extra.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                      >
+                        <span
+                          className={`w-13 h-13 rounded-2xl ${extra.iconBg} flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform`}
+                        >
+                          <ExtraIcon className="w-6 h-6" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
+                            {extra.label}
+                          </span>
+                          <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
+                            {extra.description}
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-2 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            <span>{extra.badgeText}</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* -------------------------------------------------------------
+                  SECTION 1 (HOME) NESTED HORIZONTAL WIDGETS:
+                  Daily Challenge & Important Announcements
+                  ------------------------------------------------------------- */}
+              {menu.id === 'home' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2 border-t border-slate-100">
+                  {/* Daily Challenge Card */}
+                  <div className="lg:col-span-6 rounded-3xl bg-white border-2 border-purple-200 shadow-md overflow-hidden flex flex-col justify-between">
+                    <div className="px-5 py-3 bg-gradient-to-r from-[#581c87] via-[#6b21a8] to-[#4338ca] text-white flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xl">🏆</span>
+                        <h3 className="text-base sm:text-lg font-display font-black tracking-tight">
+                          Daily Challenge
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
+                          else onOpenDemo('live-quiz');
+                        }}
+                        className="px-3 py-1 rounded-full bg-white text-[#4338ca] font-extrabold text-xs flex items-center gap-1 cursor-pointer hover:bg-purple-50 transition-colors"
+                      >
+                        <span>Start Now</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                      <div className="sm:col-span-8 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex items-center gap-2.5 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200/80">
+                            <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0">
+                              <Calendar className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-bold text-slate-500 block">
+                                Today&apos;s Quiz
+                              </span>
+                              <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                                25 Questions
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200/80">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-bold text-slate-500 block">
+                                Time
+                              </span>
+                              <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                                15 Min
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
+                            else onOpenDemo('live-quiz');
+                          }}
+                          className="w-full py-2.5 px-5 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Play Now</span>
+                        </button>
+                      </div>
+
+                      <div className="sm:col-span-4 flex items-center justify-center">
+                        <DailyChallengeBoyMascot className="w-24 h-24" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Important Announcements Card */}
+                  <div className="lg:col-span-6 rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border-2 border-indigo-400/30 shadow-md flex flex-col justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-11 h-11 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
+                        <Megaphone className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
+                            Important Announcements
+                          </span>
+                          <span className="text-xs font-bold text-sky-200">
+                            Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed">
+                          100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10). Try the Free Demo or unlock 365 days of full access for just ₹99 one-time payment.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => onOpenDemo('live-quiz')}
+                        className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Try Free Demo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onOpenMembership(selectedClass, selectedBoard)}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                      >
+                        <Crown className="w-3.5 h-3.5" />
+                        <span>₹99 / 365 Days Plan</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  SECTION 2 (COURSES) NESTED HORIZONTAL ROWS:
+                  1. Class-Wise Tabs (Class 1 to Class 10)
+                  2. Subject-Wise Tabs (All Subjects for Selected Board & Class)
+                  ------------------------------------------------------------- */}
+              {menu.id === 'courses' && (
+                <div className="space-y-4 pt-3 border-t border-slate-100">
+                  {/* Class-Wise Horizontal Row (Classes 1 to 10) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
+                        Class-Wise Tabs ({getBoardShortLabel(selectedBoard)} — Classes 1 to 10)
+                      </span>
+                      <span className="text-[11px] font-bold text-sky-700">
+                        Active: {selectedClass}
+                      </span>
+                    </div>
+
+                    <div className="flex items-stretch gap-2.5 overflow-x-auto pb-2">
+                      {ALL_10_CLASSES.map((cls) => {
+                        const clsMeta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
+                        const isCurrentClass = selectedClass === cls;
+                        return (
+                          <button
+                            key={cls}
+                            type="button"
+                            onClick={() => {
+                              if (onSelectClass) {
+                                onSelectClass(cls);
+                              }
+                              onNavigateTab('all-courses');
+                            }}
+                            className={`min-w-[115px] shrink-0 px-3.5 py-2.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                              isCurrentClass
+                                ? 'bg-gradient-to-r from-[#0f2952] to-[#1d4ed8] text-white border-amber-400 shadow-md'
+                                : 'bg-sky-50/80 hover:bg-amber-50 text-[#0f2952] border-sky-200 hover:border-amber-300'
+                            }`}
+                          >
+                            <div>
+                              <span className="block font-display font-black text-xs sm:text-sm leading-tight">
+                                {cls}
+                              </span>
+                              <span
+                                className={`block text-[10px] font-bold mt-0.5 ${
+                                  isCurrentClass ? 'text-amber-300' : 'text-slate-500'
+                                }`}
+                              >
+                                {selectedBoard === 'Maharashtra'
+                                  ? clsMeta?.marathiLabel
+                                  : clsMeta?.shortLabel}
+                              </span>
+                            </div>
+                            <ArrowRight
+                              className={`w-3.5 h-3.5 shrink-0 ${
+                                isCurrentClass ? 'text-amber-300' : 'text-slate-400'
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Subject-Wise Horizontal Row (All Subjects for Selected Board & Class) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
+                        Subject-Wise Tabs ({getBoardShortLabel(selectedBoard)} &bull; {selectedClass} — {currentSubjects.length} Subjects)
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-500">
+                        Click any subject to open lessons →
+                      </span>
+                    </div>
+
+                    <div className="flex items-stretch gap-3 overflow-x-auto pb-2">
+                      {currentSubjects.map((subj) => {
+                        const subjMeta = getSubjectMeta(subj, selectedBoard);
+                        return (
+                          <button
+                            key={subj}
+                            type="button"
+                            onClick={() => {
+                              if (onSelectBoard) onSelectBoard(selectedBoard);
+                              onNavigateTab('all-courses', 'overview', subj);
+                            }}
+                            className="min-w-[195px] shrink-0 group rounded-2xl bg-gradient-to-r from-white via-sky-50/60 to-indigo-50/50 hover:from-amber-50 hover:to-sky-100 border-2 border-sky-200/90 hover:border-amber-400 p-3 shadow-2xs hover:shadow-md transition-all cursor-pointer flex items-center gap-3 text-left"
+                          >
+                            <span className="w-11 h-11 rounded-2xl bg-white border border-sky-200 flex items-center justify-center text-2xl shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+                              {subjMeta.icon}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] truncate">
+                                {subj}
+                              </span>
+                              <span className="block text-[10px] font-bold text-slate-500 truncate mt-0.5">
+                                {subjMeta.chapters.length} Chapters &bull; Open
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  SECTION 7 (PERFORMANCE) NESTED PROGRESS SUMMARY CARD
+                  ------------------------------------------------------------- */}
+              {menu.id === 'performance' && (
+                <div className="rounded-2xl bg-sky-50/60 border border-sky-200/90 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                  <div className="sm:col-span-3 flex flex-col items-center justify-center">
+                    <div className="relative w-24 h-24 flex items-center justify-center">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r={ringRadius}
+                          fill="none"
+                          stroke="#e2e8f0"
+                          strokeWidth="10"
+                        />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r={ringRadius}
+                          fill="none"
+                          stroke="url(#progressRingGrad)"
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                          strokeDasharray={ringCircumference}
+                          strokeDashoffset={ringOffset}
+                        />
+                        <defs>
+                          <linearGradient id="progressRingGrad" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stopColor="#22c55e" />
+                            <stop offset="100%" stopColor="#0ea5e9" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-display font-black text-[#0f2952]">
+                          {pct}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-6 space-y-2">
+                    <h3 className="text-sm sm:text-base font-display font-black text-[#0f2952]">
+                      My Live Learning Progress Summary
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm font-bold text-slate-800">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>
+                          Courses Completed: <strong>{progressMetrics.coursesCompleted}</strong>
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>
+                          Practice Tests: <strong>{progressMetrics.practiceTests}</strong>
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
+                        <span>
+                          Achievements: <strong>{progressMetrics.achievements}</strong>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-3 flex items-center justify-center">
+                    <KeepGoingStarMascot className="w-20 h-20" />
+                  </div>
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+
+      {/* =====================================================================
+          BOTTOM NAVIGATION BAR WITH PERMANENT 🎁 REFER & EARN TAB
+          ===================================================================== */}
+      <nav aria-label="Bottom Navigation Menu" className="space-y-4 pt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+          {[
+            {
+              label: 'My Courses',
+              icon: BookOpen,
+              cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
+              border: 'border-sky-300',
+              iconBg: 'bg-blue-600 text-white',
+              onClick: () => onNavigateTab('all-courses'),
+            },
+            {
+              label: 'Certificates',
+              icon: Award,
+              cardBg: 'from-[#fef3c7] to-[#fde68a]',
+              border: 'border-amber-300',
+              iconBg: 'bg-amber-600 text-white',
+              onClick: () => triggerSubAction('perf-certificates'),
+            },
+            {
+              label: 'Leaderboard',
+              icon: Trophy,
+              cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
+              border: 'border-emerald-300',
+              iconBg: 'bg-emerald-600 text-white',
+              onClick: () => onNavigateTab('leaderboard'),
+            },
+            {
+              label: 'My Account',
+              icon: User,
+              cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
+              border: 'border-purple-300',
+              iconBg: 'bg-purple-600 text-white',
+              onClick: () => triggerSubAction('acc-profile'),
+            },
+            {
+              label: 'Help & Support',
+              icon: Headphones,
+              cardBg: 'from-[#e0f2fe] to-[#cffafe]',
+              border: 'border-cyan-300',
+              iconBg: 'bg-sky-600 text-white',
+              onClick: () => onNavigateTab('help-support'),
+            },
+            {
+              label: 'More Programs',
+              icon: Gift,
+              cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
+              border: 'border-rose-300',
+              iconBg: 'bg-rose-600 text-white',
+              onClick: () => onNavigateTab('other-programs'),
+            },
+          ].map((item) => {
+            const IconComp = item.icon;
+            return (
               <button
-                key={item.id}
+                key={item.label}
                 type="button"
                 onClick={item.onClick}
-                className="w-full min-h-[44px] px-3 py-2.5 rounded-2xl bg-slate-50 hover:bg-amber-50 border border-slate-200/90 hover:border-amber-300 text-left flex items-center justify-between gap-2.5 cursor-pointer transition-all group"
+                className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
               >
-                <span className="flex items-center gap-2.5 min-w-0">
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full ${item.badgeBg} shrink-0`}
-                  />
-                  <span className="font-display font-black text-xs sm:text-sm text-[#0f2952] group-hover:text-[#ea580c] truncate">
-                    {item.label}
-                  </span>
-                </span>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#ea580c] shrink-0" />
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        {/* ===================================================================
-            RIGHT-SIDE HORIZONTAL ICON DISPLAY & DASHBOARD CONTENT
-            =================================================================== */}
-        <div className="lg:col-span-8 xl:col-span-9 min-w-0 space-y-6">
-          {/* -----------------------------------------------------------------
-              RIGHT PANEL 1: SELECTED SECTION'S HORIZONTAL ICON DISPLAY
-              ----------------------------------------------------------------- */}
-          <section
-            aria-label={`${activeMenuObj.label} Horizontal Icon Display`}
-            className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-lg p-4 sm:p-5 space-y-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                {(() => {
-                  const activeIconMeta = ACCORDION_ICONS[activeMenuObj.id];
-                  const ActiveIconComp = activeIconMeta.icon;
-                  return (
-                    <span
-                      className={`w-10 h-10 rounded-2xl ${activeIconMeta.badgeBg} ${activeIconMeta.iconColor} flex items-center justify-center shadow-sm shrink-0`}
-                    >
-                      <ActiveIconComp className="w-5 h-5" />
-                    </span>
-                  );
-                })()}
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-base sm:text-xl font-display font-black text-[#0f2952]">
-                      {activeMenuObj.label.replace('🎓 ', '')} — Horizontal Icons
-                    </h2>
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px] uppercase tracking-wider border border-amber-300">
-                      Selected Section
-                    </span>
-                  </div>
-                  <p className="text-xs font-bold text-slate-600 mt-0.5">
-                    {activeMenuObj.whatIsThis}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => triggerSubAction(activeMenuObj.defaultActionId)}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#1d4ed8] text-white font-display font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
-              >
-                <span>Open {activeMenuObj.label.replace('🎓 ', '')}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Horizontal Scrollable & Grid Icon Display for the Selected Section */}
-            <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:overflow-visible sm:pb-0">
-              {activeMenuObj.items.map((item) => {
-                const visuals = getSubItemIconVisuals(item.id, activeMenuObj.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => triggerSubAction(item.id)}
-                    className={`min-w-[200px] sm:min-w-0 shrink-0 group rounded-2xl bg-gradient-to-r ${visuals.cardGradient} border-2 ${visuals.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
-                  >
-                    <div className="w-14 h-14 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                      {visuals.boardEmblem ? (
-                        <HeroBoardEmblemIcon
-                          board={visuals.boardEmblem}
-                          className="w-12 h-12 drop-shadow-xs"
-                        />
-                      ) : (
-                        <SpecialCardIllustration
-                          type={visuals.illustrationType || 'courses'}
-                          className="w-full h-full drop-shadow-xs"
-                        />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight truncate">
-                          {item.label}
-                        </span>
-                      </div>
-                      <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-0.5">
-                        {item.description}
-                      </p>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-1.5 bg-white/80 px-2.5 py-0.5 rounded-full">
-                        <span>{item.badgeText || 'Open'}</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* -----------------------------------------------------------------
-              RIGHT PANEL 2: MAIN LEARNING CATEGORIES (8 Primary Section Icons)
-              ----------------------------------------------------------------- */}
-          <section aria-label="Main Learning Categories" className="space-y-4">
-            <div className="relative rounded-2xl bg-gradient-to-r from-[#e0f2fe] via-[#f0f9ff] to-[#fef3c7] border-2 border-sky-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-              <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white shadow-md">
-                <GraduationCap className="w-5 h-5 text-amber-300" />
-                <h2 className="text-base sm:text-xl font-display font-black tracking-tight">
-                  Main Learning Categories (8 Sections)
-                </h2>
-              </div>
-              <p className="px-4 text-xs sm:text-sm font-display font-black italic text-[#1e3a8a]">
-                One Clear Destination for Every Learning Need
-              </p>
-            </div>
-
-            <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:overflow-visible sm:pb-0">
-              {mainCategoryCards.map((cat) => (
-                <div
-                  key={cat.id}
-                  onClick={cat.onClick}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      cat.onClick();
-                    }
-                  }}
-                  className={`min-w-[230px] sm:min-w-0 shrink-0 group rounded-2xl bg-gradient-to-r ${cat.cardGradient} ${cat.borderClass} border-2 p-4 shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between gap-3`}
+                <span
+                  className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <SpecialCardIllustration
-                        type={cat.illustrationType}
-                        className="w-full h-full drop-shadow-sm"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="inline-block px-2 py-0.5 rounded-full bg-white/80 text-[#0f2952] font-black text-[10px] uppercase tracking-wider mb-1">
-                        {cat.sectionBadge}
-                      </span>
-                      <h3 className="font-display font-black text-base sm:text-lg text-[#0f2952] leading-tight">
-                        {cat.title}
-                      </h3>
-                    </div>
-                  </div>
-
-                  <p className="text-xs font-bold text-[#0f2952]/85 leading-snug">
-                    {cat.whatInside}
-                  </p>
-
-                  <div className="pt-2 border-t border-white/50 flex items-center justify-between text-xs font-black text-[#0f2952]">
-                    <span>{cat.buttonLabel}</span>
-                    <span className="w-6 h-6 rounded-full bg-white/85 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
-                      <ArrowRight className="w-3.5 h-3.5 text-[#0f2952]" />
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* -----------------------------------------------------------------
-              RIGHT PANEL 3: POPULAR PROGRAMMES (8 Illustrated Enrichment Icons)
-              ----------------------------------------------------------------- */}
-          <section aria-label="Popular Enrichment Programmes" className="space-y-4">
-            <div className="relative rounded-2xl bg-gradient-to-r from-[#fef3c7] via-[#fffbeb] to-[#e0f2fe] border-2 border-amber-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-              <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white shadow-md">
-                <span className="text-xl">🎓</span>
-                <h2 className="text-base sm:text-xl font-display font-black tracking-tight">
-                  Popular Programmes &amp; Special Learning
-                </h2>
-              </div>
-              <p className="px-4 text-xs sm:text-sm font-display font-black italic text-[#1e3a8a]">
-                Explore &bull; Learn &bull; Enjoy
-              </p>
-            </div>
-
-            <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:overflow-visible sm:pb-0">
-              {popularProgrammes.map((prog) => (
-                <button
-                  key={prog.id}
-                  type="button"
-                  onClick={prog.onClick}
-                  className={`min-w-[220px] sm:min-w-0 shrink-0 group rounded-2xl bg-gradient-to-r ${prog.gradient} ${prog.border} border-2 p-3 sm:p-3.5 shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
-                >
-                  <div className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <SpecialCardIllustration
-                      type={prog.illustration}
-                      className="w-full h-full drop-shadow-sm"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-display font-black text-sm sm:text-base text-[#0f2952] leading-tight">
-                      {prog.title}
-                    </h3>
-                    <p className="text-[11px] font-bold text-[#0f2952]/80 mt-0.5 line-clamp-1">
-                      {prog.subtitle}
-                    </p>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#0f2952] mt-1.5 bg-white/70 px-2.5 py-0.5 rounded-full">
-                      <span>Open Studio</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* -----------------------------------------------------------------
-              RIGHT PANEL 4: STUDENT PROGRESS OVERVIEW & DAILY CHALLENGE
-              ----------------------------------------------------------------- */}
-          <section
-            aria-label="Student Progress and Daily Challenge"
-            className="grid grid-cols-1 xl:grid-cols-2 gap-4"
-          >
-            {/* LEFT PANEL: My Learning Progress */}
-            <div className="rounded-3xl bg-white border-2 border-sky-200 shadow-lg overflow-hidden flex flex-col justify-between">
-              <div className="px-5 py-3 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#1d4ed8] text-white flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">📊</span>
-                  <h2 className="text-base sm:text-lg font-display font-black tracking-tight">
-                    My Learning Progress
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => triggerSubAction('perf-results')}
-                  className="text-xs font-extrabold text-sky-100 hover:text-white flex items-center gap-1 cursor-pointer"
-                >
-                  <span>View Details</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                <div className="sm:col-span-4 flex flex-col items-center justify-center">
-                  <div className="relative w-28 h-28 flex items-center justify-center">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r={ringRadius}
-                        fill="none"
-                        stroke="#e2e8f0"
-                        strokeWidth="10"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r={ringRadius}
-                        fill="none"
-                        stroke="url(#progressRingGrad)"
-                        strokeWidth="10"
-                        strokeLinecap="round"
-                        strokeDasharray={ringCircumference}
-                        strokeDashoffset={ringOffset}
-                      />
-                      <defs>
-                        <linearGradient id="progressRingGrad" x1="0" y1="0" x2="1" y2="1">
-                          <stop offset="0%" stopColor="#22c55e" />
-                          <stop offset="100%" stopColor="#0ea5e9" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-display font-black text-[#0f2952]">
-                        {pct}%
-                      </span>
-                    </div>
-                  </div>
-                  {!progressMetrics.isLoggedIn && (
-                    <span className="text-[10px] font-extrabold text-slate-500 mt-1">
-                      Sign in to track live progress
-                    </span>
-                  )}
-                </div>
-
-                <div className="sm:col-span-5 space-y-2.5">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>
-                      Courses Completed :{' '}
-                      <strong className="font-black text-[#0f2952]">
-                        {progressMetrics.coursesCompleted}
-                      </strong>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
-                    <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>
-                      Practice Tests :{' '}
-                      <strong className="font-black text-[#0f2952]">
-                        {progressMetrics.practiceTests}
-                      </strong>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
-                    <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
-                    <span>
-                      Achievements :{' '}
-                      <strong className="font-black text-[#0f2952]">
-                        {progressMetrics.achievements}
-                      </strong>
-                    </span>
-                  </div>
-
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => triggerSubAction('perf-results')}
-                      className="px-3.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 text-[#0f2952] font-extrabold text-xs cursor-pointer transition-colors"
-                    >
-                      Open Performance Report →
-                    </button>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3 flex items-center justify-center">
-                  <KeepGoingStarMascot className="w-28 h-28" />
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT PANEL: Daily Challenge */}
-            <div className="rounded-3xl bg-white border-2 border-purple-200 shadow-lg overflow-hidden flex flex-col justify-between">
-              <div className="px-5 py-3 bg-gradient-to-r from-[#581c87] via-[#6b21a8] to-[#4338ca] text-white flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🏆</span>
-                  <h2 className="text-base sm:text-lg font-display font-black tracking-tight">
-                    Daily Challenge
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
-                    else onOpenDemo('live-quiz');
-                  }}
-                  className="px-3 py-1 rounded-full bg-white text-[#4338ca] font-extrabold text-xs flex items-center gap-1 cursor-pointer hover:bg-purple-50 transition-colors"
-                >
-                  <span>Start Now</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                <div className="sm:col-span-8 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex items-center gap-2.5 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200/80">
-                      <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0">
-                        <Calendar className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-slate-500 block">
-                          Today&apos;s Quiz
-                        </span>
-                        <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-                          25 Questions
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200/80">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
-                        <Clock className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-slate-500 block">Time</span>
-                        <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-                          15 Min
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
-                      else onOpenDemo('live-quiz');
-                    }}
-                    className="w-full py-2.5 px-5 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>Play Now</span>
-                  </button>
-                </div>
-
-                <div className="sm:col-span-4 flex items-center justify-center">
-                  <DailyChallengeBoyMascot className="w-28 h-28" />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* -----------------------------------------------------------------
-              RIGHT PANEL 5: IMPORTANT ANNOUNCEMENTS
-              ----------------------------------------------------------------- */}
-          <section
-            aria-label="Important Announcements"
-            className="rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border-2 border-indigo-400/30 shadow-md"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="flex items-start sm:items-center gap-3.5">
-                <div className="w-11 h-11 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
-                  <Megaphone className="w-5 h-5" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
-                      Important Announcements
-                    </span>
-                    <span className="text-xs font-bold text-sky-200">
-                      Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-200 font-medium">
-                    100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10). Try the Free Demo or unlock 365 days of full access for just ₹99 one-time payment.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab('all-courses')}
-                  className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors"
-                >
-                  Change Board / Class
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenMembership(selectedClass, selectedBoard)}
-                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                >
-                  <Crown className="w-3.5 h-3.5" />
-                  <span>₹99 / 365 Days Plan</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* -----------------------------------------------------------------
-              RIGHT PANEL 6: BOTTOM HORIZONTAL ICON BAR & REFER & EARN
-              ----------------------------------------------------------------- */}
-          <nav
-            aria-label="Bottom Navigation Menu"
-            className="space-y-4 pt-2"
-          >
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
-              {[
-                {
-                  label: 'My Courses',
-                  icon: BookOpen,
-                  cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
-                  border: 'border-sky-300',
-                  iconBg: 'bg-blue-600 text-white',
-                  onClick: () => onNavigateTab('all-courses'),
-                },
-                {
-                  label: 'Certificates',
-                  icon: Award,
-                  cardBg: 'from-[#fef3c7] to-[#fde68a]',
-                  border: 'border-amber-300',
-                  iconBg: 'bg-amber-600 text-white',
-                  onClick: () => triggerSubAction('perf-certificates'),
-                },
-                {
-                  label: 'Leaderboard',
-                  icon: Trophy,
-                  cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
-                  border: 'border-emerald-300',
-                  iconBg: 'bg-emerald-600 text-white',
-                  onClick: () => triggerSubAction('perf-certificates'),
-                },
-                {
-                  label: 'My Account',
-                  icon: User,
-                  cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
-                  border: 'border-purple-300',
-                  iconBg: 'bg-purple-600 text-white',
-                  onClick: () => triggerSubAction('acc-profile'),
-                },
-                {
-                  label: 'Help & Support',
-                  icon: Headphones,
-                  cardBg: 'from-[#e0f2fe] to-[#cffafe]',
-                  border: 'border-cyan-300',
-                  iconBg: 'bg-sky-600 text-white',
-                  onClick: () => onNavigateTab('help-support'),
-                },
-                {
-                  label: 'More Programs',
-                  icon: Gift,
-                  cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
-                  border: 'border-rose-300',
-                  iconBg: 'bg-rose-600 text-white',
-                  onClick: () => onNavigateTab('other-programs'),
-                },
-              ].map((item) => {
-                const IconComp = item.icon;
-                return (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={item.onClick}
-                    className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
-                  >
-                    <span className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}>
-                      <IconComp className="w-5 h-5" />
-                    </span>
-                    <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-
-              {/* Permanent 🎁 Refer & Earn Tab in the Bottom Navigation Menu */}
-              <button
-                type="button"
-                onClick={() => onNavigateTab('referrals')}
-                aria-label="Refer & Earn – Open Referral Hub"
-                className="col-span-2 sm:col-span-2 xl:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ring-2 ring-amber-300/60"
-              >
-                <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
-                  🎁
+                  <IconComp className="w-5 h-5" />
                 </span>
                 <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-                  Refer &amp; Earn
+                  {item.label}
                 </span>
               </button>
-            </div>
-          </nav>
+            );
+          })}
 
-          {/* Single Motivational Heritage Banner */}
-          <section aria-label="Scholarship Champion Banner">
-            <div
-              onClick={() => onNavigateTab('scholarship')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onNavigateTab('scholarship');
-                }
-              }}
-              className="relative overflow-hidden rounded-3xl border-2 border-sky-300 shadow-lg cursor-pointer group bg-gradient-to-r from-[#bae6fd] via-[#e0f2fe] to-[#bae6fd] min-h-[125px] flex items-center justify-center p-4 sm:p-6"
-            >
-              <ScholarshipChampionBannerSvg className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-              <div className="relative z-10 text-center max-w-xl mx-auto space-y-1">
-                <h2 className="text-xl sm:text-3xl font-display font-black italic text-[#0f2952] drop-shadow-xs group-hover:scale-[1.01] transition-transform">
-                  Be a Scholarship Champion!
-                </h2>
-                <p className="text-xs sm:text-base font-display font-extrabold italic text-[#1e3a8a]">
-                  Learn Today... Lead Tomorrow...
-                </p>
-              </div>
-            </div>
-          </section>
+          {/* Permanent 🎁 Refer & Earn Tab in the Bottom Navigation Menu */}
+          <button
+            type="button"
+            onClick={() => onNavigateTab('referrals')}
+            aria-label="Refer & Earn – Open Referral Hub"
+            className="col-span-2 sm:col-span-2 xl:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ring-2 ring-amber-300/60"
+          >
+            <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
+              🎁
+            </span>
+            <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+              Refer &amp; Earn
+            </span>
+          </button>
         </div>
-      </div>
+      </nav>
+
+      {/* Single Motivational Heritage Banner */}
+      <section aria-label="Scholarship Champion Banner">
+        <div
+          onClick={() => onNavigateTab('scholarship')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigateTab('scholarship');
+            }
+          }}
+          className="relative overflow-hidden rounded-3xl border-2 border-sky-300 shadow-lg cursor-pointer group bg-gradient-to-r from-[#bae6fd] via-[#e0f2fe] to-[#bae6fd] min-h-[125px] flex items-center justify-center p-4 sm:p-6"
+        >
+          <ScholarshipChampionBannerSvg className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+          <div className="relative z-10 text-center max-w-xl mx-auto space-y-1">
+            <h2 className="text-xl sm:text-3xl font-display font-black italic text-[#0f2952] drop-shadow-xs group-hover:scale-[1.01] transition-transform">
+              Be a Scholarship Champion!
+            </h2>
+            <p className="text-xs sm:text-base font-display font-extrabold italic text-[#1e3a8a]">
+              Learn Today... Lead Tomorrow...
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };
-

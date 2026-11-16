@@ -46,6 +46,8 @@ interface PublicHomeDashboardProps {
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   selectedBoard,
   selectedClass,
+  onSelectBoard,
+  onSelectClass,
   onOpenDemo,
   onNavigateZone,
   onOpenAuth,
@@ -60,11 +62,13 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
 }) => {
   return (
     <div className={`${isDesktopMode ? 'space-y-8' : 'space-y-10'} pb-12`}>
-      {/* SECTION 1: FOCUSED HOME DASHBOARD (Welcome Banner, Intro, Main Categories, Popular Programmes, Daily Challenge, Progress, Announcements & Quick Access) */}
+      {/* SECTION 1: FOCUSED HOME DASHBOARD */}
       <div id="home-overview">
         <ReferenceShowcaseSections
           selectedBoard={selectedBoard}
           selectedClass={selectedClass}
+          onSelectBoard={onSelectBoard}
+          onSelectClass={onSelectClass}
           onOpenDemo={(tab) => onOpenDemo(tab || 'live-quiz')}
           onNavigateTab={(tab, subSection, subject) =>
             onNavigateZone(tab, subSection || 'overview', subject)
