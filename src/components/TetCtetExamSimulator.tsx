@@ -38,6 +38,14 @@ import {
   TetCtetSubjectScoreEntry,
 } from '../types/tetCtet';
 import { TET_CTET_MODULES, TET_CTET_EXAM_DURATION_SECONDS } from '../data/tetCtetSyllabi';
+import {
+  getReportStatusBadgeStyle,
+  TetCtetReportQuestionModal,
+} from './TetCtetReportQuestionModal';
+import {
+  getStudentReportsForQuestion,
+  subscribeToQuestionErrorReports,
+} from '../services/questionErrorReportService';
 
 const STORAGE_KEY = 'vc_tet_ctet_active_exam_v1';
 
@@ -77,6 +85,7 @@ export interface TetCtetExamSimulatorProps {
   stream?: TetCtetPaper2Stream;
   durationSeconds?: number;
   studentId: string;
+  studentName?: string;
   autoStartSkipInstructions?: boolean;
   onSaveAttempt: (attempt: Omit<TetCtetAttemptRecord, 'id' | 'completedAt'>) => Promise<TetCtetAttemptRecord>;
   onPractiseWeakTopic: (subjectId: TetCtetSubjectId) => void;
@@ -108,6 +117,7 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
     ? TET_CTET_EXAM_DURATION_SECONDS
     : Math.max(1800, questions.length * 60),
   studentId,
+  studentName = 'Student Candidate',
   autoStartSkipInstructions = false,
   onSaveAttempt,
   onPractiseWeakTopic,
@@ -142,11 +152,21 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
   const [showSubmitModal, setShowSubmitModal] = useState<boolean>(false);
   const [showMobilePalette, setShowMobilePalette] = useState<boolean>(false);
 
-  // Result states
+  // Result states (open Question Review automatically after test submission)
   const [submittedAttempt, setSubmittedAttempt] = useState<TetCtetAttemptRecord | null>(null);
-  const [resultViewTab, setResultViewTab] = useState<'summary' | 'review' | 'explanations'>('summary');
+  const [resultViewTab, setResultViewTab] = useState<'summary' | 'review' | 'explanations'>('review');
   const [reviewFilter, setReviewFilter] = useState<'ALL' | 'CORRECT' | 'INCORRECT' | 'UNATTEMPTED'>('ALL');
   const [reviewSubjectFilter, setReviewSubjectFilter] = useState<string>('ALL');
+
+  // Student Question Error Reporting state (read-only question bank, separate report storage)
+  const [reportingQuestion, setReportingQuestion] = useState<TetCtetQuestion | null>(null);
+  const [reportRefreshTick, setReportRefreshTick] = useState<number>(0);
+
+  useEffect(() => {
+    return subscribeToQuestionErrorReports(() => {
+      setReportRefreshTick((prev) => prev + 1);
+    });
+  }, []);
 
   // Hydrate active session on mount if valid
   useEffect(() => {
@@ -326,7 +346,7 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
 
     setSubmittedAttempt(saved);
     setPhase('result');
-    setResultViewTab('summary');
+    setResultViewTab('review');
 
     if (percentage >= 60) {
       try {
@@ -733,10 +753,8 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
                   {currentQuestion.subjectLabel} · {currentQuestion.topic}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                <span>+1 Mark</span>
-                <span>·</span>
-                <span>0 Negative</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
+                <span className="hidden sm:inline">+1 Mark · 0 Negative</span>
                 {isMarked && (
                   <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 font-extrabold">
                     Marked for Review
@@ -1256,7 +1274,7 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
             </div>
 
             <div className="space-y-4">
-              {filteredReviewQuestions.slice(0, 75).map(({ q, selected }) => {
+              {filteredReviewQuestions.map(({ q, selected }) => {
                 const isCorrect = selected === q.correctAnswer;
                 const isUnattempted = selected === undefined;
                 return (
@@ -1317,16 +1335,60 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
                     <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-slate-800 leading-relaxed">
                       <strong className="text-amber-950">Explanation:</strong> {q.explanation}
                     </div>
+
+                    {/* Discreet Post-Submission Question Error Reporting Footer Below Each Question */}
+                    <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        {(() => {
+                          void reportRefreshTick;
+                          const existingReps = getStudentReportsForQuestion(studentId, q.id);
+                          const latestRep = existingReps[0];
+                          return latestRep ? (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-black ${getReportStatusBadgeStyle(
+                                latestRep.status
+                              )}`}
+                            >
+                              <span>Report {latestRep.reportNumber}: {latestRep.status}</span>
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReportingQuestion(q)}
+                        className="px-2.5 py-1 rounded-lg bg-white/80 hover:bg-rose-50 text-slate-600 hover:text-rose-800 border border-slate-200 hover:border-rose-200 font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <span aria-hidden="true">🚩</span>
+                        <span>Report an Error</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
-              {filteredReviewQuestions.length > 75 && (
-                <p className="text-xs font-bold text-slate-500 text-center py-2">
-                  Filter by Subject above to view specific questions 76–150 cleanly.
-                </p>
-              )}
             </div>
           </div>
+        )}
+
+        {/* Student Question Error Report Modal (Post-Exam Question Review) */}
+        {reportingQuestion && (
+          <TetCtetReportQuestionModal
+            isOpen={Boolean(reportingQuestion)}
+            onClose={() => setReportingQuestion(null)}
+            question={reportingQuestion}
+            moduleId={moduleId}
+            moduleTitle={`${modMeta.examTitle} ${modMeta.paperTitle}`}
+            mockTestId={
+              mode === 'MOCK'
+                ? `${moduleId}_MOCK_${String(mockTestNumber || 1).padStart(2, '0')}`
+                : `${moduleId}_${mode}`
+            }
+            testNumber={mockTestNumber || 1}
+            selectedLanguage={String(reportingQuestion.mediumRendered || medium)}
+            studentId={studentId}
+            studentName={studentName}
+            onSubmitted={() => setReportRefreshTick((prev) => prev + 1)}
+          />
         )}
       </div>
     );

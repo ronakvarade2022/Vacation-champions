@@ -75,6 +75,11 @@ const AdminReferralPanel = lazy(() =>
 const AdminSupportPanel = lazy(() =>
   import('./AdminSupportPanel').then((m) => ({ default: m.AdminSupportPanel }))
 );
+const AdminQuestionErrorReportsSection = lazy(() =>
+  import('./admin/AdminQuestionErrorReportsSection').then((m) => ({
+    default: m.AdminQuestionErrorReportsSection,
+  }))
+);
 
 type AdminSectionId =
   | 'students'
@@ -90,6 +95,7 @@ type AdminSectionId =
   | 'cricket'
   | 'scholarship'
   | 'tet-ctet'
+  | 'question-error-reports'
   | 'support'
   | 'profile';
 
@@ -511,6 +517,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('question-error-reports')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'question-error-reports'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-rose-50'
+          }`}
+        >
+          <span>🚩</span>
+          <span>QUESTION ERROR REPORTS</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('settings')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'settings'
@@ -644,6 +662,8 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {activeSection === 'tet-ctet' && <AdminTetCtetSection />}
+
+        {activeSection === 'question-error-reports' && <AdminQuestionErrorReportsSection />}
 
         {activeSection === 'settings' && (
           <AdminSettingsSection

@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   FileSearch,
+  Flag,
   RefreshCw,
   ShieldCheck,
   Users,
@@ -39,8 +40,9 @@ import {
   TET_CTET_AUDIT_BATCHES,
 } from '../../data/tetCtetAuditTracker';
 import { formatHhMmSs } from '../TetCtetExamSimulator';
+import { AdminQuestionErrorReportsSection } from './AdminQuestionErrorReportsSection';
 
-type AdminTetTab = 'batches' | 'inspector' | 'audit' | 'monitor';
+type AdminTetTab = 'batches' | 'inspector' | 'audit' | 'monitor' | 'error-reports';
 
 export const AdminTetCtetSection: React.FC = () => {
   const {
@@ -277,6 +279,7 @@ export const AdminTetCtetSection: React.FC = () => {
             { id: 'inspector' as const, label: 'Question Inspector & Editor', icon: FileSearch },
             { id: 'audit' as const, label: 'Centralized Automated Audit', icon: ShieldCheck },
             { id: 'monitor' as const, label: `Student Attempts Monitor (${allCandidateAttempts.length})`, icon: Users },
+            { id: 'error-reports' as const, label: '🚩 QUESTION ERROR REPORTS', icon: Flag },
           ].map((tab) => {
             const Icon = tab.icon;
             const isCurr = activeTab === tab.id;
@@ -1140,6 +1143,11 @@ export const AdminTetCtetSection: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* =====================================================================
+          SUB-TAB 5: 🚩 QUESTION ERROR REPORTS
+          ===================================================================== */}
+      {activeTab === 'error-reports' && <AdminQuestionErrorReportsSection />}
 
       {/* Edit Question Modal */}
       {editingQuestion && (

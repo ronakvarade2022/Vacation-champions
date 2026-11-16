@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -46,6 +46,11 @@ import {
 } from '../data/tetCtetQuestionEngine';
 import { MOCK_TEST_QA_STATUS_BY_KEY } from '../data/tetCtetCentralAuditSnapshot';
 import { formatHhMmSs, TetCtetExamSimulator } from './TetCtetExamSimulator';
+import {
+  getStudentQuestionErrorReports,
+  subscribeToQuestionErrorReports,
+} from '../services/questionErrorReportService';
+import { getReportStatusBadgeStyle } from './TetCtetReportQuestionModal';
 
 export type TetCtetModuleSubTab =
   | 'mock-tests'
@@ -111,6 +116,18 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   const [subjectSetNumbers, setSubjectSetNumbers] = useState<Record<string, number>>({});
   const [performanceScope, setPerformanceScope] = useState<'module' | 'all'>('module');
   const [activeSession, setActiveSession] = useState<ActiveSimulatorSession | null>(null);
+  const [reportTick, setReportTick] = useState<number>(0);
+
+  useEffect(() => {
+    return subscribeToQuestionErrorReports(() => {
+      setReportTick((prev) => prev + 1);
+    });
+  }, []);
+
+  const studentQuestionReports = useMemo(() => {
+    void reportTick;
+    return getStudentQuestionErrorReports(currentStudent?.id || 'guest_tet_ctet');
+  }, [currentStudent?.id, reportTick]);
 
   const isMaha = modMeta.exam === 'MAHA_TET';
   const rawL1 = isMaha ? tetCtetPreferences.mahaTetL1 : tetCtetPreferences.ctetL1;
@@ -353,6 +370,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
         stream={modMeta.paper === 2 ? activeStream : undefined}
         durationSeconds={activeSession.durationSeconds}
         studentId={currentStudent?.id || 'guest_tet_ctet'}
+        studentName={currentStudent?.name || 'Student Candidate'}
         autoStartSkipInstructions={activeSession.autoStartSkipInstructions}
         onSaveAttempt={recordTetCtetAttempt}
         onPractiseWeakTopic={(weakSubj) => {
@@ -1520,6 +1538,78 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
               </div>
             </>
           )}
+
+          {/* Student Question Error Reports Status Tracker (PART 7) */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-display font-black text-slate-900">
+                  🚩 My Question Error Reports ({studentQuestionReports.length})
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Track the live verification status of questions you reported (Submitted, Under
+                  Review, Confirmed, Corrected, or Rejected).
+                </p>
+              </div>
+            </div>
+
+            {studentQuestionReports.length === 0 ? (
+              <p className="text-xs text-slate-500 font-medium bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                You have not submitted any question reports yet. Use the &ldquo;🚩 Report
+                Question&rdquo; button at the top-right of any question card during an exam or
+                post-test review if you spot an issue.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 uppercase font-bold">
+                      <th className="py-2.5 pr-4">Report Ref</th>
+                      <th className="py-2.5 pr-4">Module &amp; Question</th>
+                      <th className="py-2.5 pr-4">Category</th>
+                      <th className="py-2.5 pr-4">Language</th>
+                      <th className="py-2.5 pr-4">Date</th>
+                      <th className="py-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                    {studentQuestionReports.slice(0, 20).map((rep) => (
+                      <tr key={rep.id}>
+                        <td className="py-2.5 pr-4 font-mono font-black text-indigo-800">
+                          {rep.reportNumber}
+                        </td>
+                        <td className="py-2.5 pr-4">
+                          <span className="font-bold text-slate-900 block">
+                            {rep.moduleTitle} · Test #{String(rep.testNumber).padStart(2, '0')} · Q
+                            {rep.questionNumber}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {rep.questionId} ({rep.subject})
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-4 text-rose-800 font-bold">
+                          {rep.reportCategory}
+                        </td>
+                        <td className="py-2.5 pr-4 text-slate-600">{rep.selectedLanguage}</td>
+                        <td className="py-2.5 pr-4 font-mono text-[11px] text-slate-500">
+                          {new Date(rep.createdAt).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className="py-2.5">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg border font-black text-[11px] ${getReportStatusBadgeStyle(
+                              rep.status
+                            )}`}
+                          >
+                            {rep.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
