@@ -35,6 +35,7 @@ import {
   Lock,
   Crown
 } from 'lucide-react';
+import { MsceFullMockExamsSection } from './MsceFullMockExamsSection';
 
 interface ScholarshipChampionsViewProps {
   onOpenAuth?: () => void;
@@ -331,6 +332,24 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 70-Test Directory Banner (20 Existing Practice Tests + 50 New Full Mock Examinations) */}
+        <div className="mt-4 pt-4 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-3 py-1 rounded-full bg-white text-amber-950 font-black">
+              📚 Existing Practice Tests (20 Sets: 10 Std. 4th + 10 Std. 7th)
+            </span>
+            <span className="px-3 py-1 rounded-full bg-slate-950 text-amber-300 font-black border border-amber-400/50">
+              🏆 MSCE Pune Full Mock Examinations (50 Tests: 25 Std. 4th + 25 Std. 7th)
+            </span>
+          </div>
+          <a
+            href="#msce-pune-full-mock-examinations"
+            className="px-4 py-1.5 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 font-black text-xs transition-all shadow-xs"
+          >
+            Jump to 50 Full Mock Exams ↓
+          </a>
         </div>
       </div>
 
@@ -861,6 +880,12 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
           </div>
         </div>
       )}
+
+      {/* NEW CLEARLY SEPARATED SUBSECTION INSIDE EXISTING SCHOLARSHIP SECTION:
+          🏆 MSCE PUNE SCHOLARSHIP – FULL MOCK EXAMINATIONS (Std 4th 25 Tests + Std 7th 25 Tests) */}
+      <div id="msce-pune-full-mock-examinations">
+        <MsceFullMockExamsSection />
+      </div>
     </div>
   );
 };

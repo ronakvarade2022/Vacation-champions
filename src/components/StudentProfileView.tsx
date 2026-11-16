@@ -71,11 +71,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     allAttempts,
     savedDrawings,
     activeBoard,
-    switchActiveBoardAndClass
+    switchActiveBoardAndClass,
+    updateStudentScholarshipMedium
   } = useApp();
   const [copiedRefLink, setCopiedRefLink] = useState(false);
   const [copiedRefCode, setCopiedRefCode] = useState(false);
   const [promotionBannerMsg, setPromotionBannerMsg] = useState<string | null>(null);
+  const [mediumSavedMsg, setMediumSavedMsg] = useState<string | null>(null);
   const [ledgerBoard, setLedgerBoard] = useState<EducationBoard>(activeBoard);
 
   if (!currentStudent) return null;
@@ -451,6 +453,96 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 );
               })}
           </div>
+        </div>
+      </div>
+
+      {/* MSCE PUNE SCHOLARSHIP EXAMINATION MEDIUM SETTINGS */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-amber-300 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🏆</span>
+              <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
+                MSCE Pune Scholarship Examination Medium (Profile Settings)
+              </h2>
+            </div>
+            <p className="text-xs text-slate-600 font-medium mt-0.5">
+              Select or update your official examination medium for Std. 4th (PSE) &amp; Std. 7th (UPS) 50 Full Mock Examinations. Paper 1 &amp; Paper 2 languages configure automatically.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('scholarship')}
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold self-start sm:self-center shrink-0 cursor-pointer shadow-xs"
+          >
+            Open Scholarship Mock Exams →
+          </button>
+        </div>
+
+        {mediumSavedMsg && (
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{mediumSavedMsg}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(
+            [
+              {
+                medium: 'English' as const,
+                title: 'English Medium',
+                paper1: 'Paper 1: First Language English (25 Qs) + Maths in English (50 Qs)',
+                paper2: 'Paper 2: Second Language Marathi (25 Qs) + Intelligence in English (50 Qs)',
+              },
+              {
+                medium: 'Marathi' as const,
+                title: 'Marathi Medium (मराठी माध्यम)',
+                paper1: 'पेपर १: प्रथम भाषा मराठी (25 प्रश्न) + गणित मराठीत (50 प्रश्न)',
+                paper2: 'पेपर २: द्वितीय भाषा इंग्रजी (25 प्रश्न) + बुद्धिमत्ता मराठीत (50 प्रश्न)',
+              },
+              {
+                medium: 'Hindi' as const,
+                title: 'Hindi Medium (हिंदी माध्यम)',
+                paper1: 'पेपर १: प्रथम भाषा हिंदी (25 प्रश्न) + गणित हिंदी में (50 प्रश्न)',
+                paper2: 'पेपर २: द्वितीय भाषा अंग्रेजी (25 प्रश्न) + बुद्धिमत्ता हिंदी में (50 प्रश्न)',
+              },
+            ]
+          ).map((item) => {
+            const currentMed = currentStudent.scholarshipMedium || 'Marathi';
+            const isSelected = currentMed === item.medium;
+            return (
+              <button
+                key={item.medium}
+                type="button"
+                onClick={() => {
+                  updateStudentScholarshipMedium(item.medium);
+                  setMediumSavedMsg(
+                    `MSCE Scholarship Examination Medium updated to ${item.title}. All 50 Mock Tests will now load in ${item.medium} Medium configuration.`
+                  );
+                  setTimeout(() => setMediumSavedMsg(null), 4000);
+                }}
+                className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer space-y-1.5 ${
+                  isSelected
+                    ? 'bg-amber-50 border-amber-500 shadow-sm'
+                    : 'bg-slate-50 hover:bg-amber-50/40 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-display font-extrabold text-xs sm:text-sm text-slate-900">
+                    {item.title}
+                  </span>
+                  {isSelected && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-600 text-white font-black text-[10px] uppercase">
+                      Saved Medium
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-700 font-semibold leading-snug">{item.paper1}</p>
+                <p className="text-[11px] text-slate-600 font-medium leading-snug">{item.paper2}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
 

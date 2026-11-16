@@ -98,6 +98,12 @@ import {
   ScholarshipSection 
 } from '../data/scholarshipData';
 import {
+  MsceMedium,
+  MsceMockAttemptRecord,
+  MsceMockQuestion,
+  MsceStdLevel
+} from '../data/msceMockExamEngine';
+import {
   buildBoardClassKey,
   canAccessWorksheet,
   canSwitchBoardAndClass,
@@ -332,6 +338,14 @@ interface AppContextType {
     maxMarks: number,
     sectionScores: Record<ScholarshipSection, { obtained: number; max: number; correct: number; total: number }>
   ) => Promise<void>;
+  updateStudentScholarshipMedium: (medium: MsceMedium) => void;
+  recordMsceMockAttempt: (attempt: Omit<MsceMockAttemptRecord, 'id' | 'completedAt'>) => Promise<MsceMockAttemptRecord>;
+  publishedMsceMockTests: Record<string, boolean>;
+  toggleMsceMockTestPublished: (stdLevel: MsceStdLevel, mockTestNumber: number) => void;
+  customMsceMockQuestions: MsceMockQuestion[];
+  saveCustomMsceMockQuestion: (question: MsceMockQuestion) => void;
+  deleteCustomMsceMockQuestion: (id: string) => void;
+  bulkImportCustomMsceMockQuestions: (questions: MsceMockQuestion[]) => { importedCount: number; skippedDuplicates: number };
 
   // Admin platform settings
   updateTimers: (c23: number, c45: number, c68: number) => void;
@@ -749,6 +763,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const [publishedMsceMockTests, setPublishedMsceMockTests] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('vc_published_msce_mock_tests');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    const initial: Record<string, boolean> = {};
+    for (let i = 1; i <= 25; i++) {
+      initial[`Std 4th_${i}`] = true;
+      initial[`Std 7th_${i}`] = true;
+    }
+    return initial;
+  });
+
+  const [customMsceMockQuestions, setCustomMsceMockQuestions] = useState<MsceMockQuestion[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_custom_msce_mock_questions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [gkQuestions, setGkQuestions] = useState<CustomGkQuestionItem[]>(() => {
     const builtIn: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap(lvl =>
       (DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map(q => ({
@@ -908,6 +944,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     safeSetLocalStorage('vc_custom_scholarship_questions', JSON.stringify(customScholarshipQuestions));
   }, [customScholarshipQuestions]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_published_msce_mock_tests', JSON.stringify(publishedMsceMockTests));
+  }, [publishedMsceMockTests]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_custom_msce_mock_questions', JSON.stringify(customMsceMockQuestions));
+  }, [customMsceMockQuestions]);
 
   useEffect(() => {
     const customOrModified = gkQuestions.filter(q => q.isCustom || q.published === false);
@@ -3621,6 +3665,133 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const updateStudentScholarshipMedium = (medium: MsceMedium) => {
+    try {
+      localStorage.setItem('vc_scholarship_medium', medium);
+    } catch {}
+    if (!currentStudent) return;
+    const updatedStudent: StudentProfile = {
+      ...currentStudent,
+      scholarshipMedium: medium,
+      lastActiveDate: new Date().toISOString()
+    };
+    setCurrentStudent(updatedStudent);
+    setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+    saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+  };
+
+  const recordMsceMockAttempt = async (
+    attemptData: Omit<MsceMockAttemptRecord, 'id' | 'completedAt'>
+  ): Promise<MsceMockAttemptRecord> => {
+    const newAttempt: MsceMockAttemptRecord = {
+      ...attemptData,
+      id: `msce_mock_att_${Date.now()}`,
+      completedAt: new Date().toISOString()
+    };
+
+    try {
+      const guestHistoryRaw = localStorage.getItem('vc_msce_mock_attempts');
+      const parsedHistory: MsceMockAttemptRecord[] = guestHistoryRaw ? JSON.parse(guestHistoryRaw) : [];
+      safeSetLocalStorage('vc_msce_mock_attempts', JSON.stringify([newAttempt, ...parsedHistory].slice(0, 200)));
+    } catch {}
+
+    if (currentStudent) {
+      const bonusPoints = Math.max(10, attemptData.marksObtained * 3);
+      const bonusCoins = Math.max(5, Math.floor(attemptData.marksObtained));
+      const updatedAttempts = [newAttempt, ...(currentStudent.msceMockAttempts || [])];
+      const updatedStudent: StudentProfile = {
+        ...currentStudent,
+        points: (currentStudent.points || 0) + bonusPoints,
+        coins: (currentStudent.coins || 0) + bonusCoins,
+        scholarshipMedium: attemptData.medium,
+        msceMockAttempts: updatedAttempts,
+        lastActiveDate: new Date().toISOString()
+      };
+      setCurrentStudent(updatedStudent);
+      setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+      saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+      await saveScholarshipAttemptToFirestore(
+        currentStudent.id,
+        {
+          id: newAttempt.id,
+          studentId: currentStudent.id,
+          subject: `MSCE Full Mock ${attemptData.stdLevel} - Test ${String(attemptData.mockTestNumber).padStart(2, '0')} Paper ${attemptData.paperNumber} (${attemptData.medium})`,
+          totalQuestions: attemptData.totalQuestions,
+          correctCount: attemptData.correctCount,
+          scorePercent: attemptData.percentage,
+          timeSpentSeconds: attemptData.timeTakenSeconds,
+          classLevel: `${attemptData.stdLevel} (${attemptData.medium} • Paper ${attemptData.paperNumber})`,
+          setNumber: attemptData.mockTestNumber,
+          marksObtained: attemptData.marksObtained,
+          maxMarks: attemptData.maxMarks,
+          completedAt: newAttempt.completedAt,
+          sectionBreakdown: {
+            [attemptData.section1Name]: { obtained: attemptData.section1Score, max: attemptData.section1MaxMarks },
+            [attemptData.section2Name]: { obtained: attemptData.section2Score, max: attemptData.section2MaxMarks }
+          }
+        },
+        []
+      ).catch(() => {});
+
+      addNotification(
+        `MSCE ${attemptData.stdLevel} Mock Test ${String(attemptData.mockTestNumber).padStart(2, '0')} (Paper ${attemptData.paperNumber}) Completed`,
+        `You scored ${attemptData.marksObtained}/${attemptData.maxMarks} marks (${attemptData.percentage}%) in ${attemptData.medium} Medium and earned +${bonusPoints} Champion Points!`,
+        'quiz'
+      );
+    }
+
+    return newAttempt;
+  };
+
+  const toggleMsceMockTestPublished = (stdLevel: MsceStdLevel, mockTestNumber: number) => {
+    const key = `${stdLevel}_${mockTestNumber}`;
+    setPublishedMsceMockTests(prev => ({
+      ...prev,
+      [key]: prev[key] === false ? true : false
+    }));
+  };
+
+  const saveCustomMsceMockQuestion = (question: MsceMockQuestion) => {
+    setCustomMsceMockQuestions(prev => {
+      const idx = prev.findIndex(q => q.id === question.id || (
+        q.stdLevel === question.stdLevel &&
+        q.mockTestNumber === question.mockTestNumber &&
+        q.paperNumber === question.paperNumber &&
+        q.questionNumber === question.questionNumber
+      ));
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = question;
+        return next;
+      }
+      return [question, ...prev];
+    });
+  };
+
+  const deleteCustomMsceMockQuestion = (id: string) => {
+    setCustomMsceMockQuestions(prev => prev.filter(q => q.id !== id));
+  };
+
+  const bulkImportCustomMsceMockQuestions = (questions: MsceMockQuestion[]) => {
+    let importedCount = 0;
+    let skippedDuplicates = 0;
+    setCustomMsceMockQuestions(prev => {
+      const existingHashes = new Set(prev.map(p => p.normalizedHash));
+      const next = [...prev];
+      for (const q of questions) {
+        if (existingHashes.has(q.normalizedHash)) {
+          skippedDuplicates++;
+          continue;
+        }
+        existingHashes.add(q.normalizedHash);
+        next.unshift(q);
+        importedCount++;
+      }
+      return next;
+    });
+    return { importedCount, skippedDuplicates };
+  };
+
   const clearAllNotifications = () => {
     setNotifications([]);
   };
@@ -3725,6 +3896,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adminApplyApproved365DayMigration,
 
       recordScholarshipAttempt,
+      updateStudentScholarshipMedium,
+      recordMsceMockAttempt,
+      publishedMsceMockTests,
+      toggleMsceMockTestPublished,
+      customMsceMockQuestions,
+      saveCustomMsceMockQuestion,
+      deleteCustomMsceMockQuestion,
+      bulkImportCustomMsceMockQuestions,
       updateTimers,
       markNotificationAsRead,
       clearAllNotifications,
@@ -3743,6 +3922,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       allStories,
       shivajiStories,
       customScholarshipQuestions,
+      publishedMsceMockTests,
+      customMsceMockQuestions,
       gkQuestions,
       learningPrograms,
       allPuzzles,

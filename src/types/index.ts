@@ -139,6 +139,9 @@ export interface StudentProfile {
   attendanceRecords?: AttendanceRecord[];
   assignments?: AssignmentItem[];
   feeRecords?: FeeRecord[];
+  // MSCE Pune Scholarship Examination Medium & Full Mock Attempt History
+  scholarshipMedium?: 'English' | 'Marathi' | 'Hindi';
+  msceMockAttempts?: import('../data/msceMockExamEngine').MsceMockAttemptRecord[];
 }
 
 export interface ClassSubscriptionRecord {
