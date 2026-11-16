@@ -174,6 +174,8 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       onNavigateTab('all-courses');
     } else if (actionId === 'sl-scholarship' || actionId === 'ez-mock-tests') {
       onNavigateTab('scholarship');
+    } else if (actionId === 'sl-tet-ctet' || actionId === 'ez-tet-ctet') {
+      onNavigateTab('tet-ctet');
     } else if (actionId === 'sl-drawing') {
       onNavigateTab('drawing');
     } else if (actionId === 'sl-stories' || actionId === 'sl-moral') {
@@ -344,6 +346,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         illustrationType: 'scholarship',
         cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#86efac]',
         borderClass: 'border-[#15803d]/40',
+      };
+    }
+    if (subId === 'sl-tet-ctet' || subId === 'ez-tet-ctet') {
+      return {
+        emojiIcon: '🎓',
+        cardGradient: 'from-[#e0e7ff] via-[#c7d2fe] to-[#a5b4fc]',
+        borderClass: 'border-[#4338ca]/50',
       };
     }
     if (subId === 'sl-gk') {

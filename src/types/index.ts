@@ -142,6 +142,9 @@ export interface StudentProfile {
   // MSCE Pune Scholarship Examination Medium & Full Mock Attempt History
   scholarshipMedium?: 'English' | 'Marathi' | 'Hindi';
   msceMockAttempts?: import('../data/msceMockExamEngine').MsceMockAttemptRecord[];
+  // MAHA TET & CTET Exam Preparation History & Preferences
+  tetCtetAttempts?: import('./tetCtet').TetCtetAttemptRecord[];
+  tetCtetPreferences?: import('./tetCtet').TetCtetUserPreferences;
 }
 
 export interface ClassSubscriptionRecord {
@@ -590,5 +593,7 @@ export interface DeviceSessionRecord {
 
 export * from './referral';
 export * from './support';
+export * from './tetCtet';
+
 
 

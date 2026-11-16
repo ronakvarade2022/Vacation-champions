@@ -39,6 +39,11 @@ const ScholarshipChampionsView = lazy(() =>
     default: m.ScholarshipChampionsView,
   }))
 );
+const TetCtetView = lazy(() =>
+  import('./components/TetCtetView').then((m) => ({
+    default: m.TetCtetView,
+  }))
+);
 const StudentProfileView = lazy(() =>
   import('./components/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
 );
@@ -106,6 +111,7 @@ const FEATURE_TITLES: Record<string, string> = {
   drawing: 'Drawing & Colouring Studio',
   cricket: 'Cricket Champions Hub',
   scholarship: 'Maharashtra Scholarship (4th & 7th Std)',
+  'tet-ctet': 'TET & CTET Exam Preparation (200 Mock Tests)',
   'future-skills': 'AI Learning Academy & Future Skills',
   'ai-academy': 'AI Learning Academy & Future Skills',
   certificates: 'Official Champion Certificates & Leaderboard',
@@ -303,7 +309,7 @@ const AppContent: React.FC = () => {
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
     const alwaysOpenTabs = new Set([
       'demo', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
-      'scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
+      'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
@@ -391,6 +397,10 @@ const AppContent: React.FC = () => {
         handleNavigateTab('scholarship');
         return;
       }
+      case 'sl-tet-ctet': {
+        handleNavigateTab('tet-ctet');
+        return;
+      }
       case 'sl-drawing': {
         handleNavigateTab('drawing');
         return;
@@ -470,6 +480,10 @@ const AppContent: React.FC = () => {
       // SECTION 6: EXAM ZONE (Chapter Tests, Subject Tests, Full Syllabus, Scholarship Mocks, Competitive, Timed)
       case 'ez-mock-tests': {
         handleNavigateTab('scholarship');
+        return;
+      }
+      case 'ez-tet-ctet': {
+        handleNavigateTab('tet-ctet');
         return;
       }
       case 'ez-chapter-tests':
@@ -566,6 +580,7 @@ const AppContent: React.FC = () => {
     if (currentTab === 'all-courses') return 'courses';
     if (
       currentTab === 'scholarship' ||
+      currentTab === 'tet-ctet' ||
       currentTab === 'drawing' ||
       currentTab === 'stories' ||
       currentTab === 'shivaji' ||
@@ -779,6 +794,7 @@ const AppContent: React.FC = () => {
                   'all-courses',
                   'other-programs',
                   'scholarship',
+                  'tet-ctet',
                   'drawing',
                   'stories',
                   'shivaji',
@@ -897,6 +913,8 @@ const AppContent: React.FC = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
+          ) : currentTab === 'tet-ctet' ? (
+            <TetCtetView />
           ) : (['scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku', 'future-skills', 'ai-academy'] as const).includes(currentTab as 'scholarship') ? (
             (() => {
               const sectionKeyMap: Record<string, SpecialLearningSectionId> = {
@@ -995,6 +1013,7 @@ const AppContent: React.FC = () => {
                     'all-courses',
                     'other-programs',
                     'scholarship',
+                    'tet-ctet',
                     'drawing',
                     'stories',
                     'shivaji',

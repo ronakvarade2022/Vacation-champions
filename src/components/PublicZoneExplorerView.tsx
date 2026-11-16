@@ -751,6 +751,17 @@ export const PublicZoneExplorerView: React.FC<PublicZoneExplorerViewProps> = ({
               cta: 'Start Timed Assessment',
               onClick: () => triggerTab('quizzes', effectiveSubject, 2),
             },
+            {
+              id: 'ez-tet-ctet',
+              title: '7. TET & CTET Exam Prep (MAHA TET & CTET)',
+              questionsCount: '150 Questions / Mock',
+              timeLimit: '150 Minutes (02:30:00)',
+              difficulty: '200 Full Mocks · 30,000 Qs',
+              diffBadge: 'bg-violet-100 text-violet-900 border-violet-300',
+              desc: 'Complete MAHA TET & CTET Paper 1 & 2 CBT preparation with 50 mocks per module, Subject Practice, Official Syllabi & Progress Charts.',
+              cta: 'Open TET & CTET Hub',
+              onClick: () => triggerTab('tet-ctet'),
+            },
           ].map((exam) => (
             <div
               key={exam.id}

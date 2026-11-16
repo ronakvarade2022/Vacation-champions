@@ -100,6 +100,9 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
     if (subId === 'sl-scholarship' || subId === 'ez-mock-tests') {
       return { ill: 'scholarship' as const, bg: 'from-[#dcfce7] to-[#86efac]', border: 'border-emerald-300' };
     }
+    if (subId === 'sl-tet-ctet' || subId === 'ez-tet-ctet') {
+      return { emoji: '🎓', bg: 'from-[#e0e7ff] to-[#a5b4fc]', border: 'border-indigo-400' };
+    }
     if (subId === 'sl-gk') {
       return { ill: 'cricket' as const, bg: 'from-[#e0f2fe] to-[#7dd3fc]', border: 'border-sky-300' };
     }

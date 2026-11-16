@@ -60,6 +60,9 @@ const AdminCricketSection = lazy(() =>
 const AdminScholarshipSection = lazy(() =>
   import('./admin/AdminScholarshipSection').then((m) => ({ default: m.AdminScholarshipSection }))
 );
+const AdminTetCtetSection = lazy(() =>
+  import('./admin/AdminTetCtetSection').then((m) => ({ default: m.AdminTetCtetSection }))
+);
 const AdminSettingsSection = lazy(() =>
   import('./admin/AdminSettingsSection').then((m) => ({ default: m.AdminSettingsSection }))
 );
@@ -86,6 +89,7 @@ type AdminSectionId =
   | 'settings'
   | 'cricket'
   | 'scholarship'
+  | 'tet-ctet'
   | 'support'
   | 'profile';
 
@@ -495,6 +499,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('tet-ctet')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'tet-ctet'
+              ? 'bg-indigo-700 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-indigo-50'
+          }`}
+        >
+          <span>🎓</span>
+          <span>TET &amp; CTET (200 Mocks)</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('settings')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'settings'
@@ -626,6 +642,8 @@ export const AdminDashboard: React.FC = () => {
             onDeleteCustomQuestion={deleteCustomScholarshipQuestion}
           />
         )}
+
+        {activeSection === 'tet-ctet' && <AdminTetCtetSection />}
 
         {activeSection === 'settings' && (
           <AdminSettingsSection

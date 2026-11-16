@@ -104,6 +104,18 @@ import {
   MsceStdLevel
 } from '../data/msceMockExamEngine';
 import {
+  TetCtetAttemptRecord,
+  TetCtetBatchStatusRecord,
+  TetCtetModuleId,
+  TetCtetQuestion,
+  TetCtetUserPreferences,
+} from '../types/tetCtet';
+import {
+  buildInitialTetCtetBatches,
+  verifySingleTetCtetBatch,
+} from '../data/tetCtetQuestionEngine';
+import { DEFAULT_TET_CTET_PREFERENCES } from '../data/tetCtetSyllabi';
+import {
   buildBoardClassKey,
   canAccessWorksheet,
   canSwitchBoardAndClass,
@@ -346,6 +358,20 @@ interface AppContextType {
   saveCustomMsceMockQuestion: (question: MsceMockQuestion) => void;
   deleteCustomMsceMockQuestion: (id: string) => void;
   bulkImportCustomMsceMockQuestions: (questions: MsceMockQuestion[]) => { importedCount: number; skippedDuplicates: number };
+
+  // TET & CTET Exam Preparation System (200 Mock Tests · 30,000 Questions)
+  tetCtetPreferences: TetCtetUserPreferences;
+  updateTetCtetPreferences: (next: Partial<TetCtetUserPreferences>) => void;
+  tetCtetAttempts: TetCtetAttemptRecord[];
+  recordTetCtetAttempt: (attempt: Omit<TetCtetAttemptRecord, 'id' | 'completedAt'>) => Promise<TetCtetAttemptRecord>;
+  tetCtetBatches: Record<string, TetCtetBatchStatusRecord>;
+  verifyAndGenerateTetCtetBatch: (moduleId: TetCtetModuleId, batchNumber: number) => { duplicateCount: number; invalidCount: number; checkedQuestions: number };
+  toggleTetCtetBatchApproved: (batchKey: string) => void;
+  toggleTetCtetBatchPublished: (batchKey: string) => void;
+  customTetCtetQuestions: TetCtetQuestion[];
+  saveCustomTetCtetQuestion: (question: TetCtetQuestion) => void;
+  rejectedTetCtetIds: string[];
+  toggleRejectTetCtetQuestion: (id: string) => void;
 
   // Admin platform settings
   updateTimers: (c23: number, c45: number, c68: number) => void;
@@ -785,6 +811,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const [tetCtetPreferences, setTetCtetPreferences] = useState<TetCtetUserPreferences>(() => {
+    try {
+      const saved = localStorage.getItem('vc_tet_ctet_preferences');
+      if (saved) return { ...DEFAULT_TET_CTET_PREFERENCES, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_TET_CTET_PREFERENCES;
+  });
+
+  const [tetCtetGuestAttempts, setTetCtetGuestAttempts] = useState<TetCtetAttemptRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_tet_ctet_attempts');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [tetCtetBatches, setTetCtetBatches] = useState<Record<string, TetCtetBatchStatusRecord>>(() => {
+    try {
+      const saved = localStorage.getItem('vc_tet_ctet_batches');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return buildInitialTetCtetBatches();
+  });
+
+  const [customTetCtetQuestions, setCustomTetCtetQuestions] = useState<TetCtetQuestion[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_custom_tet_ctet_questions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [rejectedTetCtetIds, setRejectedTetCtetIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('vc_rejected_tet_ctet_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [gkQuestions, setGkQuestions] = useState<CustomGkQuestionItem[]>(() => {
     const builtIn: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap(lvl =>
       (DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map(q => ({
@@ -952,6 +1021,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     safeSetLocalStorage('vc_custom_msce_mock_questions', JSON.stringify(customMsceMockQuestions));
   }, [customMsceMockQuestions]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_tet_ctet_preferences', JSON.stringify(tetCtetPreferences));
+  }, [tetCtetPreferences]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_tet_ctet_batches', JSON.stringify(tetCtetBatches));
+  }, [tetCtetBatches]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_custom_tet_ctet_questions', JSON.stringify(customTetCtetQuestions));
+  }, [customTetCtetQuestions]);
+
+  useEffect(() => {
+    safeSetLocalStorage('vc_rejected_tet_ctet_ids', JSON.stringify(rejectedTetCtetIds));
+  }, [rejectedTetCtetIds]);
 
   useEffect(() => {
     const customOrModified = gkQuestions.filter(q => q.isCustom || q.published === false);
@@ -3792,6 +3877,177 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { importedCount, skippedDuplicates };
   };
 
+  const tetCtetAttempts = useMemo<TetCtetAttemptRecord[]>(() => {
+    if (currentStudent?.tetCtetAttempts && currentStudent.tetCtetAttempts.length > 0) {
+      return currentStudent.tetCtetAttempts;
+    }
+    return tetCtetGuestAttempts;
+  }, [currentStudent?.tetCtetAttempts, tetCtetGuestAttempts]);
+
+  const updateTetCtetPreferences = (next: Partial<TetCtetUserPreferences>) => {
+    const merged: TetCtetUserPreferences = {
+      ...(currentStudent?.tetCtetPreferences || tetCtetPreferences),
+      ...next,
+    };
+    setTetCtetPreferences(merged);
+    if (currentStudent) {
+      const updatedStudent: StudentProfile = {
+        ...currentStudent,
+        tetCtetPreferences: merged,
+        lastActiveDate: new Date().toISOString(),
+      };
+      setCurrentStudent(updatedStudent);
+      setStudentsList(prev => prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s)));
+      saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+    }
+  };
+
+  const recordTetCtetAttempt = async (
+    attemptData: Omit<TetCtetAttemptRecord, 'id' | 'completedAt'>
+  ): Promise<TetCtetAttemptRecord> => {
+    const newAttempt: TetCtetAttemptRecord = {
+      ...attemptData,
+      id: `tet_ctet_att_${Date.now()}`,
+      completedAt: new Date().toISOString(),
+    };
+
+    setTetCtetGuestAttempts(prev => {
+      const updated = [newAttempt, ...prev].slice(0, 200);
+      safeSetLocalStorage('vc_tet_ctet_attempts', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (currentStudent) {
+      const bonusPoints = Math.max(10, attemptData.marksObtained * 2);
+      const bonusCoins = Math.max(5, Math.floor(attemptData.marksObtained / 2));
+      const updatedAttempts = [newAttempt, ...(currentStudent.tetCtetAttempts || [])].slice(0, 200);
+      const updatedStudent: StudentProfile = {
+        ...currentStudent,
+        points: (currentStudent.points || 0) + bonusPoints,
+        coins: (currentStudent.coins || 0) + bonusCoins,
+        tetCtetAttempts: updatedAttempts,
+        lastActiveDate: new Date().toISOString(),
+      };
+      setCurrentStudent(updatedStudent);
+      setStudentsList(prev => prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s)));
+      saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+
+      const examTitle = attemptData.exam === 'MAHA_TET' ? 'MAHA TET' : 'CTET';
+      const testLabel =
+        attemptData.mode === 'MOCK'
+          ? `${examTitle} P${attemptData.paper} Mock #${String(attemptData.mockTestNumber || 1).padStart(2, '0')}`
+          : `${examTitle} P${attemptData.paper} ${attemptData.practiceTitle || attemptData.mode}`;
+
+      await saveScholarshipAttemptToFirestore(
+        currentStudent.id,
+        {
+          id: newAttempt.id,
+          studentId: currentStudent.id,
+          subject: testLabel.slice(0, 98),
+          totalQuestions: attemptData.totalQuestions,
+          correctCount: attemptData.correctCount,
+          scorePercent: attemptData.percentage,
+          timeSpentSeconds: attemptData.timeTakenSeconds,
+          classLevel: `${examTitle} Paper ${attemptData.paper}`,
+          setNumber: attemptData.mockTestNumber || 1,
+          marksObtained: attemptData.marksObtained,
+          maxMarks: attemptData.maxMarks,
+          completedAt: newAttempt.completedAt,
+        },
+        []
+      ).catch(() => {});
+
+      addNotification(
+        `${testLabel} Completed`,
+        `You scored ${attemptData.marksObtained}/${attemptData.maxMarks} (${attemptData.percentage}%) and earned +${bonusPoints} Points!`,
+        'quiz'
+      );
+    }
+
+    return newAttempt;
+  };
+
+  const verifyAndGenerateTetCtetBatch = (moduleId: TetCtetModuleId, batchNumber: number) => {
+    const check = verifySingleTetCtetBatch(moduleId, batchNumber, customTetCtetQuestions, rejectedTetCtetIds);
+    const batchKey = `${moduleId}_B${batchNumber}`;
+    setTetCtetBatches(prev => {
+      const existing = prev[batchKey];
+      const startTest = (batchNumber - 1) * 5 + 1;
+      const exam = moduleId.startsWith('MAHA_TET') ? 'MAHA_TET' : 'CTET';
+      const paper = moduleId.endsWith('P1') ? 1 : 2;
+      return {
+        ...prev,
+        [batchKey]: {
+          ...(existing || {
+            batchKey,
+            moduleId,
+            exam,
+            paper,
+            batchNumber,
+            testRange: [startTest, startTest + 4] as [number, number],
+            totalTests: 5,
+            totalQuestions: 750,
+            approved: true,
+            published: true,
+          }),
+          generated: true,
+          verified: check.duplicateCount === 0 && check.invalidCount === 0,
+          duplicateCount: check.duplicateCount,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    });
+    return check;
+  };
+
+  const toggleTetCtetBatchApproved = (batchKey: string) => {
+    setTetCtetBatches(prev => {
+      const existing = prev[batchKey];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [batchKey]: {
+          ...existing,
+          approved: !existing.approved,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    });
+  };
+
+  const toggleTetCtetBatchPublished = (batchKey: string) => {
+    setTetCtetBatches(prev => {
+      const existing = prev[batchKey];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [batchKey]: {
+          ...existing,
+          published: !existing.published,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    });
+  };
+
+  const saveCustomTetCtetQuestion = (question: TetCtetQuestion) => {
+    setCustomTetCtetQuestions(prev => {
+      const idx = prev.findIndex(q => q.id === question.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...question, isCustomOverride: true };
+        return next;
+      }
+      return [{ ...question, isCustomOverride: true }, ...prev];
+    });
+  };
+
+  const toggleRejectTetCtetQuestion = (id: string) => {
+    setRejectedTetCtetIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [id, ...prev]
+    );
+  };
+
   const clearAllNotifications = () => {
     setNotifications([]);
   };
@@ -3904,6 +4160,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveCustomMsceMockQuestion,
       deleteCustomMsceMockQuestion,
       bulkImportCustomMsceMockQuestions,
+      tetCtetPreferences,
+      updateTetCtetPreferences,
+      tetCtetAttempts,
+      recordTetCtetAttempt,
+      tetCtetBatches,
+      verifyAndGenerateTetCtetBatch,
+      toggleTetCtetBatchApproved,
+      toggleTetCtetBatchPublished,
+      customTetCtetQuestions,
+      saveCustomTetCtetQuestion,
+      rejectedTetCtetIds,
+      toggleRejectTetCtetQuestion,
       updateTimers,
       markNotificationAsRead,
       clearAllNotifications,
@@ -3924,6 +4192,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       customScholarshipQuestions,
       publishedMsceMockTests,
       customMsceMockQuestions,
+      tetCtetPreferences,
+      tetCtetAttempts,
+      tetCtetBatches,
+      customTetCtetQuestions,
+      rejectedTetCtetIds,
       gkQuestions,
       learningPrograms,
       allPuzzles,

@@ -27,6 +27,7 @@ export type NavSubActionId =
   | 'sl-shivaji'
   | 'sl-moral'
   | 'sl-scholarship'
+  | 'sl-tet-ctet'
   | 'sl-gk'
   | 'sl-ai-academy'
   | 'sl-creative'
@@ -58,6 +59,7 @@ export type NavSubActionId =
   | 'ez-subject-tests'
   | 'ez-full-syllabus'
   | 'ez-mock-tests'
+  | 'ez-tet-ctet'
   | 'ez-competitive'
   | 'ez-timed'
   | 'ez-model-papers'
@@ -214,6 +216,12 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         description: 'MSCE Std 4th (PSE) & Std 7th (UPS) Scholarship preparation studio',
         badgeText: 'Std 4 & 7',
         sectionVisibilityKey: 'scholarship',
+      },
+      {
+        id: 'sl-tet-ctet',
+        label: '🎓 TET & CTET Exam Prep',
+        description: '200 Full Mock Tests & 30,000 Qs for MAHA TET & CTET (Paper 1 & 2)',
+        badgeText: '200 Mocks',
       },
       {
         id: 'sl-gk',
@@ -397,6 +405,12 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         label: 'Scholarship Mock Tests',
         description: '50 Questions · 90 Mins · Official MSCE Std 4th & 7th mock papers',
         badgeText: '50 Qs · 90m',
+      },
+      {
+        id: 'ez-tet-ctet',
+        label: '🎓 TET & CTET Mock Tests',
+        description: '200 CBT Mock Tests · 150 Qs · 150 Mins · MAHA TET & CTET',
+        badgeText: '200 Mocks',
       },
       {
         id: 'ez-competitive',
