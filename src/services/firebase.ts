@@ -127,8 +127,82 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Connection test on boot
+// In-memory TTL cache + in-flight request deduplicator for student and referral docs
+const DOC_CACHE_TTL_MS = 30_000;
+const studentDocCache = new Map<string, { ts: number; data: Record<string, any> | null }>();
+const studentDocInFlight = new Map<string, Promise<Record<string, any> | null>>();
+const referralDocCache = new Map<string, { ts: number; data: Record<string, any> | null }>();
+const referralDocInFlight = new Map<string, Promise<Record<string, any> | null>>();
+
+async function getCachedStudentDoc(studentId: string): Promise<Record<string, any> | null> {
+  const cleanId = String(studentId || '').trim();
+  if (!cleanId) return null;
+  const cached = studentDocCache.get(cleanId);
+  if (cached && Date.now() - cached.ts < DOC_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const existingPromise = studentDocInFlight.get(cleanId);
+  if (existingPromise) {
+    return existingPromise;
+  }
+  const promise = (async () => {
+    try {
+      const snap = await getDoc(doc(db, 'students', cleanId));
+      const data = snap.exists() ? (snap.data() as Record<string, any>) : null;
+      studentDocCache.set(cleanId, { ts: Date.now(), data });
+      return data;
+    } catch {
+      return null;
+    } finally {
+      studentDocInFlight.delete(cleanId);
+    }
+  })();
+  studentDocInFlight.set(cleanId, promise);
+  return promise;
+}
+
+function updateCachedStudentDoc(studentId: string, partialData: Record<string, any>): void {
+  const cleanId = String(studentId || '').trim();
+  if (!cleanId) return;
+  const prev = studentDocCache.get(cleanId)?.data || {};
+  studentDocCache.set(cleanId, {
+    ts: Date.now(),
+    data: { ...prev, ...partialData },
+  });
+}
+
+async function getCachedReferralDoc(studentId: string): Promise<Record<string, any> | null> {
+  const cleanId = String(studentId || '').trim();
+  if (!cleanId) return null;
+  const cached = referralDocCache.get(cleanId);
+  if (cached && Date.now() - cached.ts < DOC_CACHE_TTL_MS * 2) {
+    return cached.data;
+  }
+  const existingPromise = referralDocInFlight.get(cleanId);
+  if (existingPromise) {
+    return existingPromise;
+  }
+  const promise = (async () => {
+    try {
+      const snap = await getDoc(doc(db, 'referrals', cleanId));
+      const data = snap.exists() ? (snap.data() as Record<string, any>) : null;
+      referralDocCache.set(cleanId, { ts: Date.now(), data });
+      return data;
+    } catch {
+      return null;
+    } finally {
+      referralDocInFlight.delete(cleanId);
+    }
+  })();
+  referralDocInFlight.set(cleanId, promise);
+  return promise;
+}
+
+let connectionTestedOnce = false;
+// Connection test on boot (runs once per session in idle background)
 export async function testFirestoreConnection() {
+  if (connectionTestedOnce) return;
+  connectionTestedOnce = true;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return;
   }
@@ -603,13 +677,11 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     let refDocExists = false;
 
     try {
-      const [stuSnap, refSnap] = await Promise.all([
-        getDoc(studentRef).catch(() => null),
-        getDoc(referralRef).catch(() => null),
+      const [stuData, refData] = await Promise.all([
+        getCachedStudentDoc(student.id),
+        getCachedReferralDoc(student.id),
       ]);
-      const stuData = stuSnap && stuSnap.exists() ? stuSnap.data() : null;
-      refDocExists = Boolean(refSnap && refSnap.exists());
-      const refData = refDocExists && refSnap ? refSnap.data() : null;
+      refDocExists = Boolean(refData);
 
       const storedCode =
         sanitizeReferralCode(stuData?.referralCode) ||
@@ -751,6 +823,7 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       })
     );
     await setDoc(studentRef, cleanData, { merge: true });
+    updateCachedStudentDoc(student.id, cleanData);
 
     // Also ensure /referrals/{student.id} exists in Firestore with the exact same permanent referralCode
     try {
@@ -835,13 +908,10 @@ export async function ensureStudentReferralCodeInFirestore(
   try {
     const studentRef = doc(db, 'students', cleanId);
     const referralRef = doc(db, 'referrals', cleanId);
-    const [stuSnap, refSnap] = await Promise.all([
-      getDoc(studentRef).catch(() => null),
-      getDoc(referralRef).catch(() => null),
+    const [stuData, refData] = await Promise.all([
+      getCachedStudentDoc(cleanId),
+      getCachedReferralDoc(cleanId),
     ]);
-
-    const stuData = stuSnap && stuSnap.exists() ? stuSnap.data() : null;
-    const refData = refSnap && refSnap.exists() ? refSnap.data() : null;
 
     const resolvedCode =
       sanitizeReferralCode(stuData?.referralCode) ||
@@ -1031,9 +1101,8 @@ export async function saveSubscriptionToFirestore(
     let existingData: any = null;
 
     try {
-      const existingSnap = await getDoc(studentRef);
-      if (existingSnap.exists()) {
-        existingData = existingSnap.data();
+      existingData = await getCachedStudentDoc(studentId);
+      if (existingData) {
         const existingTargetRec =
           (targetCompositeKey && existingData?.classSubscriptions?.[targetCompositeKey]) ||
           (targetBoard === 'Maharashtra' && targetClass && existingData?.classSubscriptions?.[targetClass]);
@@ -1146,6 +1215,7 @@ export async function saveSubscriptionToFirestore(
       })
     );
     await setDoc(studentRef, cleanSub, { merge: true });
+    updateCachedStudentDoc(studentId, cleanSub);
     return {
       success: true,
       plan: subscriptionData.plan,
@@ -1241,11 +1311,10 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
 }> {
   if (!studentId) return { found: false };
   try {
-    const snap = await getDoc(doc(db, 'students', studentId));
-    if (!snap.exists()) {
+    const data = await getCachedStudentDoc(studentId);
+    if (!data) {
       return { found: false };
     }
-    const data = snap.data();
     const rawPlan = data?.plan;
     const plan: 'free' | 'basic' | 'premium' =
       rawPlan === 'premium' || rawPlan === 'basic' ? rawPlan : 'free';
@@ -1303,6 +1372,7 @@ export async function switchStudentActiveClassInFirestore(
       updatePayload.board = normalizeBoardValue(targetBoard);
     }
     await updateDoc(doc(db, 'students', studentId), updatePayload);
+    updateCachedStudentDoc(studentId, updatePayload);
     return { success: true };
   } catch {
     return { success: false };
@@ -1332,9 +1402,9 @@ export async function fetchStudentProfileFromFirestore(
 
   try {
     if (cleanUid) {
-      const directSnap = await getDoc(doc(db, 'students', cleanUid)).catch(() => null);
-      if (directSnap && directSnap.exists()) {
-        const data = directSnap.data() as StudentProfile;
+      const directData = await getCachedStudentDoc(cleanUid);
+      if (directData) {
+        const data = directData as StudentProfile;
         const { passwordHash: _ignored, ...safeProfile } = data;
         return {
           ...safeProfile,

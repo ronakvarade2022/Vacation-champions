@@ -2,20 +2,45 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
-import { SubjectQuizView } from './components/SubjectQuizView';
-import { DemoSectionView } from './components/DemoSectionView';
-import { MembershipModal } from './components/MembershipModal';
-import { PlanUpgradePromptModal } from './components/PlanUpgradePromptModal';
-import { AuthModal } from './components/AuthModal';
-import { PasswordResetModal } from './components/PasswordResetModal';
-import { HelpSupportView } from './components/HelpSupportView';
-import { GrievanceRedressalView } from './components/GrievanceRedressalView';
-import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
-import { AboutUsView } from './components/AboutUsView';
-import { ContactUsView } from './components/ContactUsView';
-import { FaqsView } from './components/FaqsView';
+import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 
+const SubjectQuizView = lazy(() =>
+  import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
+);
+const DemoSectionView = lazy(() =>
+  import('./components/DemoSectionView').then((m) => ({ default: m.DemoSectionView }))
+);
+const MembershipModal = lazy(() =>
+  import('./components/MembershipModal').then((m) => ({ default: m.MembershipModal }))
+);
+const PlanUpgradePromptModal = lazy(() =>
+  import('./components/PlanUpgradePromptModal').then((m) => ({ default: m.PlanUpgradePromptModal }))
+);
+const AuthModal = lazy(() =>
+  import('./components/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+const PasswordResetModal = lazy(() =>
+  import('./components/PasswordResetModal').then((m) => ({ default: m.PasswordResetModal }))
+);
+const HelpSupportView = lazy(() =>
+  import('./components/HelpSupportView').then((m) => ({ default: m.HelpSupportView }))
+);
+const GrievanceRedressalView = lazy(() =>
+  import('./components/GrievanceRedressalView').then((m) => ({ default: m.GrievanceRedressalView }))
+);
+const TermsAndPrivacyView = lazy(() =>
+  import('./components/TermsAndPrivacyView').then((m) => ({ default: m.TermsAndPrivacyView }))
+);
+const AboutUsView = lazy(() =>
+  import('./components/AboutUsView').then((m) => ({ default: m.AboutUsView }))
+);
+const ContactUsView = lazy(() =>
+  import('./components/ContactUsView').then((m) => ({ default: m.ContactUsView }))
+);
+const FaqsView = lazy(() =>
+  import('./components/FaqsView').then((m) => ({ default: m.FaqsView }))
+);
 const AdminDashboard = lazy(() =>
   import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
 );
@@ -64,9 +89,6 @@ const WorksheetsView = lazy(() =>
 );
 const StudyMaterialsView = lazy(() =>
   import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
-);
-const PublicHomeDashboard = lazy(() =>
-  import('./components/PublicHomeDashboard').then((m) => ({ default: m.PublicHomeDashboard }))
 );
 const PublicZoneExplorerView = lazy(() =>
   import('./components/PublicZoneExplorerView').then((m) => ({ default: m.PublicZoneExplorerView }))
@@ -223,6 +245,15 @@ const AppContent: React.FC = () => {
       document.title = 'MyStudyZone (mystudyzone.in) – Classes 1 to 10 Online Learning Platform';
     }
   }, [currentTab, activeRole, currentUser?.role, currentStudent?.id, currentStudent?.accountRole, currentStudent?.classLevel, activeBoard]);
+
+  // Warm-cache AuthModal & MembershipModal chunks after initial paint so button clicks open modals with zero delay
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void import('./components/AuthModal');
+      void import('./components/MembershipModal');
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, []);
 
   // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...)
   useEffect(() => {
@@ -1359,73 +1390,83 @@ const AppContent: React.FC = () => {
           )}
       </main>
 
-      {/* Global Modals */}
-      <MembershipModal
-        isOpen={isMembershipOpen}
-        onClose={() => setIsMembershipOpen(false)}
-        initialSelectedPlan={membershipInitialPlan}
-        initialSelectedClass={membershipTargetClass}
-        initialSelectedBoard={membershipTargetBoard}
-        onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
-      />
+      {/* Global Modals (Mounted on-demand inside Suspense so initial page render is ultra-fast) */}
+      <Suspense fallback={null}>
+        {isMembershipOpen && (
+          <MembershipModal
+            isOpen={isMembershipOpen}
+            onClose={() => setIsMembershipOpen(false)}
+            initialSelectedPlan={membershipInitialPlan}
+            initialSelectedClass={membershipTargetClass}
+            initialSelectedBoard={membershipTargetBoard}
+            onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
+          />
+        )}
 
-      <PlanUpgradePromptModal
-        isOpen={upgradePrompt.isOpen}
-        onClose={() => setUpgradePrompt((prev) => ({ ...prev, isOpen: false }))}
-        currentStudent={currentStudent}
-        targetClass={currentStudent?.classLevel}
-        targetBoard={activeBoard}
-        featureTitle={upgradePrompt.featureTitle}
-        requiredPlan={upgradePrompt.requiredPlan}
-        upgradeMessage={upgradePrompt.reasonMessage}
-        onSelectUpgradePlan={() => {
-          setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
-          openMembershipWithPlan('premium', currentStudent?.classLevel, activeBoard);
-        }}
-        onTryDemo={() => {
-          setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
-          setCurrentTab('demo');
-        }}
-      />
+        {upgradePrompt.isOpen && (
+          <PlanUpgradePromptModal
+            isOpen={upgradePrompt.isOpen}
+            onClose={() => setUpgradePrompt((prev) => ({ ...prev, isOpen: false }))}
+            currentStudent={currentStudent}
+            targetClass={currentStudent?.classLevel}
+            targetBoard={activeBoard}
+            featureTitle={upgradePrompt.featureTitle}
+            requiredPlan={upgradePrompt.requiredPlan}
+            upgradeMessage={upgradePrompt.reasonMessage}
+            onSelectUpgradePlan={() => {
+              setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
+              openMembershipWithPlan('premium', currentStudent?.classLevel, activeBoard);
+            }}
+            onTryDemo={() => {
+              setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
+              setCurrentTab('demo');
+            }}
+          />
+        )}
 
-      <AuthModal
-        isOpen={isAuthModalOpen || isAuthOpen}
-        defaultTab={authDefaultTab}
-        initialEmail={authInitialEmail}
-        initialBoard={publicBoard}
-        initialClass={publicClass}
-        onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
-          openMembershipWithPlan('premium', targetClass, targetBoard);
-        }}
-        onClose={() => {
-          setIsAuthModalOpen(false);
-          setIsAuthOpen(false);
-          setAuthDefaultTab('login');
-        }}
-      />
+        {(isAuthModalOpen || isAuthOpen) && (
+          <AuthModal
+            isOpen={isAuthModalOpen || isAuthOpen}
+            defaultTab={authDefaultTab}
+            initialEmail={authInitialEmail}
+            initialBoard={publicBoard}
+            initialClass={publicClass}
+            onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
+              openMembershipWithPlan('premium', targetClass, targetBoard);
+            }}
+            onClose={() => {
+              setIsAuthModalOpen(false);
+              setIsAuthOpen(false);
+              setAuthDefaultTab('login');
+            }}
+          />
+        )}
 
-      <PasswordResetModal
-        isOpen={isResetModalOpen}
-        oobCode={resetOobCode}
-        onClose={() => {
-          setIsResetModalOpen(false);
-          clearResetQueryParams();
-        }}
-        onRequestAnotherLink={(email) => {
-          setIsResetModalOpen(false);
-          clearResetQueryParams();
-          if (email) setAuthInitialEmail(email);
-          setAuthDefaultTab('forgot');
-          setIsAuthModalOpen(true);
-        }}
-        onProceedToLogin={(email) => {
-          setIsResetModalOpen(false);
-          clearResetQueryParams();
-          if (email) setAuthInitialEmail(email);
-          setAuthDefaultTab('login');
-          setIsAuthModalOpen(true);
-        }}
-      />
+        {isResetModalOpen && (
+          <PasswordResetModal
+            isOpen={isResetModalOpen}
+            oobCode={resetOobCode}
+            onClose={() => {
+              setIsResetModalOpen(false);
+              clearResetQueryParams();
+            }}
+            onRequestAnotherLink={(email) => {
+              setIsResetModalOpen(false);
+              clearResetQueryParams();
+              if (email) setAuthInitialEmail(email);
+              setAuthDefaultTab('forgot');
+              setIsAuthModalOpen(true);
+            }}
+            onProceedToLogin={(email) => {
+              setIsResetModalOpen(false);
+              clearResetQueryParams();
+              if (email) setAuthInitialEmail(email);
+              setAuthDefaultTab('login');
+              setIsAuthModalOpen(true);
+            }}
+          />
+        )}
+      </Suspense>
 
       {/* Professional Education Platform Footer */}
       <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-12 pb-8 text-xs">

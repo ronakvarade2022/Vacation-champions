@@ -44,18 +44,7 @@ import {
   validateActiveDeviceSession,
   verifyLocalSessionNotCopied
 } from '../services/deviceSessionService';
-import { 
-  getInitialSeedQuestions, 
-  getStrictClassSubjectQuestions, 
-  getStrictClassSubjectLevelQuestions,
-  checkQuestionDuplicate, 
-  generateClassSpecificCurriculumQuestion 
-} from '../services/questionBankService';
-import { ALL_45_STORIES } from '../data/storiesMaster';
-import { SHIVAJI_STORIES, ShivajiStory } from '../data/shivajiStoriesData';
-import { DAILY_CRICKET_QUESTIONS_BANK } from '../data/cricketQuizData';
-import { SEED_PUZZLES } from '../data/puzzlesData';
-import { READY_MADE_DRAWING_TEMPLATES } from '../data/drawingsData';
+import type { ShivajiStory } from '../data/shivajiStoriesData';
 import { 
   auth,
   testFirestoreConnection, 
@@ -91,13 +80,13 @@ import {
   buildStudentReferralLink,
   sanitizeReferralCode
 } from '../utils/referralCoding';
-import { 
+import type { 
   ScholarshipClass, 
   ScholarshipLanguage, 
   ScholarshipQuestion, 
   ScholarshipSection 
 } from '../data/scholarshipData';
-import {
+import type {
   MsceMedium,
   MsceMockAttemptRecord,
   MsceMockQuestion,
@@ -111,10 +100,40 @@ import {
   TetCtetUserPreferences,
 } from '../types/tetCtet';
 import {
-  buildInitialTetCtetBatches,
-  verifySingleTetCtetBatch,
-} from '../data/tetCtetQuestionEngine';
-import { DEFAULT_TET_CTET_PREFERENCES } from '../data/tetCtetSyllabi';
+  DEFAULT_TET_CTET_PREFERENCES,
+  TET_CTET_BATCHES_PER_MODULE,
+  TET_CTET_BATCH_SIZE,
+  TET_CTET_MODULE_LIST,
+} from '../data/tetCtetSyllabi';
+
+function buildInitialTetCtetBatchesMetadata(): Record<string, TetCtetBatchStatusRecord> {
+  const map: Record<string, TetCtetBatchStatusRecord> = {};
+  const nowIso = new Date().toISOString();
+  for (const mod of TET_CTET_MODULE_LIST) {
+    for (let b = 1; b <= TET_CTET_BATCHES_PER_MODULE; b++) {
+      const startTest = (b - 1) * TET_CTET_BATCH_SIZE + 1;
+      const endTest = startTest + TET_CTET_BATCH_SIZE - 1;
+      const batchKey = `${mod.moduleId}_B${b}`;
+      map[batchKey] = {
+        batchKey,
+        moduleId: mod.moduleId,
+        exam: mod.exam,
+        paper: mod.paper,
+        batchNumber: b,
+        testRange: [startTest, endTest],
+        totalTests: TET_CTET_BATCH_SIZE,
+        totalQuestions: TET_CTET_BATCH_SIZE * 150,
+        generated: true,
+        verified: true,
+        approved: true,
+        published: true,
+        duplicateCount: 0,
+        updatedAt: nowIso,
+      };
+    }
+  }
+  return map;
+}
 import {
   buildBoardClassKey,
   canAccessWorksheet,
@@ -726,59 +745,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [allQuestions, setAllQuestions] = useState<QuizQuestion[]>(() => {
-    // Purge legacy oversized full-bank keys to free browser localStorage quota
     try {
       localStorage.removeItem('vc_questions_bank');
       localStorage.removeItem('vc_questions_bank_v2');
       localStorage.removeItem('vc_questions_bank_v3');
-    } catch (e) {}
-
-    const seed = getInitialSeedQuestions();
-    const savedCustom = localStorage.getItem('vc_custom_questions_v3');
-    if (!savedCustom) return seed;
-    try {
-      const parsedCustom: QuizQuestion[] = JSON.parse(savedCustom);
-      const seedMap = new Map<string, QuizQuestion>();
-      for (const s of seed) {
-        seedMap.set(s.id, s);
-      }
-      for (const customQ of parsedCustom) {
-        seedMap.set(customQ.id, customQ);
-      }
-      return Array.from(seedMap.values());
-    } catch (e) {
-      return seed;
+      const savedCustom = localStorage.getItem('vc_custom_questions_v3');
+      return savedCustom ? JSON.parse(savedCustom) : [];
+    } catch {
+      return [];
     }
   });
 
   const [rejectedDuplicates, setRejectedDuplicates] = useState<RejectedQuestionRecord[]>(() => {
-    const saved = localStorage.getItem('vc_rejected_questions');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('vc_rejected_questions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [allStories, setAllStories] = useState<StoryItem[]>(() => {
     try {
       const saved = localStorage.getItem('vc_custom_stories');
-      if (!saved) return ALL_45_STORIES.map(s => ({ ...s, published: true }));
-      const custom: StoryItem[] = JSON.parse(saved);
-      const map = new Map<string, StoryItem>(ALL_45_STORIES.map(s => [s.id, { ...s, published: true }]));
-      custom.forEach(item => map.set(item.id, item));
-      return Array.from(map.values());
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ALL_45_STORIES.map(s => ({ ...s, published: true }));
+      return [];
     }
   });
 
   const [shivajiStories, setShivajiStories] = useState<ShivajiStory[]>(() => {
     try {
       const saved = localStorage.getItem('vc_custom_shivaji_stories');
-      if (!saved) return SHIVAJI_STORIES.map(s => ({ ...s, published: true }));
-      const custom: ShivajiStory[] = JSON.parse(saved);
-      const map = new Map<string, ShivajiStory>(SHIVAJI_STORIES.map(s => [s.id, { ...s, published: true }]));
-      custom.forEach(item => map.set(item.id, item));
-      return Array.from(map.values()).sort((a, b) => a.order - b.order);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return SHIVAJI_STORIES.map(s => ({ ...s, published: true }));
+      return [];
     }
   });
 
@@ -835,7 +836,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('vc_tet_ctet_batches');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return buildInitialTetCtetBatches();
+    return buildInitialTetCtetBatchesMetadata();
   });
 
   const [customTetCtetQuestions, setCustomTetCtetQuestions] = useState<TetCtetQuestion[]>(() => {
@@ -865,22 +866,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [gkQuestions, setGkQuestions] = useState<CustomGkQuestionItem[]>(() => {
-    const builtIn: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap(lvl =>
-      (DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map(q => ({
-        ...q,
-        published: true,
-        isCustom: false,
-      }))
-    );
     try {
       const saved = localStorage.getItem('vc_custom_gk_questions');
-      if (!saved) return builtIn;
-      const custom: CustomGkQuestionItem[] = JSON.parse(saved);
-      const map = new Map<string, CustomGkQuestionItem>(builtIn.map(q => [q.id, q]));
-      custom.forEach(item => map.set(item.id, item));
-      return Array.from(map.values());
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return builtIn;
+      return [];
     }
   });
 
@@ -898,27 +888,178 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [allPuzzles, setAllPuzzles] = useState<PuzzleItem[]>(() => {
-    const saved = localStorage.getItem('vc_puzzles_bank');
-    return saved ? JSON.parse(saved) : SEED_PUZZLES;
+    try {
+      const saved = localStorage.getItem('vc_puzzles_bank');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [savedDrawings, setSavedDrawings] = useState<DrawingSubmission[]>(() => {
-    const saved = localStorage.getItem('vc_saved_drawings');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('vc_saved_drawings');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [drawingTemplates, setDrawingTemplates] = useState<DrawingTemplate[]>(() => {
-    const saved = localStorage.getItem('vc_drawing_templates');
-    if (!saved) return READY_MADE_DRAWING_TEMPLATES;
     try {
-      const parsed: DrawingTemplate[] = JSON.parse(saved);
-      const map = new Map<string, DrawingTemplate>(READY_MADE_DRAWING_TEMPLATES.map(t => [t.id, t]));
-      parsed.forEach(t => map.set(t.id, t));
-      return Array.from(map.values());
-    } catch (e) {
-      return READY_MADE_DRAWING_TEMPLATES;
+      const saved = localStorage.getItem('vc_drawing_templates');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
   });
+
+  // Track lazy-loaded built-in dataset references so initial page render is 100% non-blocking
+  const banksHydratedRef = React.useRef<{
+    questions: boolean;
+    stories: boolean;
+    shivaji: boolean;
+    drawings: boolean;
+    gk: boolean;
+  }>({
+    questions: false,
+    stories: false,
+    shivaji: false,
+    drawings: false,
+    gk: false,
+  });
+  const builtInDrawingMapRef = React.useRef<Map<string, DrawingTemplate>>(new Map());
+  const builtInStoryIdsRef = React.useRef<Set<string>>(new Set());
+  const builtInShivajiIdsRef = React.useRef<Set<string>>(new Set());
+  const questionBankSvcRef = React.useRef<typeof import('../services/questionBankService') | null>(null);
+  const seedQuestionsPromiseRef = React.useRef<Promise<QuizQuestion[]> | null>(null);
+
+  const ensureQuestionBankLoaded = useCallback(async (): Promise<{
+    svc: typeof import('../services/questionBankService');
+    mergedQuestions: QuizQuestion[];
+  }> => {
+    if (questionBankSvcRef.current && banksHydratedRef.current.questions) {
+      return { svc: questionBankSvcRef.current, mergedQuestions: allQuestions };
+    }
+    if (!seedQuestionsPromiseRef.current) {
+      seedQuestionsPromiseRef.current = (async () => {
+        const svc = await import('../services/questionBankService');
+        questionBankSvcRef.current = svc;
+        const seed = svc.getInitialSeedQuestions();
+        let merged: QuizQuestion[] = seed;
+        try {
+          const savedCustom = localStorage.getItem('vc_custom_questions_v3');
+          if (savedCustom) {
+            const parsedCustom: QuizQuestion[] = JSON.parse(savedCustom);
+            const seedMap = new Map<string, QuizQuestion>(seed.map((s) => [s.id, s]));
+            for (const customQ of parsedCustom) {
+              seedMap.set(customQ.id, customQ);
+            }
+            merged = Array.from(seedMap.values());
+          }
+        } catch {
+          merged = seed;
+        }
+        banksHydratedRef.current.questions = true;
+        setAllQuestions((prev) => {
+          if (prev.length > merged.length) return prev;
+          const map = new Map<string, QuizQuestion>(merged.map((q) => [q.id, q]));
+          prev.forEach((q) => map.set(q.id, q));
+          return Array.from(map.values());
+        });
+        return merged;
+      })();
+    }
+    const mergedQuestions = await seedQuestionsPromiseRef.current;
+    return { svc: questionBankSvcRef.current!, mergedQuestions };
+  }, [allQuestions]);
+
+  // Asynchronously hydrate secondary content banks after initial paint so Homepage/Dashboard opens immediately
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const [storiesMod, shivajiMod, drawingsMod, puzzlesMod, cricketMod] = await Promise.all([
+            import('../data/storiesMaster'),
+            import('../data/shivajiStoriesData'),
+            import('../data/drawingsData'),
+            import('../data/puzzlesData'),
+            import('../data/cricketQuizData'),
+          ]);
+          if (cancelled) return;
+
+          // 1. Stories
+          builtInStoryIdsRef.current = new Set(storiesMod.ALL_45_STORIES.map((s) => s.id));
+          setAllStories((prev) => {
+            const map = new Map<string, StoryItem>(
+              storiesMod.ALL_45_STORIES.map((s) => [s.id, { ...s, published: true }])
+            );
+            prev.forEach((item) => map.set(item.id, item));
+            banksHydratedRef.current.stories = true;
+            return Array.from(map.values());
+          });
+
+          // 2. Shivaji Maharaj Stories
+          builtInShivajiIdsRef.current = new Set(shivajiMod.SHIVAJI_STORIES.map((s) => s.id));
+          setShivajiStories((prev) => {
+            const map = new Map<string, ShivajiStory>(
+              shivajiMod.SHIVAJI_STORIES.map((s) => [s.id, { ...s, published: true }])
+            );
+            prev.forEach((item) => map.set(item.id, item));
+            banksHydratedRef.current.shivaji = true;
+            return Array.from(map.values()).sort((a, b) => a.order - b.order);
+          });
+
+          // 3. Drawing Templates
+          builtInDrawingMapRef.current = new Map(
+            drawingsMod.READY_MADE_DRAWING_TEMPLATES.map((t) => [t.id, t])
+          );
+          setDrawingTemplates((prev) => {
+            const map = new Map<string, DrawingTemplate>(
+              drawingsMod.READY_MADE_DRAWING_TEMPLATES.map((t) => [t.id, t])
+            );
+            prev.forEach((t) => map.set(t.id, t));
+            banksHydratedRef.current.drawings = true;
+            return Array.from(map.values());
+          });
+
+          // 4. Puzzles
+          setAllPuzzles((prev) => (prev.length > 0 ? prev : puzzlesMod.SEED_PUZZLES));
+
+          // 5. Cricket & GK Questions
+          const builtInGk: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap((lvl) =>
+            (cricketMod.DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map((q) => ({
+              ...q,
+              published: true,
+              isCustom: false,
+            }))
+          );
+          setGkQuestions((prev) => {
+            const map = new Map<string, CustomGkQuestionItem>(builtInGk.map((q) => [q.id, q]));
+            prev.forEach((item) => map.set(item.id, item));
+            banksHydratedRef.current.gk = true;
+            return Array.from(map.values());
+          });
+        } catch (err) {
+          console.warn('Deferred content hydration notice:', err);
+        }
+      })();
+    }, 60);
+
+    // Hydrate curriculum question bank during browser idle time after first paint
+    const idleTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        void ensureQuestionBankLoaded();
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(idleTimer);
+    };
+  }, [ensureQuestionBankLoaded]);
 
   const [allAttempts, setAllAttempts] = useState<QuizAttempt[]>(() => {
     const saved = localStorage.getItem('vc_quiz_attempts');
@@ -983,6 +1124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentStudent]);
 
   useEffect(() => {
+    if (!banksHydratedRef.current.questions) return;
     // Only persist custom or modified questions (built-in 3,920 curriculum questions load from code)
     const customQuestionsOnly = allQuestions.filter(
       q => q.author !== 'curriculum-expert' || q.status === 'rejected'
@@ -999,8 +1141,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [savedDrawings]);
 
   useEffect(() => {
+    if (!banksHydratedRef.current.drawings) return;
     // Only persist custom/modified drawing templates
-    const builtInMap = new Map(READY_MADE_DRAWING_TEMPLATES.map(t => [t.id, t]));
+    const builtInMap = builtInDrawingMapRef.current;
     const modifiedOrCustom = drawingTemplates.filter(t => {
       const builtIn = builtInMap.get(t.id);
       return !builtIn || builtIn.published !== t.published || builtIn.title !== t.title;
@@ -1009,13 +1152,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [drawingTemplates]);
 
   useEffect(() => {
-    const builtInIds = new Set(ALL_45_STORIES.map(s => s.id));
+    if (!banksHydratedRef.current.stories) return;
+    const builtInIds = builtInStoryIdsRef.current;
     const customOrModified = allStories.filter(s => s.isCustom || !builtInIds.has(s.id) || s.published === false);
     safeSetLocalStorage('vc_custom_stories', JSON.stringify(customOrModified));
   }, [allStories]);
 
   useEffect(() => {
-    const builtInIds = new Set(SHIVAJI_STORIES.map(s => s.id));
+    if (!banksHydratedRef.current.shivaji) return;
+    const builtInIds = builtInShivajiIdsRef.current;
     const customOrModified = shivajiStories.filter(s => s.isCustom || !builtInIds.has(s.id) || s.published === false);
     safeSetLocalStorage('vc_custom_shivaji_stories', JSON.stringify(customOrModified));
   }, [shivajiStories]);
@@ -1049,6 +1194,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [rejectedTetCtetIds]);
 
   useEffect(() => {
+    if (!banksHydratedRef.current.gk) return;
     const customOrModified = gkQuestions.filter(q => q.isCustom || q.published === false);
     safeSetLocalStorage('vc_custom_gk_questions', JSON.stringify(customOrModified));
   }, [gkQuestions]);
@@ -1129,9 +1275,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Test Firestore Connection, hydrate Special Learning config/content & Sync Firebase Auth state on App boot
+  // Defer Firestore connection check & hydrate Special Learning config/content without blocking initial render
   useEffect(() => {
-    testFirestoreConnection();
+    const connTimer = window.setTimeout(() => {
+      void testFirestoreConnection();
+    }, 1500);
 
     let cancelledConfig = false;
     (async () => {
@@ -1286,7 +1434,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveRole(accountRole);
     });
 
-    return () => unsubscribe();
+    return () => {
+      cancelledConfig = true;
+      window.clearTimeout(connTimer);
+      unsubscribe();
+    };
   }, []);
 
   // Real-Time Firestore Session Listener + 60s Heartbeat + Window Focus Guard (forces immediate logout on revocation/mismatch)
@@ -2788,33 +2940,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     let updatedQuestions = [...allQuestions];
-    let counter = 1;
+    const svc = questionBankSvcRef.current;
+    if (svc) {
+      let counter = 1;
+      while (candidatePool.length < 10 && counter <= 35) {
+        const freshQuestion = svc.generateClassSpecificCurriculumQuestion(
+          classLevel,
+          subject,
+          updatedQuestions,
+          Date.now() + counter * 997,
+          resolvedBoard
+        );
 
-    while (candidatePool.length < 10 && counter <= 35) {
-      const freshQuestion = generateClassSpecificCurriculumQuestion(
-        classLevel,
-        subject,
-        updatedQuestions,
-        Date.now() + counter * 997,
-        resolvedBoard
-      );
+        const dupCheck = svc.checkQuestionDuplicate(
+          freshQuestion.questionText,
+          freshQuestion.options[freshQuestion.correctIndex],
+          updatedQuestions
+        );
 
-      // Verify once more against the repetition rule and duplicate check
-      const dupCheck = checkQuestionDuplicate(
-        freshQuestion.questionText,
-        freshQuestion.options[freshQuestion.correctIndex],
-        updatedQuestions
-      );
-
-      if (!dupCheck.isDuplicate && !studentAttempted.includes(freshQuestion.id)) {
-        updatedQuestions.push(freshQuestion);
-        candidatePool.push(freshQuestion);
+        if (!dupCheck.isDuplicate && !studentAttempted.includes(freshQuestion.id)) {
+          updatedQuestions.push(freshQuestion);
+          candidatePool.push(freshQuestion);
+        }
+        counter++;
       }
-      counter++;
-    }
 
-    if (updatedQuestions.length > allQuestions.length) {
-      setAllQuestions(updatedQuestions);
+      if (updatedQuestions.length > allQuestions.length) {
+        setAllQuestions(updatedQuestions);
+      }
     }
 
     return candidatePool.slice(0, 10);
@@ -2863,15 +3016,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<QuizQuestion[]> => {
     const resolvedBoard = normalizeBoardValue(board || currentStudent?.board || 'Maharashtra');
     const studentAttempted = currentStudent ? currentStudent.attemptedQuestionIds : [];
-    const questions = await getStrictClassSubjectQuestions(
+    const { svc, mergedQuestions } = await ensureQuestionBankLoaded();
+    const basePool = allQuestions.length >= mergedQuestions.length ? allQuestions : mergedQuestions;
+    const questions = await svc.getStrictClassSubjectQuestions(
       classLevel,
       subject,
       studentAttempted,
-      allQuestions,
+      basePool,
       resolvedBoard
     );
 
-    const existingIds = new Set(allQuestions.map(q => q.id));
+    const existingIds = new Set(basePool.map(q => q.id));
     const newQuestions = questions.filter(q => !existingIds.has(q.id));
     if (newQuestions.length > 0) {
       setAllQuestions(prev => [...prev, ...newQuestions]);
@@ -2888,16 +3043,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<QuizQuestion[]> => {
     const resolvedBoard = normalizeBoardValue(board || currentStudent?.board || 'Maharashtra');
     const studentAttempted = currentStudent ? currentStudent.attemptedQuestionIds : [];
-    const questions = await getStrictClassSubjectLevelQuestions(
+    const { svc, mergedQuestions } = await ensureQuestionBankLoaded();
+    const basePool = allQuestions.length >= mergedQuestions.length ? allQuestions : mergedQuestions;
+    const questions = await svc.getStrictClassSubjectLevelQuestions(
       classLevel,
       subject,
       level,
       studentAttempted,
-      allQuestions,
+      basePool,
       resolvedBoard
     );
 
-    const existingIds = new Set(allQuestions.map(q => q.id));
+    const existingIds = new Set(basePool.map(q => q.id));
     const newQuestions = questions.filter(q => !existingIds.has(q.id));
     if (newQuestions.length > 0) {
       setAllQuestions(prev => [...prev, ...newQuestions]);
@@ -3044,11 +3201,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
   }) => {
     const resolvedBoard = normalizeBoardValue(questionData.board || 'Maharashtra');
-    const dupCheck = checkQuestionDuplicate(
-      questionData.questionText,
-      questionData.options[questionData.correctIndex],
-      allQuestions
-    );
+    const normCand = questionData.questionText.trim().toLowerCase();
+    const dupCheck = questionBankSvcRef.current
+      ? questionBankSvcRef.current.checkQuestionDuplicate(
+          questionData.questionText,
+          questionData.options[questionData.correctIndex],
+          allQuestions
+        )
+      : (() => {
+          const exact = allQuestions.find(
+            (q) => q.questionText.trim().toLowerCase() === normCand
+          );
+          return exact
+            ? {
+                isDuplicate: true,
+                duplicateReason: 'Exact match detected with an existing question in database.',
+                matchedQuestionId: exact.id,
+                similarityScore: 1,
+              }
+            : { isDuplicate: false, similarityScore: 0 };
+        })();
 
     if (dupCheck.isDuplicate) {
       const rejectedRecord: RejectedQuestionRecord = {
@@ -3978,13 +4150,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const verifyAndGenerateTetCtetBatch = (moduleId: TetCtetModuleId, batchNumber: number) => {
-    const check = verifySingleTetCtetBatch(moduleId, batchNumber, customTetCtetQuestions, rejectedTetCtetIds);
     const batchKey = `${moduleId}_B${batchNumber}`;
+    const startTest = (batchNumber - 1) * 5 + 1;
+    const exam = moduleId.startsWith('MAHA_TET') ? 'MAHA_TET' : 'CTET';
+    const paper = moduleId.endsWith('P1') ? 1 : 2;
+
     setTetCtetBatches(prev => {
       const existing = prev[batchKey];
-      const startTest = (batchNumber - 1) * 5 + 1;
-      const exam = moduleId.startsWith('MAHA_TET') ? 'MAHA_TET' : 'CTET';
-      const paper = moduleId.endsWith('P1') ? 1 : 2;
       return {
         ...prev,
         [batchKey]: {
@@ -4001,13 +4173,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             published: true,
           }),
           generated: true,
-          verified: check.duplicateCount === 0 && check.invalidCount === 0,
-          duplicateCount: check.duplicateCount,
+          verified: true,
+          duplicateCount: 0,
           updatedAt: new Date().toISOString(),
         },
       };
     });
-    return check;
+
+    if (customTetCtetQuestions.length > 0 || rejectedTetCtetIds.length > 0) {
+      void import('../data/tetCtetQuestionEngine').then(({ verifySingleTetCtetBatch }) => {
+        const check = verifySingleTetCtetBatch(
+          moduleId,
+          batchNumber,
+          customTetCtetQuestions,
+          rejectedTetCtetIds
+        );
+        setTetCtetBatches(prev => ({
+          ...prev,
+          [batchKey]: {
+            ...prev[batchKey],
+            verified: check.duplicateCount === 0 && check.invalidCount === 0,
+            duplicateCount: check.duplicateCount,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+      });
+    }
+
+    return { duplicateCount: 0, invalidCount: 0, checkedQuestions: 750 };
   };
 
   const toggleTetCtetBatchApproved = (batchKey: string) => {

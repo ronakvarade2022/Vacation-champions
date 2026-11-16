@@ -37,9 +37,10 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="image" href="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.webp" type="image/webp" fetchpriority="high">
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Razorpay Official Standard Checkout Script -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <!-- Razorpay Official Standard Checkout Script (Deferred so homepage renders immediately) -->
+    <script defer src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script>
       // Gracefully handle Vite WebSocket / HMR disconnects in preview environments
       window.addEventListener('unhandledrejection', function(event) {

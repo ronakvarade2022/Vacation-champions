@@ -15,6 +15,7 @@ import {
   getActivatedBoardClassesList,
   getBoardShortLabel,
   getStudentPlanInfo,
+  parseBoardAndClassFromWorksheetId,
 } from '../utils/subscriptionAccess';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import {
@@ -22,7 +23,6 @@ import {
   ALL_10_CLASSES_META,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
-import { getAllWorksheetsForClass } from '../data/worksheetsData';
 import { NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 
@@ -59,10 +59,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   if (!currentStudent) return null;
 
   const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel, activeBoard);
-  const classWorksheets = getAllWorksheetsForClass(currentStudent.classLevel, activeBoard);
-  const completedWorksheetsCount = classWorksheets.filter((w) =>
-    (currentStudent.completedWorksheetIds || []).includes(w.id)
-  ).length;
+  const completedWorksheetsCount = (currentStudent.completedWorksheetIds || []).filter((wsId) => {
+    const parsed = parseBoardAndClassFromWorksheetId(wsId);
+    if (!parsed.classLevel) return true;
+    const boardMatch = !parsed.board || parsed.board === activeBoard;
+    return boardMatch && parsed.classLevel === currentStudent.classLevel;
+  }).length;
 
   const studentAttempts = allAttempts.filter((a) => a.studentId === currentStudent.id);
   const totalQuizzes = studentAttempts.length;

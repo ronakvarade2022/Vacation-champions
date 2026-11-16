@@ -524,17 +524,23 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         aria-label="Welcome to MyStudyZone Educational Hero Banner"
         className="rounded-3xl bg-white border-2 border-sky-200/80 shadow-xl overflow-hidden"
       >
-        <div className="relative w-full">
-          <img
-            src="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.png"
-            alt="Welcome to MyStudyZone – Your Learning World (Classes 1 to 10) – Select Your Education Board: Maharashtra State Board, CBSE Board, ICSE Board"
-            width={2172}
-            height={724}
-            fetchPriority="high"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            className="w-full h-auto block select-none"
-          />
+        <div className="relative w-full aspect-[3/1] bg-sky-50/60">
+          <picture>
+            <source
+              srcSet="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.webp"
+              type="image/webp"
+            />
+            <img
+              src="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.png"
+              alt="Welcome to MyStudyZone – Your Learning World (Classes 1 to 10) – Select Your Education Board: Maharashtra State Board, CBSE Board, ICSE Board"
+              width={2172}
+              height={724}
+              fetchPriority="high"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover block select-none"
+            />
+          </picture>
 
           {/* Interactive Clickable Element: ▶ START LEARNING Button */}
           <button

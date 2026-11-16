@@ -31,7 +31,7 @@ export default defineConfig(() => {
       watch: null,
     },
     build: {
-      chunkSizeWarningLimit: 900,
+      chunkSizeWarningLimit: 1200,
       rolldownOptions: {
         output: {
           manualChunks(id: string) {
@@ -40,10 +40,45 @@ export default defineConfig(() => {
               if (id.includes('react') || id.includes('lucide-react')) return 'vendor-ui';
               return 'vendor-misc';
             }
-            if (id.includes('src/data/scholarshipData')) return 'data-scholarship';
-            if (id.includes('src/data/stories') || id.includes('src/data/shivajiStoriesData')) return 'data-stories';
-            if (id.includes('src/data/drawingsData')) return 'data-drawings';
-            if (id.includes('src/data/boards/') || id.includes('src/data/questionBank')) return 'data-questions';
+            if (id.includes('src/data/tetCtetVerifiedBatchManifest') || id.includes('src/data/tetCtetCentralAuditEngine')) {
+              return 'data-tet-manifest';
+            }
+            if (
+              id.includes('src/data/tetCtetAuditBatches') ||
+              id.includes('src/data/tetCtetLanguageBanks') ||
+              id.includes('src/data/tetCtetSubjectBanks') ||
+              id.includes('src/data/tetCtetUnifiedSyllabusBanks') ||
+              id.includes('src/data/tetCtetAutoReplacementBank') ||
+              id.includes('src/data/tetCtetQuestionEngine')
+            ) {
+              return 'data-tet-banks';
+            }
+            if (
+              id.includes('src/data/scholarship') ||
+              id.includes('src/data/msceMock')
+            ) {
+              return 'data-scholarship';
+            }
+            if (id.includes('src/data/stories') || id.includes('src/data/shivajiStoriesData')) {
+              return 'data-stories';
+            }
+            if (id.includes('src/data/drawingsData') || id.includes('src/data/readyMadeDrawings')) {
+              return 'data-drawings';
+            }
+            if (
+              id.includes('src/data/worksheetsData') ||
+              id.includes('src/data/classDemoWorksheetsData')
+            ) {
+              return 'data-worksheets';
+            }
+            if (
+              id.includes('src/data/boards/') ||
+              id.includes('src/data/questions/') ||
+              id.includes('src/services/questionBankService') ||
+              id.includes('src/services/curriculumQuestionBank')
+            ) {
+              return 'data-questions';
+            }
             return undefined;
           },
         },
