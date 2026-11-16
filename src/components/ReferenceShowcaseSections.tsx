@@ -23,17 +23,24 @@ import {
   Crown,
   Monitor,
   Smartphone,
-  Rocket,
-  Sparkles,
-  Megaphone,
+   Megaphone,
   GraduationCap,
+  Copy,
+  Share2,
+  Check,
+  Send,
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import {
-  BrandBookCapLogo,
-  HeroSchoolchildrenIllustration,
+  generateUniqueStudentReferralCode,
+  buildStudentReferralLink,
+  buildStudentReferralDisplayLink,
+} from '../utils/referralCoding';
+import { referralService } from '../services/referralService';
+import {
   SpecialCardIllustration,
   KeepGoingStarMascot,
   DailyChallengeBoyMascot,
@@ -98,14 +105,85 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   onToggleViewMode,
   progressMetrics,
 }) => {
+  const { currentStudent, activeRole } = useApp();
   const [expandedMenu, setExpandedMenu] = useState<MainMenuId | null>('special-learning');
+  const [copiedRefCode, setCopiedRefCode] = useState(false);
+  const [copiedRefLink, setCopiedRefLink] = useState(false);
+
+  const activeUserId = currentStudent?.id || 'guest_ambassador';
+  const activeUserName =
+    currentStudent?.name || progressMetrics.studentName || 'Student Champion';
+  const isTeacherUser =
+    activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
+
+  const referralCode =
+    currentStudent?.referralCode ||
+    generateUniqueStudentReferralCode(activeUserId, activeUserName);
+  const referralLink =
+    currentStudent?.referralLink || buildStudentReferralLink(referralCode);
+  const referralDisplayLink = buildStudentReferralDisplayLink(referralCode);
+
+  const handleCopyReferralCode = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setCopiedRefCode(true);
+      setTimeout(() => setCopiedRefCode(false), 2500);
+    } catch {
+      // Ignore clipboard fallback
+    }
+  };
+
+  const handleCopyReferralLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopiedRefLink(true);
+      referralService.recordInviteClick(activeUserId).catch(() => {});
+      setTimeout(() => setCopiedRefLink(false), 2500);
+    } catch {
+      // Ignore clipboard fallback
+    }
+  };
+
+  const handleWhatsAppReferralShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareText = isTeacherUser
+      ? `🏆 *Special Invitation from Educator ${activeUserName}!*\n\nEmpower your child with *MyStudyZone* (Classes 1 to 10 – Maharashtra Board, CBSE & ICSE).\n\nUse my Referral Code *${referralCode}* on the ₹99 Premium Plan (365 Days) to unlock ₹5 referral cashback!\n\n👉 Join here: ${referralLink}`
+      : `🎁 *Refer & Earn with MyStudyZone!*\n\nHey! Join me on MyStudyZone (${selectedClass} • ${getBoardShortLabel(selectedBoard)}) for interactive quizzes, notes, worksheets, audio stories & AI Academy.\n\nUse my Referral Code *${referralCode}* when subscribing to the ₹99 Premium Plan (365 Days)!\n\n👉 Register here: ${referralLink}`;
+
+    referralService.recordInviteClick(activeUserId).catch(() => {});
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleNativeReferralShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareText = `Join MyStudyZone (Classes 1 to 10) using my referral code ${referralCode}! Register here: ${referralLink}`;
+    referralService.recordInviteClick(activeUserId).catch(() => {});
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'MyStudyZone – Refer & Earn',
+          text: shareText,
+          url: referralLink,
+        });
+        return;
+      } catch {
+        // Fallback to copying link
+      }
+    }
+    await handleCopyReferralLink(e);
+  };
 
   const triggerSubAction = (actionId: NavSubActionId) => {
     if (onMenuAction) {
       onMenuAction(actionId);
       return;
     }
-    if (actionId.startsWith('course-')) {
+    if (actionId === 'acc-referrals') {
+      onNavigateTab('referrals');
+    } else if (actionId.startsWith('course-')) {
       onNavigateTab('all-courses');
     } else if (actionId === 'sl-scholarship' || actionId === 'ez-mock-tests') {
       onNavigateTab('scholarship');
@@ -1037,77 +1115,191 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </section>
 
       {/* =====================================================================
-          9. QUICK ACCESS BUTTONS (6 Pastel Cards + Single Champion Banner)
+          9. BOTTOM NAVIGATION BAR & REFER & EARN SECTION (Positioned at Bottom)
           ===================================================================== */}
-      <section aria-label="Quick Access Shortcuts" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          {
-            label: 'My Courses',
-            icon: BookOpen,
-            cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
-            border: 'border-sky-300',
-            iconBg: 'bg-blue-600 text-white',
-            onClick: () => onNavigateTab('all-courses'),
-          },
-          {
-            label: 'Certificates',
-            icon: Award,
-            cardBg: 'from-[#fef3c7] to-[#fde68a]',
-            border: 'border-amber-300',
-            iconBg: 'bg-amber-600 text-white',
-            onClick: () => triggerSubAction('perf-certificates'),
-          },
-          {
-            label: 'Leaderboard',
-            icon: Trophy,
-            cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
-            border: 'border-emerald-300',
-            iconBg: 'bg-emerald-600 text-white',
-            onClick: () => triggerSubAction('perf-certificates'),
-          },
-          {
-            label: 'My Account',
-            icon: User,
-            cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
-            border: 'border-purple-300',
-            iconBg: 'bg-purple-600 text-white',
-            onClick: () => triggerSubAction('acc-profile'),
-          },
-          {
-            label: 'Help & Support',
-            icon: Headphones,
-            cardBg: 'from-[#e0f2fe] to-[#cffafe]',
-            border: 'border-cyan-300',
-            iconBg: 'bg-sky-600 text-white',
-            onClick: () => onNavigateTab('help-support'),
-          },
-          {
-            label: 'More Programs',
-            icon: Gift,
-            cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
-            border: 'border-rose-300',
-            iconBg: 'bg-rose-600 text-white',
-            onClick: () => onNavigateTab('other-programs'),
-          },
-        ].map((item) => {
-          const IconComp = item.icon;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={item.onClick}
-              className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
-            >
-              <span className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}>
-                <IconComp className="w-5 h-5" />
-              </span>
-              <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </section>
+      <nav
+        aria-label="Bottom Navigation Menu"
+        className="space-y-4 pt-2"
+      >
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {[
+            {
+              label: 'My Courses',
+              icon: BookOpen,
+              cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
+              border: 'border-sky-300',
+              iconBg: 'bg-blue-600 text-white',
+              onClick: () => onNavigateTab('all-courses'),
+            },
+            {
+              label: 'Certificates',
+              icon: Award,
+              cardBg: 'from-[#fef3c7] to-[#fde68a]',
+              border: 'border-amber-300',
+              iconBg: 'bg-amber-600 text-white',
+              onClick: () => triggerSubAction('perf-certificates'),
+            },
+            {
+              label: 'Leaderboard',
+              icon: Trophy,
+              cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
+              border: 'border-emerald-300',
+              iconBg: 'bg-emerald-600 text-white',
+              onClick: () => triggerSubAction('perf-certificates'),
+            },
+            {
+              label: 'My Account',
+              icon: User,
+              cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
+              border: 'border-purple-300',
+              iconBg: 'bg-purple-600 text-white',
+              onClick: () => triggerSubAction('acc-profile'),
+            },
+            {
+              label: 'Help & Support',
+              icon: Headphones,
+              cardBg: 'from-[#e0f2fe] to-[#cffafe]',
+              border: 'border-cyan-300',
+              iconBg: 'bg-sky-600 text-white',
+              onClick: () => onNavigateTab('help-support'),
+            },
+            {
+              label: 'More Programs',
+              icon: Gift,
+              cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
+              border: 'border-rose-300',
+              iconBg: 'bg-rose-600 text-white',
+              onClick: () => onNavigateTab('other-programs'),
+            },
+          ].map((item) => {
+            const IconComp = item.icon;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.onClick}
+                className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
+              >
+                <span className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}>
+                  <IconComp className="w-5 h-5" />
+                </span>
+                <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Permanent 🎁 Refer & Earn Tab in the Bottom Navigation Menu */}
+          <button
+            type="button"
+            onClick={() => onNavigateTab('referrals')}
+            aria-label="Refer & Earn – Open Referral Hub"
+            className="col-span-2 sm:col-span-2 lg:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ring-2 ring-amber-300/60"
+          >
+            <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
+              🎁
+            </span>
+            <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+              Refer &amp; Earn
+            </span>
+          </button>
+        </div>
+
+        {/* Existing Refer & Earn Bar Moved to the Bottom Navigation Area */}
+        <div className="rounded-3xl bg-gradient-to-r from-[#0f2952] via-[#1e1b4b] to-[#064e3b] text-white border-2 border-amber-400/70 shadow-lg overflow-hidden p-4 sm:p-5">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+              <button
+                type="button"
+                onClick={() => onNavigateTab('referrals')}
+                aria-label="Refer & Earn"
+                className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-orange-500 text-slate-950 flex flex-col items-center justify-center shrink-0 shadow-md border-2 border-white cursor-pointer hover:scale-105 transition-transform"
+              >
+                <span className="text-2xl leading-none">🎁</span>
+              </button>
+
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-display font-black text-[10px] sm:text-xs uppercase tracking-wider">
+                    <span>🎁</span>
+                    <span>Refer &amp; Earn</span>
+                  </span>
+                  <span className="text-[11px] sm:text-xs font-extrabold text-emerald-300">
+                    Earn ₹5 Cashback per Verified ₹99 Referral
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <span className="text-xs font-bold text-sky-100">
+                    Referral Code:{' '}
+                    <strong className="font-mono text-white bg-slate-950/70 px-2 py-0.5 rounded border border-amber-400/40">
+                      {referralCode}
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyReferralCode}
+                    className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 text-amber-200 font-extrabold text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {copiedRefCode ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                    <span>{copiedRefCode ? 'Code Copied' : 'Copy Code'}</span>
+                  </button>
+                  <span className="text-[11px] font-mono text-sky-200/90 truncate max-w-xs">
+                    {referralDisplayLink}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleWhatsAppReferralShare}
+                className="min-h-[42px] px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] text-white font-display font-black text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
+              >
+                <Send className="w-3.5 h-3.5 fill-current shrink-0" />
+                <span>WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyReferralLink}
+                className="min-h-[42px] px-3.5 py-2 rounded-xl bg-white hover:bg-amber-50 text-slate-950 font-display font-black text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
+              >
+                {copiedRefLink ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-slate-800 shrink-0" />
+                )}
+                <span>{copiedRefLink ? 'Copied!' : 'Copy Link'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleNativeReferralShare}
+                className="min-h-[42px] px-3.5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-display font-black text-xs shadow-sm border border-indigo-300/40 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
+              >
+                <Share2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Share</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('referrals')}
+                className="min-h-[42px] px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:brightness-105 text-slate-950 font-display font-black text-xs shadow-sm border border-white/60 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-[0.98]"
+              >
+                <span>🎁</span>
+                <span className="truncate">Refer &amp; Earn</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
 
       {/* Single Motivational Heritage Banner */}
       <section aria-label="Scholarship Champion Banner">

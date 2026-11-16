@@ -4,16 +4,11 @@ import { ClassLevel, EducationBoard, SubjectName, QuizLevel } from '../types';
 import { calculateLevel } from '../data/badgesData';
 import {
   Crown,
-  ArrowRight,
   Lock,
   ChevronRight,
   User,
   ShieldCheck,
   GraduationCap,
-  Sparkles,
-  Copy,
-  Share2,
-  Check,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -22,10 +17,6 @@ import {
   getStudentPlanInfo,
 } from '../utils/subscriptionAccess';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
-import {
-  generateUniqueStudentReferralCode,
-  buildStudentReferralLink,
-} from '../utils/referralCoding';
 import {
   ALL_10_CLASSES,
   ALL_10_CLASSES_META,
@@ -59,7 +50,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     getSubjectLevelProgress,
     switchActiveBoardAndClass,
   } = useApp();
-  const [copiedDashRefLink, setCopiedDashRefLink] = useState(false);
   const [selectedCurriculumBoard, setSelectedCurriculumBoard] = useState<EducationBoard>(activeBoard);
 
   useEffect(() => {
@@ -73,41 +63,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const completedWorksheetsCount = classWorksheets.filter((w) =>
     (currentStudent.completedWorksheetIds || []).includes(w.id)
   ).length;
-
-  const studentReferralCode =
-    currentStudent.referralCode ||
-    generateUniqueStudentReferralCode(currentStudent.id, currentStudent.name);
-  const studentReferralLink =
-    currentStudent.referralLink || buildStudentReferralLink(studentReferralCode);
-
-  const handleCopyDashboardRefLink = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(studentReferralLink);
-      setCopiedDashRefLink(true);
-      setTimeout(() => setCopiedDashRefLink(false), 2500);
-    } catch {
-      // Ignore clipboard fallback
-    }
-  };
-
-  const handleShareDashboardRefLink = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const shareText = `Join MyStudyZone (${currentStudent.classLevel}) using my unique referral code ${studentReferralCode}! Register here: ${studentReferralLink}`;
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({
-          title: 'MyStudyZone Referral Link',
-          text: shareText,
-          url: studentReferralLink,
-        });
-        return;
-      } catch {
-        // Fallback
-      }
-    }
-    await handleCopyDashboardRefLink(e);
-  };
 
   const studentAttempts = allAttempts.filter((a) => a.studentId === currentStudent.id);
   const totalQuizzes = studentAttempts.length;
@@ -349,46 +304,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 </button>
               );
             })}
-          </div>
-        </div>
-
-        {/* Compact Referral Link Bar */}
-        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-600" />
-            <span className="font-bold text-slate-700">
-              Referral Code: <strong className="font-mono text-slate-900">{studentReferralCode}</strong> (Earn ₹5 Cashback per verified ₹99 referral)
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCopyDashboardRefLink}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              {copiedDashRefLink ? (
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-              <span>{copiedDashRefLink ? 'Copied!' : 'Copy Link'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleShareDashboardRefLink}
-              className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>Share</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('referrals')}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs flex items-center gap-1 cursor-pointer"
-            >
-              <span>Referral Wallet</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
       </div>

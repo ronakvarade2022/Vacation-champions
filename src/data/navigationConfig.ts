@@ -79,6 +79,7 @@ export type NavSubActionId =
   | 'acc-profile'
   | 'acc-purchases'
   | 'acc-classes'
+  | 'acc-referrals'
   | 'acc-settings'
   | 'acc-support'
   | 'acc-login'
@@ -499,7 +500,7 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
       {
         id: 'acc-settings',
         label: 'Account Settings & Password',
-        description: 'Password management, single-device security & referral wallet',
+        description: 'Password management & single-device security',
         badgeText: 'Security',
       },
       {

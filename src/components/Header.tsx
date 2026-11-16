@@ -26,7 +26,6 @@ import {
   BookOpen,
   Puzzle,
   Palette,
-  Gift,
   LogOut,
   LogIn,
   ChevronRight,
@@ -832,21 +831,6 @@ export const Header: React.FC<HeaderProps> = ({
                           <span>My Subscription (₹99/yr)</span>
                         </span>
                         <ChevronRight className="w-4 h-4 text-slate-400" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCurrentTab('referrals');
-                          setShowProfileDropdown(false);
-                        }}
-                        className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold text-xs border border-emerald-200 flex items-center justify-between cursor-pointer"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Gift className="w-4 h-4 text-emerald-600" />
-                          <span>Referral Wallet (₹5 Cashback)</span>
-                        </span>
-                        <ChevronRight className="w-4 h-4 text-emerald-600" />
                       </button>
 
                       {[

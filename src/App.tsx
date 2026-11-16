@@ -96,7 +96,7 @@ import {
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage
 } from './utils/subscriptionAccess';
-import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X } from 'lucide-react';
+import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -522,7 +522,11 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      // SECTION 9: MY ACCOUNT (Profile, Personal Info, Purchases, Courses, Settings, Password, Help & Support)
+      // SECTION 9: MY ACCOUNT (Profile, Personal Info, Purchases, Courses, Refer & Earn, Settings, Password, Help & Support)
+      case 'acc-referrals': {
+        handleNavigateTab('referrals');
+        return;
+      }
       case 'acc-support': {
         handleNavigateTab('help-support');
         return;
@@ -575,7 +579,12 @@ const AppContent: React.FC = () => {
       return 'practice-zone';
     }
     if (currentTab === 'certificates' || currentTab === 'leaderboard') return 'performance';
-    if (currentTab === 'profile' || currentTab === 'account' || currentTab === 'subscription') {
+    if (
+      currentTab === 'profile' ||
+      currentTab === 'account' ||
+      currentTab === 'subscription' ||
+      currentTab === 'referrals'
+    ) {
       return 'account';
     }
     if ((currentTab === 'dashboard' || currentTab === 'public-home') && homeScrollTarget === 'courses-section') {
@@ -746,6 +755,7 @@ const AppContent: React.FC = () => {
                   'sudoku',
                   'future-skills',
                   'ai-academy',
+                  'referrals',
                   'faqs',
                 ]);
                 if (directStudioTabs.has(tab)) {
@@ -788,7 +798,7 @@ const AppContent: React.FC = () => {
               userName={currentStudent?.name || 'Visitor Preview'}
               userEmail={currentStudent?.email || ''}
               userMobile={currentStudent?.mobile || ''}
-              initialRole="student"
+              initialRole={isTeacherPortal ? 'teacher' : 'student'}
               onNavigateUpgrade={() => openMembershipWithPlan('premium')}
             />
           ) : currentTab === 'help-support' ? (
@@ -957,6 +967,7 @@ const AppContent: React.FC = () => {
                     'sudoku',
                     'future-skills',
                     'ai-academy',
+                    'referrals',
                     'faqs',
                   ]);
                   if (directStudioTabs.has(tab)) {
@@ -1190,6 +1201,107 @@ const AppContent: React.FC = () => {
           </>
         )}
         </Suspense>
+
+        {/* Permanent Bottom Navigation Menu across all non-home student dashboard pages (Home Dashboard & Public Home render this inside ReferenceShowcaseSections so there is zero duplication) */}
+        {isLearningPortal &&
+          currentTab !== 'public-home' &&
+          !(currentTab === 'dashboard' && currentStudent) &&
+          !(currentTab === 'dashboard' && !currentStudent) && (
+            <nav
+              aria-label="Bottom Navigation Menu"
+              className="mt-10 pt-6 border-t border-amber-200/80"
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                {[
+                  {
+                    label: 'My Courses',
+                    icon: BookOpen,
+                    cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
+                    border: 'border-sky-300',
+                    iconBg: 'bg-blue-600 text-white',
+                    onClick: () => handleNavigateTab('all-courses'),
+                  },
+                  {
+                    label: 'Certificates',
+                    icon: Award,
+                    cardBg: 'from-[#fef3c7] to-[#fde68a]',
+                    border: 'border-amber-300',
+                    iconBg: 'bg-amber-600 text-white',
+                    onClick: () => handleMenuAction('perf-certificates'),
+                  },
+                  {
+                    label: 'Leaderboard',
+                    icon: Trophy,
+                    cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
+                    border: 'border-emerald-300',
+                    iconBg: 'bg-emerald-600 text-white',
+                    onClick: () => handleMenuAction('perf-certificates'),
+                  },
+                  {
+                    label: 'My Account',
+                    icon: User,
+                    cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
+                    border: 'border-purple-300',
+                    iconBg: 'bg-purple-600 text-white',
+                    onClick: () => handleMenuAction('acc-profile'),
+                  },
+                  {
+                    label: 'Help & Support',
+                    icon: Headphones,
+                    cardBg: 'from-[#e0f2fe] to-[#cffafe]',
+                    border: 'border-cyan-300',
+                    iconBg: 'bg-sky-600 text-white',
+                    onClick: () => handleNavigateTab('help-support'),
+                  },
+                  {
+                    label: 'More Programs',
+                    icon: Gift,
+                    cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
+                    border: 'border-rose-300',
+                    iconBg: 'bg-rose-600 text-white',
+                    onClick: () => handleNavigateTab('other-programs'),
+                  },
+                ].map((item) => {
+                  const IconComp = item.icon;
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={item.onClick}
+                      className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
+                    >
+                      <span
+                        className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}
+                      >
+                        <IconComp className="w-5 h-5" />
+                      </span>
+                      <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => handleNavigateTab('referrals')}
+                  aria-label="Refer & Earn – Open Referral Hub"
+                  className={`col-span-2 sm:col-span-2 lg:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ${
+                    currentTab === 'referrals'
+                      ? 'ring-3 ring-emerald-600'
+                      : 'ring-2 ring-amber-300/60'
+                  }`}
+                >
+                  <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
+                    🎁
+                  </span>
+                  <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+                    Refer &amp; Earn
+                  </span>
+                </button>
+              </div>
+            </nav>
+          )}
       </main>
 
       {/* Global Modals */}
@@ -1371,6 +1483,16 @@ const AppContent: React.FC = () => {
                     className="hover:text-amber-300 cursor-pointer transition-colors"
                   >
                     Plans &amp; Pricing (Free ₹0 · Premium ₹99/Yr)
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateTab('referrals')}
+                    className="text-amber-300 hover:text-amber-200 font-bold cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    <span>🎁</span>
+                    <span>Refer &amp; Earn (₹5 Cashback Hub)</span>
                   </button>
                 </li>
               </ul>
