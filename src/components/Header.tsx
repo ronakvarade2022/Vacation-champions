@@ -163,144 +163,9 @@ export const Header: React.FC<HeaderProps> = ({
     viewMode === 'desktop' ? 'max-w-[1680px] w-full mx-auto' : 'max-w-7xl w-full mx-auto';
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-      {/* Top Sticky Portal Access Strip: Permanently Visible Student, Teacher & Admin Portals + Desktop Site Toggle */}
-      <div className="bg-slate-950 text-white px-2.5 sm:px-6 py-1.5 text-xs border-b border-slate-800">
-        <div className={`${containerWidthClass} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-1.5`}>
-          <div className="hidden lg:flex items-center gap-2.5 min-w-0">
-            <span className="font-bold tracking-wide text-[11px] text-amber-300 whitespace-nowrap">
-              MyStudyZone · Classes 1st to 10th (Maharashtra · CBSE · ICSE)
-            </span>
-            {currentUser && (
-              <span className="text-[11px] font-semibold text-slate-300 truncate">
-                {currentUser.role === 'admin' && '· Active: Admin Dashboard'}
-                {currentUser.role === 'teacher' &&
-                  `· Active Teacher: ${currentUser.displayName}${
-                    currentStudent
-                      ? ` (${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel})`
-                      : ''
-                  }`}
-                {currentUser.role === 'student' &&
-                  `· Active Student: ${currentUser.displayName}${
-                    currentStudent
-                      ? ` (${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel})`
-                      : ''
-                  }`}
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between lg:justify-end gap-1.5 sm:gap-2 w-full lg:w-auto">
-            {/* Permanent 3-Portal Access Bar (Never Hidden Inside Hamburger Menu) */}
-            <div
-              role="navigation"
-              aria-label="Portal Access"
-              className="grid grid-cols-3 sm:flex sm:items-center gap-1 sm:gap-1.5 w-full sm:w-auto"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenPanel('student', 'login');
-                }}
-                aria-label="Student Portal Login"
-                className={`px-1.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-colors flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
-                  activeRole === 'student' && currentStudent
-                    ? 'bg-indigo-500 text-white border-indigo-400 shadow-xs'
-                    : 'bg-slate-800/95 hover:bg-indigo-600 text-white border-slate-700'
-                }`}
-              >
-                <GraduationCap className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span className="truncate">Student Portal</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenPanel('teacher', 'login');
-                }}
-                aria-label="Teacher Portal Login"
-                className={`px-1.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-colors flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
-                  activeRole === 'teacher' && currentStudent?.accountRole === 'teacher'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-xs'
-                    : 'bg-slate-800/95 hover:bg-emerald-700 text-white border-slate-700'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                <span className="truncate">Teacher Portal</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenPanel('admin', 'login');
-                }}
-                aria-label="Admin Portal Login"
-                className={`px-1.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-colors flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
-                  activeRole === 'admin' && currentUser?.role === 'admin'
-                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-xs'
-                    : 'bg-slate-800/95 hover:bg-amber-600 hover:text-slate-950 text-amber-200 border-amber-500/40'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Admin Portal</span>
-              </button>
-            </div>
-
-            {/* Desktop Site / Mobile View Toggle + Free Demo (Top Bar) */}
-            <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={onToggleViewMode}
-                title={
-                  viewMode === 'desktop'
-                    ? 'Currently showing full-width Desktop Site layout. Click to switch back to Mobile View.'
-                    : 'Switch to full-screen landscape Desktop Site layout'
-                }
-                aria-pressed={viewMode === 'desktop'}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer border whitespace-nowrap shrink-0 ${
-                  viewMode === 'desktop'
-                    ? 'bg-emerald-400 text-slate-950 border-emerald-300'
-                    : 'bg-white/10 hover:bg-white/20 text-slate-100 border-white/20'
-                }`}
-              >
-                {viewMode === 'desktop' ? (
-                  <>
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Mobile View</span>
-                  </>
-                ) : (
-                  <>
-                    <Monitor className="w-3.5 h-3.5" />
-                    <span>Desktop Site</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setCurrentTab('demo');
-                }}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer border whitespace-nowrap shrink-0 ${
-                  currentTab === 'demo'
-                    ? 'bg-amber-400 text-slate-950 border-amber-300'
-                    : 'bg-white/10 hover:bg-white/20 text-amber-200 border-white/15'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Free Demo</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs w-full">
       {/* Main Header Row */}
-      <div className={`${containerWidthClass} px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-3`}>
+      <div className={`${containerWidthClass} px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 min-h-[60px] sm:min-h-[68px] flex items-center justify-between gap-2 sm:gap-3`}>
         {/* Brand Logo (Reference-matched Orange Cap-Book Icon + Two-Tone MyStudyZone + Learn • Practice • Grow) */}
         <button
           type="button"
@@ -310,15 +175,15 @@ export const Header: React.FC<HeaderProps> = ({
             if (activeRole === 'admin') handleRoleChange('student');
             onMenuAction('home-overview');
           }}
-          className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group shrink-0 text-left"
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0 min-w-0 text-left"
         >
-          <BrandBookCapLogo className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
-          <div className="leading-none">
-            <span className="font-display font-black text-lg sm:text-2xl tracking-tight block">
+          <BrandBookCapLogo className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
+          <div className="leading-none min-w-0">
+            <span className="font-display font-black text-base sm:text-2xl tracking-tight block truncate">
               <span className="text-slate-900">MyStudy</span>
               <span className="text-orange-600">Zone</span>
             </span>
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-700 tracking-wide block mt-0.5">
+            <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-700 tracking-wide block mt-0.5 truncate">
               Learn • Practice • Grow
             </span>
           </div>
@@ -439,38 +304,14 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Right Actions Area */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Mobile Direct Desktop Site Button (Always Accessible Without Opening Drawer) */}
-          <button
-            type="button"
-            onClick={onToggleViewMode}
-            aria-pressed={viewMode === 'desktop'}
-            className={`sm:hidden px-2 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 border cursor-pointer whitespace-nowrap ${
-              viewMode === 'desktop'
-                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                : 'bg-slate-100 text-slate-800 border-slate-300'
-            }`}
-          >
-            {viewMode === 'desktop' ? (
-              <>
-                <Smartphone className="w-3 h-3 shrink-0" />
-                <span>Mobile</span>
-              </>
-            ) : (
-              <>
-                <Monitor className="w-3 h-3 shrink-0" />
-                <span>Desktop</span>
-              </>
-            )}
-          </button>
-
-          {/* Signed-in Active Board & Class Switcher Pill */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Signed-in Active Board & Class Switcher Pill (Desktop & Tablet) */}
           {isLearningRole &&
             currentStudent &&
             (() => {
               const accessiblePairs = getAccessibleBoardClassesList(currentStudent);
               return (
-                <div className="relative">
+                <div className="relative hidden md:block">
                   <button
                     type="button"
                     onClick={() => {
@@ -626,7 +467,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenMembership(currentStudent.classLevel, activeBoard)}
-                    className="hidden md:flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                    className="hidden lg:flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
                   >
                     <Crown className="w-3.5 h-3.5" />
                     <span>Upgrade ₹99</span>
@@ -637,7 +478,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenMembership(currentStudent.classLevel, activeBoard)}
-                  className="hidden md:flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                  className="hidden lg:flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
                 >
                   <Crown className="w-3.5 h-3.5 text-emerald-600" />
                   <span>₹99 ({pInfo.daysRemaining}d)</span>
@@ -645,22 +486,9 @@ export const Header: React.FC<HeaderProps> = ({
               );
             })()}
 
-          {/* Signed-out Desktop Quick CTAs */}
-          {!currentStudent && !currentUser && (
-            <div className="hidden sm:flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onOpenAuth('register')}
-                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
-              >
-                Register Free
-              </button>
-            </div>
-          )}
-
           {/* Notification Bell (Authenticated Users Only) */}
           {(currentStudent || currentUser) && (
-            <div className="relative">
+            <div className="relative hidden sm:block">
               <button
                 type="button"
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -862,18 +690,6 @@ export const Header: React.FC<HeaderProps> = ({
                           </button>
                         );
                       })}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowProfileDropdown(false);
-                          setShowLogoutConfirm(true);
-                        }}
-                        className="w-full p-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Sign Out</span>
-                      </button>
                     </div>
                   </div>
                 </>
@@ -881,9 +697,22 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Logout OR Sign In Button */}
+          {/* Mobile Hamburger Menu Button */}
+          {isLearningRole && (
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="xl:hidden p-2 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors shrink-0"
+              aria-label="Toggle Navigation Menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          )}
+
+          {/* SINGLE LOGIN / LOGOUT BUTTON IN TOP-RIGHT CORNER */}
           {currentUser || currentStudent ? (
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -891,11 +720,12 @@ export const Header: React.FC<HeaderProps> = ({
                   setShowProfileDropdown(false);
                   setShowNotifications(false);
                 }}
-                className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer"
+                aria-label="Logout"
                 aria-expanded={showLogoutConfirm}
+                className="min-h-[38px] sm:min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40"
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Logout</span>
+                <LogOut className="w-4 h-4 shrink-0" />
+                <span>Logout</span>
               </button>
 
               {showLogoutConfirm && (
@@ -904,7 +734,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="fixed inset-0 z-40"
                     onClick={() => setShowLogoutConfirm(false)}
                   />
-                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border-2 border-red-200 p-4 z-50">
+                  <div className="fixed sm:absolute right-3.5 sm:right-0 top-16 sm:top-full sm:mt-2 w-72 max-w-[calc(100vw-1.75rem)] bg-white rounded-2xl shadow-2xl border-2 border-red-200 p-4 z-50">
                     <h4 className="font-extrabold text-sm text-slate-900">
                       Confirm Log Out?
                     </h4>
@@ -939,24 +769,15 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <button
               type="button"
-              onClick={() => onOpenAuth('login')}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenAuth('login');
+              }}
+              aria-label="Login"
+              className="min-h-[38px] sm:min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40"
             >
-              <LogIn className="w-3.5 h-3.5" />
+              <LogIn className="w-4 h-4 shrink-0" />
               <span>Login</span>
-            </button>
-          )}
-
-          {/* Mobile Hamburger Menu Button */}
-          {isLearningRole && (
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="xl:hidden p-2 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors"
-              aria-label="Toggle Navigation Menu"
-              aria-expanded={mobileMenuOpen}
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           )}
         </div>
@@ -1114,55 +935,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Account Bottom Row */}
-          {currentUser || currentStudent ? (
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+          {/* Account Bottom Row (Profile Shortcut Only when Signed In — No Duplicate Login/Logout) */}
+          {currentStudent && (
+            <div className="pt-2 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => {
                   setCurrentTab('profile');
                   setMobileMenuOpen(false);
                 }}
-                className="min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <User className="w-4 h-4" />
                 <span>My Profile</span>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setMobileMenuOpen(false);
-                  await logout();
-                }}
-                className="min-h-[44px] rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAuth('register');
-                }}
-                className="min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <User className="w-4 h-4" />
-                <span>Register Free</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAuth('login');
-                }}
-                className="min-h-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Login</span>
               </button>
             </div>
           )}
