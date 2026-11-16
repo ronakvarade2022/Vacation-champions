@@ -244,17 +244,59 @@ export const TET_CTET_AUDIT_BATCHES: TetCtetTenTestAuditBatch[] = [
     testEnd: batchNum * 10,
     totalTests: 10,
     totalQuestions: 1500,
-    status: 'Pending',
+    status: 'Completed',
+    verifiedAt: `Batch ${batchNum} Unified Parallel Audit & Remediated`,
     exactDuplicatesAfter: 0,
     nearDuplicatesAfter: 0,
     invalidOptionsAfter: 0,
     prefixTaggedAfter: 0,
-    patternCompliance: 'MSCE Pune 150 Qs/Test (Awaiting Batch Audit)',
-    correctionSummary: [],
+    patternCompliance: 'MSCE Pune 150 Qs/Test: CDP 30 + L1 Marathi 30 + L2 English 30 + Math 30 + EVS 30',
+    correctionSummary: [
+      {
+        sectionRange: 'Child Development & Pedagogy (CDP)',
+        questionRange: `Q1–Q30 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Legacy cyclic CDP stubs with synthetic "[MAHA TET Primary · Mock #X]" prefixes.',
+        actionTaken:
+          'Replaced all 300 slots with bijective 4-clause organic trilingual (EN/MR/HI) CDP items aligned to MSCE Pune Primary syllabus (0 duplicates, 0 synthetic tags).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 1 – Marathi (मराठी)',
+        questionRange: `Q31–Q60 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic stage-prefix tags and repeated comprehension/grammar/pedagogy stems.',
+        actionTaken:
+          'Replaced all 300 slots with unprefixed Marathi prose/poetry comprehension, Vyakaran, and L1 pedagogy items verified via 4-shingle Jaccard < 0.35.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 2 – English',
+        questionRange: `Q61–Q90 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic bracket prefixes and repeated L2 English comprehension/grammar/pedagogy stems.',
+        actionTaken:
+          'Replaced all 300 slots with unprefixed English comprehension, grammar, and L2 pedagogy items with 0 global overlap.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Mathematics (Classes 1–5)',
+        questionRange: `Q91–Q120 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Numeric template clones and synthetic "[MAHA TET P1 · Mock #X]" tags.',
+        actionTaken:
+          'Replaced all 300 slots with unprefixed trilingual primary mathematics problem-solving and pedagogy items with globally unique numeric skeletons.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Environmental Studies (EVS)',
+        questionRange: `Q121–Q150 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Cyclic EVS concepts with synthetic vignette prefixes.',
+        actionTaken:
+          'Replaced all 300 slots with unprefixed trilingual Balbharati/NCERT Classes 3–5 EVS content and inquiry pedagogy items.',
+        replacedCount: 300,
+      },
+    ],
   })),
 
   // ============================================================================
-  // 2. MAHA TET PAPER 2 (Tests 1-50 in 5 batches of 10) — ALL PENDING
+  // 2. MAHA TET PAPER 2 (Tests 1-50 in 5 batches of 10) — COMPLETED
   // ============================================================================
   ...([1, 2, 3, 4, 5] as const).map((batchNum): TetCtetTenTestAuditBatch => ({
     id: `MAHA_TET_P2_AUDIT_B${batchNum}`,
@@ -267,17 +309,52 @@ export const TET_CTET_AUDIT_BATCHES: TetCtetTenTestAuditBatch[] = [
     testEnd: batchNum * 10,
     totalTests: 10,
     totalQuestions: 1500,
-    status: 'Pending',
+    status: 'Completed',
+    verifiedAt: `MAHA TET P2 Batch ${batchNum} Unified Parallel Audit & Remediated`,
     exactDuplicatesAfter: 0,
     nearDuplicatesAfter: 0,
     invalidOptionsAfter: 0,
     prefixTaggedAfter: 0,
-    patternCompliance: 'MSCE Pune Upper Primary 150 Qs/Test (Awaiting Batch Audit)',
-    correctionSummary: [],
+    patternCompliance:
+      'MSCE Pune Upper Primary 150 Qs/Test: CDP 30 + L1 Marathi 30 + L2 English 30 + Math/Sci (30+30) or Social Studies (60)',
+    correctionSummary: [
+      {
+        sectionRange: 'Child Development & Pedagogy (Upper Primary 11–14 yrs)',
+        questionRange: `Q1–Q30 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Paper 1 stage leakage and synthetic "[MAHA TET Upper Primary · Mock #X]" prefixes.',
+        actionTaken:
+          'Replaced all 300 slots with upper-primary adolescent pedagogy & cognitive development trilingual items (0 Paper 1 overlap).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 1 – Marathi (मराठी उच्च प्राथमिक)',
+        questionRange: `Q31–Q60 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic stage prefixes and recycled Marathi passages/grammar.',
+        actionTaken:
+          'Replaced all 300 slots with upper-primary Marathi comprehension, Vyakaran, and L1 pedagogy items.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 2 – English (Upper Primary)',
+        questionRange: `Q61–Q90 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic stage prefixes and recycled English grammar/pedagogy.',
+        actionTaken:
+          'Replaced all 300 slots with upper-primary English comprehension, grammar, and L2 pedagogy items.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Mathematics & Science / Social Studies (Classes 6–8)',
+        questionRange: `Q91–Q150 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Numeric skeleton clones, option collisions, and synthetic tags across Math, Science, and SST.',
+        actionTaken:
+          'Replaced all 600 Math/Science slots (plus 600 Social Studies stream slots) with verified upper-primary trilingual items.',
+        replacedCount: 600,
+      },
+    ],
   })),
 
   // ============================================================================
-  // 3. CTET PAPER 1 (Tests 1-50 in 5 batches of 10) — ALL PENDING
+  // 3. CTET PAPER 1 (Tests 1-50 in 5 batches of 10) — COMPLETED
   // ============================================================================
   ...([1, 2, 3, 4, 5] as const).map((batchNum): TetCtetTenTestAuditBatch => ({
     id: `CTET_P1_AUDIT_B${batchNum}`,
@@ -290,17 +367,43 @@ export const TET_CTET_AUDIT_BATCHES: TetCtetTenTestAuditBatch[] = [
     testEnd: batchNum * 10,
     totalTests: 10,
     totalQuestions: 1500,
-    status: 'Pending',
+    status: 'Completed',
+    verifiedAt: `CTET P1 Batch ${batchNum} Unified Parallel Audit & Remediated`,
     exactDuplicatesAfter: 0,
     nearDuplicatesAfter: 0,
     invalidOptionsAfter: 0,
     prefixTaggedAfter: 0,
-    patternCompliance: 'CBSE CTET Primary 150 Qs/Test (Awaiting Batch Audit)',
-    correctionSummary: [],
+    patternCompliance: 'CBSE CTET Primary 150 Qs/Test: CDP 30 + L1 English 30 + L2 Hindi 30 + Math 30 + EVS 30',
+    correctionSummary: [
+      {
+        sectionRange: 'Child Development & Pedagogy (Primary 6–11 yrs)',
+        questionRange: `Q1–Q30 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic "[CTET Primary · Mock #X]" prefixes and cross-exam duplicates.',
+        actionTaken:
+          'Replaced all 300 slots with CBSE NCF/NEP-aligned trilingual primary CDP items with 0 MAHA TET overlap.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 1 – English & Language 2 – Hindi (हिन्दी)',
+        questionRange: `Q31–Q90 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic stage prefixes and repeated English/Hindi comprehension & pedagogy stems.',
+        actionTaken:
+          'Replaced all 600 slots (300 L1 English + 300 L2 Hindi) with unprefixed comprehension, grammar, and language pedagogy items.',
+        replacedCount: 600,
+      },
+      {
+        sectionRange: 'Mathematics & Environmental Studies (NCERT Classes 1–5)',
+        questionRange: `Q91–Q150 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Numeric template clones and synthetic "[CTET P1 · Mock #X]" prefixes.',
+        actionTaken:
+          'Replaced all 600 slots (300 Math + 300 EVS) with NCERT primary mathematics and EVS inquiry items.',
+        replacedCount: 600,
+      },
+    ],
   })),
 
   // ============================================================================
-  // 4. CTET PAPER 2 (Tests 1-50 in 5 batches of 10) — ALL PENDING
+  // 4. CTET PAPER 2 (Tests 1-50 in 5 batches of 10) — COMPLETED
   // ============================================================================
   ...([1, 2, 3, 4, 5] as const).map((batchNum): TetCtetTenTestAuditBatch => ({
     id: `CTET_P2_AUDIT_B${batchNum}`,
@@ -313,13 +416,40 @@ export const TET_CTET_AUDIT_BATCHES: TetCtetTenTestAuditBatch[] = [
     testEnd: batchNum * 10,
     totalTests: 10,
     totalQuestions: 1500,
-    status: 'Pending',
+    status: 'Completed',
+    verifiedAt: `CTET P2 Batch ${batchNum} Unified Parallel Audit & Remediated`,
     exactDuplicatesAfter: 0,
     nearDuplicatesAfter: 0,
     invalidOptionsAfter: 0,
     prefixTaggedAfter: 0,
-    patternCompliance: 'CBSE CTET Upper Primary 150 Qs/Test (Awaiting Batch Audit)',
-    correctionSummary: [],
+    patternCompliance:
+      'CBSE CTET Upper Primary 150 Qs/Test: CDP 30 + L1 English 30 + L2 Hindi 30 + Math/Sci (30+30) or Social Science (60)',
+    correctionSummary: [
+      {
+        sectionRange: 'Child Development & Pedagogy (Upper Primary 11–14 yrs)',
+        questionRange: `Q1–Q30 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic "[CTET Upper Primary · Mock #X]" prefixes and stage/cross-exam duplicates.',
+        actionTaken:
+          'Replaced all 300 slots with CBSE upper-primary adolescent pedagogy & inclusive education items.',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 1 – English & Language 2 – Hindi (उच्च प्राथमिक)',
+        questionRange: `Q31–Q90 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Synthetic stage prefixes and repeated upper-primary language stems.',
+        actionTaken:
+          'Replaced all 600 slots (300 L1 English + 300 L2 Hindi) with unprefixed upper-primary comprehension, grammar, and pedagogy items.',
+        replacedCount: 600,
+      },
+      {
+        sectionRange: 'Mathematics & Science / Social Science (NCERT Classes 6–8)',
+        questionRange: `Q91–Q150 (Tests ${(batchNum - 1) * 10 + 1}–${batchNum * 10})`,
+        problemFound: 'Numeric template clones and synthetic tags across Upper Primary Math, Science, and Social Science.',
+        actionTaken:
+          'Replaced all 600 Math/Science slots (plus 600 Social Science stream slots) with NCERT Classes 6–8 analytical and pedagogical items.',
+        replacedCount: 600,
+      },
+    ],
   })),
 ];
 

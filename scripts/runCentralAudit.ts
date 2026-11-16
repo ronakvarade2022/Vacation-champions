@@ -1,16 +1,23 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  executeCentralizedAuditWithManifest,
+  executeParallelCentralizedAudit,
   MockTestQaStatusRecord,
 } from '../src/data/tetCtetCentralAuditEngine';
 
-const { report: fullReport, manifestEntries } = executeCentralizedAuditWithManifest({
-  auditMode: 'full',
-  includePaper2SocialStudies: true,
-  includePracticePools: true,
-  includeMultiMediumVerification: true,
-});
+async function main() {
+  const { report: fullReport, manifestEntries } = await executeParallelCentralizedAudit({
+    auditMode: 'full',
+    concurrency: 6,
+    preserveVerifiedBatchIds: [
+      'MAHA_TET_P1_AUDIT_B1',
+      'MAHA_TET_P1_AUDIT_B2',
+      'MAHA_TET_P1_AUDIT_B3',
+    ],
+    includePaper2SocialStudies: true,
+    includePracticePools: true,
+    includeMultiMediumVerification: true,
+  });
 
 const manifestPath = resolve(process.cwd(), 'src/data/tetCtetVerifiedBatchManifest.ts');
 const manifestSource = `import type { TetCtetModuleId } from '../types/tetCtet';
@@ -62,12 +69,15 @@ export const MOCK_TEST_QA_STATUS_BY_KEY: Record<string, MockTestQaStatusRecord> 
 `;
 writeFileSync(snapshotPath, snapshotSource, 'utf8');
 
-console.log('=== STEP 2 & STEP 7: QA AUDIT & PUBLICATION READINESS REPORT ===');
+console.log('=== UNIFIED PARALLEL QA AUDIT & PUBLICATION READINESS REPORT ===');
 console.log({
   generatedAt: fullReport.generatedAt,
   durationMs: fullReport.durationMs,
   totalMockTests: fullReport.totalMockTests,
   totalQuestions: fullReport.totalQuestions,
+  preservedGreenTestsSkipped: fullReport.skippedVerifiedTests,
+  preservedGreenQuestionsSkipped: fullReport.skippedVerifiedQuestions,
+  freshlyScannedPendingTests: fullReport.freshlyScannedTests,
   verifiedQuestions: fullReport.questionsPassed,
   questionsReplaced: fullReport.questionsReplaced,
   duplicateQuestionsRemaining: fullReport.duplicateQuestionsDetected,
@@ -81,4 +91,10 @@ console.log({
   verifiedMediumsCheck: fullReport.verifiedMediumsCheck,
   practicePoolSummary: fullReport.practicePoolSummary,
   socialStudiesExtraChecked: fullReport.socialStudiesExtraChecked,
+  sampleFindingsCount: fullReport.sampleFindings.length,
+  sampleFindings: fullReport.sampleFindings.slice(0, 5),
 });
+}
+
+main();
+

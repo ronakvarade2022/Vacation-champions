@@ -12,6 +12,10 @@ import { getMahaTetP1B2MarathiL1Question } from './tetCtetAuditBatches/mahaTetP1
 import { getMahaTetP1B2EnglishL2Question } from './tetCtetAuditBatches/mahaTetP1B2EnAll';
 import { getMahaTetP1B3MarathiL1Question } from './tetCtetAuditBatches/mahaTetP1B3MrAll';
 import { getMahaTetP1B3EnglishL2Question } from './tetCtetAuditBatches/mahaTetP1B3EnAll';
+import {
+  computeBijectiveSlotIndex,
+  composeVariedLanguageStem,
+} from './tetCtetUnifiedSyllabusBanks';
 
 export function normalizeTetText(raw: string): string {
   return String(raw || '')
@@ -266,6 +270,52 @@ const MARATHI_PASSAGES: PassageBankItem[] = [
       },
     ],
   },
+  {
+    title: 'शालेय परसबाग आणि श्रमसंस्कार',
+    text: 'शाळेच्या परसबागेत विद्यार्थ्यांनी स्वतःच्या हातांनी भाजीपाल्याचे वाफे तयार केले. सेंद्रिय खताचा वापर आणि ठिबक सिंचनामुळे पाण्याची बचत होऊन भरघोस उत्पादन मिळाले.',
+    questions: [
+      {
+        q: 'परसबागेतील उपक्रमातून विद्यार्थ्यांनी पाण्याची बचत कशी साधली?',
+        opts: [
+          'सेंद्रिय खताचा वापर आणि ठिबक सिंचन पद्धतीचा अवलंब करून',
+          'रोपांना अजिबात पाणी न देता',
+          'रासायनिक तणनाशकांचा अतिवापर करून',
+          'बागेत सिमेंटचे रस्ते बांधून',
+        ],
+        ans: 0,
+        exp: 'ठिबक सिंचनामुळे पाण्याची बचत झाली आणि सेंद्रिय खतामुळे चांगले उत्पादन मिळाले.',
+      },
+      {
+        q: '"भरघोस" या शब्दाचा संदर्भातील अचूक अर्थ कोणता?',
+        opts: ['मुबलक किंवा विपुल प्रमाणात', 'अत्यंत अल्प', 'दुर्मीळ', 'अपूर्ण'],
+        ans: 0,
+        exp: 'भरघोस उत्पादन म्हणजे मुबलक किंवा भरपूर उत्पादन.',
+      },
+    ],
+  },
+  {
+    title: 'वाचनसंस्कृती आणि विचारप्रगल्भता (पद्य)',
+    text: 'ग्रंथ हेच गुरू अमुचे, उजळती मनाची वाट, / शब्दांच्या या चांदण्यातून, फिटे अज्ञानाची रात्र.',
+    questions: [
+      {
+        q: 'वरील काव्यपंक्तीत कवीने ग्रंथांना कोणाची उपमा दिली आहे?',
+        opts: [
+          'मनाची वाट उजळणाऱ्या गुरूची',
+          'अज्ञानाच्या काळोखाची',
+          'निर्जीव कागदाच्या गठ्ठ्याची',
+          'व्यापारी नफ्याची',
+        ],
+        ans: 0,
+        exp: '"ग्रंथ हेच गुरू अमुचे" या ओळीत ग्रंथांना मार्गदर्शक गुरू म्हटले आहे.',
+      },
+      {
+        q: '"अज्ञानाची रात्र" या शब्दसमूहातून कोणता अलंकार सूचित होतो?',
+        opts: ['रूपक अलंकार', 'यमक अलंकार', 'अतिशयोक्ती अलंकार', 'अनन्वय अलंकार'],
+        ans: 0,
+        exp: 'अज्ञानावर रात्रीचे अभेद आरोपण केल्यामुळे रूपक अलंकार साधला आहे.',
+      },
+    ],
+  },
 ];
 
 const MARATHI_GRAMMAR_POOL: GrammarItem[] = [
@@ -328,6 +378,57 @@ const HINDI_PASSAGES: PassageBankItem[] = [
         opts: ['सत् + उपयोग', 'सदु + प्रयोग', 'सद + उपयोग', 'सत् + प्रयोग'],
         ans: 0,
         exp: 'व्यंजन संधि के नियमानुसार सत् + उपयोग = सदुपयोग होता है।',
+      },
+    ],
+  },
+  {
+    title: 'ग्रामीण पुस्तकालय और स्वाध्याय',
+    text: 'पंचायत भवन के छोटे पुस्तकालय ने गाँव के किशोरों में प्रतिदिन संध्या को सामूहिक पठन की रुचि जगाई। समाचार-पत्रों और विज्ञान पत्रिकाओं के माध्यम से उनमें तार्किक जिज्ञासा का विकास हुआ।',
+    questions: [
+      {
+        q: 'गाँव के किशोरों में तार्किक जिज्ञासा के विकास का मुख्य साधन क्या बना?',
+        opts: [
+          'पंचायत पुस्तकालय में समाचार-पत्रों और विज्ञान पत्रिकाओं का सामूहिक पठन',
+          'विद्यालय की वार्षिक परीक्षा रद्द होना',
+          'बिना समझे पुरानी सूचियाँ रटना',
+          'पुस्तकालय को ताला लगाना',
+        ],
+        ans: 0,
+        exp: 'गद्यांश के अनुसार समाचार-पत्रों और विज्ञान पत्रिकाओं के सामूहिक पठन से तार्किक जिज्ञासा बढ़ी।',
+      },
+      {
+        q: '"जिज्ञासा" शब्द का उपयुक्त अर्थ क्या है?',
+        opts: ['जानने की उत्कट इच्छा', 'उदासीनता का भाव', 'भय और संकोच', 'थकान की स्थिति'],
+        ans: 0,
+        exp: 'जिज्ञासा का अर्थ जानने या सीखने की प्रबल इच्छा होता है।',
+      },
+    ],
+  },
+  {
+    title: 'वाणी का माधुर्य (पद्यांश)',
+    text: 'मीठी वाणी बोलिए, मन का आपा खोय, / औरन को सीतल करै, आपहुँ सीतल होय।',
+    questions: [
+      {
+        q: 'प्रस्तुत दोहे में "मन का आपा खोय" से कवि का क्या आशय है?',
+        opts: [
+          'अहंकार और कटुता का त्याग करके विनम्र भाव से बोलना',
+          'अपनी स्मृति पूरी तरह खो देना',
+          'क्रोध में उच्च स्वर में बोलना',
+          'मौन रहकर किसी से संवाद न करना',
+        ],
+        ans: 0,
+        exp: '"मन का आपा खोय" का अर्थ अहंकार त्यागकर मधुर वाणी बोलना है।',
+      },
+      {
+        q: 'मधुर वाणी का वक्ता और श्रोता दोनों पर क्या प्रभाव पड़ता है?',
+        opts: [
+          'दोनों के मन को शीतलता और प्रसन्नता की अनुभूति होती है',
+          'दोनों के बीच विवाद बढ़ जाता है',
+          'केवल श्रोता को हानि होती है',
+          'समय का अपव्यय होता है',
+        ],
+        ans: 0,
+        exp: 'मधुर वचन दूसरों को भी शीतल करता है और स्वयं को भी मानसिक शांति देता है।',
       },
     ],
   },
@@ -617,49 +718,6 @@ const LANG_PEDAGOGY_CORES: LangPedagogyCore[] = [
   },
 ];
 
-const CONTEXT_BANKS = {
-  English: [
-    'Case Study (Primary Vocabulary Workshop)',
-    'Classroom Situation (Reading Corner)',
-    'CBSE / NCF Pedagogy Context',
-    'Peer Storytelling Circle',
-    'Bilingual Bridging Task',
-    'Formative Writing Feedback',
-    'Elementary Listening Lab',
-    'Assessment Rubric Review',
-    'Guided Oral Dialogue',
-    'Print-Rich Classroom Wall',
-  ],
-  Marathi: [
-    'वर्ग प्रसंग (वाचन कोपरा)',
-    'बालभारती कृतियुक्त अध्यापन',
-    'बहुभाषिक वर्ग संवाद',
-    'उपचारात्मक भाषा वर्ग',
-    'कथाकथन व श्रवण उपक्रम',
-    'निर्मितीक्षम लेखन कार्यशाळा',
-    'मूल्यमापन व अभिप्राय सत्र',
-    'संदर्भयुक्त व्याकरण सराव',
-  ],
-  Hindi: [
-    'कक्षा परिस्थिति (पठन कोना)',
-    'एन.सी.एफ. आधारित भाषा सत्र',
-    'संवादात्मक कहानी वाचन',
-    'रचनात्मक लेखन कार्यशाला',
-    'बहुभाषिक कक्षा सेतु',
-    'सतत एवं व्यापक मूल्यांकन',
-    'प्रसंगानुकूल व्याकरण अभ्यास',
-    'सहपाठी पठन गतिविधि',
-  ],
-  Urdu: [
-    'کلاس روم کا منظر (مطالعہ کارنر)',
-    'تخلیقی تحریر کی سرگرمی',
-    'کثیر اللسانی تدریسی ماحول',
-    'کہانی گوئی اور سننے کی مشق',
-    'تشخیصی و علاجی تدریس',
-    'عملی قواعد کی مشق',
-  ],
-};
-
 function deterministicSelect<T>(arr: T[], idx: number): T {
   return arr[((idx % arr.length) + arr.length) % arr.length];
 }
@@ -734,21 +792,19 @@ export function generateTetCtetLanguageQuestion(params: {
     }
   }
 
-  const examOffset = exam === 'MAHA_TET' ? 0 : 100000;
-  const paperOffset = paper === 1 ? 0 : 50000;
-  const poolOffset =
-    poolType === 'MOCK'
-      ? 0
-      : poolType === 'SUBJECT_PRACTICE'
-      ? 200000
-      : poolType === 'TOPIC_PRACTICE'
-      ? 300000
-      : poolType === 'REVISION'
-      ? 400000
-      : 500000;
-  const lOffset = isLanguage1 ? 0 : 12000;
-  const globalIdx =
-    examOffset + paperOffset + poolOffset + lOffset + testNumber * 37 + slotIndex;
+  const moduleId = getModuleId(exam, paper);
+  const subjectId = isLanguage1 ? 'LANGUAGE_1' : 'LANGUAGE_2';
+  const subjectLabel = `${isLanguage1 ? 'Language 1' : 'Language 2'} (${language})`;
+  const qId = `TETCTET-${exam}-P${paper}-${poolType === 'MOCK' ? `T${String(testNumber).padStart(2, '0')}` : poolType}-${isLanguage1 ? 'L1' : 'L2'}-${language.toUpperCase()}-Q${String(questionNumber).padStart(3, '0')}`;
+
+  const bijectiveSeed = computeBijectiveSlotIndex({
+    exam,
+    paper,
+    poolType,
+    testNumber,
+    subjectId,
+    slotIndex,
+  });
 
   const passages =
     language === 'Marathi'
@@ -768,11 +824,6 @@ export function generateTetCtetLanguageQuestion(params: {
       ? URDU_GRAMMAR_POOL
       : ENGLISH_GRAMMAR_POOL;
 
-  const moduleId = getModuleId(exam, paper);
-  const subjectId = isLanguage1 ? 'LANGUAGE_1' : 'LANGUAGE_2';
-  const subjectLabel = `${isLanguage1 ? 'Language 1' : 'Language 2'} (${language})`;
-  const qId = `TETCTET-${exam}-P${paper}-${poolType === 'MOCK' ? `T${String(testNumber).padStart(2, '0')}` : poolType}-${isLanguage1 ? 'L1' : 'L2'}-${language.toUpperCase()}-Q${String(questionNumber).padStart(3, '0')}`;
-
   // First 15 slots: Comprehension / Grammar Content; Next 15 slots: Language Pedagogy
   let rawQuestion = '';
   let rawOptions: [string, string, string, string] = ['', '', '', ''];
@@ -781,69 +832,75 @@ export function generateTetCtetLanguageQuestion(params: {
   let topic = '';
   let pattern: TetCtetQuestion['questionPattern'] = 'Comprehension';
 
-  const paperStageTag =
-    paper === 1
-      ? language === 'Marathi'
-        ? `इयत्ता १–५ (${exam === 'MAHA_TET' ? 'महाटेट' : 'सीटेट'} संच ${testNumber})`
-        : language === 'Hindi'
-        ? `कक्षा १–५ (${exam === 'MAHA_TET' ? 'महाटीईटी' : 'सीटेट'} सेट ${testNumber})`
-        : language === 'Urdu'
-        ? `جماعت ۱–۵ (سیٹ ${testNumber})`
-        : `Primary Classes 1–5 (${exam === 'MAHA_TET' ? 'MAHA TET' : 'CTET'} Set ${testNumber})`
-      : language === 'Marathi'
-      ? `इयत्ता ६–८ (${exam === 'MAHA_TET' ? 'महाटेट' : 'सीटेट'} संच ${testNumber})`
-      : language === 'Hindi'
-      ? `कक्षा ६–८ (${exam === 'MAHA_TET' ? 'महाटीईटी' : 'सीटेट'} सेट ${testNumber})`
-      : language === 'Urdu'
-      ? `جماعت ۶–۸ (سیٹ ${testNumber})`
-      : `Upper Primary Classes 6–8 (${exam === 'MAHA_TET' ? 'MAHA TET' : 'CTET'} Set ${testNumber})`;
-
   if (slotIndex < 7) {
     // Comprehension passage slot
-    const pIdx = (globalIdx + slotIndex * 5) % passages.length;
+    const pIdx = (bijectiveSeed + slotIndex * 5) % passages.length;
     const passage = passages[pIdx];
-    const qObj = passage.questions[(globalIdx + slotIndex * 3) % passage.questions.length];
+    const qObj = passage.questions[(bijectiveSeed + slotIndex * 3) % passage.questions.length];
     topic = `${passage.title} – Comprehension`;
     pattern = 'Comprehension';
-    rawQuestion = `[${paperStageTag} · ${isLanguage1 ? 'L1' : 'L2'} Q${questionNumber} · "${passage.title}"]\n"${passage.text}"\n\n${qObj.q}`;
+    rawQuestion = composeVariedLanguageStem({
+      language,
+      topic,
+      corePrompt: qObj.q,
+      bijectiveSeed,
+      paper,
+      exam,
+      passageTitle: passage.title,
+      passageText: passage.text,
+    });
     rawOptions = qObj.opts;
     rawCorrect = qObj.ans;
     rawExplanation = qObj.exp;
   } else if (slotIndex < 15) {
     // Grammar & Vocabulary slot
-    const gIdx = (globalIdx * 7 + slotIndex * 11) % grammarPool.length;
+    const gIdx = (bijectiveSeed + slotIndex * 11) % grammarPool.length;
     const gItem = grammarPool[gIdx];
     topic = gItem.topic;
     pattern = 'Grammar';
-    rawQuestion = `[${paperStageTag} · ${isLanguage1 ? 'L1' : 'L2'} Q${questionNumber} · ${gItem.topic}] ${gItem.prompt}`;
+    rawQuestion = composeVariedLanguageStem({
+      language,
+      topic,
+      corePrompt: gItem.prompt,
+      bijectiveSeed,
+      paper,
+      exam,
+    });
     rawOptions = gItem.options;
     rawCorrect = gItem.correct;
     rawExplanation = gItem.explanation;
   } else {
     // Language Pedagogy slots 15..29
-    const pCore = deterministicSelect(LANG_PEDAGOGY_CORES, globalIdx + slotIndex * 5);
-    const ctxList = CONTEXT_BANKS[language] || CONTEXT_BANKS.English;
-    const ctx = `${deterministicSelect(ctxList, globalIdx * 5 + slotIndex * 3)} • ${paperStageTag} • ${isLanguage1 ? 'L1' : 'L2'} Q${questionNumber}`;
+    const pCore = deterministicSelect(LANG_PEDAGOGY_CORES, bijectiveSeed + slotIndex * 5);
     topic = pCore.concept;
     pattern = slotIndex % 2 === 0 ? 'Classroom Scenario' : 'Pedagogical';
 
+    let cleanCorePrompt = '';
     if (language === 'Marathi') {
-      rawQuestion = pCore.mrPrompt(ctx);
+      cleanCorePrompt = pCore.mrPrompt('').replace(/^:\s*/, '');
       rawOptions = pCore.mrOpts;
       rawExplanation = pCore.mrExp;
     } else if (language === 'Hindi') {
-      rawQuestion = pCore.hiPrompt(ctx);
+      cleanCorePrompt = pCore.hiPrompt('').replace(/^:\s*/, '');
       rawOptions = pCore.hiOpts;
       rawExplanation = pCore.hiExp;
     } else if (language === 'Urdu') {
-      rawQuestion = pCore.urPrompt(ctx);
+      cleanCorePrompt = pCore.urPrompt('').replace(/^:\s*/, '');
       rawOptions = pCore.urOpts;
       rawExplanation = pCore.urExp;
     } else {
-      rawQuestion = pCore.enPrompt(ctx);
+      cleanCorePrompt = pCore.enPrompt('').replace(/^:\s*/, '');
       rawOptions = pCore.enOpts;
       rawExplanation = pCore.enExp;
     }
+    rawQuestion = composeVariedLanguageStem({
+      language,
+      topic,
+      corePrompt: cleanCorePrompt,
+      bijectiveSeed,
+      paper,
+      exam,
+    });
     rawCorrect = 0;
   }
 

@@ -8,6 +8,7 @@ import {
 } from '../types/tetCtet';
 import { getModuleId } from './tetCtetSyllabi';
 import { normalizeTetText, seededPermuteOptions } from './tetCtetLanguageBanks';
+import { composeVariedLanguageStem } from './tetCtetUnifiedSyllabusBanks';
 
 interface ReplacementEntry {
   key: string;
@@ -205,10 +206,27 @@ export function pickVerifiedReplacementQuestion(params: {
     return paperMatch && subjMatch;
   });
 
-  const fallbackPool = candidates.length > 0 ? candidates : REPLACEMENT_ENTRIES.filter((e) => e.subjectId === 'CDP');
+  const fallbackPool =
+    candidates.length > 0 ? candidates : REPLACEMENT_ENTRIES.filter((e) => e.subjectId === 'CDP');
 
-  for (const cand of fallbackPool) {
-    const norm = normalizeTetText(cand.question);
+  for (let i = 0; i < fallbackPool.length; i++) {
+    const cand = fallbackPool[i];
+    const directNorm = normalizeTetText(cand.question);
+    const useDirect = !existingStems || !existingStems.has(directNorm);
+    const finalQuestion = useDirect
+      ? cand.question
+      : composeVariedLanguageStem({
+          language:
+            baseQuestion.subjectId === 'LANGUAGE_1' || baseQuestion.subjectId === 'LANGUAGE_2'
+              ? language
+              : medium,
+          topic: cand.topic,
+          corePrompt: cand.question,
+          bijectiveSeed: 270000 + testNumber * 211 + baseQuestion.questionNumber * 17 + i,
+          paper,
+          exam,
+        });
+    const norm = normalizeTetText(finalQuestion);
     if (existingStems && existingStems.has(norm)) continue;
     const seedId = `${baseQuestion.id}-REPL-${cand.key}`;
     const permuted = seededPermuteOptions(cand.options, 0, seedId);
@@ -216,10 +234,13 @@ export function pickVerifiedReplacementQuestion(params: {
       ...baseQuestion,
       id: baseQuestion.id,
       moduleId: modId,
-      languageCode: baseQuestion.subjectId === 'LANGUAGE_1' || baseQuestion.subjectId === 'LANGUAGE_2' ? language : undefined,
+      languageCode:
+        baseQuestion.subjectId === 'LANGUAGE_1' || baseQuestion.subjectId === 'LANGUAGE_2'
+          ? language
+          : undefined,
       mediumRendered: medium,
       topic: cand.topic,
-      question: cand.question,
+      question: finalQuestion,
       options: permuted.options,
       correctAnswer: permuted.correctAnswer,
       explanation: cand.exp,
@@ -231,3 +252,4 @@ export function pickVerifiedReplacementQuestion(params: {
   }
   return null;
 }
+

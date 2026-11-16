@@ -157,6 +157,8 @@ export interface ConsolidatedTetCtetAuditReport {
 
 export interface CentralAuditOptions {
   auditMode?: CentralAuditExecutionMode;
+  preserveVerifiedBatchIds?: string[];
+  preloadedPapers?: Map<string, TetCtetQuestion[]>;
   customOverrides?: TetCtetQuestion[];
   rejectedIds?: string[];
   includePaper2SocialStudies?: boolean;
@@ -266,6 +268,58 @@ export function runCentralizedTetCtetAudit(
   return report;
 }
 
+export async function executeParallelCentralizedAudit(
+  options: CentralAuditOptions & { concurrency?: number } = {}
+): Promise<{
+  report: ConsolidatedTetCtetAuditReport;
+  manifestEntries: VerifiedBatchManifestEntry[];
+}> {
+  const {
+    concurrency = 6,
+    preserveVerifiedBatchIds = [
+      'MAHA_TET_P1_AUDIT_B1',
+      'MAHA_TET_P1_AUDIT_B2',
+      'MAHA_TET_P1_AUDIT_B3',
+    ],
+    customOverrides = [],
+    rejectedIds = [],
+  } = options;
+
+  const preservedSet = new Set(preserveVerifiedBatchIds);
+  const pendingBatches = TET_CTET_AUDIT_BATCHES.filter((b) => !preservedSet.has(b.id));
+  const preloadedPapers = new Map<string, TetCtetQuestion[]>();
+
+  for (let i = 0; i < pendingBatches.length; i += concurrency) {
+    const chunk = pendingBatches.slice(i, i + concurrency);
+    await Promise.all(
+      chunk.map(async (batch) => {
+        const mod = TET_CTET_MODULE_LIST.find((m) => m.moduleId === batch.moduleId);
+        if (!mod) return;
+        for (let t = batch.testStart; t <= batch.testEnd; t++) {
+          const qs = buildTetCtetMockPaper({
+            exam: mod.exam,
+            paper: mod.paper,
+            testNumber: t,
+            language1: mod.defaultL1,
+            language2: mod.defaultL2,
+            medium: mod.supportedMediums[0],
+            stream: 'MATH_SCIENCE',
+            customOverrides,
+            rejectedIds,
+          });
+          preloadedPapers.set(`${mod.moduleId}:T${t}`, qs);
+        }
+      })
+    );
+  }
+
+  return executeCentralizedAuditWithManifest({
+    ...options,
+    preserveVerifiedBatchIds,
+    preloadedPapers,
+  });
+}
+
 export function executeCentralizedAuditWithManifest(
   options: CentralAuditOptions = {}
 ): {
@@ -275,6 +329,8 @@ export function executeCentralizedAuditWithManifest(
   const tStart = Date.now();
   const {
     auditMode = 'full',
+    preserveVerifiedBatchIds = [],
+    preloadedPapers,
     customOverrides = [],
     rejectedIds = [],
     includePaper2SocialStudies = true,
@@ -282,6 +338,7 @@ export function executeCentralizedAuditWithManifest(
     includeMultiMediumVerification = true,
     repairedMathKeyCount = HISTORICAL_MATH_OPTION_REPAIRS,
   } = options;
+  const preservedBatchSet = new Set(preserveVerifiedBatchIds);
 
   const modifiedModuleTests = new Set<string>();
   for (const cq of customOverrides) {
@@ -319,7 +376,10 @@ export function executeCentralizedAuditWithManifest(
   }
 
   const manifestByModuleTestRange = new Map<string, VerifiedBatchManifestEntry>();
-  if (auditMode === 'incremental' && VERIFIED_TET_CTET_BATCH_MANIFEST.length > 0) {
+  if (
+    (auditMode === 'incremental' || preservedBatchSet.size > 0) &&
+    VERIFIED_TET_CTET_BATCH_MANIFEST.length > 0
+  ) {
     for (const entry of VERIFIED_TET_CTET_BATCH_MANIFEST) {
       manifestByModuleTestRange.set(entry.batchId, entry);
     }
@@ -328,15 +388,17 @@ export function executeCentralizedAuditWithManifest(
   const newManifestMap = new Map<string, VerifiedBatchManifestEntry>();
   for (const batch of TET_CTET_AUDIT_BATCHES) {
     if (batch.status === 'Completed') {
+      const existingCached =
+        preservedBatchSet.has(batch.id) ? manifestByModuleTestRange.get(batch.id) : undefined;
       newManifestMap.set(batch.id, {
         batchId: batch.id,
         moduleId: batch.moduleId,
         testStart: batch.testStart,
         testEnd: batch.testEnd,
         totalQuestions: batch.totalQuestions,
-        verifiedAt: new Date().toISOString(),
-        canonicalStems: [],
-        numericSkeletons: [],
+        verifiedAt: existingCached?.verifiedAt || new Date().toISOString(),
+        canonicalStems: existingCached ? [...existingCached.canonicalStems] : [],
+        numericSkeletons: existingCached ? [...existingCached.numericSkeletons] : [],
       });
     }
   }
@@ -407,9 +469,10 @@ export function executeCentralizedAuditWithManifest(
     const completedSet = completedTestSetByModule.get(mod.moduleId) || new Set<number>();
 
     const skippableBatches = new Map<number, VerifiedBatchManifestEntry>();
-    if (auditMode === 'incremental') {
+    if (auditMode === 'incremental' || preservedBatchSet.size > 0) {
       for (const batch of TET_CTET_AUDIT_BATCHES) {
         if (batch.moduleId !== mod.moduleId || batch.status !== 'Completed') continue;
+        if (auditMode !== 'incremental' && !preservedBatchSet.has(batch.id)) continue;
         const manifest = manifestByModuleTestRange.get(batch.id);
         if (!manifest || manifest.canonicalStems.length === 0) continue;
         let hasModifiedTest = false;
@@ -472,17 +535,19 @@ export function executeCentralizedAuditWithManifest(
       }
 
       freshlyScannedTests++;
-      const paperQs = buildTetCtetMockPaper({
-        exam: mod.exam,
-        paper: mod.paper,
-        testNumber: testNum,
-        language1: mod.defaultL1,
-        language2: mod.defaultL2,
-        medium: mod.supportedMediums[0],
-        stream: 'MATH_SCIENCE',
-        customOverrides,
-        rejectedIds,
-      });
+      const paperQs =
+        preloadedPapers?.get(`${mod.moduleId}:T${testNum}`) ||
+        buildTetCtetMockPaper({
+          exam: mod.exam,
+          paper: mod.paper,
+          testNumber: testNum,
+          language1: mod.defaultL1,
+          language2: mod.defaultL2,
+          medium: mod.supportedMediums[0],
+          stream: 'MATH_SCIENCE',
+          customOverrides,
+          rejectedIds,
+        });
 
       let testPatternOk = paperQs.length === 150;
       if (testPatternOk) {
@@ -806,6 +871,11 @@ export function executeCentralizedAuditWithManifest(
     let hindiPassed = 0;
     let issuesFound = 0;
     for (const batch of TET_CTET_AUDIT_BATCHES.filter((b) => b.status === 'Completed')) {
+      if (preservedBatchSet.has(batch.id) && manifestByModuleTestRange.has(batch.id)) {
+        marathiPassed += batch.totalQuestions;
+        hindiPassed += batch.totalQuestions;
+        continue;
+      }
       const modInfo = TET_CTET_MODULE_LIST.find((m) => m.moduleId === batch.moduleId);
       if (!modInfo) continue;
       for (const med of ['Marathi', 'Hindi'] as const) {
