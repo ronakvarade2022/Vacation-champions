@@ -14,6 +14,7 @@ import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
 import { AboutUsView } from './components/AboutUsView';
 import { ContactUsView } from './components/ContactUsView';
 import { FaqsView } from './components/FaqsView';
+import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 
 const AdminDashboard = lazy(() =>
   import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
@@ -84,7 +85,7 @@ const PortalLoadingCard: React.FC = () => (
   </div>
 );
 import { ClassLevel, EducationBoard, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
-import { MainMenuId, NavSubActionId } from './data/navigationConfig';
+import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationConfig';
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
 import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
 import {
@@ -702,6 +703,34 @@ const AppContent: React.FC = () => {
           </div>
         )}
 
+        {/* Consistent Sub-Page Navigation Bar (Return to Main Dashboard + Active Class + Left Vertical Section List + Right Horizontal Icon Display) */}
+        {isLearningPortal && currentTab !== 'public-home' && currentTab !== 'dashboard' && (
+          <SubPageConsistencyBar
+            activeSectionId={currentTab === 'referrals' ? 'referrals' : getActiveMenuId()}
+            selectedBoard={currentStudent ? activeBoard : publicBoard}
+            selectedClass={currentStudent ? currentStudent.classLevel : publicClass}
+            onSelectSection={(sectionId) => {
+              if (sectionId === 'referrals') {
+                handleNavigateTab('referrals');
+                return;
+              }
+              const targetMenu = MAIN_NAV_MENUS.find((m) => m.id === sectionId);
+              if (targetMenu && targetMenu.items.length > 0) {
+                handleMenuAction(targetMenu.items[0].id);
+              } else {
+                handleMenuAction('home-overview');
+              }
+            }}
+            onTriggerSubAction={handleMenuAction}
+            onNavigateTab={(tab) => handleNavigateTab(tab)}
+            onReturnHome={() => {
+              setHomeScrollTarget('home-overview');
+              setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        )}
+
         {/* Live Interactive Visitor Demo Dashboard (All Classes 1st–10th preview, zero DB writes) */}
         <Suspense fallback={<PortalLoadingCard />}>
           {currentTab === 'demo' ? (
@@ -794,6 +823,8 @@ const AppContent: React.FC = () => {
               currentRole={activeRole}
               currentUserName={currentStudent?.name || currentUser?.displayName}
               isDesktopMode={viewMode === 'desktop'}
+              onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
+              onMenuAction={handleMenuAction}
             />
           ) : currentTab === 'referrals' ? (
             <ReferralHubView

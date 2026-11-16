@@ -305,13 +305,13 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions Area */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* Signed-in Active Board & Class Switcher Pill (Desktop & Tablet) */}
+          {/* Signed-in Active Board & Class Switcher Pill (Visible on Mobile, Tablet & Desktop) */}
           {isLearningRole &&
             currentStudent &&
             (() => {
               const accessiblePairs = getAccessibleBoardClassesList(currentStudent);
               return (
-                <div className="relative hidden md:block">
+                <div className="relative block">
                   <button
                     type="button"
                     onClick={() => {
@@ -319,14 +319,16 @@ export const Header: React.FC<HeaderProps> = ({
                       setShowNotifications(false);
                       setShowProfileDropdown(false);
                     }}
-                    className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-xl cursor-pointer transition-colors"
-                    title={`Active: ${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel} (${accessiblePairs.length} unlocked)`}
+                    className="flex items-center gap-1 sm:gap-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 sm:px-2.5 py-1.5 rounded-xl cursor-pointer transition-colors"
+                    title={`Active Class: ${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel} (${accessiblePairs.length} unlocked)`}
                   >
                     <GraduationCap className="w-3.5 h-3.5 text-amber-800 shrink-0" />
-                    <span className="text-[11px] sm:text-xs font-extrabold text-amber-950 whitespace-nowrap">
-                      {getBoardShortLabel(activeBoard)} · {currentStudent.classLevel}
+                    <span className="text-[10px] sm:text-xs font-extrabold text-amber-950 whitespace-nowrap">
+                      <span className="hidden sm:inline">Active Class: {getBoardShortLabel(activeBoard)} · </span>
+                      <span className="sm:hidden">Active: </span>
+                      {currentStudent.classLevel}
                     </span>
-                    <ChevronDown className="w-3 h-3 text-amber-800" />
+                    <ChevronDown className="w-3 h-3 text-amber-800 shrink-0" />
                   </button>
 
                   {showClassSwitcher && (

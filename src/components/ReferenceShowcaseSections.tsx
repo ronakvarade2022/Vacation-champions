@@ -355,12 +355,296 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - (pct / 100) * ringCircumference;
 
+  // Helper to get existing icon illustration and colour theme for any sub-action item
+  const getSubItemIconVisuals = (
+    subId: NavSubActionId,
+    menuId: MainMenuId
+  ): {
+    illustrationType?:
+      | 'drawing'
+      | 'stories'
+      | 'shivaji'
+      | 'puzzles'
+      | 'sudoku'
+      | 'cricket'
+      | 'ai'
+      | 'scholarship'
+      | 'courses'
+      | 'maths'
+      | 'english'
+      | 'gk'
+      | 'memory'
+      | 'moral'
+      | 'writing';
+    boardEmblem?: EducationBoard;
+    cardGradient: string;
+    borderClass: string;
+  } => {
+    if (subId === 'course-maharashtra' || subId === 'plan-maharashtra') {
+      return {
+        boardEmblem: 'Maharashtra',
+        cardGradient: 'from-[#eff6ff] via-[#dbeafe] to-[#bfdbfe]',
+        borderClass: 'border-[#2563eb]/60',
+      };
+    }
+    if (subId === 'course-cbse' || subId === 'plan-cbse') {
+      return {
+        boardEmblem: 'CBSE',
+        cardGradient: 'from-[#f0fdf4] via-[#dcfce7] to-[#bbf7d0]',
+        borderClass: 'border-[#16a34a]/60',
+      };
+    }
+    if (subId === 'course-icse' || subId === 'plan-icse') {
+      return {
+        boardEmblem: 'ICSE',
+        cardGradient: 'from-[#fff7ed] via-[#ffedd5] to-[#fed7aa]',
+        borderClass: 'border-[#ea580c]/60',
+      };
+    }
+    if (subId === 'sl-drawing') {
+      return {
+        illustrationType: 'drawing',
+        cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
+        borderClass: 'border-[#9333ea]/40',
+      };
+    }
+    if (subId === 'sl-stories') {
+      return {
+        illustrationType: 'stories',
+        cardGradient: 'from-[#d9f99d] via-[#a3e635] to-[#84cc16]',
+        borderClass: 'border-[#4d7c0f]/40',
+      };
+    }
+    if (subId === 'sl-shivaji') {
+      return {
+        illustrationType: 'shivaji',
+        cardGradient: 'from-[#fde68a] via-[#fcd34d] to-[#f59e0b]',
+        borderClass: 'border-[#d97706]/40',
+      };
+    }
+    if (subId === 'sl-moral') {
+      return {
+        illustrationType: 'moral',
+        cardGradient: 'from-[#fed7aa] via-[#fdba74] to-[#fb923c]',
+        borderClass: 'border-[#ea580c]/40',
+      };
+    }
+    if (subId === 'sl-scholarship' || subId === 'ez-mock-tests') {
+      return {
+        illustrationType: 'scholarship',
+        cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#86efac]',
+        borderClass: 'border-[#15803d]/40',
+      };
+    }
+    if (subId === 'sl-gk') {
+      return {
+        illustrationType: 'cricket',
+        cardGradient: 'from-[#bfdbfe] via-[#93c5fd] to-[#60a5fa]',
+        borderClass: 'border-[#1d4ed8]/40',
+      };
+    }
+    if (subId === 'sl-ai-academy') {
+      return {
+        illustrationType: 'ai',
+        cardGradient: 'from-[#f5d0fe] via-[#e879f9] to-[#c084fc]',
+        borderClass: 'border-[#9333ea]/40',
+      };
+    }
+    if (subId === 'sl-creative') {
+      return {
+        illustrationType: 'writing',
+        cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
+        borderClass: 'border-[#9333ea]/40',
+      };
+    }
+    if (subId === 'pz-puzzles') {
+      return {
+        illustrationType: 'puzzles',
+        cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#60a5fa]',
+        borderClass: 'border-[#2563eb]/40',
+      };
+    }
+    if (subId === 'pz-sudoku') {
+      return {
+        illustrationType: 'sudoku',
+        cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
+        borderClass: 'border-[#16a34a]/40',
+      };
+    }
+    if (subId === 'pz-memory') {
+      return {
+        illustrationType: 'memory',
+        cardGradient: 'from-[#c7d2fe] via-[#a5b4fc] to-[#818cf8]',
+        borderClass: 'border-[#4f46e5]/40',
+      };
+    }
+    if (subId === 'pz-english' || subId === 'pz-vocabulary') {
+      return {
+        illustrationType: 'english',
+        cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
+        borderClass: 'border-[#16a34a]/40',
+      };
+    }
+    if (menuId === 'courses') {
+      return {
+        illustrationType: 'courses',
+        cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8]',
+        borderClass: 'border-[#0284c7]/40',
+      };
+    }
+    if (menuId === 'study-material') {
+      return {
+        illustrationType: 'english',
+        cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
+        borderClass: 'border-[#16a34a]/40',
+      };
+    }
+    if (menuId === 'practice-zone') {
+      return {
+        illustrationType: 'maths',
+        cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#a3e635]',
+        borderClass: 'border-[#65a30d]/40',
+      };
+    }
+    if (menuId === 'exam-zone') {
+      return {
+        illustrationType: 'gk',
+        cardGradient: 'from-[#fbcfe8] via-[#f9a8d4] to-[#f472b6]',
+        borderClass: 'border-[#db2777]/40',
+      };
+    }
+    if (menuId === 'performance') {
+      return {
+        illustrationType: 'memory',
+        cardGradient: 'from-[#c7d2fe] via-[#a5b4fc] to-[#818cf8]',
+        borderClass: 'border-[#4f46e5]/40',
+      };
+    }
+    if (menuId === 'plans') {
+      return {
+        illustrationType: 'moral',
+        cardGradient: 'from-[#fed7aa] via-[#fdba74] to-[#fb923c]',
+        borderClass: 'border-[#ea580c]/40',
+      };
+    }
+    if (menuId === 'account') {
+      return {
+        illustrationType: 'writing',
+        cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
+        borderClass: 'border-[#9333ea]/40',
+      };
+    }
+    return {
+      illustrationType: 'courses',
+      cardGradient: 'from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc]',
+      borderClass: 'border-[#0284c7]/40',
+    };
+  };
+
+  const activeMenuObj =
+    MAIN_NAV_MENUS.find((m) => m.id === (expandedMenu || 'special-learning')) ||
+    MAIN_NAV_MENUS[2];
+
+  // Ordered sequence of direct sections in the Left-Side Vertical Navigation
+  const directActivityLinks = [
+    {
+      id: 'nav-drawing',
+      label: 'Drawing Studio',
+      badgeBg: 'bg-purple-600',
+      onClick: () => onNavigateTab('drawing'),
+    },
+    {
+      id: 'nav-stories',
+      label: 'Story World',
+      badgeBg: 'bg-lime-600',
+      onClick: () => onNavigateTab('stories'),
+    },
+    {
+      id: 'nav-shivaji',
+      label: 'Shivaji Maharaj Stories',
+      badgeBg: 'bg-amber-600',
+      onClick: () => onNavigateTab('shivaji'),
+    },
+    {
+      id: 'nav-moral',
+      label: 'Moral Stories',
+      badgeBg: 'bg-orange-600',
+      onClick: () => triggerSubAction('sl-moral'),
+    },
+    {
+      id: 'nav-scholarship',
+      label: 'Scholarship Corner',
+      badgeBg: 'bg-emerald-600',
+      onClick: () => onNavigateTab('scholarship'),
+    },
+    {
+      id: 'nav-cricket',
+      label: 'Cricket & GK',
+      badgeBg: 'bg-blue-600',
+      onClick: () => onNavigateTab('cricket'),
+    },
+    {
+      id: 'nav-puzzles',
+      label: 'Brain Puzzles',
+      badgeBg: 'bg-sky-600',
+      onClick: () => onNavigateTab('puzzles'),
+    },
+    {
+      id: 'nav-sudoku',
+      label: 'Sudoku Game',
+      badgeBg: 'bg-green-600',
+      onClick: () => onNavigateTab('sudoku'),
+    },
+    {
+      id: 'nav-ai',
+      label: 'AI Learning Academy',
+      badgeBg: 'bg-fuchsia-600',
+      onClick: () => onNavigateTab('future-skills'),
+    },
+    {
+      id: 'nav-certificates',
+      label: 'Certificates',
+      badgeBg: 'bg-amber-600',
+      onClick: () => triggerSubAction('perf-certificates'),
+    },
+    {
+      id: 'nav-leaderboard',
+      label: 'Leaderboard',
+      badgeBg: 'bg-emerald-600',
+      onClick: () => triggerSubAction('perf-certificates'),
+    },
+    {
+      id: 'nav-support',
+      label: 'Help & Support',
+      badgeBg: 'bg-cyan-600',
+      onClick: () => onNavigateTab('help-support'),
+    },
+    {
+      id: 'nav-referrals',
+      label: '🎁 Refer & Earn',
+      badgeBg: 'bg-emerald-600',
+      onClick: () => onNavigateTab('referrals'),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* =====================================================================
-          1. TOP 3 SHORTCUT PILLS (Free Demo · Courses · Desktop Site)
+          1. TOP 4 SHORTCUT TABS (Active Class · Free Demo · Courses · Desktop Site)
           ===================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          type="button"
+          onClick={() => onNavigateTab('all-courses')}
+          aria-label={`Active Class: ${getBoardShortLabel(selectedBoard)} ${selectedClass}`}
+          className="h-12 sm:h-13 rounded-2xl bg-gradient-to-b from-[#fef3c7] via-[#fde68a] to-[#fcd34d] hover:brightness-105 text-[#0f2952] font-display font-black text-xs sm:text-sm shadow-md border-2 border-amber-500 flex items-center justify-center gap-2 px-3 cursor-pointer transition-all active:scale-[0.99]"
+        >
+          <GraduationCap className="w-5 h-5 text-amber-800 shrink-0" />
+          <span className="truncate">
+            Active Class: {selectedClass} ({getBoardShortLabel(selectedBoard)})
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={() => onOpenDemo('live-quiz')}
@@ -582,576 +866,701 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         sectionTitle="Welcome to MyStudyZone (Classes 1 to 10)"
         whatIsThis="Your central learning dashboard connecting School Courses, Special Learning Studios, Study Material, Practice Zone, Exam Zone, and Personal Performance."
         whatCanILearn={`Complete ${getBoardShortLabel(selectedBoard)} (${selectedClass}) syllabus, 4-level quizzes, worksheets, audio stories, drawing, Sudoku, and scholarship exams.`}
-        whatShouldIClick="Pick any of the 8 Main Learning Categories below or expand a navigation bar to open that dedicated section."
+        whatShouldIClick="Select any section from the Left-Side Vertical Navigation below or click any corresponding icon on the Right Side to open it immediately."
         accentTheme="blue"
       />
 
       {/* =====================================================================
-          4. EXPANDABLE 9-SECTION NAVIGATION BARS (Reference Accordion Style)
+          4. SYSTEMATIC SPLIT DASHBOARD:
+             - LEFT SIDE: Fixed/Sticky Vertical Navigation List (All Existing Section Names in Separate Rows)
+             - RIGHT SIDE: Horizontal Icon Display & Main Dashboard Content
           ===================================================================== */}
-      <section
-        aria-label="Main Navigation Directory"
-        className="rounded-3xl bg-white/95 border-2 border-slate-200/90 shadow-md overflow-hidden divide-y divide-slate-200/80"
-      >
-        {MAIN_NAV_MENUS.map((menu) => {
-          const isExpanded = expandedMenu === menu.id;
-          const isSpecial = menu.id === 'special-learning';
-          const iconMeta = ACCORDION_ICONS[menu.id];
-          const IconComp = iconMeta.icon;
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* ===================================================================
+            LEFT-SIDE VERTICAL NAVIGATION (Sticky & Scrollable)
+            =================================================================== */}
+        <aside
+          aria-label="Left-Side Vertical Section Navigation"
+          className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto rounded-3xl bg-white border-2 border-sky-200/90 shadow-lg p-3.5 sm:p-4 space-y-3"
+        >
+          {/* Active Class Header inside Left Navigation */}
+          <div className="rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white p-3.5 space-y-2 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-display font-black uppercase tracking-widest text-amber-300">
+                All Dashboard Sections
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-[10px] font-black">
+                {MAIN_NAV_MENUS.length + directActivityLinks.length} Sections
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('all-courses')}
+              className="w-full py-2 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-display font-black text-xs flex items-center justify-between gap-2 cursor-pointer transition-colors"
+            >
+              <span className="flex items-center gap-1.5 truncate">
+                <GraduationCap className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  Active Class: {selectedClass} ({getBoardShortLabel(selectedBoard)})
+                </span>
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </button>
+          </div>
 
-          return (
-            <div key={menu.id} className="transition-colors">
+          {/* Primary 9 Sections in Separate Vertical Rows */}
+          <div className="space-y-2">
+            <div className="px-1.5 text-[11px] font-display font-black uppercase tracking-wider text-slate-500">
+              Main Learning Sections
+            </div>
+
+            {MAIN_NAV_MENUS.map((menu, index) => {
+              const isSelected = (expandedMenu || 'special-learning') === menu.id;
+              const iconMeta = ACCORDION_ICONS[menu.id];
+              const IconComp = iconMeta.icon;
+
+              return (
+                <div
+                  key={menu.id}
+                  className={`rounded-2xl border-2 transition-all ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] text-white border-amber-400 shadow-md'
+                      : 'bg-slate-50/90 hover:bg-amber-50/70 text-[#0f2952] border-slate-200/90 hover:border-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 p-2.5 sm:p-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedMenu(menu.id);
+                        if (menu.id === 'home') {
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                      }}
+                      className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+                    >
+                      <span
+                        className={`w-8 h-8 rounded-xl ${iconMeta.badgeBg} ${iconMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+                      >
+                        <IconComp className="w-4 h-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="block font-display font-black text-xs sm:text-sm leading-tight truncate">
+                          {index + 1}. {menu.label.replace('🎓 ', '')}
+                        </span>
+                        <span
+                          className={`block text-[10px] font-bold truncate mt-0.5 ${
+                            isSelected ? 'text-sky-200' : 'text-slate-500'
+                          }`}
+                        >
+                          {menu.items.length} Activities &bull; Tap to view icons →
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => triggerSubAction(menu.defaultActionId)}
+                      className={`px-2.5 py-1.5 rounded-xl font-display font-black text-[11px] shrink-0 flex items-center gap-1 cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
+                          : 'bg-white hover:bg-sky-100 text-[#0f2952] border border-slate-200'
+                      }`}
+                    >
+                      <span>Open</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Direct Section & Studio Rows in Separate Vertical Lines */}
+          <div className="pt-2 border-t border-slate-200 space-y-2">
+            <div className="px-1.5 text-[11px] font-display font-black uppercase tracking-wider text-slate-500">
+              Direct Section &amp; Studio Links
+            </div>
+
+            {directActivityLinks.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                className="w-full min-h-[44px] px-3 py-2.5 rounded-2xl bg-slate-50 hover:bg-amber-50 border border-slate-200/90 hover:border-amber-300 text-left flex items-center justify-between gap-2.5 cursor-pointer transition-all group"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${item.badgeBg} shrink-0`}
+                  />
+                  <span className="font-display font-black text-xs sm:text-sm text-[#0f2952] group-hover:text-[#ea580c] truncate">
+                    {item.label}
+                  </span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#ea580c] shrink-0" />
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        {/* ===================================================================
+            RIGHT-SIDE HORIZONTAL ICON DISPLAY & DASHBOARD CONTENT
+            =================================================================== */}
+        <div className="lg:col-span-8 xl:col-span-9 min-w-0 space-y-6">
+          {/* -----------------------------------------------------------------
+              RIGHT PANEL 1: SELECTED SECTION'S HORIZONTAL ICON DISPLAY
+              ----------------------------------------------------------------- */}
+          <section
+            aria-label={`${activeMenuObj.label} Horizontal Icon Display`}
+            className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-lg p-4 sm:p-5 space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const activeIconMeta = ACCORDION_ICONS[activeMenuObj.id];
+                  const ActiveIconComp = activeIconMeta.icon;
+                  return (
+                    <span
+                      className={`w-10 h-10 rounded-2xl ${activeIconMeta.badgeBg} ${activeIconMeta.iconColor} flex items-center justify-center shadow-sm shrink-0`}
+                    >
+                      <ActiveIconComp className="w-5 h-5" />
+                    </span>
+                  );
+                })()}
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-base sm:text-xl font-display font-black text-[#0f2952]">
+                      {activeMenuObj.label.replace('🎓 ', '')} — Horizontal Icons
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px] uppercase tracking-wider border border-amber-300">
+                      Selected Section
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-600 mt-0.5">
+                    {activeMenuObj.whatIsThis}
+                  </p>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setExpandedMenu((prev) => (prev === menu.id ? null : menu.id))}
-                className={`w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left cursor-pointer transition-colors ${
-                  isSpecial
-                    ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fef3c7] hover:brightness-98'
-                    : isExpanded
-                    ? 'bg-sky-50/80'
-                    : 'bg-white hover:bg-slate-50'
-                }`}
+                onClick={() => triggerSubAction(activeMenuObj.defaultActionId)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#1d4ed8] text-white font-display font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className={`w-7 h-7 rounded-lg ${iconMeta.badgeBg} ${iconMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
-                  >
-                    <IconComp className="w-4 h-4" />
-                  </span>
-                  <span className="font-display font-black text-xs sm:text-sm uppercase tracking-wider text-[#0f2952] truncate">
-                    {menu.label.replace('🎓 ', '')}
-                  </span>
-                  <span className="hidden md:inline-block text-[11px] font-semibold text-slate-500 truncate">
-                    — {menu.whatIsThis}
-                  </span>
-                </div>
+                <span>Open {activeMenuObj.label.replace('🎓 ', '')}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] font-extrabold text-slate-500 hidden sm:inline">
-                    {menu.items.length} Options
-                  </span>
-                  {isExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-[#0f2952]" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-slate-500" />
+            {/* Horizontal Scrollable & Grid Icon Display for the Selected Section */}
+            <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:overflow-visible sm:pb-0">
+              {activeMenuObj.items.map((item) => {
+                const visuals = getSubItemIconVisuals(item.id, activeMenuObj.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => triggerSubAction(item.id)}
+                    className={`min-w-[200px] sm:min-w-0 shrink-0 group rounded-2xl bg-gradient-to-r ${visuals.cardGradient} border-2 ${visuals.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                  >
+                    <div className="w-14 h-14 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      {visuals.boardEmblem ? (
+                        <HeroBoardEmblemIcon
+                          board={visuals.boardEmblem}
+                          className="w-12 h-12 drop-shadow-xs"
+                        />
+                      ) : (
+                        <SpecialCardIllustration
+                          type={visuals.illustrationType || 'courses'}
+                          className="w-full h-full drop-shadow-xs"
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight truncate">
+                          {item.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-0.5">
+                        {item.description}
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-1.5 bg-white/80 px-2.5 py-0.5 rounded-full">
+                        <span>{item.badgeText || 'Open'}</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* -----------------------------------------------------------------
+              RIGHT PANEL 2: MAIN LEARNING CATEGORIES (8 Primary Section Icons)
+              ----------------------------------------------------------------- */}
+          <section aria-label="Main Learning Categories" className="space-y-4">
+            <div className="relative rounded-2xl bg-gradient-to-r from-[#e0f2fe] via-[#f0f9ff] to-[#fef3c7] border-2 border-sky-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+              <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white shadow-md">
+                <GraduationCap className="w-5 h-5 text-amber-300" />
+                <h2 className="text-base sm:text-xl font-display font-black tracking-tight">
+                  Main Learning Categories (8 Sections)
+                </h2>
+              </div>
+              <p className="px-4 text-xs sm:text-sm font-display font-black italic text-[#1e3a8a]">
+                One Clear Destination for Every Learning Need
+              </p>
+            </div>
+
+            <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:overflow-visible sm:pb-0">
+              {mainCategoryCards.map((cat) => (
+                <div
+                  key={cat.id}
+                  onClick={cat.onClick}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      cat.onClick();
+                    }
+                  }}
+                  className={`min-w-[230px] sm:min-w-0 shrink-0 group rounded-2xl bg-gradient-to-r ${cat.cardGradient} ${cat.borderClass} border-2 p-4 shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between gap-3`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <SpecialCardIllustration
+                        type={cat.illustrationType}
+                        className="w-full h-full drop-shadow-sm"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-white/80 text-[#0f2952] font-black text-[10px] uppercase tracking-wider mb-1">
+                        {cat.sectionBadge}
+                      </span>
+                      <h3 className="font-display font-black text-base sm:text-lg text-[#0f2952] leading-tight">
+                        {cat.title}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <p className="text-xs font-bold text-[#0f2952]/85 leading-snug">
+                    {cat.whatInside}
+                  </p>
+
+                  <div className="pt-2 border-t border-white/50 flex items-center justify-between text-xs font-black text-[#0f2952]">
+                    <span>{cat.buttonLabel}</span>
+                    <span className="w-6 h-6 rounded-full bg-white/85 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
+                      <ArrowRight className="w-3.5 h-3.5 text-[#0f2952]" />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* -----------------------------------------------------------------
+              RIGHT PANEL 3: POPULAR PROGRAMMES (8 Illustrated Enrichment Icons)
+              ----------------------------------------------------------------- */}
+          <section aria-label="Popular Enrichment Programmes" className="space-y-4">
+            <div className="relative rounded-2xl bg-gradient-to-r from-[#fef3c7] via-[#fffbeb] to-[#e0f2fe] border-2 border-amber-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+              <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white shadow-md">
+                <span className="text-xl">🎓</span>
+                <h2 className="text-base sm:text-xl font-display font-black tracking-tight">
+                  Popular Programmes &amp; Special Learning
+                </h2>
+              </div>
+              <p className="px-4 text-xs sm:text-sm font-display font-black italic text-[#1e3a8a]">
+                Explore &bull; Learn &bull; Enjoy
+              </p>
+            </div>
+
+            <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:overflow-visible sm:pb-0">
+              {popularProgrammes.map((prog) => (
+                <button
+                  key={prog.id}
+                  type="button"
+                  onClick={prog.onClick}
+                  className={`min-w-[220px] sm:min-w-0 shrink-0 group rounded-2xl bg-gradient-to-r ${prog.gradient} ${prog.border} border-2 p-3 sm:p-3.5 shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                >
+                  <div className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <SpecialCardIllustration
+                      type={prog.illustration}
+                      className="w-full h-full drop-shadow-sm"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-display font-black text-sm sm:text-base text-[#0f2952] leading-tight">
+                      {prog.title}
+                    </h3>
+                    <p className="text-[11px] font-bold text-[#0f2952]/80 mt-0.5 line-clamp-1">
+                      {prog.subtitle}
+                    </p>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#0f2952] mt-1.5 bg-white/70 px-2.5 py-0.5 rounded-full">
+                      <span>Open Studio</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* -----------------------------------------------------------------
+              RIGHT PANEL 4: STUDENT PROGRESS OVERVIEW & DAILY CHALLENGE
+              ----------------------------------------------------------------- */}
+          <section
+            aria-label="Student Progress and Daily Challenge"
+            className="grid grid-cols-1 xl:grid-cols-2 gap-4"
+          >
+            {/* LEFT PANEL: My Learning Progress */}
+            <div className="rounded-3xl bg-white border-2 border-sky-200 shadow-lg overflow-hidden flex flex-col justify-between">
+              <div className="px-5 py-3 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#1d4ed8] text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">📊</span>
+                  <h2 className="text-base sm:text-lg font-display font-black tracking-tight">
+                    My Learning Progress
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => triggerSubAction('perf-results')}
+                  className="text-xs font-extrabold text-sky-100 hover:text-white flex items-center gap-1 cursor-pointer"
+                >
+                  <span>View Details</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                <div className="sm:col-span-4 flex flex-col items-center justify-center">
+                  <div className="relative w-28 h-28 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r={ringRadius}
+                        fill="none"
+                        stroke="#e2e8f0"
+                        strokeWidth="10"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r={ringRadius}
+                        fill="none"
+                        stroke="url(#progressRingGrad)"
+                        strokeWidth="10"
+                        strokeLinecap="round"
+                        strokeDasharray={ringCircumference}
+                        strokeDashoffset={ringOffset}
+                      />
+                      <defs>
+                        <linearGradient id="progressRingGrad" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stopColor="#22c55e" />
+                          <stop offset="100%" stopColor="#0ea5e9" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-2xl font-display font-black text-[#0f2952]">
+                        {pct}%
+                      </span>
+                    </div>
+                  </div>
+                  {!progressMetrics.isLoggedIn && (
+                    <span className="text-[10px] font-extrabold text-slate-500 mt-1">
+                      Sign in to track live progress
+                    </span>
                   )}
                 </div>
-              </button>
 
-              {isExpanded && (
-                <div className="px-4 sm:px-6 py-4 bg-slate-50/90 border-t border-slate-200/60 space-y-3">
-                  {/* 3-Question Mini Bar inside expanded accordion */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] bg-white p-3 rounded-2xl border border-slate-200/80">
-                    <div>
-                      <span className="font-black text-blue-700 uppercase">What is this? </span>
-                      <span className="font-semibold text-slate-700">{menu.whatIsThis}</span>
-                    </div>
-                    <div>
-                      <span className="font-black text-emerald-700 uppercase">What can I learn? </span>
-                      <span className="font-semibold text-slate-700">{menu.whatCanILearn}</span>
-                    </div>
-                    <div>
-                      <span className="font-black text-amber-800 uppercase">What to click? </span>
-                      <span className="font-semibold text-slate-700">{menu.whatShouldIClick}</span>
-                    </div>
+                <div className="sm:col-span-5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Courses Completed :{' '}
+                      <strong className="font-black text-[#0f2952]">
+                        {progressMetrics.coursesCompleted}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
+                    <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>
+                      Practice Tests :{' '}
+                      <strong className="font-black text-[#0f2952]">
+                        {progressMetrics.practiceTests}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
+                    <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
+                    <span>
+                      Achievements :{' '}
+                      <strong className="font-black text-[#0f2952]">
+                        {progressMetrics.achievements}
+                      </strong>
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                    {menu.items.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => triggerSubAction(item.id)}
-                        className="p-3 rounded-2xl bg-white hover:bg-amber-50/70 border border-slate-200/90 hover:border-amber-400 text-left transition-all cursor-pointer flex items-start justify-between gap-2 shadow-2xs group"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-display font-extrabold text-xs text-[#0f2952] group-hover:text-[#ea580c] truncate">
-                              {item.label}
-                            </span>
-                            {item.badgeText && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-black text-[9px] shrink-0">
-                                {item.badgeText}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                            {item.description}
-                          </p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#ea580c] shrink-0 mt-0.5" />
-                      </button>
-                    ))}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => triggerSubAction('perf-results')}
+                      className="px-3.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 text-[#0f2952] font-extrabold text-xs cursor-pointer transition-colors"
+                    >
+                      Open Performance Report →
+                    </button>
                   </div>
                 </div>
-              )}
+
+                <div className="sm:col-span-3 flex items-center justify-center">
+                  <KeepGoingStarMascot className="w-28 h-28" />
+                </div>
+              </div>
             </div>
-          );
-        })}
-      </section>
 
-      {/* =====================================================================
-          5. MAIN LEARNING CATEGORIES (8 Primary Section Cards — Zero Duplication)
-          ===================================================================== */}
-      <section aria-label="Main Learning Categories" className="space-y-4">
-        <div className="relative rounded-2xl bg-gradient-to-r from-[#e0f2fe] via-[#f0f9ff] to-[#fef3c7] border-2 border-sky-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white shadow-md">
-            <GraduationCap className="w-5 h-5 text-amber-300" />
-            <h2 className="text-base sm:text-xl font-display font-black tracking-tight">
-              Main Learning Categories (8 Sections)
-            </h2>
-          </div>
-          <p className="px-4 text-xs sm:text-sm font-display font-black italic text-[#1e3a8a]">
-            One Clear Destination for Every Learning Need
-          </p>
-        </div>
+            {/* RIGHT PANEL: Daily Challenge */}
+            <div className="rounded-3xl bg-white border-2 border-purple-200 shadow-lg overflow-hidden flex flex-col justify-between">
+              <div className="px-5 py-3 bg-gradient-to-r from-[#581c87] via-[#6b21a8] to-[#4338ca] text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">🏆</span>
+                  <h2 className="text-base sm:text-lg font-display font-black tracking-tight">
+                    Daily Challenge
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
+                    else onOpenDemo('live-quiz');
+                  }}
+                  className="px-3 py-1 rounded-full bg-white text-[#4338ca] font-extrabold text-xs flex items-center gap-1 cursor-pointer hover:bg-purple-50 transition-colors"
+                >
+                  <span>Start Now</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {mainCategoryCards.map((cat) => (
+              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                <div className="sm:col-span-8 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2.5 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200/80">
+                      <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0">
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 block">
+                          Today&apos;s Quiz
+                        </span>
+                        <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                          25 Questions
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200/80">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-500 block">Time</span>
+                        <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                          15 Min
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
+                      else onOpenDemo('live-quiz');
+                    }}
+                    className="w-full py-2.5 px-5 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>Play Now</span>
+                  </button>
+                </div>
+
+                <div className="sm:col-span-4 flex items-center justify-center">
+                  <DailyChallengeBoyMascot className="w-28 h-28" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* -----------------------------------------------------------------
+              RIGHT PANEL 5: IMPORTANT ANNOUNCEMENTS
+              ----------------------------------------------------------------- */}
+          <section
+            aria-label="Important Announcements"
+            className="rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border-2 border-indigo-400/30 shadow-md"
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
+                      Important Announcements
+                    </span>
+                    <span className="text-xs font-bold text-sky-200">
+                      Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-200 font-medium">
+                    100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10). Try the Free Demo or unlock 365 days of full access for just ₹99 one-time payment.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('all-courses')}
+                  className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors"
+                >
+                  Change Board / Class
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenMembership(selectedClass, selectedBoard)}
+                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>₹99 / 365 Days Plan</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* -----------------------------------------------------------------
+              RIGHT PANEL 6: BOTTOM HORIZONTAL ICON BAR & REFER & EARN
+              ----------------------------------------------------------------- */}
+          <nav
+            aria-label="Bottom Navigation Menu"
+            className="space-y-4 pt-2"
+          >
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+              {[
+                {
+                  label: 'My Courses',
+                  icon: BookOpen,
+                  cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
+                  border: 'border-sky-300',
+                  iconBg: 'bg-blue-600 text-white',
+                  onClick: () => onNavigateTab('all-courses'),
+                },
+                {
+                  label: 'Certificates',
+                  icon: Award,
+                  cardBg: 'from-[#fef3c7] to-[#fde68a]',
+                  border: 'border-amber-300',
+                  iconBg: 'bg-amber-600 text-white',
+                  onClick: () => triggerSubAction('perf-certificates'),
+                },
+                {
+                  label: 'Leaderboard',
+                  icon: Trophy,
+                  cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
+                  border: 'border-emerald-300',
+                  iconBg: 'bg-emerald-600 text-white',
+                  onClick: () => triggerSubAction('perf-certificates'),
+                },
+                {
+                  label: 'My Account',
+                  icon: User,
+                  cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
+                  border: 'border-purple-300',
+                  iconBg: 'bg-purple-600 text-white',
+                  onClick: () => triggerSubAction('acc-profile'),
+                },
+                {
+                  label: 'Help & Support',
+                  icon: Headphones,
+                  cardBg: 'from-[#e0f2fe] to-[#cffafe]',
+                  border: 'border-cyan-300',
+                  iconBg: 'bg-sky-600 text-white',
+                  onClick: () => onNavigateTab('help-support'),
+                },
+                {
+                  label: 'More Programs',
+                  icon: Gift,
+                  cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
+                  border: 'border-rose-300',
+                  iconBg: 'bg-rose-600 text-white',
+                  onClick: () => onNavigateTab('other-programs'),
+                },
+              ].map((item) => {
+                const IconComp = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={item.onClick}
+                    className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
+                  >
+                    <span className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}>
+                      <IconComp className="w-5 h-5" />
+                    </span>
+                    <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {/* Permanent 🎁 Refer & Earn Tab in the Bottom Navigation Menu */}
+              <button
+                type="button"
+                onClick={() => onNavigateTab('referrals')}
+                aria-label="Refer & Earn – Open Referral Hub"
+                className="col-span-2 sm:col-span-2 xl:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ring-2 ring-amber-300/60"
+              >
+                <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
+                  🎁
+                </span>
+                <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
+                  Refer &amp; Earn
+                </span>
+              </button>
+            </div>
+          </nav>
+
+          {/* Single Motivational Heritage Banner */}
+          <section aria-label="Scholarship Champion Banner">
             <div
-              key={cat.id}
-              onClick={cat.onClick}
+              onClick={() => onNavigateTab('scholarship')}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  cat.onClick();
+                  onNavigateTab('scholarship');
                 }
               }}
-              className={`group rounded-2xl bg-gradient-to-r ${cat.cardGradient} ${cat.borderClass} border-2 p-4 shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between gap-3`}
+              className="relative overflow-hidden rounded-3xl border-2 border-sky-300 shadow-lg cursor-pointer group bg-gradient-to-r from-[#bae6fd] via-[#e0f2fe] to-[#bae6fd] min-h-[125px] flex items-center justify-center p-4 sm:p-6"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <SpecialCardIllustration
-                    type={cat.illustrationType}
-                    className="w-full h-full drop-shadow-sm"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="inline-block px-2 py-0.5 rounded-full bg-white/80 text-[#0f2952] font-black text-[10px] uppercase tracking-wider mb-1">
-                    {cat.sectionBadge}
-                  </span>
-                  <h3 className="font-display font-black text-base sm:text-lg text-[#0f2952] leading-tight">
-                    {cat.title}
-                  </h3>
-                </div>
-              </div>
-
-              <p className="text-xs font-bold text-[#0f2952]/85 leading-snug">
-                {cat.whatInside}
-              </p>
-
-              <div className="pt-2 border-t border-white/50 flex items-center justify-between text-xs font-black text-[#0f2952]">
-                <span>{cat.buttonLabel}</span>
-                <span className="w-6 h-6 rounded-full bg-white/85 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
-                  <ArrowRight className="w-3.5 h-3.5 text-[#0f2952]" />
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* =====================================================================
-          6. POPULAR PROGRAMMES (8 Illustrated Enrichment Shortcuts — Links Only)
-          ===================================================================== */}
-      <section aria-label="Popular Enrichment Programmes" className="space-y-4">
-        <div className="relative rounded-2xl bg-gradient-to-r from-[#fef3c7] via-[#fffbeb] to-[#e0f2fe] border-2 border-amber-200 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#172554] text-white shadow-md">
-            <span className="text-xl">🎓</span>
-            <h2 className="text-base sm:text-xl font-display font-black tracking-tight">
-              Popular Programmes &amp; Special Learning
-            </h2>
-          </div>
-          <p className="px-4 text-xs sm:text-sm font-display font-black italic text-[#1e3a8a]">
-            Explore &bull; Learn &bull; Enjoy
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {popularProgrammes.map((prog) => (
-            <button
-              key={prog.id}
-              type="button"
-              onClick={prog.onClick}
-              className={`group rounded-2xl bg-gradient-to-r ${prog.gradient} ${prog.border} border-2 p-3 sm:p-3.5 shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
-            >
-              <div className="w-16 h-16 sm:w-18 sm:h-18 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <SpecialCardIllustration
-                  type={prog.illustration}
-                  className="w-full h-full drop-shadow-sm"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-display font-black text-sm sm:text-base text-[#0f2952] leading-tight">
-                  {prog.title}
-                </h3>
-                <p className="text-[11px] font-bold text-[#0f2952]/80 mt-0.5 line-clamp-1">
-                  {prog.subtitle}
+              <ScholarshipChampionBannerSvg className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+              <div className="relative z-10 text-center max-w-xl mx-auto space-y-1">
+                <h2 className="text-xl sm:text-3xl font-display font-black italic text-[#0f2952] drop-shadow-xs group-hover:scale-[1.01] transition-transform">
+                  Be a Scholarship Champion!
+                </h2>
+                <p className="text-xs sm:text-base font-display font-extrabold italic text-[#1e3a8a]">
+                  Learn Today... Lead Tomorrow...
                 </p>
-                <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#0f2952] mt-1.5 bg-white/70 px-2.5 py-0.5 rounded-full">
-                  <span>Open Studio</span>
-                  <ArrowRight className="w-3 h-3" />
-                </span>
               </div>
-            </button>
-          ))}
+            </div>
+          </section>
         </div>
-      </section>
-
-      {/* =====================================================================
-          7. STUDENT PROGRESS OVERVIEW & DAILY LEARNING CHALLENGE (2 Panels)
-          ===================================================================== */}
-      <section
-        aria-label="Student Progress and Daily Challenge"
-        className="grid grid-cols-1 lg:grid-cols-2 gap-4"
-      >
-        {/* LEFT PANEL: My Learning Progress */}
-        <div className="rounded-3xl bg-white border-2 border-sky-200 shadow-lg overflow-hidden flex flex-col justify-between">
-          <div className="px-5 py-3 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#1d4ed8] text-white flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl">📊</span>
-              <h2 className="text-base sm:text-lg font-display font-black tracking-tight">
-                My Learning Progress
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => triggerSubAction('perf-results')}
-              className="text-xs font-extrabold text-sky-100 hover:text-white flex items-center gap-1 cursor-pointer"
-            >
-              <span>View Details</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-            <div className="sm:col-span-4 flex flex-col items-center justify-center">
-              <div className="relative w-28 h-28 flex items-center justify-center">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r={ringRadius}
-                    fill="none"
-                    stroke="#e2e8f0"
-                    strokeWidth="10"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r={ringRadius}
-                    fill="none"
-                    stroke="url(#progressRingGrad)"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                    strokeDasharray={ringCircumference}
-                    strokeDashoffset={ringOffset}
-                  />
-                  <defs>
-                    <linearGradient id="progressRingGrad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#22c55e" />
-                      <stop offset="100%" stopColor="#0ea5e9" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-display font-black text-[#0f2952]">
-                    {pct}%
-                  </span>
-                </div>
-              </div>
-              {!progressMetrics.isLoggedIn && (
-                <span className="text-[10px] font-extrabold text-slate-500 mt-1">
-                  Sign in to track live progress
-                </span>
-              )}
-            </div>
-
-            <div className="sm:col-span-5 space-y-2.5">
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>
-                  Courses Completed :{' '}
-                  <strong className="font-black text-[#0f2952]">
-                    {progressMetrics.coursesCompleted}
-                  </strong>
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
-                <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>
-                  Practice Tests :{' '}
-                  <strong className="font-black text-[#0f2952]">
-                    {progressMetrics.practiceTests}
-                  </strong>
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
-                <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
-                <span>
-                  Achievements :{' '}
-                  <strong className="font-black text-[#0f2952]">
-                    {progressMetrics.achievements}
-                  </strong>
-                </span>
-              </div>
-
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => triggerSubAction('perf-results')}
-                  className="px-3.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 text-[#0f2952] font-extrabold text-xs cursor-pointer transition-colors"
-                >
-                  Open Performance Report →
-                </button>
-              </div>
-            </div>
-
-            <div className="sm:col-span-3 flex items-center justify-center">
-              <KeepGoingStarMascot className="w-28 h-28" />
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT PANEL: Daily Challenge */}
-        <div className="rounded-3xl bg-white border-2 border-purple-200 shadow-lg overflow-hidden flex flex-col justify-between">
-          <div className="px-5 py-3 bg-gradient-to-r from-[#581c87] via-[#6b21a8] to-[#4338ca] text-white flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl">🏆</span>
-              <h2 className="text-base sm:text-lg font-display font-black tracking-tight">
-                Daily Challenge
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
-                else onOpenDemo('live-quiz');
-              }}
-              className="px-3 py-1 rounded-full bg-white text-[#4338ca] font-extrabold text-xs flex items-center gap-1 cursor-pointer hover:bg-purple-50 transition-colors"
-            >
-              <span>Start Now</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-            <div className="sm:col-span-8 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2.5 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200/80">
-                  <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 block">
-                      Today&apos;s Quiz
-                    </span>
-                    <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-                      25 Questions
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200/80">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 block">Time</span>
-                    <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-                      15 Min
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
-                  else onOpenDemo('live-quiz');
-                }}
-                className="w-full py-2.5 px-5 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                <span>Play Now</span>
-              </button>
-            </div>
-
-            <div className="sm:col-span-4 flex items-center justify-center">
-              <DailyChallengeBoyMascot className="w-28 h-28" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* =====================================================================
-          8. IMPORTANT ANNOUNCEMENTS (Clean Notice Bar — No Duplicate Dump)
-          ===================================================================== */}
-      <section
-        aria-label="Important Announcements"
-        className="rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border-2 border-indigo-400/30 shadow-md"
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
-              <Megaphone className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
-                  Important Announcements
-                </span>
-                <span className="text-xs font-bold text-sky-200">
-                  Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-200 font-medium">
-                100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10). Try the Free Demo or unlock 365 days of full access for just ₹99 one-time payment.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => onNavigateTab('all-courses')}
-              className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors"
-            >
-              Change Board / Class
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenMembership(selectedClass, selectedBoard)}
-              className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-            >
-              <Crown className="w-3.5 h-3.5" />
-              <span>₹99 / 365 Days Plan</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* =====================================================================
-          9. BOTTOM NAVIGATION BAR & REFER & EARN SECTION (Positioned at Bottom)
-          ===================================================================== */}
-      <nav
-        aria-label="Bottom Navigation Menu"
-        className="space-y-4 pt-2"
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          {[
-            {
-              label: 'My Courses',
-              icon: BookOpen,
-              cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
-              border: 'border-sky-300',
-              iconBg: 'bg-blue-600 text-white',
-              onClick: () => onNavigateTab('all-courses'),
-            },
-            {
-              label: 'Certificates',
-              icon: Award,
-              cardBg: 'from-[#fef3c7] to-[#fde68a]',
-              border: 'border-amber-300',
-              iconBg: 'bg-amber-600 text-white',
-              onClick: () => triggerSubAction('perf-certificates'),
-            },
-            {
-              label: 'Leaderboard',
-              icon: Trophy,
-              cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
-              border: 'border-emerald-300',
-              iconBg: 'bg-emerald-600 text-white',
-              onClick: () => triggerSubAction('perf-certificates'),
-            },
-            {
-              label: 'My Account',
-              icon: User,
-              cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
-              border: 'border-purple-300',
-              iconBg: 'bg-purple-600 text-white',
-              onClick: () => triggerSubAction('acc-profile'),
-            },
-            {
-              label: 'Help & Support',
-              icon: Headphones,
-              cardBg: 'from-[#e0f2fe] to-[#cffafe]',
-              border: 'border-cyan-300',
-              iconBg: 'bg-sky-600 text-white',
-              onClick: () => onNavigateTab('help-support'),
-            },
-            {
-              label: 'More Programs',
-              icon: Gift,
-              cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
-              border: 'border-rose-300',
-              iconBg: 'bg-rose-600 text-white',
-              onClick: () => onNavigateTab('other-programs'),
-            },
-          ].map((item) => {
-            const IconComp = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={item.onClick}
-                className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
-              >
-                <span className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}>
-                  <IconComp className="w-5 h-5" />
-                </span>
-                <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* Permanent 🎁 Refer & Earn Tab in the Bottom Navigation Menu */}
-          <button
-            type="button"
-            onClick={() => onNavigateTab('referrals')}
-            aria-label="Refer & Earn – Open Referral Hub"
-            className="col-span-2 sm:col-span-2 lg:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ring-2 ring-amber-300/60"
-          >
-            <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
-              🎁
-            </span>
-            <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-              Refer &amp; Earn
-            </span>
-          </button>
-        </div>
-      </nav>
-
-      {/* Single Motivational Heritage Banner */}
-      <section aria-label="Scholarship Champion Banner">
-        <div
-          onClick={() => onNavigateTab('scholarship')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onNavigateTab('scholarship');
-            }
-          }}
-          className="relative overflow-hidden rounded-3xl border-2 border-sky-300 shadow-lg cursor-pointer group bg-gradient-to-r from-[#bae6fd] via-[#e0f2fe] to-[#bae6fd] min-h-[125px] flex items-center justify-center p-4 sm:p-6"
-        >
-          <ScholarshipChampionBannerSvg className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-          <div className="relative z-10 text-center max-w-xl mx-auto space-y-1">
-            <h2 className="text-xl sm:text-3xl font-display font-black italic text-[#0f2952] drop-shadow-xs group-hover:scale-[1.01] transition-transform">
-              Be a Scholarship Champion!
-            </h2>
-            <p className="text-xs sm:text-base font-display font-extrabold italic text-[#1e3a8a]">
-              Learn Today... Lead Tomorrow...
-            </p>
-          </div>
-        </div>
-      </section>
+      </div>
     </div>
   );
 };
+
