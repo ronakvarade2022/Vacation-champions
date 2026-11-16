@@ -4,7 +4,7 @@ import { CuratedTrilingualMcq } from './types';
 export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   {
     topic: 'Word Problem Key-Word Trap Danger',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Teaching students a mechanical shortcut like "whenever you see the word MORE, always ADD" is risky because:',
@@ -39,7 +39,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Van Hiele Level 1 Analysis Indicators',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Which student statement demonstrates Van Hiele Level 1 (Analysis) rather than Level 0 (Visualization)?',
@@ -74,7 +74,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Piaget Conservation of Number Experiment',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Two rows each hold 6 coins. When the teacher spreads Row B farther apart so it looks longer, a 5-year-old says Row B now has MORE coins. According to Piaget, the child lacks:',
@@ -109,7 +109,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Concept of Perimeter vs Area Confusion',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Many Class 5 students mistakenly believe "If two rectangles have the same perimeter, they MUST have the same area." How can a teacher disprove this misconception experientially?',
@@ -144,7 +144,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Role of Mathematical Games and Puzzles',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Why should Magic Squares, Sudoku-style grids, and number riddles be integrated into primary mathematics classrooms?',
@@ -179,7 +179,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Peer Collaborative Math Talk',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Encouraging students in pairs to explain *why* they chose a strategy ("Math Talk") primarily develops:',
@@ -214,7 +214,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Fractions Beyond "Pizza Slice" Part-Whole Model',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'If a teacher ONLY shows shaded circle slices for fractions, what difficulty do Class 4 pupils often encounter later?',
@@ -249,7 +249,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Formative Assessment Checkpoints Inside Lesson',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'During a Class 4 multiplication lesson, a teacher observes students solving 24 × 13 at their desks to spot carry errors immediately before assigning homework. This is:',
@@ -284,7 +284,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Ramanujan Number 1729 Historical Engagement',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Sharing brief stories of Indian mathematicians like Aryabhata, Bhaskaracharya II (Lilavati), and Srinivasa Ramanujan in primary math lessons helps to:',
@@ -319,7 +319,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Alternative Student Algorithms Validation',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'To compute 63 − 28 mentally, a Class 3 student says: "63 − 30 = 33, then add back 2 = 35." How should the teacher respond?',
@@ -354,7 +354,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Concrete Fraction Strips Equivalent Recognition',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Why do teachers align a "1/2 strip" directly underneath "two 1/4 strips" of the same total length?',
@@ -389,7 +389,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Meaningful Homework Design Principle',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Which primary mathematics homework assignment best follows NCF-2005 recommendations?',
@@ -424,7 +424,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Skip Counting Foundation for Multiplication',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'How does practicing "skip counting by 3s and 5s" on a 100-number grid prepare Class 2 pupils for multiplication?',
@@ -459,7 +459,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Math Lab Purpose in Primary School',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'What is the core objective of setting up a dedicated Mathematics Corner / Math Lab in a primary school?',
@@ -494,7 +494,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Remedial Teaching Cycle Principles',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'After diagnosing a group of 6 Class 4 students struggling with 2-digit division, what distinguishes effective REMEDIAL teaching from simple repetition?',
@@ -529,7 +529,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Zero in Quotient Misconception (412 ÷ 4 = 13)',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A Class 4 pupil divides 412 ÷ 4 and writes the quotient as 13 instead of 103. How can the teacher help the child catch this error independently?',
@@ -564,7 +564,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Deductive Method Appropriate Stage',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'In primary vs upper schooling, where does the Deductive Method fit BEST in mathematics?',
@@ -599,7 +599,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Project Method in Elementary Math',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Organizing a "Class Mock Vegetable Market" where pupils act as shopkeepers and buyers using play money exemplifies:',
@@ -634,7 +634,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Heuristic Method Core Philosophy',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Professor H.E. Armstrong’s "Heuristic Method" in teaching mathematics places the child in the role of:',
@@ -669,7 +669,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Venn Diagram Classification Activity',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Asking Class 4 learners to place number cards inside two overlapping hula-hoops—one for "Multiples of 2" and one for "Multiples of 3"—visually builds understanding of:',
@@ -704,7 +704,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Protractor Common Zero-Scale Reading Error',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A Class 5 pupil measures a visibly ACUTE angle with a dual-scale semi-circular protractor and records "130°" instead of "50°". What is the teacher’s best coaching tip?',
@@ -739,7 +739,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Multiple Mathematical Representations (Lesh Model)',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Difficult',
     en: {
       q: 'Deep understanding of a fraction like 3/4 requires connecting FIVE representations: Real-world context, Manipulative model, Pictures, Spoken language, and Written symbols. This holistic approach highlights:',
@@ -774,7 +774,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Oral & Mental Math Role in Daily Routine',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Allocating 10 minutes daily to lively oral mental math games (e.g., "What adds to 37 to make 100?") primarily strengthens:',
@@ -809,7 +809,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Meaning of "Zero" Introduced via Subtraction',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Which teaching sequence is MOST intuitive when introducing the number ZERO ("0") to Class 1 pupils?',
@@ -844,7 +844,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Classroom Use of Geogebra / Dynamic Tools at Upper Primary Transition',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'When using a visual bar chart activity on a tablet or grid board in Class 5, what key convention MUST learners understand first?',
@@ -879,7 +879,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Rubrics for Assessing Math Problem Solving',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Why is an analytic scoring Rubric better than "Right/Wrong tick marks only" when assessing multi-step Class 5 word problems?',
@@ -914,7 +914,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Developing Place Value Grouping with Bundles & Loose Sticks',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Tying 10 matchsticks or ice-cream sticks with a rubber band to form 1 "ten-bundle" is MOST effective for helping Class 1–2 learners understand:',
@@ -949,7 +949,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Inclusive Math Support for Dyscalculia',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'If a primary learner exhibits persistent indicators of Dyscalculia (difficulty remembering number facts and aligning columns), which classroom accommodation is MOST helpful?',
@@ -984,7 +984,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Concept of Multiplication as Scaling vs Repeated Addition',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Why must Class 4–5 instruction gradually expand multiplication beyond "repeated addition" alone to include area/array and scaling ("3 times as long")?',
@@ -1019,7 +1019,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Comparing Angles by Ray Length Misconception',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A Class 4 child looks at two 40° angles: Angle A has short arms (2 cm rays) while Angle B has long arms (8 cm rays), and says "Angle B is bigger." What misconception needs correction?',
@@ -1054,7 +1054,7 @@ export const MAHA_TET_P1_B1_MATH_P2: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Contextual Decimal Understanding via Currency',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'When introducing decimals like ₹12.50 and ₹12.05 to Class 4 pupils, why is Indian money (rupees and paise) an ideal starting context?',

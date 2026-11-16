@@ -4,7 +4,7 @@ import { CuratedTrilingualMcq } from './types';
 export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   {
     topic: 'NCF-2005 Aim of Mathematics Education',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'According to NCF-2005, what is the MAIN goal of mathematics education in primary schools?',
@@ -39,7 +39,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Van Hiele Level 0 Visualization',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A Class 2 pupil identifies a tilted square as a "diamond" and calls only horizontally resting squares "squares". According to Van Hiele’s geometric levels, this learner is at:',
@@ -74,7 +74,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Dienes Blocks Manipulative Use',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Dienes Base-Ten Blocks (unit cubes, tens rods, hundreds flats) are MOST effective for teaching which primary concept?',
@@ -109,7 +109,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Geoboard Teaching Purpose',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'A wooden Geoboard fitted with grid pegs and rubber bands is BEST suited in Class 4 for exploring:',
@@ -144,7 +144,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Error Analysis: Fraction Numerator-Denominator Add',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A student writes 1/2 + 1/3 = 2/5. What does this error reveal, and what is the MOST appropriate remedial step?',
@@ -179,7 +179,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Polya Problem Solving Stages',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Arrange George Polya’s four classic stages of mathematical problem solving in correct logical order:',
@@ -214,7 +214,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Tangram Spatial Reasoning Benefits',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Including 7-piece Chinese Tangram puzzles in the NCERT Class 3–4 Math-Magic textbook primarily nurtures:',
@@ -249,7 +249,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Bruner CPA Sequence (ELPS)',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'In primary math instruction (CPA / ELPS framework), what is the ideal progression when introducing "addition with carry"?',
@@ -284,7 +284,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Graph Paper Estimation of Irregular Area',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'To help Class 5 children estimate the area of an irregular leaf, which classroom activity is MOST pedagogically sound?',
@@ -319,7 +319,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Decimal Size Misconception Diagnosis',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'When asked which is larger, 0.5 or 0.25, a Class 5 learner picks 0.25 arguing "25 is bigger than 5". Which teaching resource BEST resolves this misconception?',
@@ -354,7 +354,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Open-Ended vs Closed-Ended Math Questions',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Which of the following teacher prompts is an OPEN-ENDED question encouraging divergent mathematical thinking?',
@@ -389,7 +389,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Inductive Method of Teaching Rules',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'A Class 4 teacher asks students to measure interior angles of five different paper triangles, sum them up (getting ~180° each time), and then generalize "Sum of triangle angles = 180°". Which method is this?',
@@ -424,7 +424,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Zero as Placeholder on Abacus',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Why is an empty vertical spike (0 beads) on a physical wooden Abacus so valuable when teaching 407 vs 47 to primary children?',
@@ -459,7 +459,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'NIPUN Bharat FLN Class 3 Numeracy Goal',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Under the NIPUN Bharat Mission (Foundational Numeracy target by end of Grade 3), learners are expected to:',
@@ -494,7 +494,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Borrowing Subtraction Error Diagnosis',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A Class 3 child computes: 42 − 17 = 35 (subtracting smaller digit 2 from larger digit 7 in ones column). What is the underlying cause?',
@@ -529,7 +529,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Mental Math & Estimation Value',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Why does primary mathematics curriculum emphasize estimation and approximation alongside exact calculation?',
@@ -564,7 +564,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Mathematics Anxiety & Classroom Climate',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'According to NCF-2005, which classroom practice is MOST responsible for generating "Mathematics Anxiety" and fear of failure?',
@@ -599,7 +599,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Measuring Non-Standard to Standard Units',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Before handing a standard centimetre ruler to Class 2 students, why should a teacher let them measure their desk using handspans and pencils first?',
@@ -634,7 +634,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Diagnostic vs Summative Evaluation Focus',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'What is the primary purpose of conducting a Diagnostic Test in primary mathematics?',
@@ -669,7 +669,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Newman’s Error Analysis Hierarchy',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Difficult',
     en: {
       q: 'In Anne Newman’s 5-step Error Analysis for math word problems, what is the VERY FIRST hurdle checked before calculation errors?',
@@ -704,7 +704,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Commutative Property Concrete Discovery',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'A Class 3 teacher asks pupils to arrange 12 buttons as "3 rows of 4" and then turn the card 90° to see "4 rows of 3". This activity builds intuitive proof of:',
@@ -739,7 +739,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Analytic vs Synthetic Teaching Strategy',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Difficult',
     en: {
       q: 'Which statement accurately distinguishes the Analytic Method from the Synthetic Method in math instruction?',
@@ -774,7 +774,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Cardinality vs Ordinality Concept Distinction',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'When a Class 1 pupil says "Meera is standing 3rd in the prayer line" versus "There are 3 pencils in my pouch", the child is using numbers respectively in which senses?',
@@ -809,7 +809,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Connecting Word Problems to Cultural Context',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Why does NCF-2005 advocate framing primary math tasks around local farmers’ markets, cooking recipes, and bus tickets?',
@@ -844,7 +844,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Place Value Error: 35 Written as 305',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Asked to write "Four hundred twenty-seven" in numerals, a Class 2 pupil writes "400207". What diagnosis explains this error?',
@@ -879,7 +879,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Teaching Symmetry via Paper Ink-Blot & Folding',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Which hands-on classroom task BEST introduces the concept of "Line of Reflection Symmetry" to Class 3–4 learners?',
@@ -914,7 +914,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Gender Equity in Math Classroom',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'A primary teacher notices boys dominating board responses in mathematics while girls stay hesitant. Which action reflects sound gender-inclusive math pedagogy?',
@@ -949,7 +949,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Assessment of Conceptual vs Procedural Knowledge',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Which question tests CONCEPTUAL understanding of division rather than mere procedural computation?',
@@ -984,7 +984,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Using Cuisenaire Rods for Fraction Ratios',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Colour-coded wooden rods of lengths 1 cm to 10 cm (Cuisenaire Rods) are especially powerful in Class 3–5 for:',
@@ -1019,7 +1019,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Concrete Clock Face Teaching of Elapsed Time',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'Why do Class 4 children commonly make errors like calculating "2:40 + 30 min = 2:70"? How should teachers prevent this?',
@@ -1054,7 +1054,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Math Portfolio Assessment Contents',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Easy',
     en: {
       q: 'What makes a "Student Mathematics Portfolio" uniquely valuable inside Continuous Comprehensive Evaluation (CCE)?',
@@ -1089,7 +1089,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Division by Zero Conceptual Explanation',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'A bright Class 5 pupil asks: "If 6 ÷ 2 = 3, why isn’t 6 ÷ 0 equal to 0?" Which explanation is mathematically accurate and child-friendly?',
@@ -1124,7 +1124,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Subitizing Early Number Sense Skill',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Difficult',
     en: {
       q: 'When a Class 1 child looks briefly at 4 dots arranged on a dice face and instantly recognizes "4" WITHOUT counting "1, 2, 3, 4" one by one, this foundational cognitive ability is called:',
@@ -1159,7 +1159,7 @@ export const MAHA_TET_P1_B1_MATH_P1: CuratedTrilingualMcq[] = [
   },
   {
     topic: 'Pre-Number Concepts Sequence',
-    pattern: 'Pedagogy',
+    pattern: 'Pedagogical',
     difficulty: 'Moderate',
     en: {
       q: 'Which set of Pre-Number Concepts should children master in Balvatika/Class 1 BEFORE formal addition symbols (+, =)?',

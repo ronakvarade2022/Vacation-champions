@@ -320,6 +320,14 @@ export function checkTetCtetCandidateDuplicate(
   };
 }
 
+export function canonicalAuditStem(raw: string): string {
+  const stripped = String(raw || '')
+    .replace(/^\[[^\]]+\]\s*/g, '')
+    .replace(/^[^:\n]{1,120}•\s*(?:Primary|Upper Primary|इयत्ता|कक्षा|جماعت)[^:\n]*:\s*/i, '')
+    .trim();
+  return normalizeTetText(stripped);
+}
+
 export function runTetCtetDuplicateAudit(
   batchesMap: Record<string, TetCtetBatchStatusRecord>,
   customOverrides: TetCtetQuestion[] = [],
@@ -386,22 +394,23 @@ export function runTetCtetDuplicateAudit(
           invalidOptionQuestions++;
         }
 
+        const auditHash = canonicalAuditStem(q.question);
         const otherExam: TetCtetExamType = mod.exam === 'MAHA_TET' ? 'CTET' : 'MAHA_TET';
         const otherPaper: TetCtetPaperNumber = mod.paper === 1 ? 2 : 1;
 
-        if (seenByExam[otherExam].has(q.normalizedHash)) {
+        if (seenByExam[otherExam].has(auditHash)) {
           crossExamDuplicatesFound++;
         }
-        if (seenByPaper[otherPaper].has(q.normalizedHash)) {
+        if (seenByPaper[otherPaper].has(auditHash)) {
           crossPaperDuplicatesFound++;
         }
-        if (seenHashes.has(q.normalizedHash)) {
+        if (seenHashes.has(auditHash)) {
           exactDuplicatesFound++;
         }
-        seenHashes.add(q.normalizedHash);
+        seenHashes.add(auditHash);
         seenConcepts.add(q.conceptSignature);
-        seenByExam[mod.exam].add(q.normalizedHash);
-        seenByPaper[mod.paper].add(q.normalizedHash);
+        seenByExam[mod.exam].add(auditHash);
+        seenByPaper[mod.paper].add(auditHash);
       }
     }
   }
@@ -428,10 +437,11 @@ export function runTetCtetDuplicateAudit(
       });
       for (const pq of pQs) {
         practiceVerified++;
-        if (seenHashes.has(pq.normalizedHash)) {
+        const pqHash = canonicalAuditStem(pq.question);
+        if (seenHashes.has(pqHash)) {
           mockVsPracticeDuplicatesFound++;
         }
-        seenHashes.add(pq.normalizedHash);
+        seenHashes.add(pqHash);
         seenConcepts.add(pq.conceptSignature);
       }
     }
@@ -488,8 +498,9 @@ export function verifySingleTetCtetBatch(
     });
     for (const q of qs) {
       checkedQuestions++;
-      if (hashes.has(q.normalizedHash)) duplicateCount++;
-      hashes.add(q.normalizedHash);
+      const auditHash = canonicalAuditStem(q.question);
+      if (hashes.has(auditHash)) duplicateCount++;
+      hashes.add(auditHash);
       if (q.options.length !== 4 || q.correctAnswer < 0 || q.correctAnswer > 3) {
         invalidCount++;
       }

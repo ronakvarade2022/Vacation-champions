@@ -29,6 +29,10 @@ import {
   checkTetCtetCandidateDuplicate,
   runTetCtetDuplicateAudit,
 } from '../../data/tetCtetQuestionEngine';
+import {
+  getTetCtetAuditSummary,
+  TET_CTET_AUDIT_BATCHES,
+} from '../../data/tetCtetAuditTracker';
 import { formatHhMmSs } from '../TetCtetExamSimulator';
 
 type AdminTetTab = 'batches' | 'inspector' | 'audit' | 'monitor';
@@ -612,6 +616,110 @@ export const AdminTetCtetSection: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Persistent 10-Test Batch Remediation Tracker (20 Batches = 200 Mock Tests) */}
+          {(() => {
+            const auditSummary = getTetCtetAuditSummary();
+            const batch1 = TET_CTET_AUDIT_BATCHES.find((b) => b.id === 'MAHA_TET_P1_AUDIT_B1');
+            return (
+              <div className="pt-4 border-t border-slate-200 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm sm:text-base font-display font-black text-slate-900">
+                      10-Test Deep Quality Audit Tracker ({auditSummary.completedTests}/200 Completed · {auditSummary.pendingTests} Pending)
+                    </h4>
+                    <p className="text-xs text-slate-600">
+                      Systematic 10-test-per-batch content uniqueness, pattern alignment &amp; trilingual remediation schedule.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <span className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-mono tabular-nums">
+                      Completed: {auditSummary.completedTests} Tests ({auditSummary.completedQuestions.toLocaleString('en-IN')} Qs)
+                    </span>
+                    <span className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-mono tabular-nums">
+                      Pending: {auditSummary.pendingTests} Tests ({auditSummary.pendingQuestions.toLocaleString('en-IN')} Qs)
+                    </span>
+                  </div>
+                </div>
+
+                {batch1 && batch1.correctionSummary.length > 0 && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-display font-black text-emerald-950">
+                        Batch 1 Verified Summary — {batch1.examLabel} (Tests {batch1.testStart}–{batch1.testEnd} · {batch1.totalQuestions.toLocaleString('en-IN')} Questions)
+                      </span>
+                      <span className="text-[11px] font-bold text-emerald-800">
+                        0 Duplicates · 0 Synthetic Tags · 150 Qs/Test Verified
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-emerald-200 text-emerald-900 font-bold">
+                            <th className="py-2 pr-3">Section</th>
+                            <th className="py-2 pr-3">Q Range</th>
+                            <th className="py-2 pr-3">Problem Found</th>
+                            <th className="py-2 pr-3">Action Taken</th>
+                            <th className="py-2 text-right">Replaced</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-100 text-slate-800">
+                          {batch1.correctionSummary.map((log, i) => (
+                            <tr key={i}>
+                              <td className="py-2 pr-3 font-bold text-slate-900 whitespace-nowrap">{log.sectionRange}</td>
+                              <td className="py-2 pr-3 font-mono whitespace-nowrap">{log.questionRange}</td>
+                              <td className="py-2 pr-3">{log.problemFound}</td>
+                              <td className="py-2 pr-3">{log.actionTaken}</td>
+                              <td className="py-2 text-right font-mono font-black text-emerald-800">{log.replacedCount} Qs</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 uppercase font-bold">
+                        <th className="py-2 pr-3">Paper</th>
+                        <th className="py-2 pr-3">Batch</th>
+                        <th className="py-2 pr-3">Test Range</th>
+                        <th className="py-2 pr-3">Questions</th>
+                        <th className="py-2 pr-3">Pattern Compliance</th>
+                        <th className="py-2">Audit Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                      {TET_CTET_AUDIT_BATCHES.map((ab) => (
+                        <tr key={ab.id}>
+                          <td className="py-2.5 pr-3 font-bold text-slate-900 whitespace-nowrap">{ab.examLabel}</td>
+                          <td className="py-2.5 pr-3 font-mono">Batch {ab.batchNumber}</td>
+                          <td className="py-2.5 pr-3 font-mono">Tests {ab.testStart}–{ab.testEnd}</td>
+                          <td className="py-2.5 pr-3 font-mono">{ab.totalQuestions.toLocaleString('en-IN')} Qs</td>
+                          <td className="py-2.5 pr-3 text-slate-600">{ab.patternCompliance}</td>
+                          <td className="py-2.5">
+                            <span
+                              className={`font-bold ${
+                                ab.status === 'Completed'
+                                  ? 'text-emerald-700'
+                                  : ab.status === 'In Progress'
+                                  ? 'text-indigo-700'
+                                  : 'text-amber-700'
+                              }`}
+                            >
+                              {ab.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

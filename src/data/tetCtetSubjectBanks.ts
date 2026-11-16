@@ -9,6 +9,9 @@ import {
 } from '../types/tetCtet';
 import { getModuleId } from './tetCtetSyllabi';
 import { normalizeTetText, seededPermuteOptions } from './tetCtetLanguageBanks';
+import { getMahaTetP1B1CdpQuestion } from './tetCtetAuditBatches/mahaTetP1B1CdpAll';
+import { getMahaTetP1B1MathQuestion } from './tetCtetAuditBatches/mahaTetP1B1MathAll';
+import { getMahaTetP1B1EvsQuestion } from './tetCtetAuditBatches/mahaTetP1B1EvsAll';
 
 interface TrilingualMcqCore {
   topic: string;
@@ -769,6 +772,38 @@ function buildMathQuestion(params: {
   const moduleId = getModuleId(exam, paper);
   const qId = `TETCTET-${exam}-P${paper}-${poolType === 'MOCK' ? `T${String(testNumber).padStart(2, '0')}` : poolType}-MATH-Q${String(questionNumber).padStart(3, '0')}`;
 
+  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 10) {
+    const curated = getMahaTetP1B1MathQuestion(testNumber, slotIndex);
+    if (curated) {
+      const loc = medium === 'Marathi' ? curated.mr : medium === 'Hindi' ? curated.hi : curated.en;
+      const permuted = seededPermuteOptions(loc.opts, 0, qId);
+      return {
+        id: qId,
+        exam,
+        paper,
+        moduleId,
+        poolType,
+        testNumber,
+        batchNumber: Math.ceil(testNumber / 5),
+        questionNumber,
+        subjectId: 'MATHEMATICS',
+        subjectLabel: 'Mathematics',
+        topic: curated.topic,
+        mediumRendered: medium,
+        difficulty: curated.difficulty,
+        questionPattern: curated.pattern,
+        question: loc.q,
+        options: permuted.options,
+        correctAnswer: permuted.correctAnswer,
+        explanation: loc.exp,
+        marks: 1,
+        conceptSignature: `${exam}|P1|MOCK|T${testNumber}|MATH|${curated.topic}|Q${questionNumber}`,
+        normalizedHash: normalizeTetText(loc.q),
+        approvalStatus: 'approved',
+      };
+    }
+  }
+
   // Disjoint seed per (exam, paper, poolType, testNumber, slotIndex)
   const exBias = exam === 'MAHA_TET' ? 1 : 2;
   const pBias = paper === 1 ? 0 : 73;
@@ -1171,6 +1206,50 @@ export function generateTetCtetNonLangSubjectQuestion(params: {
       medium,
       questionNumber,
     });
+  }
+
+  if (
+    exam === 'MAHA_TET' &&
+    paper === 1 &&
+    poolType === 'MOCK' &&
+    testNumber >= 1 &&
+    testNumber <= 10 &&
+    (subjectId === 'CDP' || subjectId === 'EVS')
+  ) {
+    const curated =
+      subjectId === 'CDP'
+        ? getMahaTetP1B1CdpQuestion(testNumber, slotIndex)
+        : getMahaTetP1B1EvsQuestion(testNumber, slotIndex);
+    if (curated) {
+      const moduleIdCurated = getModuleId(exam, paper);
+      const qIdCurated = `TETCTET-${exam}-P${paper}-T${String(testNumber).padStart(2, '0')}-${subjectId}-Q${String(questionNumber).padStart(3, '0')}`;
+      const loc = medium === 'Marathi' ? curated.mr : medium === 'Hindi' ? curated.hi : curated.en;
+      const permuted = seededPermuteOptions(loc.opts, 0, qIdCurated);
+      return {
+        id: qIdCurated,
+        exam,
+        paper,
+        moduleId: moduleIdCurated,
+        poolType,
+        testNumber,
+        batchNumber: Math.ceil(testNumber / 5),
+        questionNumber,
+        subjectId,
+        subjectLabel: subjectId === 'CDP' ? 'Child Development & Pedagogy' : 'Environmental Studies (EVS)',
+        topic: curated.topic,
+        mediumRendered: medium,
+        difficulty: curated.difficulty,
+        questionPattern: curated.pattern,
+        question: loc.q,
+        options: permuted.options,
+        correctAnswer: permuted.correctAnswer,
+        explanation: loc.exp,
+        marks: 1,
+        conceptSignature: `${exam}|P1|MOCK|T${testNumber}|${subjectId}|${curated.topic}|Q${questionNumber}`,
+        normalizedHash: normalizeTetText(loc.q),
+        approvalStatus: 'approved',
+      };
+    }
   }
 
   const moduleId = getModuleId(exam, paper);

@@ -6,6 +6,8 @@ import {
   TetCtetQuestion,
 } from '../types/tetCtet';
 import { getModuleId } from './tetCtetSyllabi';
+import { getMahaTetP1B1MarathiL1Question } from './tetCtetAuditBatches/mahaTetP1B1MrAll';
+import { getMahaTetP1B1EnglishL2Question } from './tetCtetAuditBatches/mahaTetP1B1EnAll';
 
 export function normalizeTetText(raw: string): string {
   return String(raw || '')
@@ -678,6 +680,47 @@ export function generateTetCtetLanguageQuestion(params: {
     language,
     questionNumber,
   } = params;
+
+  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 10) {
+    const curatedLang =
+      isLanguage1 && language === 'Marathi'
+        ? getMahaTetP1B1MarathiL1Question(testNumber, slotIndex)
+        : !isLanguage1 && language === 'English'
+        ? getMahaTetP1B1EnglishL2Question(testNumber, slotIndex)
+        : null;
+
+    if (curatedLang) {
+      const moduleIdCurated = getModuleId(exam, paper);
+      const subjectIdCurated = isLanguage1 ? 'LANGUAGE_1' : 'LANGUAGE_2';
+      const qIdCurated = `TETCTET-${exam}-P${paper}-T${String(testNumber).padStart(2, '0')}-${isLanguage1 ? 'L1' : 'L2'}-${language.toUpperCase()}-Q${String(questionNumber).padStart(3, '0')}`;
+      const permuted = seededPermuteOptions(curatedLang.opts, 0, qIdCurated);
+      return {
+        id: qIdCurated,
+        exam,
+        paper,
+        moduleId: moduleIdCurated,
+        poolType,
+        testNumber,
+        batchNumber: Math.ceil(testNumber / 5),
+        questionNumber,
+        subjectId: subjectIdCurated,
+        subjectLabel: `${isLanguage1 ? 'Language 1' : 'Language 2'} (${language})`,
+        topic: curatedLang.topic,
+        languageCode: language,
+        mediumRendered: language,
+        difficulty: curatedLang.difficulty,
+        questionPattern: curatedLang.pattern,
+        question: curatedLang.q,
+        options: permuted.options,
+        correctAnswer: permuted.correctAnswer,
+        explanation: curatedLang.exp,
+        marks: 1,
+        conceptSignature: `${exam}|P1|MOCK|T${testNumber}|${subjectIdCurated}|${language}|${curatedLang.topic}|Q${questionNumber}`,
+        normalizedHash: normalizeTetText(curatedLang.q),
+        approvalStatus: 'approved',
+      };
+    }
+  }
 
   const examOffset = exam === 'MAHA_TET' ? 0 : 100000;
   const paperOffset = paper === 1 ? 0 : 50000;
