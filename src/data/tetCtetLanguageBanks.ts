@@ -8,6 +8,10 @@ import {
 import { getModuleId } from './tetCtetSyllabi';
 import { getMahaTetP1B1MarathiL1Question } from './tetCtetAuditBatches/mahaTetP1B1MrAll';
 import { getMahaTetP1B1EnglishL2Question } from './tetCtetAuditBatches/mahaTetP1B1EnAll';
+import { getMahaTetP1B2MarathiL1Question } from './tetCtetAuditBatches/mahaTetP1B2MrAll';
+import { getMahaTetP1B2EnglishL2Question } from './tetCtetAuditBatches/mahaTetP1B2EnAll';
+import { getMahaTetP1B3MarathiL1Question } from './tetCtetAuditBatches/mahaTetP1B3MrAll';
+import { getMahaTetP1B3EnglishL2Question } from './tetCtetAuditBatches/mahaTetP1B3EnAll';
 
 export function normalizeTetText(raw: string): string {
   return String(raw || '')
@@ -681,12 +685,20 @@ export function generateTetCtetLanguageQuestion(params: {
     questionNumber,
   } = params;
 
-  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 10) {
+  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 30) {
     const curatedLang =
       isLanguage1 && language === 'Marathi'
-        ? getMahaTetP1B1MarathiL1Question(testNumber, slotIndex)
+        ? testNumber <= 10
+          ? getMahaTetP1B1MarathiL1Question(testNumber, slotIndex)
+          : testNumber <= 20
+          ? getMahaTetP1B2MarathiL1Question(testNumber, slotIndex)
+          : getMahaTetP1B3MarathiL1Question(testNumber, slotIndex)
         : !isLanguage1 && language === 'English'
-        ? getMahaTetP1B1EnglishL2Question(testNumber, slotIndex)
+        ? testNumber <= 10
+          ? getMahaTetP1B1EnglishL2Question(testNumber, slotIndex)
+          : testNumber <= 20
+          ? getMahaTetP1B2EnglishL2Question(testNumber, slotIndex)
+          : getMahaTetP1B3EnglishL2Question(testNumber, slotIndex)
         : null;
 
     if (curatedLang) {

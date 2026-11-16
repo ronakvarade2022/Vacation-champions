@@ -372,6 +372,8 @@ interface AppContextType {
   saveCustomTetCtetQuestion: (question: TetCtetQuestion) => void;
   rejectedTetCtetIds: string[];
   toggleRejectTetCtetQuestion: (id: string) => void;
+  tetCtetEnforceGreenOnly: boolean;
+  toggleTetCtetEnforceGreenOnly: () => void;
 
   // Admin platform settings
   updateTimers: (c23: number, c45: number, c68: number) => void;
@@ -851,6 +853,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
+    }
+  });
+
+  const [tetCtetEnforceGreenOnly, setTetCtetEnforceGreenOnly] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('vc_tet_ctet_enforce_green_only') === 'true';
+    } catch {
+      return false;
     }
   });
 
@@ -4048,6 +4058,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const toggleTetCtetEnforceGreenOnly = () => {
+    setTetCtetEnforceGreenOnly(prev => {
+      const next = !prev;
+      safeSetLocalStorage('vc_tet_ctet_enforce_green_only', String(next));
+      return next;
+    });
+  };
+
   const clearAllNotifications = () => {
     setNotifications([]);
   };
@@ -4172,6 +4190,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveCustomTetCtetQuestion,
       rejectedTetCtetIds,
       toggleRejectTetCtetQuestion,
+      tetCtetEnforceGreenOnly,
+      toggleTetCtetEnforceGreenOnly,
       updateTimers,
       markNotificationAsRead,
       clearAllNotifications,
@@ -4197,6 +4217,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tetCtetBatches,
       customTetCtetQuestions,
       rejectedTetCtetIds,
+      tetCtetEnforceGreenOnly,
       gkQuestions,
       learningPrograms,
       allPuzzles,

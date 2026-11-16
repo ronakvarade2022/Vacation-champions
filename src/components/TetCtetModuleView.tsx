@@ -44,6 +44,7 @@ import {
   buildTetCtetMockPaper,
   buildTetCtetPracticeSet,
 } from '../data/tetCtetQuestionEngine';
+import { MOCK_TEST_QA_STATUS_BY_KEY } from '../data/tetCtetCentralAuditSnapshot';
 import { formatHhMmSs, TetCtetExamSimulator } from './TetCtetExamSimulator';
 
 export type TetCtetModuleSubTab =
@@ -100,6 +101,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     tetCtetBatches,
     customTetCtetQuestions,
     rejectedTetCtetIds,
+    tetCtetEnforceGreenOnly,
   } = useApp();
 
   const modMeta = TET_CTET_MODULES[moduleId];
@@ -718,17 +720,27 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                         {testNumbers.map((tNum) => {
                           const best = mockBestByNumber.get(tNum);
+                          const qaRec = MOCK_TEST_QA_STATUS_BY_KEY[`${moduleId}_T${tNum}`];
+                          const qaLocked = tetCtetEnforceGreenOnly && qaRec?.status !== 'GREEN';
                           return (
                             <div
                               key={tNum}
-                              className="rounded-2xl bg-slate-50/70 border border-slate-200 p-4 flex flex-col justify-between gap-3 hover:border-indigo-300 transition-colors"
+                              className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-colors ${
+                                qaLocked
+                                  ? 'bg-slate-100/80 border-slate-200 opacity-85'
+                                  : 'bg-slate-50/70 border-slate-200 hover:border-indigo-300'
+                              }`}
                             >
                               <div className="space-y-1.5">
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="font-mono tabular-nums text-xs font-black text-indigo-800">
                                     MOCK TEST {String(tNum).padStart(2, '0')}
                                   </span>
-                                  {best && (
+                                  {qaRec?.status === 'GREEN' ? (
+                                    <span className="text-[10px] font-black uppercase text-emerald-700">
+                                      Verified GREEN
+                                    </span>
+                                  ) : best ? (
                                     <span
                                       className={`text-[11px] font-mono tabular-nums font-black ${
                                         best.qualified ? 'text-emerald-700' : 'text-amber-700'
@@ -736,7 +748,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                                     >
                                       {best.bestMarks}/150 ({best.bestPct}%)
                                     </span>
-                                  )}
+                                  ) : null}
                                 </div>
                                 <h4 className="text-sm font-display font-black text-slate-900">
                                   {modMeta.examTitle} P{modMeta.paper} Full Set {tNum}
@@ -751,14 +763,26 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                                 )}
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleLaunchMockTest(tNum)}
-                                className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
-                              >
-                                <Play className="w-3.5 h-3.5 fill-current" />
-                                <span>{best ? 'Retake Test' : 'Start Test'}</span>
-                              </button>
+                              {qaLocked ? (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-slate-200 text-slate-600 font-display font-black text-xs flex items-center justify-center gap-1.5 cursor-not-allowed whitespace-nowrap"
+                                >
+                                  <span>
+                                    {qaRec?.status === 'YELLOW' ? 'QA Review Pending' : 'Not Published Yet'}
+                                  </span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchMockTest(tNum)}
+                                  className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-current" />
+                                  <span>{best ? 'Retake Test' : 'Start Test'}</span>
+                                </button>
+                              )}
                             </div>
                           );
                         })}

@@ -101,7 +101,139 @@ export const TET_CTET_AUDIT_BATCHES: TetCtetTenTestAuditBatch[] = [
       },
     ],
   },
-  ...([2, 3, 4, 5] as const).map((batchNum): TetCtetTenTestAuditBatch => ({
+  {
+    id: 'MAHA_TET_P1_AUDIT_B2',
+    moduleId: 'MAHA_TET_P1',
+    exam: 'MAHA_TET',
+    paper: 1,
+    examLabel: 'MAHA TET Paper 1 (Classes 1–5)',
+    batchNumber: 2,
+    testStart: 11,
+    testEnd: 20,
+    totalTests: 10,
+    totalQuestions: 1500,
+    status: 'Completed',
+    verifiedAt: 'Batch 2 Remediated & Verified',
+    exactDuplicatesAfter: 0,
+    nearDuplicatesAfter: 0,
+    invalidOptionsAfter: 0,
+    prefixTaggedAfter: 0,
+    patternCompliance: 'MSCE Pune 150 Qs/Test: CDP 30 + L1 Marathi 30 + L2 English 30 + Math 30 + EVS 30',
+    correctionSummary: [
+      {
+        sectionRange: 'Child Development & Pedagogy (CDP)',
+        questionRange: 'Q1–Q30 (Tests 11–20)',
+        problemFound:
+          'Recycled legacy CDP stubs with synthetic "[MAHA TET Primary · Mock #X]" prefixes.',
+        actionTaken:
+          'Replaced all 300 items with 300 original unprefixed trilingual (EN/MR/HI) CDP items across Montessori, Froebel, Ausubel, Bandura, Flavell, Bloom, NCF-2023, NIPUN Bharat, PARAKH, UDL, RTE, and inclusive classrooms (0 overlap with Batch 1).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 1 – Marathi (मराठी)',
+        questionRange: 'Q31–Q60 (Tests 11–20)',
+        problemFound:
+          'Legacy cyclic passages/grammar tags and overlapping pedagogy stubs.',
+        actionTaken:
+          'Replaced all 300 items with 10 fresh Marathi prose passages (40 Qs), 10 Marathi poems (30 Qs), 80 Marathi Vyakaran & Shabd-Sampatti items, and 150 distinct L1 Marathi pedagogy MCQs (0 overlap with Batch 1).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 2 – English',
+        questionRange: 'Q61–Q90 (Tests 11–20)',
+        problemFound:
+          'Recycled English grammar/passage slots and L1-cloned pedagogy stubs.',
+        actionTaken:
+          'Replaced all 300 items with 20 original passages (70 Qs), 80 applied English grammar & usage MCQs, and 150 distinct L2 English pedagogy items (0 overlap with Batch 1 or Marathi L1).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Mathematics (Classes 1–5)',
+        questionRange: 'Q91–Q120 (Tests 11–20)',
+        problemFound:
+          'Template-cloned numeric items and synthetic bracket prefixes across Tests 11–20.',
+        actionTaken:
+          'Replaced all 300 items with 200 original trilingual primary arithmetic/geometry/fractions/decimals/mensuration/money/time/data MCQs and 100 distinct Mathematics pedagogy items (0 overlap with Batch 1).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Environmental Studies (EVS)',
+        questionRange: 'Q121–Q150 (Tests 11–20)',
+        problemFound:
+          'Cyclic legacy EVS prompts tagged with synthetic Mock prefixes.',
+        actionTaken:
+          'Replaced all 300 items with 180 original trilingual Balbharati/NCERT Classes 3–5 EVS Content MCQs and 120 distinct EVS Inquiry Pedagogy items (0 overlap with Batch 1).',
+        replacedCount: 300,
+      },
+    ],
+  },
+  {
+    id: 'MAHA_TET_P1_AUDIT_B3',
+    moduleId: 'MAHA_TET_P1',
+    exam: 'MAHA_TET',
+    paper: 1,
+    examLabel: 'MAHA TET Paper 1 (Classes 1–5)',
+    batchNumber: 3,
+    testStart: 21,
+    testEnd: 30,
+    totalTests: 10,
+    totalQuestions: 1500,
+    status: 'Completed',
+    verifiedAt: 'Batch 3 Remediated & Verified',
+    exactDuplicatesAfter: 0,
+    nearDuplicatesAfter: 0,
+    invalidOptionsAfter: 0,
+    prefixTaggedAfter: 0,
+    patternCompliance: 'MSCE Pune 150 Qs/Test: CDP 30 + L1 Marathi 30 + L2 English 30 + Math 30 + EVS 30',
+    correctionSummary: [
+      {
+        sectionRange: 'Child Development & Pedagogy (CDP)',
+        questionRange: 'Q1–Q30 (Tests 21–30)',
+        problemFound:
+          'Recycled legacy CDP stubs with synthetic "[MAHA TET Primary · Mock #X]" prefixes.',
+        actionTaken:
+          'Replaced all 300 items with 300 strictly deduplicated trilingual (EN/MR/HI) CDP items across Montessori, Piaget, Vygotsky, Kohlberg, Bronfenbrenner, Gardner, Bloom, NCF-2023, RTE, RPwD 2016, and inclusive pedagogy (0 overlap with Batches 1–2).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 1 – Marathi (मराठी)',
+        questionRange: 'Q31–Q60 (Tests 21–30)',
+        problemFound:
+          'Legacy cyclic passages/grammar tags and overlapping pedagogy stubs.',
+        actionTaken:
+          'Replaced all 300 items with 10 fresh Marathi prose extracts (40 Qs), 10 Marathi poems (30 Qs), 80 Marathi Vyakaran & Shabd-Sampatti items, and 150 distinct L1 Marathi pedagogy MCQs (0 overlap with Batches 1–2).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Language 2 – English',
+        questionRange: 'Q61–Q90 (Tests 21–30)',
+        problemFound:
+          'Recycled English grammar/passage slots and L1-cloned pedagogy stubs.',
+        actionTaken:
+          'Replaced all 300 items with 20 original passages (70 Qs), 80 applied English grammar & usage MCQs, and 150 distinct L2 English pedagogy items (0 overlap with Batches 1–2 or Marathi L1).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Mathematics (Classes 1–5)',
+        questionRange: 'Q91–Q120 (Tests 21–30)',
+        problemFound:
+          'Template-cloned numeric items and synthetic bracket prefixes across Tests 21–30.',
+        actionTaken:
+          'Replaced all 300 items with 200 strictly unique trilingual primary arithmetic/geometry/fractions/decimals/mensuration/money/time/data MCQs and 100 distinct Mathematics pedagogy items (0 overlap with Batches 1–2).',
+        replacedCount: 300,
+      },
+      {
+        sectionRange: 'Environmental Studies (EVS)',
+        questionRange: 'Q121–Q150 (Tests 21–30)',
+        problemFound:
+          'Cyclic legacy EVS prompts tagged with synthetic Mock prefixes.',
+        actionTaken:
+          'Replaced all 300 items with 180 strictly unique trilingual Balbharati/NCERT Classes 3–5 EVS Content MCQs and 120 distinct EVS Inquiry Pedagogy items (0 overlap with Batches 1–2).',
+        replacedCount: 300,
+      },
+    ],
+  },
+  ...([4, 5] as const).map((batchNum): TetCtetTenTestAuditBatch => ({
     id: `MAHA_TET_P1_AUDIT_B${batchNum}`,
     moduleId: 'MAHA_TET_P1',
     exam: 'MAHA_TET',

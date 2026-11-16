@@ -15,7 +15,6 @@ import {
 import { useApp } from '../../context/AppContext';
 import {
   TetCtetAttemptRecord,
-  TetCtetAuditReport,
   TetCtetModuleId,
   TetCtetQuestion,
   TetCtetSubjectId,
@@ -27,8 +26,14 @@ import {
 import {
   buildTetCtetMockPaper,
   checkTetCtetCandidateDuplicate,
-  runTetCtetDuplicateAudit,
 } from '../../data/tetCtetQuestionEngine';
+import {
+  ConsolidatedTetCtetAuditReport,
+  MockTestPublicationStatus,
+  runCentralizedTetCtetAudit,
+  validateSingleTetCtetQuestion,
+} from '../../data/tetCtetCentralAuditEngine';
+import { LATEST_TET_CTET_CENTRAL_AUDIT } from '../../data/tetCtetCentralAuditSnapshot';
 import {
   getTetCtetAuditSummary,
   TET_CTET_AUDIT_BATCHES,
@@ -49,11 +54,15 @@ export const AdminTetCtetSection: React.FC = () => {
     saveCustomTetCtetQuestion,
     rejectedTetCtetIds,
     toggleRejectTetCtetQuestion,
+    tetCtetEnforceGreenOnly,
+    toggleTetCtetEnforceGreenOnly,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<AdminTetTab>('batches');
   const [batchModuleFilter, setBatchModuleFilter] = useState<TetCtetModuleId | 'ALL'>('ALL');
   const [batchFeedback, setBatchFeedback] = useState<string | null>(null);
+  const [qaStatusFilter, setQaStatusFilter] = useState<'ALL' | MockTestPublicationStatus>('ALL');
+  const [qaModuleFilter, setQaModuleFilter] = useState<TetCtetModuleId | 'ALL'>('ALL');
 
   // Inspector states
   const [inspectModule, setInspectModule] = useState<TetCtetModuleId>('MAHA_TET_P1');
@@ -62,8 +71,27 @@ export const AdminTetCtetSection: React.FC = () => {
   const [editingQuestion, setEditingQuestion] = useState<TetCtetQuestion | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Duplicate Audit state
-  const [auditReport, setAuditReport] = useState<TetCtetAuditReport | null>(null);
+  // Centralized Automated Audit state (pre-loaded from verified snapshot or saved session record)
+  const [auditReport, setAuditReport] = useState<ConsolidatedTetCtetAuditReport>(() => {
+    try {
+      const saved = localStorage.getItem('vc_tet_ctet_central_audit_record');
+      if (saved) {
+        const parsed = JSON.parse(saved) as ConsolidatedTetCtetAuditReport;
+        if (
+          parsed &&
+          typeof parsed.totalQuestions === 'number' &&
+          parsed.moduleBreakdown &&
+          parsed.publicationSummary &&
+          parsed.defectClassification
+        ) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore storage parse error and fall back to verified snapshot
+    }
+    return LATEST_TET_CTET_CENTRAL_AUDIT;
+  });
 
   // Module Progress Calculation (X/50 Tests Verified per Module)
   const moduleStats = useMemo(() => {
@@ -130,32 +158,44 @@ export const AdminTetCtetSection: React.FC = () => {
     );
   }, [studentsList, tetCtetAttempts]);
 
-  const handleRunFullAudit = () => {
-    const rep = runTetCtetDuplicateAudit(
-      tetCtetBatches,
-      customTetCtetQuestions,
-      rejectedTetCtetIds
-    );
+  const handleRunFullAudit = (mode: 'incremental' | 'full' = 'incremental') => {
+    const rep = runCentralizedTetCtetAudit({
+      auditMode: mode,
+      customOverrides: customTetCtetQuestions,
+      rejectedIds: rejectedTetCtetIds,
+      includePaper2SocialStudies: true,
+      includePracticePools: mode === 'full',
+      includeMultiMediumVerification: mode === 'full',
+    });
     setAuditReport(rep);
+    try {
+      localStorage.setItem('vc_tet_ctet_central_audit_record', JSON.stringify(rep));
+    } catch {
+      // Ignore storage quota warning
+    }
   };
 
   const handleSaveEditedQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingQuestion) return;
-    if (
-      !editingQuestion.question.trim() ||
-      editingQuestion.options.some((o) => !o.trim())
-    ) {
-      setEditError('Question stem and all 4 options must be non-empty.');
-      return;
-    }
 
-    // Check duplicate against sibling questions in the same test
+    // Check against sibling stems + strict automated validation rules
     const otherHashes = new Set<string>(
       inspectedQuestions
         .filter((q) => q.id !== editingQuestion.id)
         .map((q) => q.normalizedHash)
     );
+    const otherCanonicalStems = new Set<string>(
+      inspectedQuestions
+        .filter((q) => q.id !== editingQuestion.id)
+        .map((q) => q.question.replace(/^\[[^\]]+\]\s*/g, '').trim().toLowerCase())
+    );
+    const validation = validateSingleTetCtetQuestion(editingQuestion, otherCanonicalStems);
+    if (!validation.isValid) {
+      setEditError(validation.reasons[0]);
+      return;
+    }
+
     const dupCheck = checkTetCtetCandidateDuplicate(editingQuestion.question, otherHashes);
     if (dupCheck.isDuplicate) {
       setEditError('Duplicate question detected inside this Mock Test. Please provide an original stem.');
@@ -197,7 +237,7 @@ export const AdminTetCtetSection: React.FC = () => {
             className="min-h-[42px] px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs flex items-center gap-2 cursor-pointer shadow-xs"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Run Full 30,000-Q Duplicate Audit</span>
+            <span>Run Centralized 30,000-Q Audit</span>
           </button>
         </div>
 
@@ -235,7 +275,7 @@ export const AdminTetCtetSection: React.FC = () => {
           {[
             { id: 'batches' as const, label: '40 Batches Manager (5 Tests/Batch)', icon: RefreshCw },
             { id: 'inspector' as const, label: 'Question Inspector & Editor', icon: FileSearch },
-            { id: 'audit' as const, label: '30,000-Q Duplicate Audit', icon: ShieldCheck },
+            { id: 'audit' as const, label: 'Centralized Automated Audit', icon: ShieldCheck },
             { id: 'monitor' as const, label: `Student Attempts Monitor (${allCandidateAttempts.length})`, icon: Users },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -527,100 +567,416 @@ export const AdminTetCtetSection: React.FC = () => {
       )}
 
       {/* =====================================================================
-          SUB-TAB 3: 30,000-QUESTION ZERO-DUPLICATE AUDIT ENGINE
+          SUB-TAB 3: CENTRALIZED AUTOMATED AUDIT ENGINE & CONSOLIDATED REPORT
           ===================================================================== */}
       {activeTab === 'audit' && (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-display font-black text-slate-900">
-                Full 200 Mock Tests (30,000 Questions) Zero-Repetition Integrity Audit
+                Centralized Automated TET &amp; CTET Audit System (200 Mock Tests · 30,000 Qs)
               </h3>
               <p className="text-xs text-slate-600 mt-0.5">
-                Validates every single Mock Test position across all 4 modules + practice pools for hash collisions, cross-exam overlaps, cross-paper overlaps, and valid 4-option schema.
+                Single-pass engine verifying exact/near duplicates, template clones, 4 unique options &amp; keys, 150-Q pattern alignment, and stage appropriateness. Mode:{' '}
+                <strong className="uppercase text-indigo-800">{auditReport.auditMode}</strong> · Skipped verified:{' '}
+                <span className="font-mono font-bold">{auditReport.skippedVerifiedQuestions.toLocaleString('en-IN')}</span> Qs · Last run:{' '}
+                <span className="font-mono">{new Date(auditReport.generatedAt).toLocaleString()}</span> ({auditReport.durationMs} ms).
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleRunFullAudit}
-              className="min-h-[42px] px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs cursor-pointer"
-            >
-              Execute Audit Now
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleRunFullAudit('incremental')}
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs cursor-pointer"
+              >
+                Fast Incremental Audit (Skip Verified)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRunFullAudit('full')}
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs cursor-pointer"
+              >
+                Final Deep Cross-Check (All 30,000)
+              </button>
+            </div>
           </div>
 
-          {!auditReport ? (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 text-center space-y-2">
-              <ShieldCheck className="w-10 h-10 text-indigo-700 mx-auto" />
-              <p className="text-sm font-display font-black text-slate-900">
-                Click &ldquo;Execute Audit Now&rdquo; to inspect all 30,000 mock positions
+          {/* 10 Requested Consolidated Audit Report Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Total Mock Tests</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-slate-900 mt-1">
+                {auditReport.totalMockTests}
               </p>
-              <p className="text-xs text-slate-600">
-                Performs normalized text hashing across MAHA TET P1, MAHA TET P2, CTET P1, CTET P2, and Practice Pools.
-              </p>
+              <span className="text-[11px] text-slate-500">
+                {auditReport.patternCompliantTests}/200 pattern verified
+              </span>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                  <span className="text-xs font-bold text-slate-500">Mock Tests Verified</span>
-                  <p className="text-2xl font-mono tabular-nums font-black text-slate-900 mt-1">
-                    {auditReport.totalMockTests}
-                  </p>
-                </div>
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                  <span className="text-xs font-bold text-slate-500">Mock Question Positions</span>
-                  <p className="text-2xl font-mono tabular-nums font-black text-indigo-800 mt-1">
-                    {auditReport.totalMockQuestionPositions.toLocaleString('en-IN')}
-                  </p>
-                </div>
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
-                  <span className="text-xs font-bold text-emerald-800">Unique Concept Signatures</span>
-                  <p className="text-2xl font-mono tabular-nums font-black text-emerald-950 mt-1">
-                    {auditReport.uniqueConceptSignatures.toLocaleString('en-IN')}
-                  </p>
-                </div>
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
-                  <span className="text-xs font-bold text-emerald-800">Exact Duplicates</span>
-                  <p className="text-2xl font-mono tabular-nums font-black text-emerald-700 mt-1">
-                    {auditReport.exactDuplicatesFound}
-                  </p>
-                </div>
-              </div>
 
-              <div className="rounded-2xl border border-slate-200 p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-bold">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Total Questions</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-slate-900 mt-1">
+                {auditReport.totalQuestions.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-slate-500">4 modules × 50 tests × 150</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200">
+              <span className="text-[11px] font-bold text-indigo-800 uppercase">Questions Audited</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-indigo-950 mt-1">
+                {auditReport.questionsAudited.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-indigo-700">100% programmatically scanned</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200">
+              <span className="text-[11px] font-bold text-emerald-800 uppercase">Questions Passed</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-emerald-950 mt-1">
+                {auditReport.questionsPassed.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-emerald-800">
+                {auditReport.verifiedCleanTests} clean tests verified
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200">
+              <span className="text-[11px] font-bold text-emerald-800 uppercase">Questions Replaced</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-emerald-800 mt-1">
+                {auditReport.questionsReplaced.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-emerald-700">
+                {auditReport.curatedBatchReplacementsCount.toLocaleString('en-IN')} curated + {auditReport.legacyMathRepairedCount} math key fixes
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200">
+              <span className="text-[11px] font-bold text-rose-800 uppercase">Duplicate Questions Detected</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-rose-900 mt-1">
+                {auditReport.duplicateQuestionsDetected.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-rose-700">
+                {auditReport.exactDuplicatesCount.toLocaleString('en-IN')} exact + {auditReport.nearDuplicatesCount} near/clones
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200">
+              <span className="text-[11px] font-bold text-emerald-800 uppercase">Incorrect Questions Detected</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-emerald-800 mt-1">
+                {auditReport.incorrectQuestionsDetected.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-emerald-700">All 4-option &amp; key checks clean</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200">
+              <span className="text-[11px] font-bold text-amber-900 uppercase">Out-of-Syllabus / Tag Issues</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-amber-950 mt-1">
+                {auditReport.outOfSyllabusQuestions.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-amber-800">
+                {auditReport.syntheticTaggedCount.toLocaleString('en-IN')} tagged · {auditReport.stageMismatchCount.toLocaleString('en-IN')} stage overlap
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200">
+              <span className="text-[11px] font-bold text-amber-900 uppercase">Requiring Manual Review</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-amber-950 mt-1">
+                {auditReport.questionsRequiringManualReview.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-amber-800">Un-remediated legacy batches</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200">
+              <span className="text-[11px] font-bold text-amber-900 uppercase">Remaining Questions</span>
+              <p className="text-2xl font-mono tabular-nums font-black text-amber-950 mt-1">
+                {auditReport.remainingQuestions.toLocaleString('en-IN')}
+              </p>
+              <span className="text-[11px] text-amber-800">Batches 3–20 (180 tests)</span>
+            </div>
+          </div>
+
+          {(auditReport.socialStudiesExtraChecked ||
+            auditReport.verifiedMediumsCheck ||
+            auditReport.practicePoolSummary) && (
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs font-semibold text-slate-700 space-y-1.5">
+              {auditReport.verifiedMediumsCheck && (
                 <div>
-                  <span className="text-slate-500 block">Cross-Exam Duplicates</span>
-                  <span className="font-mono tabular-nums text-emerald-700 text-base">
-                    {auditReport.crossExamDuplicatesFound}
+                  <strong className="text-slate-900">Verified Batches Multi-Medium Parity:</strong>{' '}
+                  Marathi Clean:{' '}
+                  <span className="font-mono font-bold text-emerald-700">
+                    {auditReport.verifiedMediumsCheck.marathiPassed.toLocaleString('en-IN')}
+                  </span>{' '}
+                  · Hindi Clean:{' '}
+                  <span className="font-mono font-bold text-emerald-700">
+                    {auditReport.verifiedMediumsCheck.hindiPassed.toLocaleString('en-IN')}
+                  </span>{' '}
+                  · Multi-Medium Issues:{' '}
+                  <span className="font-mono font-bold text-emerald-700">
+                    {auditReport.verifiedMediumsCheck.issuesFound}
                   </span>
                 </div>
+              )}
+              {auditReport.practicePoolSummary && (
                 <div>
-                  <span className="text-slate-500 block">Cross-Paper Duplicates</span>
-                  <span className="font-mono tabular-nums text-emerald-700 text-base">
-                    {auditReport.crossPaperDuplicatesFound}
+                  <strong className="text-slate-900">Practice &amp; PYQ Pools Audit:</strong>{' '}
+                  {auditReport.practicePoolSummary.totalChecked} items checked ·{' '}
+                  {auditReport.practicePoolSummary.invalidOptionsOrKeys} invalid options/keys ·{' '}
+                  <span className="text-amber-800 font-bold">
+                    {auditReport.practicePoolSummary.exactDuplicates} duplicates &amp;{' '}
+                    {auditReport.practicePoolSummary.prefixTagged} tagged stubs queued for cleanup
                   </span>
                 </div>
+              )}
+              {auditReport.socialStudiesExtraChecked && (
                 <div>
-                  <span className="text-slate-500 block">Mock vs Practice Collisions</span>
-                  <span className="font-mono tabular-nums text-emerald-700 text-base">
-                    {auditReport.mockVsPracticeDuplicatesFound}
+                  <strong className="text-slate-900">Paper 2 Social Studies Stream Check:</strong>{' '}
+                  {auditReport.socialStudiesExtraChecked.totalSlots.toLocaleString('en-IN')} slots scanned ·{' '}
+                  {auditReport.socialStudiesExtraChecked.invalidOptionsOrKeys} invalid options/keys ·{' '}
+                  <span className="text-amber-800 font-bold">
+                    {auditReport.socialStudiesExtraChecked.exactDuplicatesWithinP2Sst.toLocaleString('en-IN')} cyclic duplicates queued for P2 replacement batches
                   </span>
                 </div>
-                <div>
-                  <span className="text-slate-500 block">Invalid Option Items</span>
-                  <span className="font-mono tabular-nums text-emerald-700 text-base">
-                    {auditReport.invalidOptionQuestions}
-                  </span>
-                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2 Actual Defect Classification + Step 1 Backup Checkpoint */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-xs sm:text-sm font-display font-black text-slate-900">
+                Defect Reason Classification &amp; QA Checkpoint ({auditReport.checkpoint.backupArtifactDir})
+              </h4>
+              <span className="text-[11px] font-mono font-bold text-indigo-800">
+                Next Resume Checkpoint: {auditReport.checkpoint.nextResumeBatchId}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-white border border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-800 uppercase block">Clean Verified</span>
+                <span className="text-base font-mono font-black text-emerald-900">
+                  {auditReport.defectClassification.cleanVerified.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white border border-rose-200">
+                <span className="text-[10px] font-bold text-rose-800 uppercase block">Exact Duplicates</span>
+                <span className="text-base font-mono font-black text-rose-900">
+                  {auditReport.defectClassification.exactDuplicates.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white border border-rose-200">
+                <span className="text-[10px] font-bold text-rose-800 uppercase block">Template Clones</span>
+                <span className="text-base font-mono font-black text-rose-900">
+                  {auditReport.defectClassification.nearDuplicatesOrClones.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white border border-amber-200">
+                <span className="text-[10px] font-bold text-amber-900 uppercase block">Tag Review Only</span>
+                <span className="text-base font-mono font-black text-amber-950">
+                  {auditReport.defectClassification.syntheticTagOnlyNeedsReview.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white border border-amber-200">
+                <span className="text-[10px] font-bold text-amber-900 uppercase block">Stage Mismatch</span>
+                <span className="text-base font-mono font-black text-amber-950">
+                  {auditReport.defectClassification.stageOrSyllabusMismatchOnly.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white border border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-800 uppercase block">Option / Key Errors</span>
+                <span className="text-base font-mono font-black text-emerald-900">
+                  {auditReport.defectClassification.incorrectKeyOrOptionsOrMissing.toLocaleString('en-IN')}
+                </span>
               </div>
             </div>
+          </div>
+
+          {/* Per-Module Centralized Breakdown */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-bold">
+                  <th className="py-2.5 px-3">Module</th>
+                  <th className="py-2.5 px-3 text-right">Audited</th>
+                  <th className="py-2.5 px-3 text-right">Passed</th>
+                  <th className="py-2.5 px-3 text-right">Exact Dups</th>
+                  <th className="py-2.5 px-3 text-right">Near Dups</th>
+                  <th className="py-2.5 px-3 text-right">GREEN</th>
+                  <th className="py-2.5 px-3 text-right">YELLOW</th>
+                  <th className="py-2.5 px-3 text-right">RED</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                {auditReport.moduleBreakdown.map((row) => (
+                  <tr key={row.moduleId}>
+                    <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">{row.title}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{row.questionsAudited.toLocaleString('en-IN')}</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                      {row.questionsPassed.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-rose-700">
+                      {row.exactDuplicates.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-rose-700">
+                      {row.nearDuplicates.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                      {row.greenTests}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700">
+                      {row.yellowTests}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-700">
+                      {row.redTests}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Step 6: Student Publication Approval (GREEN / YELLOW / RED — 200 Mock Tests) */}
+          <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-display font-black text-slate-900">
+                  Student Publication Approval Matrix (GREEN: {auditReport.publicationSummary.greenTestsCount} · YELLOW: {auditReport.publicationSummary.yellowTestsCount} · RED: {auditReport.publicationSummary.redTestsCount})
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  GREEN = Verified &amp; ready for students · YELLOW = Manual review required · RED = Confirmed duplicates/errors (blocked when GREEN-only access is active).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleTetCtetEnforceGreenOnly}
+                className={`min-h-[38px] px-3.5 py-2 rounded-xl text-xs font-display font-black cursor-pointer transition-colors ${
+                  tetCtetEnforceGreenOnly
+                    ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                    : 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
+                }`}
+              >
+                {tetCtetEnforceGreenOnly
+                  ? 'GREEN-Only Student Lock: ACTIVE (20 Live / 180 Locked)'
+                  : 'Enforce GREEN-Only Student Access (Currently All 200 Open)'}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {(['ALL', 'GREEN', 'YELLOW', 'RED'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setQaStatusFilter(st)}
+                  className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer border ${
+                    qaStatusFilter === st
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+              <select
+                value={qaModuleFilter}
+                onChange={(e) => setQaModuleFilter(e.target.value as TetCtetModuleId | 'ALL')}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 font-bold bg-white text-slate-800"
+              >
+                <option value="ALL">All 4 Modules (200 Tests)</option>
+                {TET_CTET_MODULE_LIST.map((m) => (
+                  <option key={m.moduleId} value={m.moduleId}>
+                    {m.examTitle} P{m.paper}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="sticky top-0 bg-slate-100 text-slate-600 uppercase font-bold">
+                  <tr>
+                    <th className="py-2 px-3">Mock Test</th>
+                    <th className="py-2 px-3">Status</th>
+                    <th className="py-2 px-3 text-right">Clean</th>
+                    <th className="py-2 px-3 text-right">Dups / Clones</th>
+                    <th className="py-2 px-3 text-right">Errors</th>
+                    <th className="py-2 px-3">Audit Finding</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {auditReport.mockTestStatuses
+                    .filter(
+                      (m) =>
+                        (qaModuleFilter === 'ALL' || m.moduleId === qaModuleFilter) &&
+                        (qaStatusFilter === 'ALL' || m.status === qaStatusFilter)
+                    )
+                    .map((rec) => (
+                      <tr key={rec.key}>
+                        <td className="py-2 px-3 font-bold whitespace-nowrap">
+                          {rec.moduleTitle} · Mock #{rec.testNumber}
+                        </td>
+                        <td className="py-2 px-3 font-mono font-black whitespace-nowrap">
+                          <span
+                            className={
+                              rec.status === 'GREEN'
+                                ? 'text-emerald-700'
+                                : rec.status === 'YELLOW'
+                                ? 'text-amber-700'
+                                : 'text-rose-700'
+                            }
+                          >
+                            {rec.status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono">{rec.cleanQuestions}/150</td>
+                        <td className="py-2 px-3 text-right font-mono">
+                          {rec.exactDuplicates + rec.nearDuplicates}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono">{rec.incorrectQuestions}</td>
+                        <td className="py-2 px-3 text-slate-600">{rec.reasonSummary}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Sample Automated Findings Log */}
+          {auditReport.sampleFindings.length > 0 && (
+            <details className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <summary className="cursor-pointer text-xs font-display font-black text-slate-900">
+                View Sample Automated Flagged Findings ({auditReport.sampleFindings.length} sampled issues across pending batches)
+              </summary>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 uppercase font-bold">
+                      <th className="py-2 pr-3">Location</th>
+                      <th className="py-2 pr-3">Issue</th>
+                      <th className="py-2 pr-3">Detail</th>
+                      <th className="py-2">Snippet</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-slate-700">
+                    {auditReport.sampleFindings.slice(0, 15).map((f, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 pr-3 font-mono font-bold whitespace-nowrap">
+                          {f.moduleId} · T{f.testNumber} · Q{f.questionNumber}
+                        </td>
+                        <td className="py-2 pr-3 font-bold text-rose-700 whitespace-nowrap">{f.issueType}</td>
+                        <td className="py-2 pr-3">{f.detail}</td>
+                        <td className="py-2 text-slate-600">{f.questionSnippet}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           )}
 
           {/* Persistent 10-Test Batch Remediation Tracker (20 Batches = 200 Mock Tests) */}
           {(() => {
             const auditSummary = getTetCtetAuditSummary();
-            const batch1 = TET_CTET_AUDIT_BATCHES.find((b) => b.id === 'MAHA_TET_P1_AUDIT_B1');
+            const completedBatchesWithLogs = TET_CTET_AUDIT_BATCHES.filter(
+              (b) => b.status === 'Completed' && b.correctionSummary.length > 0
+            );
             return (
               <div className="pt-4 border-t border-slate-200 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -642,14 +998,14 @@ export const AdminTetCtetSection: React.FC = () => {
                   </div>
                 </div>
 
-                {batch1 && batch1.correctionSummary.length > 0 && (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                {completedBatchesWithLogs.map((completedBatch) => (
+                  <div key={completedBatch.id} className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-display font-black text-emerald-950">
-                        Batch 1 Verified Summary — {batch1.examLabel} (Tests {batch1.testStart}–{batch1.testEnd} · {batch1.totalQuestions.toLocaleString('en-IN')} Questions)
+                        Batch {completedBatch.batchNumber} Verified Summary — {completedBatch.examLabel} (Tests {completedBatch.testStart}–{completedBatch.testEnd} · {completedBatch.totalQuestions.toLocaleString('en-IN')} Questions)
                       </span>
                       <span className="text-[11px] font-bold text-emerald-800">
-                        0 Duplicates · 0 Synthetic Tags · 150 Qs/Test Verified
+                        {completedBatch.exactDuplicatesAfter} Duplicates · {completedBatch.prefixTaggedAfter} Synthetic Tags · 150 Qs/Test Verified
                       </span>
                     </div>
                     <div className="overflow-x-auto">
@@ -664,7 +1020,7 @@ export const AdminTetCtetSection: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-emerald-100 text-slate-800">
-                          {batch1.correctionSummary.map((log, i) => (
+                          {completedBatch.correctionSummary.map((log, i) => (
                             <tr key={i}>
                               <td className="py-2 pr-3 font-bold text-slate-900 whitespace-nowrap">{log.sectionRange}</td>
                               <td className="py-2 pr-3 font-mono whitespace-nowrap">{log.questionRange}</td>
@@ -677,7 +1033,7 @@ export const AdminTetCtetSection: React.FC = () => {
                       </table>
                     </div>
                   </div>
-                )}
+                ))}
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">

@@ -38,7 +38,17 @@ export type TetCtetQuestionPattern =
   | 'Assertion-Reasoning'
   | 'Comprehension'
   | 'Grammar'
-  | 'Problem Solving';
+  | 'Problem Solving'
+  | 'Application'
+  | 'Assessment'
+  | 'Cultural'
+  | 'Factual'
+  | 'Inclusive'
+  | 'Numerical'
+  | 'Policy / NCF / NEP'
+  | 'Safety'
+  | 'Visual Reasoning'
+  | 'Word Problem';
 
 export type TetCtetQuestionStatus = 'approved' | 'pending' | 'rejected';
 

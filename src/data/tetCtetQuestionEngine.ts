@@ -23,6 +23,7 @@ import {
 } from './tetCtetSyllabi';
 import { generateTetCtetLanguageQuestion, normalizeTetText } from './tetCtetLanguageBanks';
 import { generateTetCtetNonLangSubjectQuestion } from './tetCtetSubjectBanks';
+import { pickVerifiedReplacementQuestion } from './tetCtetAutoReplacementBank';
 
 export function buildInitialTetCtetBatches(): Record<string, TetCtetBatchStatusRecord> {
   const map: Record<string, TetCtetBatchStatusRecord> = {};
@@ -135,31 +136,50 @@ export function buildTetCtetMockPaper(params: {
       if (custom && custom.approvalStatus !== 'rejected') {
         questions.push({ ...custom, questionNumber: qNum });
       } else if (rejectedSet.has(built.id)) {
-        // Generate an alternative unique replacement slot deterministically if admin marked original rejected
-        const alt =
-          slot.subjectId === 'LANGUAGE_1' || slot.subjectId === 'LANGUAGE_2'
-            ? generateTetCtetLanguageQuestion({
-                exam,
-                paper,
-                poolType: 'MOCK',
-                testNumber: safeTestNum + 100,
-                slotIndex: localSlotIdx,
-                isLanguage1: slot.subjectId === 'LANGUAGE_1',
-                language: slot.subjectId === 'LANGUAGE_1' ? pair.language1 : pair.language2,
-                questionNumber: qNum,
-              })
-            : generateTetCtetNonLangSubjectQuestion({
-                exam,
-                paper,
-                stream: paper === 2 ? stream : undefined,
-                poolType: 'MOCK',
-                testNumber: safeTestNum + 100,
-                subjectId: slot.subjectId,
-                slotIndex: localSlotIdx,
-                medium,
-                questionNumber: qNum,
-              });
-        questions.push({ ...alt, id: built.id, questionNumber: qNum, isCustomOverride: true });
+        const existingStems = new Set(questions.map((item) => canonicalAuditStem(item.question)));
+        const targetLang =
+          slot.subjectId === 'LANGUAGE_1'
+            ? pair.language1
+            : slot.subjectId === 'LANGUAGE_2'
+            ? pair.language2
+            : medium;
+        const verifiedRepl = pickVerifiedReplacementQuestion({
+          baseQuestion: built,
+          exam,
+          paper,
+          testNumber: safeTestNum,
+          language: targetLang,
+          medium,
+          existingStems,
+        });
+        if (verifiedRepl) {
+          questions.push({ ...verifiedRepl, questionNumber: qNum });
+        } else {
+          const alt =
+            slot.subjectId === 'LANGUAGE_1' || slot.subjectId === 'LANGUAGE_2'
+              ? generateTetCtetLanguageQuestion({
+                  exam,
+                  paper,
+                  poolType: 'MOCK',
+                  testNumber: safeTestNum + 100,
+                  slotIndex: localSlotIdx,
+                  isLanguage1: slot.subjectId === 'LANGUAGE_1',
+                  language: slot.subjectId === 'LANGUAGE_1' ? pair.language1 : pair.language2,
+                  questionNumber: qNum,
+                })
+              : generateTetCtetNonLangSubjectQuestion({
+                  exam,
+                  paper,
+                  stream: paper === 2 ? stream : undefined,
+                  poolType: 'MOCK',
+                  testNumber: safeTestNum + 100,
+                  subjectId: slot.subjectId,
+                  slotIndex: localSlotIdx,
+                  medium,
+                  questionNumber: qNum,
+                });
+          questions.push({ ...alt, id: built.id, questionNumber: qNum, isCustomOverride: true });
+        }
       } else {
         questions.push(built);
       }

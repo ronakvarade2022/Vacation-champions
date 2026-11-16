@@ -223,23 +223,23 @@ export const MAHA_TET_P1_B2_MATH_C3: CuratedTrilingualMcq[] = [
     },
   },
   {
-    topic: 'Polygons Interior Angle Sum Quadrilateral',
+    topic: 'Exterior Angle of Regular Polygon',
     pattern: 'Conceptual',
     difficulty: 'Easy',
     en: {
-      q: 'Three interior angles of a quadrilateral measure `85°`, `95°`, and `105°`. What is the measure of the fourth angle?',
-      opts: ['75°', '85°', '65°', '90°'],
-      exp: 'Quadrilateral interior angles sum to `360°`. Fourth angle = `360° − (85° + 95° + 105°) = 360° − 285° = 75°`.',
+      q: 'What is the measure of each exterior angle of a regular 9-sided polygon (nonagon)?',
+      opts: ['40°', '45°', '36°', '60°'],
+      exp: 'The sum of exterior angles of any convex polygon is `360°`. Each exterior angle = `360° ÷ 9 = 40°`.',
     },
     mr: {
-      q: 'एका चौकोनाच्या तीन कोनांची मापे `85°, 95°` व `105°` आहेत, तर चौथ्या कोनाचे माप किती अंश असेल?',
-      opts: ['75°', '85°', '65°', '90°'],
-      exp: 'चौकोनाच्या चारही कोनांची बेरीज `360°`. चौथा कोन = `360° − 285° = 75°`.',
+      q: 'नऊ बाजू असलेल्या सुसम बहुभुजाकृतीच्या (regular nonagon) प्रत्येक बाह्यकोनाचे माप किती अंश असते?',
+      opts: ['40°', '45°', '36°', '60°'],
+      exp: 'कोणत्याही बहुभुजाकृतीच्या बाह्यकोनांची बेरीज `360°` असते; म्हणून प्रत्येक बाह्यकोन = `360° ÷ 9 = 40°`.',
     },
     hi: {
-      q: 'एक चतुर्भुज के तीन कोण `85°, 95°` और `105°` हैं। चौथे कोण की माप क्या होगी?',
-      opts: ['75°', '85°', '65°', '90°'],
-      exp: '`360° − (85° + 95° + 105°) = 360° − 285° = 75°`।',
+      q: '9 भुजाओं वाले एक सम-बहुभुज (regular nonagon) के प्रत्येक बाह्य कोण की माप कितनी होती है?',
+      opts: ['40°', '45°', '36°', '60°'],
+      exp: 'किसी भी बहुभुज के बाह्य कोणों का योग `360°` होता है; प्रत्येक बाह्य कोण = `360° ÷ 9 = 40°`।',
     },
   },
   {

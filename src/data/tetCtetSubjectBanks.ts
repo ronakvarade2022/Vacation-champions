@@ -12,6 +12,12 @@ import { normalizeTetText, seededPermuteOptions } from './tetCtetLanguageBanks';
 import { getMahaTetP1B1CdpQuestion } from './tetCtetAuditBatches/mahaTetP1B1CdpAll';
 import { getMahaTetP1B1MathQuestion } from './tetCtetAuditBatches/mahaTetP1B1MathAll';
 import { getMahaTetP1B1EvsQuestion } from './tetCtetAuditBatches/mahaTetP1B1EvsAll';
+import { getMahaTetP1B2CdpQuestion } from './tetCtetAuditBatches/mahaTetP1B2CdpAll';
+import { getMahaTetP1B2MathQuestion } from './tetCtetAuditBatches/mahaTetP1B2MathAll';
+import { getMahaTetP1B2EvsQuestion } from './tetCtetAuditBatches/mahaTetP1B2EvsAll';
+import { getMahaTetP1B3CdpQuestion } from './tetCtetAuditBatches/mahaTetP1B3CdpAll';
+import { getMahaTetP1B3MathQuestion } from './tetCtetAuditBatches/mahaTetP1B3MathAll';
+import { getMahaTetP1B3EvsQuestion } from './tetCtetAuditBatches/mahaTetP1B3EvsAll';
 
 interface TrilingualMcqCore {
   topic: string;
@@ -772,8 +778,13 @@ function buildMathQuestion(params: {
   const moduleId = getModuleId(exam, paper);
   const qId = `TETCTET-${exam}-P${paper}-${poolType === 'MOCK' ? `T${String(testNumber).padStart(2, '0')}` : poolType}-MATH-Q${String(questionNumber).padStart(3, '0')}`;
 
-  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 10) {
-    const curated = getMahaTetP1B1MathQuestion(testNumber, slotIndex);
+  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 30) {
+    const curated =
+      testNumber <= 10
+        ? getMahaTetP1B1MathQuestion(testNumber, slotIndex)
+        : testNumber <= 20
+        ? getMahaTetP1B2MathQuestion(testNumber, slotIndex)
+        : getMahaTetP1B3MathQuestion(testNumber, slotIndex);
     if (curated) {
       const loc = medium === 'Marathi' ? curated.mr : medium === 'Hindi' ? curated.hi : curated.en;
       const permuted = seededPermuteOptions(loc.opts, 0, qId);
@@ -936,20 +947,24 @@ function buildMathQuestion(params: {
         const gcd = (x: number, y: number): number => (y === 0 ? x : gcd(y, x % y));
         const lcm = (a * b) / gcd(a, b);
         const startHr = 8 + (u % 3);
-        const hrsAdd = Math.floor(lcm / 60);
-        const minsAdd = lcm % 60;
-        const resTime = `${String(startHr + hrsAdd).padStart(2, '0')}:${String(minsAdd).padStart(2, '0')} AM`;
+        const fmtClock = (totalMins: number) => {
+          const hh = Math.floor(totalMins / 60);
+          const mm = totalMins % 60;
+          return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} AM`;
+        };
+        const baseMins = startHr * 60;
+        const resTime = fmtClock(baseMins + lcm);
         topic = 'LCM Time Synchronization';
         qEn = `Two school bells ring at intervals of ${a} minutes and ${b} minutes respectively. If they ring together at ${String(startHr).padStart(2, '0')}:00 AM, when will they ring together next?`;
         qMr = `शाळेच्या दोन घंटा अनुक्रमे ${a} मिनिटे आणि ${b} मिनिटांच्या अंतराने वाजतात. सकाळी ${String(startHr).padStart(2, '0')}:00 वाजता त्या एकत्र वाजल्यास, पुन्हा केव्हा एकत्र वाजतील?`;
         qHi = `दो विद्यालयी घंटियाँ क्रमशः ${a} मिनट और ${b} मिनट के अंतराल पर बजती हैं। यदि वे प्रातः ${String(startHr).padStart(2, '0')}:00 बजे साथ बजीं, तो पुनः कब एक साथ बजेंगी?`;
         optsEn = optsMr = optsHi = [
           resTime,
-          `${String(startHr + hrsAdd).padStart(2, '0')}:${String((minsAdd + 15) % 60).padStart(2, '0')} AM`,
-          `${String(startHr + hrsAdd + 1).padStart(2, '0')}:${String(minsAdd).padStart(2, '0')} AM`,
-          `${String(startHr).padStart(2, '0')}:${String((a + b) % 60).padStart(2, '0')} AM`,
+          fmtClock(baseMins + lcm + 15),
+          fmtClock(baseMins + lcm + 45),
+          fmtClock(baseMins + lcm + 60),
         ];
-        expEn = `LCM(${a}, ${b}) = ${lcm} minutes (${hrsAdd} hr ${minsAdd} min), so next synchronization is at ${resTime}.`;
+        expEn = `LCM(${a}, ${b}) = ${lcm} minutes, so next synchronization is at ${resTime}.`;
         expMr = `${a} व ${b} चा लसावि = ${lcm} मिनिटे. त्यामुळे पुढील वेळ = ${resTime}.`;
         expHi = `${a} और ${b} का लघुत्तम समापवर्त्य = ${lcm} मिनट, अतः अगली बार ${resTime} पर साथ बजेंगी।`;
       } else if (fam === 3) {
@@ -1062,7 +1077,7 @@ function buildMathQuestion(params: {
         qEn = `What is the measure of each interior angle of a regular ${sides}-sided polygon?`;
         qMr = `${sides} बाजू असलेल्या सुसम बहुभुजाकृतीच्या प्रत्येक आंतरकोनाचे माप किती अंश असते?`;
         qHi = `${sides} भुजाओं वाले सम-बहुभुज के प्रत्येक अंतःकोण का माप कितना होता है?`;
-        optsEn = optsMr = optsHi = [`${eachInt}°`, `${360 / sides}°`, `${eachInt - 12}°`, `${180 - eachInt / 2}°`];
+        optsEn = optsMr = optsHi = [`${eachInt}°`, `${360 / sides}°`, `${eachInt - 12}°`, `${eachInt + 18}°`];
         expEn = `Sum of interior angles = (${sides} - 2) × 180° = ${sumAng}°. Dividing by ${sides} gives ${eachInt}°.`;
         expMr = `आंतरकोनांची बेरीज = (${sides} - २) × १८०° = ${sumAng}°. प्रत्येक कोन = ${eachInt}°.`;
         expHi = `अंतःकोणों का योग = (${sides} - २) × १८०° = ${sumAng}°; प्रत्येक कोण = ${eachInt}°।`;
@@ -1086,13 +1101,13 @@ function buildMathQuestion(params: {
         const mean = base;
         const val1 = base - k;
         const val2 = base - 1;
-        const val3 = base + k + 1;
+        const val3 = base + k + 3;
         const missing = 4 * mean - (val1 + val2 + val3);
         topic = 'Data Handling – Arithmetic Mean';
         qEn = `The arithmetic mean of four test scores (${val1}, ${val2}, ${val3}, and x) is ${mean}. Find the value of x.`;
         qMr = `(${val1}, ${val2}, ${val3} आणि x) या चार संख्यांची सरासरी ${mean} असल्यास x ची किंमत किती?`;
         qHi = `चार प्राप्तांकों (${val1}, ${val2}, ${val3} और x) का समांतर माध्य ${mean} है। x का मान ज्ञात कीजिए।`;
-        optsEn = optsMr = optsHi = [`${missing}`, `${missing + 3}`, `${missing - 2}`, `${mean}`];
+        optsEn = optsMr = optsHi = [`${missing}`, `${missing + 4}`, `${missing - 3}`, `${mean + 6}`];
         expEn = `Sum of 4 scores = 4 × ${mean} = ${4 * mean}. Thus x = ${4 * mean} - (${val1 + val2 + val3}) = ${missing}.`;
         expMr = `४ संख्यांची बेरीज = ${4 * mean}; म्हणून x = ${missing}.`;
         expHi = `चारों का योग = ${4 * mean}; अतः x = ${missing}।`;
@@ -1213,13 +1228,21 @@ export function generateTetCtetNonLangSubjectQuestion(params: {
     paper === 1 &&
     poolType === 'MOCK' &&
     testNumber >= 1 &&
-    testNumber <= 10 &&
+    testNumber <= 30 &&
     (subjectId === 'CDP' || subjectId === 'EVS')
   ) {
     const curated =
       subjectId === 'CDP'
-        ? getMahaTetP1B1CdpQuestion(testNumber, slotIndex)
-        : getMahaTetP1B1EvsQuestion(testNumber, slotIndex);
+        ? testNumber <= 10
+          ? getMahaTetP1B1CdpQuestion(testNumber, slotIndex)
+          : testNumber <= 20
+          ? getMahaTetP1B2CdpQuestion(testNumber, slotIndex)
+          : getMahaTetP1B3CdpQuestion(testNumber, slotIndex)
+        : testNumber <= 10
+        ? getMahaTetP1B1EvsQuestion(testNumber, slotIndex)
+        : testNumber <= 20
+        ? getMahaTetP1B2EvsQuestion(testNumber, slotIndex)
+        : getMahaTetP1B3EvsQuestion(testNumber, slotIndex);
     if (curated) {
       const moduleIdCurated = getModuleId(exam, paper);
       const qIdCurated = `TETCTET-${exam}-P${paper}-T${String(testNumber).padStart(2, '0')}-${subjectId}-Q${String(questionNumber).padStart(3, '0')}`;
