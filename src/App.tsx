@@ -217,24 +217,27 @@ const AppContent: React.FC = () => {
     }
   }, [currentTab, activeRole, currentUser?.role, currentStudent?.id, currentStudent?.accountRole, currentStudent?.classLevel, activeBoard]);
 
-  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and Referral Registration link (/register?ref=...)
+  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...)
   useEffect(() => {
     try {
+      localStorage.removeItem('vc_pending_ref_code');
       const params = new URLSearchParams(window.location.search);
       const mode = params.get('mode');
       const oobCode = params.get('oobCode');
       const emailParam = params.get('email');
-      const refParam = (params.get('ref') || params.get('referral') || '').trim().toUpperCase();
       const pathname = window.location.pathname.toLowerCase();
 
-      if (refParam && refParam !== 'VC-STU-CHAMP') {
-        localStorage.setItem('vc_pending_ref_code', refParam);
+      if (params.has('ref') || params.has('referral')) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('ref');
+        cleanUrl.searchParams.delete('referral');
+        window.history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
       }
 
       if (mode === 'resetPassword' && oobCode) {
         setResetOobCode(oobCode);
         setIsResetModalOpen(true);
-      } else if (pathname.startsWith('/register') || refParam) {
+      } else if (pathname.startsWith('/register')) {
         setAuthDefaultTab('register');
         setIsAuthOpen(true);
         setIsAuthModalOpen(true);
@@ -794,11 +797,13 @@ const AppContent: React.FC = () => {
             />
           ) : currentTab === 'referrals' ? (
             <ReferralHubView
-              currentUserId={currentStudent?.id || 'guest_ambassador'}
-              userName={currentStudent?.name || 'Visitor Preview'}
+              currentUserId={currentStudent?.id || ''}
+              userName={currentStudent?.name || ''}
               userEmail={currentStudent?.email || ''}
               userMobile={currentStudent?.mobile || ''}
               initialRole={isTeacherPortal ? 'teacher' : 'student'}
+              isAuthenticated={Boolean(currentStudent)}
+              onRequestAuth={(tab) => openAuthModalWithTab(tab || 'login')}
               onNavigateUpgrade={() => openMembershipWithPlan('premium')}
             />
           ) : currentTab === 'help-support' ? (

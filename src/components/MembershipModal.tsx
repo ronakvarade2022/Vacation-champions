@@ -107,17 +107,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
       setReferralCreditedNotice('');
       clearQrTimers();
 
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const defaultRef =
-          currentStudent?.referredByCode ||
-          params.get('ref') ||
-          localStorage.getItem('vc_pending_ref_code') ||
-          '';
-        setReferralCodeInput(defaultRef.toUpperCase());
-      } catch {
-        setReferralCodeInput(currentStudent?.referredByCode || '');
-      }
+      setReferralCodeInput(
+        currentStudent?.referredByCode ? currentStudent.referredByCode.toUpperCase() : ''
+      );
 
       // Preload Razorpay Checkout script immediately when modal opens so button click is fast
       loadRazorpayScript().catch((err) => {
@@ -827,24 +819,6 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                         <span>Independent 365-Day Validity Linked to {getBoardShortLabel(targetBoard)} {targetClass} on Your Account</span>
                       </li>
                     </ul>
-
-                    {/* Optional Referral Code Input */}
-                    <div className="mb-4 p-3 rounded-2xl bg-amber-100/70 border border-amber-300/80 space-y-1.5">
-                      <label className="flex items-center justify-between text-[11px] font-black text-amber-950 uppercase tracking-wide">
-                        <span className="flex items-center gap-1">
-                          <Gift className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Referral Code (Optional)</span>
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-700">₹5 Referral Cashback</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={referralCodeInput}
-                        onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
-                        placeholder="Enter friend's code (e.g. VC-STU-...)"
-                        className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs font-mono font-bold uppercase text-slate-900 focus:outline-none focus:border-amber-600"
-                      />
-                    </div>
                   </div>
 
                   {currentStudent ? (
