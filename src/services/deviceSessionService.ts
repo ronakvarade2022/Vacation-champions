@@ -22,8 +22,10 @@ import {
   updateCachedAdminValue
 } from './adminCacheService';
 
-export const SINGLE_DEVICE_BLOCK_MESSAGE =
-  'Your account is currently active on another device. Please log out from your previous device before logging in here.';
+export const SESSION_LOGGED_IN_ELSEWHERE_MESSAGE =
+  'Your account has been logged in on another device. Please log in again.';
+
+export const SINGLE_DEVICE_BLOCK_MESSAGE = SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
 
 export const SESSION_INACTIVITY_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -340,31 +342,17 @@ export async function acquireSingleDeviceSession(params: {
   const nowIso = new Date(nowMs).toISOString();
   const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
 
-  // 1. Check authoritative Firestore /device_sessions/{userId} first (enforced by firestore.rules)
+  // Check existing session doc if any (prior session ID is tracked for audit)
+  let priorActiveSessionId: string | undefined;
   try {
     const ref = doc(db, 'device_sessions', params.userId);
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const existing = snap.data() as DeviceSessionRecord;
-      const isExpired =
-        existing.status !== 'ACTIVE' || Number(existing.expiresAtMs || 0) <= nowMs;
-      if (!isExpired) {
-        const isSameDevice =
-          existing.deviceId === meta.deviceId &&
-          existing.hardwareSignature === meta.hardwareSignature &&
-          existing.deviceSignature === meta.deviceSignature;
-        if (!isSameDevice) {
-          clearLocalActiveSessionState();
-          return {
-            allowed: false,
-            blockedByActiveDevice: true,
-            error: SINGLE_DEVICE_BLOCK_MESSAGE
-          };
-        }
-      }
+      priorActiveSessionId = existing.activeSessionId;
     }
   } catch {
-    // Proceed to backend check
+    // Proceed to backend acquire
   }
 
   // 2. Acquire via backend API (authoritative across devices even if Firestore Admin is enabled)

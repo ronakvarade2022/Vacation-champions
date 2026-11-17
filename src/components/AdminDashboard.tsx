@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useMemo, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   ClassLevel,

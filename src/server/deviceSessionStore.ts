@@ -11,8 +11,10 @@ import {
   serverSetDoc
 } from '../../firebase/admin.ts';
 
-export const SINGLE_DEVICE_BLOCK_MESSAGE =
-  'Your account is currently active on another device. Please log out from your previous device before logging in here.';
+export const SESSION_LOGGED_IN_ELSEWHERE_MESSAGE =
+  'Your account has been logged in on another device. Please log in again.';
+
+export const SINGLE_DEVICE_BLOCK_MESSAGE = SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
 
 // Sliding inactivity window: 12 hours (automatically expires stale sessions after crash/abandoned browser)
 export const SESSION_INACTIVITY_TTL_MS = 12 * 60 * 60 * 1000;
@@ -219,11 +221,16 @@ export async function acquireDeviceSessionServer(
       existing.deviceSignature === cleanDevSig;
 
     if (!isSamePhysicalDevice) {
+      // Requirement 2: When the same student logs in on another device or browser,
+      // automatically invalidate the previous session and issue a fresh active session.
+      const fresh = buildFreshActiveSession(input, nowMs, existing);
+      fresh.previousSessionId = existing.activeSessionId;
+      fresh.previousDeviceId = existing.deviceId;
+      await persistDeviceSessionToStore(fresh);
       return {
-        allowed: false,
-        code: 'DEVICE_SESSION_ACTIVE_ELSEWHERE',
-        error: SINGLE_DEVICE_BLOCK_MESSAGE,
-        activeDevice: toPublicDeviceSummary(existing)
+        allowed: true,
+        resumed: false,
+        session: fresh
       };
     }
 
@@ -344,14 +351,15 @@ export async function validateDeviceSessionServer(
   if (existing.status === 'TERMINATED') {
     const isAdmin = existing.terminatedBy === 'ADMIN';
     const isRecovery = existing.terminatedBy === 'USER_RECOVERY';
+    const isNewDevice = existing.terminatedBy === 'NEW_DEVICE_LOGIN';
     return {
       valid: false,
       reason: 'TERMINATED',
       terminatedBy: existing.terminatedBy,
       error: isAdmin
         ? 'Your session was terminated by the MyStudyZone Administrator. Please log in again.'
-        : isRecovery
-        ? 'Your session was signed out because account access was recovered on another device.'
+        : (isRecovery || isNewDevice)
+        ? SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
         : 'Your account session was logged out. Please sign in again.'
     };
   }

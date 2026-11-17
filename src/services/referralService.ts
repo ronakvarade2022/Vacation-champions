@@ -26,9 +26,13 @@ import {
   cachedAdminFetch,
   invalidateAdminCache,
 } from './adminCacheService';
+import { getLocalSessionHeaders } from './deviceSessionService';
 
 async function getBearerAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { ...extraHeaders };
+  const headers: Record<string, string> = {
+    ...getLocalSessionHeaders(),
+    ...extraHeaders
+  };
   try {
     const token = await auth.currentUser?.getIdToken();
     if (token) {
@@ -687,9 +691,10 @@ export const referralService = {
     bankAccountNumber?: string;
     bankIfsc?: string;
   }) {
+    const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
     const res = await fetch('/api/referrals/payout-request', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         ...params,
         method: params.method || params.payoutMethod || 'BANK',
@@ -704,9 +709,10 @@ export const referralService = {
     teacherIdNumber?: string;
     credentialsDocUrl?: string;
   }) {
+    const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
     const res = await fetch('/api/referrals/teacher-verify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(params),
     });
     return res.json();

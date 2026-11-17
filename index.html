@@ -26,15 +26,9 @@
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-      media="print"
-      onload="this.media='all'"
     />
-    <noscript>
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-      />
-    </noscript>
+    <!-- Razorpay Official Standard Checkout Script (Deferred so homepage renders immediately) -->
+    <script defer src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -60,23 +54,6 @@
             console.debug('[Vite HMR Guard] Handled gracefully:', msg);
           }
         }
-      });
-      // Defer GTM & Razorpay Checkout SDK until after initial page paint so Homepage FCP/LCP are never delayed
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          var gtm = document.createElement('script');
-          gtm.async = true;
-          gtm.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-N4CHVK8H';
-          document.head.appendChild(gtm);
-        }, 1800);
-        setTimeout(function() {
-          if (!window.Razorpay && !document.querySelector('script[src^="https://checkout.razorpay.com/v1/checkout.js"]')) {
-            var rzp = document.createElement('script');
-            rzp.async = true;
-            rzp.src = 'https://checkout.razorpay.com/v1/checkout.js';
-            document.head.appendChild(rzp);
-          }
-        }, 3200);
       });
     </script>
   </head>

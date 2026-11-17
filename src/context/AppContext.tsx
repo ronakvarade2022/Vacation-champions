@@ -36,9 +36,11 @@ import {
   acquireSingleDeviceSession,
   clearLocalActiveSessionState,
   getLocalActiveSessionState,
+  getLocalSessionHeaders,
   recoverSingleDeviceSession,
   releaseSingleDeviceSession,
   sendDeviceSessionHeartbeat,
+  SESSION_LOGGED_IN_ELSEWHERE_MESSAGE,
   SINGLE_DEVICE_BLOCK_MESSAGE,
   subscribeToUserDeviceSession,
   validateActiveDeviceSession,
@@ -923,6 +925,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stories: boolean;
     shivaji: boolean;
     drawings: boolean;
+    puzzles: boolean;
     gk: boolean;
   }>({
     questions: false,
@@ -1520,9 +1523,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const msg =
           remote.terminatedBy === 'ADMIN'
             ? 'Your active session was terminated by the MyStudyZone Administrator. Please log in again.'
-            : remote.terminatedBy === 'USER_RECOVERY'
-            ? 'Your session was signed out because access was recovered on a new device.'
-            : SINGLE_DEVICE_BLOCK_MESSAGE;
+            : remote.terminatedBy === 'USER_LOGOUT'
+            ? 'Your session was logged out. Please sign in again.'
+            : 'Your account has been logged in on another device. Please log in again.';
         forceInvalidateSessionState(msg);
       } else {
         setActiveDeviceSession(remote);
@@ -3757,7 +3760,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })();
 
     (async () => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...getLocalSessionHeaders()
+      };
       try {
         const token = await auth.currentUser?.getIdToken();
         if (token) headers.Authorization = `Bearer ${token}`;

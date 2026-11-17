@@ -403,6 +403,11 @@ service cloud.firestore {
              data.status in ['ACTIVE', 'TERMINATED', 'EXPIRED'] &&
              data.loginAt is string && data.loginAt.size() <= 50 &&
              data.expiresAtMs is number &&
+             (!('previousSessionId' in data) || (data.previousSessionId is string && data.previousSessionId.size() <= 128)) &&
+             (!('previousDeviceId' in data) || (data.previousDeviceId is string && data.previousDeviceId.size() <= 128)) &&
+             (!('terminatedBy' in data) || (data.terminatedBy is string && data.terminatedBy.size() <= 40)) &&
+             (!('terminatedAt' in data) || (data.terminatedAt is string && data.terminatedAt.size() <= 50)) &&
+             (!('terminationReason' in data) || (data.terminationReason is string && data.terminationReason.size() <= 200)) &&
              (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() <= 120)) &&
              (!('browser' in data) || (data.browser is string && data.browser.size() <= 60)) &&
              (!('os' in data) || (data.os is string && data.os.size() <= 60)) &&
@@ -411,9 +416,10 @@ service cloud.firestore {
     }
 
     // 12. Collection: /device_sessions/{userId}
-    // Enforces strict Single Device Login at the database layer:
-    // - A second device cannot overwrite or delete an active, unexpired session owned by another device.
-    // - Only the active device (matching activeSessionId & hardwareSignature) can heartbeat or log out.
+    // Enforces single-device session authentication at the database layer:
+    // - Each student account has only ONE active session at a time.
+    // - When the student logs in on another device/browser, it automatically invalidates the previous session.
+    // - Realtime onSnapshot listener alerts the previous device immediately.
     // - Admins can inspect and terminate any session.
     match /device_sessions/{userId} {
       allow get: if isValidId(userId) && (isStudentDocOwner(userId) || isAdmin());
@@ -449,6 +455,11 @@ service cloud.firestore {
               incoming().deviceId == existing().deviceId &&
               incoming().hardwareSignature == existing().hardwareSignature &&
               incoming().status == 'ACTIVE'
+            ) ||
+            // Case 4: Authenticated student logging in on another device or browser, superseding previous session
+            (
+              incoming().status == 'ACTIVE' &&
+              (isStudentDocOwner(userId) || (isSignedIn() && incoming().get('firebaseUid', '') == request.auth.uid))
             )
           )
         )

@@ -584,9 +584,11 @@ export interface DeviceSessionRecord {
   lastActivityAt: string;
   expiresAt: string;
   expiresAtMs: number;
-  terminatedBy?: 'USER_LOGOUT' | 'ADMIN' | 'USER_RECOVERY' | 'EXPIRED' | 'SECURITY_MISMATCH';
+  terminatedBy?: 'USER_LOGOUT' | 'ADMIN' | 'USER_RECOVERY' | 'EXPIRED' | 'SECURITY_MISMATCH' | 'NEW_DEVICE_LOGIN';
   terminatedAt?: string;
   terminationReason?: string;
+  previousSessionId?: string;
+  previousDeviceId?: string;
   recoveryCount24h?: number;
   lastRecoveryAt?: string;
 }

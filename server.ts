@@ -41,6 +41,7 @@ import {
   listDeviceSessionsAdminServer,
   terminateDeviceSessionAdminServer,
   loadDeviceSessionFromStore,
+  SESSION_LOGGED_IN_ELSEWHERE_MESSAGE,
   SINGLE_DEVICE_BLOCK_MESSAGE
 } from './src/server/deviceSessionStore.ts';
 import {
@@ -1331,6 +1332,14 @@ app.post('/api/referrals/payout-request', async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, message: 'Missing required withdrawal details.' });
     }
 
+    const sessionCheck = await verifyRequestDeviceSession(req, String(userId));
+    if (!sessionCheck.valid) {
+      return res.status(sessionCheck.statusCode).json({
+        success: false,
+        message: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      });
+    }
+
     const numAmount = Number(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid withdrawal amount.' });
@@ -2379,8 +2388,19 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'studentId is required.' });
     }
 
-    // Require verified Firebase Bearer token on non-guest sync requests when Admin SDK is configured
+    // Enforce active single-device session validation
     const isGuestOrDemo = cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+    if (!isGuestOrDemo) {
+      const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
+      if (!sessionCheck.valid) {
+        return res.status(sessionCheck.statusCode).json({
+          success: false,
+          error: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+        });
+      }
+    }
+
+    // Require verified Firebase Bearer token on non-guest sync requests when Admin SDK is configured
     if (isFirebaseAdminConfigured() && !isGuestOrDemo) {
       if (!req.headers.authorization) {
         return res.status(401).json({
@@ -2816,7 +2836,18 @@ const SERVER_WORKSHEET_UPGRADE_MSG =
 // 8.3 Backend access verification for features, subjects, and worksheets (strictly board+class & server-verified)
 app.post('/api/subscription/verify-access', async (req: Request, res: Response) => {
   const { studentId, feature, subject, worksheetId, selectedBoard, board, selectedClass } = req.body || {};
-  const sub = await evaluateServerSubscriptionFromStore(String(studentId || ''));
+  const cleanStudentId = String(studentId || '').trim();
+  if (cleanStudentId && cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')) {
+    const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
+    if (!sessionCheck.valid) {
+      return res.status(sessionCheck.statusCode).json({
+        allowed: false,
+        error: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE,
+        message: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      });
+    }
+  }
+  const sub = await evaluateServerSubscriptionFromStore(cleanStudentId);
   const requestedBoard =
     selectedBoard || board ? normalizeBackendBoard(selectedBoard || board) : null;
   const requestedClass = normalizeBackendClassLevel(selectedClass);

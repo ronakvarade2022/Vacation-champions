@@ -46,6 +46,7 @@ import {
   WORKSHEET_PREMIUM_UPGRADE_MESSAGE,
   WORKSHEET_CLASS_LOCK_MESSAGE
 } from '../utils/subscriptionAccess';
+import { getLocalSessionHeaders } from '../services/deviceSessionService';
 
 interface WorksheetsViewProps {
   initialClassLevel?: ClassLevel;
@@ -177,7 +178,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     try {
       const resp = await fetch('/api/worksheets/verify-access', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getLocalSessionHeaders()
+        },
         body: JSON.stringify({
           studentId: currentStudent?.id || 'guest',
           worksheetId: ws.id,

@@ -67,6 +67,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     recoverAccount,
     acquireSessionAfterRegistration,
     recoverBlockedDeviceSession,
+    sessionSecurityNotice,
   } = useApp();
 
   const [tab, setTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>(defaultTab);
@@ -149,13 +150,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
     setRegReferralCode('');
     setReferralValidationInfo({ checked: false, valid: false });
-    setError('');
+    setError(sessionSecurityNotice || '');
     setSuccessMsg('');
     setExistingAccountMatch(null);
     setExistingAccountPassword('');
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
-  }, [defaultTab, initialEmail, initialBoard, initialClass, isOpen]);
+  }, [defaultTab, initialEmail, initialBoard, initialClass, isOpen, sessionSecurityNotice]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {
