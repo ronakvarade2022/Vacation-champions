@@ -10,6 +10,12 @@ import {
 } from '../firebase/index.ts';
 import { serverGetDoc } from '../firebase/admin.ts';
 import { verifyAndConfirmCapturedPayment } from '../src/server/razorpayPaymentStatusService.ts';
+import {
+  getPlanCatalogItem,
+  resolvePlanSku,
+  type CategoryId,
+  type PlanSkuId
+} from '../src/data/planCatalog.ts';
 
 export interface WebhookVerificationResult {
   valid: boolean;
@@ -80,6 +86,8 @@ export interface CapturedPaymentSubscriptionResult {
   selectedClass: string;
   boardClassKey: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
+  unlockedCategories?: CategoryId[];
   subscriptionTier: 'standard' | 'premium';
   planLabel: string;
   amountInr: number;
@@ -93,6 +101,8 @@ export interface CapturedPaymentSubscriptionResult {
   activatedClasses: string[];
   activatedClassKeys: string[];
   classSubscriptions: Record<string, any>;
+  activatedCategoryKeys?: CategoryId[];
+  categorySubscriptions?: Record<string, any>;
 }
 
 /**
@@ -131,12 +141,14 @@ export async function processPaymentCapturedEvent(params: {
   }
 
   const planId: 'premium' = 'premium';
-  const amountInr = 99;
+  const resolvedSku = resolvePlanSku(notes.planSku, notes.planId, amountPaise);
+  const planItem = getPlanCatalogItem(resolvedSku);
+  const amountInr = planItem.amountInr;
   let method = String(paymentEntity?.method || 'RAZORPAY').toUpperCase();
 
-  if (amountPaise > 0 && amountPaise < 9900) {
+  if (amountPaise > 0 && amountPaise < planItem.amountPaise) {
     throw new Error(
-      `Webhook payment amount (${amountPaise} paise) is below the ₹99 (9900 paise) Premium Plan price.`
+      `Webhook payment amount (${amountPaise} paise) is below the ₹${amountInr} (${planItem.amountPaise} paise) plan price.`
     );
   }
 
@@ -147,6 +159,7 @@ export async function processPaymentCapturedEvent(params: {
       paymentId,
       orderId: paymentEntity?.order_id || orderEntity?.id || '',
       expectedPlanId: planId,
+      expectedPlanSku: resolvedSku,
       fallbackMethod: method,
       autoCaptureIfAuthorized: true
     });
@@ -195,6 +208,7 @@ export async function processPaymentCapturedEvent(params: {
     selectedBoard,
     selectedClass,
     planId,
+    planSku: resolvedSku,
     paymentId,
     orderId,
     signature,
@@ -211,6 +225,8 @@ export async function processPaymentCapturedEvent(params: {
     selectedClass: activation.selectedClass,
     boardClassKey: activation.boardClassKey,
     planId: activation.plan,
+    planSku: activation.planSku,
+    unlockedCategories: activation.unlockedCategories,
     subscriptionTier: activation.subscriptionTier,
     planLabel: activation.planLabel,
     amountInr,
@@ -223,7 +239,9 @@ export async function processPaymentCapturedEvent(params: {
     receiptNumber: activation.receiptNumber,
     activatedClasses: activation.activatedClasses || [activation.selectedClass],
     activatedClassKeys: activation.activatedClassKeys || [activation.boardClassKey],
-    classSubscriptions: activation.classSubscriptions || {}
+    classSubscriptions: activation.classSubscriptions || {},
+    activatedCategoryKeys: activation.activatedCategoryKeys || [],
+    categorySubscriptions: activation.categorySubscriptions || {}
   };
 }
 

@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  ScholarshipClass, 
-  ScholarshipLanguage, 
-  ScholarshipQuestion, 
+import {
+  ScholarshipClass,
+  ScholarshipLanguage,
+  ScholarshipQuestion,
   ScholarshipSection,
-  MSCE_LANGUAGES, 
+  MSCE_LANGUAGES,
   SCHOLARSHIP_SECTION_BREAKDOWN,
-  getScholarshipSetQuestions,
-  getDynamicScholarshipQuestions 
+  getDynamicScholarshipQuestions,
 } from '../data/scholarshipData';
+import { PlanSkuId } from '../types';
 import { randomizeQuizQuestions } from '../services/answerRandomizerService';
-import { canAccessFeature } from '../utils/subscriptionAccess';
+import {
+  getCategorySubscriptionInfo,
+  getVisibleExamCategoriesForStudent,
+  hasCategoryAccess,
+} from '../utils/subscriptionAccess';
 import confetti from 'canvas-confetti';
 import { 
   Trophy, 
@@ -51,7 +55,7 @@ const SCHOLARSHIP_PRACTICE_DRAFT_KEY = 'vc_scholarship_practice_draft_v1';
 
 interface ScholarshipChampionsViewProps {
   onOpenAuth?: () => void;
-  onOpenMembership?: () => void;
+  onOpenMembership?: (planSku?: PlanSkuId) => void;
 }
 
 export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> = ({
@@ -59,11 +63,34 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
   onOpenMembership,
 }) => {
   const { currentStudent, recordScholarshipAttempt, customScholarshipQuestions } = useApp();
-  const hasFullAccess = canAccessFeature(currentStudent, 'scholarship').allowed;
+  const visibleCats = getVisibleExamCategoriesForStudent(currentStudent);
   const [lockedSetNotice, setLockedSetNotice] = useState<string | null>(null);
 
-  // Active configurations
-  const [selectedClass, setSelectedClass] = useState<ScholarshipClass>('Std 4th (PSE)');
+  // Active configurations (role-scoped default)
+  const [selectedClass, setSelectedClass] = useState<ScholarshipClass>(() => {
+    if (currentStudent && currentStudent.accountRole !== 'teacher') {
+      if (visibleCats.showScholarship7th && !visibleCats.showScholarship4th) {
+        return 'Std 7th (UPS)';
+      }
+    }
+    return 'Std 4th (PSE)';
+  });
+
+  useEffect(() => {
+    if (!currentStudent || currentStudent.accountRole === 'teacher') return;
+    if (visibleCats.showScholarship7th && !visibleCats.showScholarship4th) {
+      setSelectedClass('Std 7th (UPS)');
+    } else if (visibleCats.showScholarship4th && !visibleCats.showScholarship7th) {
+      setSelectedClass('Std 4th (PSE)');
+    }
+  }, [currentStudent?.id, currentStudent?.accountRole, visibleCats.showScholarship4th, visibleCats.showScholarship7th]);
+
+  const selectedCategoryId = selectedClass === 'Std 4th (PSE)' ? 'scholarship_4th' : 'scholarship_7th';
+  const selectedPlanSku: PlanSkuId =
+    selectedClass === 'Std 4th (PSE)' ? 'SCHOLARSHIP_4TH' : 'SCHOLARSHIP_7TH';
+  const hasFullAccess = hasCategoryAccess(currentStudent, selectedCategoryId);
+  const categorySubInfo = getCategorySubscriptionInfo(currentStudent, selectedCategoryId);
+
   const [selectedLanguage, setSelectedLanguage] = useState<ScholarshipLanguage>('Marathi');
   const [selectedSetNum, setSelectedSetNum] = useState<number>(1);
   const [activeSectionFilter, setActiveSectionFilter] = useState<ScholarshipSection | 'All'>('All');
@@ -92,16 +119,22 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
     'Intelligence Test': { obtained: 0, max: 20, correct: 0, total: 10 }
   });
 
-  // Restore saved practice draft if available and not expired
+  // Restore saved practice draft if available and authorized
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SCHOLARSHIP_PRACTICE_DRAFT_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
-        setSelectedClass(parsed.selectedClass || 'Std 4th (PSE)');
+        const draftCls: ScholarshipClass = parsed.selectedClass || 'Std 4th (PSE)';
+        const draftSetNum: number = parsed.selectedSetNum || 1;
+        const draftCat = draftCls === 'Std 7th (UPS)' ? 'scholarship_7th' : 'scholarship_4th';
+        if (draftSetNum > 1 && !hasCategoryAccess(currentStudent, draftCat)) {
+          return;
+        }
+        setSelectedClass(draftCls);
         setSelectedLanguage(parsed.selectedLanguage || 'Marathi');
-        setSelectedSetNum(parsed.selectedSetNum || 1);
+        setSelectedSetNum(draftSetNum);
         setQuestions(parsed.questions);
         setCurrentQIndex(parsed.currentQIndex || 0);
         setUserAnswers(parsed.userAnswers || {});
@@ -111,7 +144,7 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
         setExamState('taking');
       }
     } catch {}
-  }, []);
+  }, [currentStudent?.id]);
 
   // Persist in-progress practice answers cleanly
   useEffect(() => {
@@ -173,7 +206,7 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
   const startScholarshipSet = (setNumber: number) => {
     if (!hasFullAccess && setNumber > 1) {
       setLockedSetNotice(
-        `Practice Set #1 is open as a Free MSCE Preview. Sets #2 to #10 unlock with the ₹99 Annual Plan!`
+        `Practice Set #1 is open as a Free Preview for ${selectedClass}. Sets #2 to #10 unlock with the ${selectedClass} Scholarship Plan (₹99 / 365 Days)!`
       );
       return;
     }
@@ -361,25 +394,76 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
             </p>
           </div>
 
-          {/* Class Switcher Pill */}
-          <div className="flex items-center gap-1.5 bg-black/25 p-1 rounded-2xl border border-white/20 self-start md:self-auto">
-            <button
-              onClick={() => { setSelectedClass('Std 4th (PSE)'); setExamState('idle'); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                selectedClass === 'Std 4th (PSE)' ? 'bg-white text-amber-950 shadow-xs' : 'text-amber-100 hover:text-white'
-              }`}
-            >
-              Std 4th – Primary (PSE)
-            </button>
-            <button
-              onClick={() => { setSelectedClass('Std 7th (UPS)'); setExamState('idle'); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                selectedClass === 'Std 7th (UPS)' ? 'bg-white text-amber-950 shadow-xs' : 'text-amber-100 hover:text-white'
-              }`}
-            >
-              Std 7th – Upper Primary (UPS)
-            </button>
+          {/* Class Switcher Pill (Role & Class Scoped) */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-black/25 p-1 rounded-2xl border border-white/20 self-start md:self-auto">
+            {(visibleCats.showScholarship4th || !visibleCats.showScholarship7th) && (
+              <button
+                type="button"
+                onClick={() => { setSelectedClass('Std 4th (PSE)'); setExamState('idle'); setLockedSetNotice(null); }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  selectedClass === 'Std 4th (PSE)' ? 'bg-white text-amber-950 shadow-xs' : 'text-amber-100 hover:text-white'
+                }`}
+              >
+                Std 4th – Primary (PSE)
+              </button>
+            )}
+            {(visibleCats.showScholarship7th || !visibleCats.showScholarship4th) && (
+              <button
+                type="button"
+                onClick={() => { setSelectedClass('Std 7th (UPS)'); setExamState('idle'); setLockedSetNotice(null); }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  selectedClass === 'Std 7th (UPS)' ? 'bg-white text-amber-950 shadow-xs' : 'text-amber-100 hover:text-white'
+                }`}
+              >
+                Std 7th – Upper Primary (UPS)
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* Category Subscription & Class Scope Strip */}
+        <div className="mt-4 p-3 rounded-2xl bg-black/20 border border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            {hasFullAccess ? (
+              <span className="px-3 py-1 rounded-full bg-emerald-500 text-slate-950 font-black flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>{selectedClass} Scholarship Unlocked ({categorySubInfo.daysRemainingDisplay})</span>
+              </span>
+            ) : (
+              <span className="px-3 py-1 rounded-full bg-amber-300 text-slate-950 font-black flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" />
+                <span>Free Preview: Set #1 &amp; Mock 01 Open • Paid Plan Required for All Sets &amp; 25 Mocks</span>
+              </span>
+            )}
+            {currentStudent &&
+              currentStudent.accountRole !== 'teacher' &&
+              !visibleCats.showScholarship4th &&
+              !visibleCats.showScholarship7th && (
+                <span className="text-amber-100 font-semibold">
+                  Your account is registered for {currentStudent.classLevel}. MSCE Scholarship exams target Class 4 (PSE) &amp; Class 7 (UPS).
+                </span>
+              )}
+          </div>
+          {!hasFullAccess && onOpenMembership && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => onOpenMembership(selectedPlanSku)}
+                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-950 font-black text-xs cursor-pointer transition-colors"
+              >
+                Unlock {selectedClass.split(' ')[1]} (₹99)
+              </button>
+              {(visibleCats.isTeacher || (!currentStudent)) && (
+                <button
+                  type="button"
+                  onClick={() => onOpenMembership('SCHOLARSHIP_COMBO')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 font-black text-xs cursor-pointer transition-colors"
+                >
+                  4th + 7th Combo (₹149)
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Language Selection Bar (3 Official MSCE Languages: Marathi, English, Hindi) */}
@@ -797,11 +881,11 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
                   {onOpenMembership && (
                     <button
                       type="button"
-                      onClick={onOpenMembership}
+                      onClick={() => onOpenMembership(selectedPlanSku)}
                       className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold flex items-center gap-1 cursor-pointer"
                     >
                       <Crown className="w-3.5 h-3.5" />
-                      <span>Unlock ₹99 Plan</span>
+                      <span>Unlock {selectedClass} (₹99)</span>
                     </button>
                   )}
                 </div>
@@ -879,7 +963,10 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
       {/* NEW CLEARLY SEPARATED SUBSECTION INSIDE EXISTING SCHOLARSHIP SECTION:
           🏆 MSCE PUNE SCHOLARSHIP – FULL MOCK EXAMINATIONS (Std 4th 25 Tests + Std 7th 25 Tests) */}
       <div id="msce-pune-full-mock-examinations">
-        <MsceFullMockExamsSection />
+        <MsceFullMockExamsSection
+          onOpenAuth={onOpenAuth}
+          onOpenMembership={onOpenMembership}
+        />
       </div>
     </div>
   );

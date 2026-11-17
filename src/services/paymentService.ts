@@ -1,4 +1,11 @@
 import { ClassLevel, EducationBoard, PaymentTransaction, StudentProfile } from '../types';
+import {
+  CategoryId,
+  PlanCatalogItem,
+  PlanSkuId,
+  getPlanCatalogItem,
+  resolvePlanSku
+} from '../data/planCatalog';
 import { getLocalSessionHeaders } from './deviceSessionService';
 import { buildBoardClassKey, normalizeBoardValue } from '../utils/subscriptionAccess';
 
@@ -9,17 +16,20 @@ export interface RazorpayConfigResponse {
   mode: 'LIVE' | 'TEST';
   configured: boolean;
   currency: string;
+  catalog?: Record<PlanSkuId, PlanCatalogItem>;
 }
 
 export interface CreateOrderResponse {
   success: boolean;
   orderId: string;
-  amount: number; // in paise (4900 or 9900)
+  amount: number; // in paise
   amountRupees: number;
   currency: string;
   keyId: string;
   receiptNumber: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
+  unlockedCategories?: CategoryId[];
   selectedBoard?: EducationBoard;
   selectedClass?: string;
   isMock?: boolean;
@@ -35,6 +45,8 @@ export interface CreateQrResponse {
   amountRupees: number;
   currency: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
+  unlockedCategories?: CategoryId[];
   planTitle?: string;
   selectedBoard?: EducationBoard;
   selectedClass?: string;
@@ -53,10 +65,12 @@ export interface CheckQrStatusResponse {
   orderId?: string;
   method?: string;
   amount?: number;
+  planSku?: PlanSkuId;
   selectedBoard?: EducationBoard;
   selectedClass?: string;
   activatedClasses?: string[];
   activatedClassKeys?: string[];
+  activatedCategoryKeys?: CategoryId[];
   message?: string;
   transaction?: PaymentTransaction;
   membership?: {
@@ -67,7 +81,9 @@ export interface CheckQrStatusResponse {
     selectedClass?: string;
     activatedClasses?: string[];
     activatedClassKeys?: string[];
+    activatedCategoryKeys?: CategoryId[];
     planId: 'basic' | 'premium';
+    planSku?: PlanSkuId;
     planTitle: string;
     amount: number;
     startDate: string;
@@ -82,11 +98,14 @@ export interface VerifyPaymentResponse {
   success: boolean;
   alreadyProcessed?: boolean;
   message?: string;
+  planSku?: PlanSkuId;
   selectedBoard?: EducationBoard;
   selectedClass?: string;
   activatedClasses?: string[];
   activatedClassKeys?: string[];
   classSubscriptions?: Record<string, any>;
+  activatedCategoryKeys?: CategoryId[];
+  categorySubscriptions?: Record<string, any>;
   transaction?: PaymentTransaction;
   membership?: {
     membershipId: string;
@@ -96,7 +115,9 @@ export interface VerifyPaymentResponse {
     selectedClass?: string;
     activatedClasses?: string[];
     activatedClassKeys?: string[];
+    activatedCategoryKeys?: CategoryId[];
     planId: 'basic' | 'premium';
+    planSku?: PlanSkuId;
     planTitle: string;
     amount: number;
     startDate: string;
@@ -124,6 +145,7 @@ export interface CheckExistingAccountResponse {
   primaryClassLevel?: string | null;
   activeClasses?: string[];
   activeClassKeys?: string[];
+  activeCategoryKeys?: CategoryId[];
   studentName?: string;
   error?: string;
 }
@@ -318,19 +340,23 @@ export async function switchStudentActiveClassApi(
   }
 }
 
-// 2. Request backend LIVE order creation (enforces server-side ₹99 / 9900 paise Premium pricing per selected board & class)
+// 2. Request backend LIVE order creation (enforces server-side Plan SKU pricing)
 export async function createRazorpayOrder(
   student: StudentProfile,
   _planId: 'basic' | 'premium' = 'premium',
   referralCode?: string,
   selectedClass?: ClassLevel,
-  selectedBoard?: EducationBoard
+  selectedBoard?: EducationBoard,
+  planSku: PlanSkuId = 'BOARD_CLASS'
 ): Promise<CreateOrderResponse> {
   const planId = 'premium';
+  const resolvedSku = resolvePlanSku(planSku, planId);
+  const catalogItem = getPlanCatalogItem(resolvedSku);
   const targetBoard = normalizeBoardValue(selectedBoard || student.board || 'Maharashtra');
   const targetClass = selectedClass || student.classLevel;
   const payload = {
     planId,
+    planSku: resolvedSku,
     studentId: student.id,
     studentName: student.name,
     email: student.email,
@@ -341,7 +367,7 @@ export async function createRazorpayOrder(
   };
 
   console.info(
-    `[Razorpay] Creating LIVE order for plan 'premium' (${targetBoard} • ${targetClass} • ₹99 / 9900 paise)...`
+    `[Razorpay] Creating LIVE order for ${resolvedSku} (${targetBoard} • ${targetClass} • ₹${catalogItem.amountInr} / ${catalogItem.amountPaise} paise)...`
   );
 
   const { res, urlUsed } = await fetchPaymentApi(
@@ -392,23 +418,28 @@ export async function createRazorpayOrder(
 
   return {
     ...data,
+    planSku: data.planSku || resolvedSku,
     keyId: resolvedKeyId
   };
 }
 
-// 2.1 Dynamic Razorpay UPI QR Code Generator (₹99 Premium per selected board & class)
+// 2.1 Dynamic Razorpay UPI QR Code Generator
 export async function createRazorpayQrCode(
   student: StudentProfile,
   _planId: 'basic' | 'premium' = 'premium',
   referralCode?: string,
   selectedClass?: ClassLevel,
-  selectedBoard?: EducationBoard
+  selectedBoard?: EducationBoard,
+  planSku: PlanSkuId = 'BOARD_CLASS'
 ): Promise<CreateQrResponse> {
   const planId = 'premium';
+  const resolvedSku = resolvePlanSku(planSku, planId);
+  const catalogItem = getPlanCatalogItem(resolvedSku);
   const targetBoard = normalizeBoardValue(selectedBoard || student.board || 'Maharashtra');
   const targetClass = selectedClass || student.classLevel;
   const payload = {
     planId,
+    planSku: resolvedSku,
     studentId: student.id,
     studentName: student.name,
     email: student.email,
@@ -418,7 +449,7 @@ export async function createRazorpayQrCode(
     referralCode: referralCode || student.referredByCode || ''
   };
 
-  console.info(`[Razorpay QR] Generating dynamic UPI QR code for ${targetBoard} • ${targetClass} (₹99)...`);
+  console.info(`[Razorpay QR] Generating dynamic UPI QR code for ${resolvedSku} (${targetBoard} • ${targetClass} • ₹${catalogItem.amountInr})...`);
 
   const { res, urlUsed } = await fetchPaymentApi(
     '/razorpay/create-qr',
@@ -453,13 +484,16 @@ export async function checkRazorpayQrStatus(
   _planId: 'basic' | 'premium' = 'premium',
   referralCode?: string,
   selectedClass?: ClassLevel,
-  selectedBoard?: EducationBoard
+  selectedBoard?: EducationBoard,
+  planSku: PlanSkuId = 'BOARD_CLASS'
 ): Promise<CheckQrStatusResponse> {
+  const resolvedSku = resolvePlanSku(planSku, 'premium');
   const targetBoard = normalizeBoardValue(selectedBoard || student.board || 'Maharashtra');
   const targetClass = selectedClass || student.classLevel;
   const params = new URLSearchParams({
     studentId: student.id,
     planId: 'premium',
+    planSku: resolvedSku,
     selectedBoard: targetBoard,
     selectedClass: targetClass,
     studentName: student.name || 'Student',
@@ -485,6 +519,7 @@ export async function verifyRazorpayPayment(payload: {
   razorpay_payment_id: string;
   razorpay_signature: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
   selectedBoard?: EducationBoard;
   selectedClass?: string;
   studentId: string;
@@ -496,6 +531,7 @@ export async function verifyRazorpayPayment(payload: {
   referralCode?: string;
 }): Promise<VerifyPaymentResponse> {
   try {
+    const resolvedSku = resolvePlanSku(payload.planSku, payload.planId);
     const { res } = await fetchPaymentApi(
       '/razorpay/verify-payment',
       {
@@ -503,7 +539,8 @@ export async function verifyRazorpayPayment(payload: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...payload,
-          planId: 'premium'
+          planId: 'premium',
+          planSku: resolvedSku
         })
       },
       15000
@@ -670,6 +707,7 @@ export async function launchRazorpayCheckout(options: {
   orderData: CreateOrderResponse;
   student: StudentProfile;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
   selectedBoard?: EducationBoard;
   selectedClass?: ClassLevel;
   referralCode?: string;
@@ -682,6 +720,7 @@ export async function launchRazorpayCheckout(options: {
     orderData,
     student,
     planId,
+    planSku,
     selectedBoard,
     selectedClass,
     referralCode,
@@ -690,6 +729,10 @@ export async function launchRazorpayCheckout(options: {
     onSuccess,
     onFailure
   } = options;
+
+  const resolvedSku = resolvePlanSku(planSku || orderData.planSku, planId, orderData.amount);
+  const catalogItem = getPlanCatalogItem(resolvedSku);
+  const isCategoryPlan = catalogItem.unlockedCategories.length > 0;
 
   const targetBoard: EducationBoard = normalizeBoardValue(
     selectedBoard || orderData.selectedBoard || student.board || 'Maharashtra'
@@ -726,8 +769,10 @@ export async function launchRazorpayCheckout(options: {
     return;
   }
 
-  const planTitle = `PREMIUM PLAN – ₹99 – 365 Days (${targetBoard} • ${targetClass})`;
-  const planAmountPaise = 9900;
+  const planTitle = isCategoryPlan
+    ? `${catalogItem.title} – ₹${catalogItem.amountInr} – 365 Days`
+    : `PREMIUM PLAN – ₹${catalogItem.amountInr} – 365 Days (${targetBoard} • ${targetClass})`;
+  const planAmountPaise = catalogItem.amountPaise;
 
   // Sanitize prefill fields so Razorpay Live Checkout never fails prefill validation
   const cleanDigits = (student.mobile || '').replace(/\D/g, '').slice(-10);
@@ -750,17 +795,22 @@ export async function launchRazorpayCheckout(options: {
 
   let hasSettled = false;
 
-  const targetClassExistingExpiry =
-    student.classSubscriptions?.[compositeKey]?.expiresAt ||
-    (targetBoard === 'Maharashtra' ? student.classSubscriptions?.[targetClass]?.expiresAt : undefined) ||
-    (student.activatedClassLevel === targetClass &&
-    normalizeBoardValue(student.activatedBoard || student.board || 'Maharashtra') === targetBoard
-      ? student.planExpiresAt
-      : undefined);
+  const targetClassExistingExpiry = isCategoryPlan
+    ? catalogItem.unlockedCategories
+        .map((catId) => student.categorySubscriptions?.[catId]?.expiresAt)
+        .filter((val): val is string => Boolean(val))
+        .sort()
+        .pop()
+    : student.classSubscriptions?.[compositeKey]?.expiresAt ||
+      (targetBoard === 'Maharashtra' ? student.classSubscriptions?.[targetClass]?.expiresAt : undefined) ||
+      (student.activatedClassLevel === targetClass &&
+      normalizeBoardValue(student.activatedBoard || student.board || 'Maharashtra') === targetBoard
+        ? student.planExpiresAt
+        : undefined);
 
   const rzpOptions: Record<string, any> = {
     key: resolvedPublicKeyId,
-    amount: Number(orderData.amount) || planAmountPaise, // in paise (9900)
+    amount: Number(orderData.amount) || planAmountPaise, // in paise
     currency: orderData.currency || 'INR',
     name: 'MyStudyZone',
     description: `${planTitle} • ${student.name}`,
@@ -774,6 +824,8 @@ export async function launchRazorpayCheckout(options: {
       selectedClass: String(targetClass),
       classLevel: String(targetClass),
       planId: 'premium',
+      planSku: resolvedSku,
+      unlockedCategories: catalogItem.unlockedCategories.join(','),
       subscriptionTier: 'premium',
       validityDays: '365',
       referralCode: referralCode || student.referredByCode || ''
@@ -803,6 +855,7 @@ export async function launchRazorpayCheckout(options: {
             orderId: orderData.orderId,
             paymentId: `cancelled_${Date.now()}`,
             planId: 'premium',
+            planSku: resolvedSku,
             selectedBoard: targetBoard,
             selectedClass: targetClass,
             studentId: student.id,
@@ -829,6 +882,7 @@ export async function launchRazorpayCheckout(options: {
       console.info('[Razorpay Checkout] Payment completed, verifying signature on backend:', {
         orderId: response.razorpay_order_id || orderData.orderId,
         paymentId: response.razorpay_payment_id,
+        planSku: resolvedSku,
         selectedBoard: targetBoard,
         selectedClass: targetClass
       });
@@ -843,6 +897,7 @@ export async function launchRazorpayCheckout(options: {
           razorpay_payment_id: response.razorpay_payment_id,
           razorpay_signature: response.razorpay_signature,
           planId: 'premium',
+          planSku: resolvedSku,
           selectedBoard: targetBoard,
           selectedClass: targetClass,
           studentId: student.id,
@@ -880,7 +935,7 @@ export async function launchRazorpayCheckout(options: {
 
   try {
     console.info(
-      `[Razorpay Checkout] Opening Razorpay LIVE modal for Order ${orderData.orderId} (${targetClass} • ₹99 / ${planAmountPaise} paise)`
+      `[Razorpay Checkout] Opening Razorpay LIVE modal for Order ${orderData.orderId} (${resolvedSku} • ₹${catalogItem.amountInr} / ${planAmountPaise} paise)`
     );
     const razorpayInstance = new RazorpayConstructor(rzpOptions);
     activeRazorpayInstance = razorpayInstance;
@@ -921,6 +976,7 @@ export async function launchRazorpayCheckout(options: {
           orderId: failedOrderId,
           paymentId: failedPaymentId,
           planId: 'premium',
+          planSku: resolvedSku,
           selectedBoard: targetBoard,
           selectedClass: targetClass,
           studentId: student.id,

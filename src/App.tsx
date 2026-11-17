@@ -137,7 +137,7 @@ const PortalLoadingCard: React.FC = () => (
     </div>
   </div>
 );
-import { ClassLevel, EducationBoard, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
+import { ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationConfig';
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
 import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
@@ -148,9 +148,10 @@ import {
   getActivatedBoardClassesList,
   getBoardShortLabel,
   getStudentPlanInfo,
-  getPremiumActivatedBannerMessage
+  getPremiumActivatedBannerMessage,
+  hasCategoryAccess,
 } from './utils/subscriptionAccess';
-import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift } from 'lucide-react';
+import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift, Lock, CheckCircle2 } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -186,11 +187,13 @@ const AppContent: React.FC = () => {
   const [quizInitialLevel, setQuizInitialLevel] = useState<QuizLevel | undefined>(undefined);
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>('login');
+  const [authInitialRegisterRole, setAuthInitialRegisterRole] = useState<'student' | 'teacher'>('student');
   const [authInitialEmail, setAuthInitialEmail] = useState<string>('');
   const [resetOobCode, setResetOobCode] = useState<string>('');
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState<boolean>(false);
   const [membershipInitialPlan, setMembershipInitialPlan] = useState<'basic' | 'premium'>('premium');
+  const [membershipPlanSku, setMembershipPlanSku] = useState<PlanSkuId>('BOARD_CLASS');
   const [membershipTargetClass, setMembershipTargetClass] = useState<ClassLevel | undefined>(undefined);
   const [membershipTargetBoard, setMembershipTargetBoard] = useState<EducationBoard | undefined>(undefined);
 
@@ -373,15 +376,21 @@ const AppContent: React.FC = () => {
   const openMembershipWithPlan = (
     _plan: 'basic' | 'premium' = 'premium',
     targetClass?: ClassLevel,
-    targetBoard?: EducationBoard
+    targetBoard?: EducationBoard,
+    planSku: PlanSkuId = 'BOARD_CLASS'
   ) => {
     setMembershipInitialPlan('premium');
+    setMembershipPlanSku(planSku || 'BOARD_CLASS');
     setMembershipTargetClass(targetClass || currentStudent?.classLevel || publicClass);
     setMembershipTargetBoard(targetBoard || (currentStudent ? activeBoard : publicBoard));
     setIsMembershipOpen(true);
   };
 
-  const openAuthModalWithTab = (defaultTab: 'login' | 'teacher' | 'register' | 'admin' | 'forgot' = 'login') => {
+  const openAuthModalWithTab = (
+    defaultTab: 'login' | 'teacher' | 'register' | 'admin' | 'forgot' = 'login',
+    registerRole: 'student' | 'teacher' = 'student'
+  ) => {
+    setAuthInitialRegisterRole(registerRole);
     setAuthDefaultTab(defaultTab);
     setIsAuthModalOpen(true);
   };
@@ -714,30 +723,30 @@ const AppContent: React.FC = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
-      openAuthModalWithTab('admin');
+      openAuthModalWithTab('admin', 'student');
       return;
     }
 
     if (panel === 'teacher') {
-      if (currentStudent && currentStudent.accountRole === 'teacher') {
+      if (currentStudent && currentStudent.accountRole === 'teacher' && intent === 'login') {
         switchRole('teacher');
         setCurrentTab('dashboard');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
-      openAuthModalWithTab('teacher');
+      openAuthModalWithTab(intent === 'register' ? 'register' : 'teacher', 'teacher');
       return;
     }
 
     if (activeRole !== 'student') {
       switchRole('student');
     }
-    if (currentStudent && intent === 'login') {
+    if (currentStudent && currentStudent.accountRole !== 'teacher' && intent === 'login') {
       setCurrentTab('dashboard');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    openAuthModalWithTab(intent === 'register' ? 'register' : 'login');
+    openAuthModalWithTab(intent === 'register' ? 'register' : 'login', 'student');
   };
 
   const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
@@ -1002,7 +1011,12 @@ const AppContent: React.FC = () => {
               }}
             />
           ) : currentTab === 'tet-ctet' ? (
-            <TetCtetView />
+            <TetCtetView
+              onOpenAuth={() => openAuthModalWithTab('teacher', 'teacher')}
+              onOpenMembership={(planSku) =>
+                openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'MAHA_TET')
+              }
+            />
           ) : (['scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku', 'future-skills', 'ai-academy'] as const).includes(currentTab as 'scholarship') ? (
             (() => {
               const sectionKeyMap: Record<string, SpecialLearningSectionId> = {
@@ -1040,7 +1054,9 @@ const AppContent: React.FC = () => {
                 return (
                   <ScholarshipChampionsView
                     onOpenAuth={() => openAuthModalWithTab('login')}
-                    onOpenMembership={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
+                    onOpenMembership={(planSku) =>
+                      openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'SCHOLARSHIP_4TH')
+                    }
                   />
                 );
               }
@@ -1153,46 +1169,136 @@ const AppContent: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-xs font-extrabold uppercase tracking-wider">
                             <GraduationCap className="w-3.5 h-3.5" />
-                            <span>Dedicated Teacher Portal • Active: {getBoardShortLabel(activeBoard)} • Standard {formatStandardOrdinal(currentStudent.classLevel)} ({currentStudent.classLevel})</span>
+                            <span>Teacher Portal &bull; Active: {getBoardShortLabel(activeBoard)} &bull; {currentStudent.classLevel}</span>
                           </span>
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-amber-200 text-xs font-bold">
                             <Sparkles className="w-3 h-3" />
                             <span>
-                              Multi-Board &amp; Multi-Class ({getActivatedBoardClassesList(currentStudent).length} Paid Activation{getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 's'})
+                              Classes 1–10 + Scholarship + TET/CTET Hub ({getActivatedBoardClassesList(currentStudent).length} Paid Class{getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 'es'})
                             </span>
                           </span>
                         </div>
                         <h2 className="text-xl sm:text-2xl font-display font-black">
-                          Welcome, {currentStudent.name}! ({getBoardShortLabel(activeBoard)} • Standard {formatStandardOrdinal(currentStudent.classLevel)} Educator Hub)
+                          Welcome, {currentStudent.name}! (Educator Workspace)
                         </h2>
                         <p className="text-xs sm:text-sm text-emerald-100 font-medium">
                           {isPremiumActive
                             ? getPremiumActivatedBannerMessage(currentStudent.classLevel, activeBoard)
-                            : `Complete access to ${getBoardShortLabel(activeBoard)} Standard ${formatStandardOrdinal(currentStudent.classLevel)} curriculum: Subjects, Board & Class-Wise Worksheets, Study Notes, 4-Level Quizzes, Audio Stories, Cricket Current Affairs, Scholarship Practice, and Model Solutions.`}
+                            : `Browse Classes 1–10 (All Boards), 4th & 7th Scholarship, MAHA TET, and CTET Papers 1 & 2. Free demos & Mock 01 previews are open; paid tests and full banks unlock per purchased plan.`}
                         </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        {!isPremiumActive ? (
+                        <button
+                          type="button"
+                          onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, 'BOARD_CLASS')}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white font-black text-xs cursor-pointer transition-colors"
+                        >
+                          <Crown className="w-4 h-4 text-amber-300" />
+                          <span>{isPremiumActive ? `Class Active (${getBoardShortLabel(activeBoard)} ${currentStudent.classLevel})` : `Unlock Class (₹99)`}</span>
+                        </button>
+                        {!hasCategoryAccess(currentStudent, 'all_classes') && (
                           <button
                             type="button"
-                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs shadow-md cursor-pointer"
+                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, 'TEACHER_ALL_ACCESS')}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs shadow-md cursor-pointer transition-all"
                           >
-                            <Crown className="w-4 h-4" />
-                            <span>Unlock {getBoardShortLabel(activeBoard)} {currentStudent.classLevel} – ₹99</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer transition-colors"
-                          >
-                            <Crown className="w-4 h-4" />
-                            <span>₹99 Active ({getBoardShortLabel(activeBoard)} • {currentStudent.classLevel}) • Add Board/Class</span>
+                            <Award className="w-4 h-4" />
+                            <span>All-Access Educator Bundle (₹499)</span>
                           </button>
                         )}
                       </div>
+                    </div>
+
+                    {/* Teacher Category Access Badges (Visibility Separate from Paid Access) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-2 border-t border-white/15 text-xs">
+                      {[
+                        {
+                          id: 'all_classes',
+                          label: 'Classes 1 to 10',
+                          unlocked: hasCategoryAccess(currentStudent, 'all_classes') || getActivatedBoardClassesList(currentStudent).length > 0,
+                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('all_classes'),
+                          sku: 'BOARD_CLASS' as PlanSkuId,
+                          tab: 'all-courses',
+                        },
+                        {
+                          id: 'scholarship_4th',
+                          label: '4th Scholarship',
+                          unlocked: hasCategoryAccess(currentStudent, 'scholarship_4th'),
+                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('scholarship_4th'),
+                          sku: 'SCHOLARSHIP_4TH' as PlanSkuId,
+                          tab: 'scholarship',
+                        },
+                        {
+                          id: 'scholarship_7th',
+                          label: '7th Scholarship',
+                          unlocked: hasCategoryAccess(currentStudent, 'scholarship_7th'),
+                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('scholarship_7th'),
+                          sku: 'SCHOLARSHIP_7TH' as PlanSkuId,
+                          tab: 'scholarship',
+                        },
+                        {
+                          id: 'maha_tet',
+                          label: 'Maharashtra TET',
+                          unlocked: hasCategoryAccess(currentStudent, 'maha_tet'),
+                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('maha_tet'),
+                          sku: 'MAHA_TET' as PlanSkuId,
+                          tab: 'tet-ctet',
+                        },
+                        {
+                          id: 'ctet_paper_1',
+                          label: 'CTET Paper 1',
+                          unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_1'),
+                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('ctet_paper_1'),
+                          sku: 'CTET_PAPER_1' as PlanSkuId,
+                          tab: 'tet-ctet',
+                        },
+                        {
+                          id: 'ctet_paper_2',
+                          label: 'CTET Paper 2',
+                          unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_2'),
+                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('ctet_paper_2'),
+                          sku: 'CTET_PAPER_2' as PlanSkuId,
+                          tab: 'tet-ctet',
+                        },
+                        {
+                          id: 'ctet_both',
+                          label: 'Both CTET Papers',
+                          unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_1') && hasCategoryAccess(currentStudent, 'ctet_paper_2'),
+                          selected: !currentStudent.selectedTeacherCategories?.length || (currentStudent.selectedTeacherCategories.includes('ctet_paper_1') && currentStudent.selectedTeacherCategories.includes('ctet_paper_2')),
+                          sku: 'CTET_COMBO' as PlanSkuId,
+                          tab: 'tet-ctet',
+                        },
+                      ].map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() =>
+                            cat.unlocked
+                              ? handleNavigateTab(cat.tab)
+                              : openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, cat.sku)
+                          }
+                          className={`px-3 py-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                            cat.unlocked
+                              ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-100 hover:bg-emerald-500/30'
+                              : cat.selected
+                              ? 'bg-white/15 border-amber-300/50 text-white hover:bg-white/20'
+                              : 'bg-black/25 border-white/15 text-amber-100/80 hover:bg-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1 w-full">
+                            <span className="font-extrabold truncate">{cat.label}</span>
+                            {cat.unlocked ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                            ) : (
+                              <Lock className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                            )}
+                          </div>
+                          <span className="text-[9px] font-bold text-emerald-200/90 truncate">
+                            {cat.unlocked ? 'Purchased ✓' : cat.selected ? '✓ Selected • Preview Open' : 'Available'}
+                          </span>
+                        </button>
+                      ))}
                     </div>
 
                     {/* Teacher Portal Quick Module Bar */}
@@ -1215,7 +1321,7 @@ const AppContent: React.FC = () => {
                         }`}
                       >
                         <BookOpen className="w-3.5 h-3.5" />
-                        <span>Class-Wise Worksheets &amp; Solutions</span>
+                        <span>Class-Wise Worksheets</span>
                       </button>
                       <button
                         type="button"
@@ -1235,27 +1341,7 @@ const AppContent: React.FC = () => {
                         }`}
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        <span>4-Level Practice Quizzes &amp; Explanations</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigateTab('stories')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'stories' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>Stories &amp; Story Audio (45)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigateTab('cricket')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'cricket' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
-                      >
-                        <Activity className="w-3.5 h-3.5" />
-                        <span>Daily &amp; Cricket Current Affairs</span>
+                        <span>4-Level Practice Quizzes</span>
                       </button>
                       <button
                         type="button"
@@ -1265,7 +1351,37 @@ const AppContent: React.FC = () => {
                         }`}
                       >
                         <Award className="w-3.5 h-3.5" />
-                        <span>Scholarship Practice &amp; Assessments</span>
+                        <span>4th &amp; 7th Scholarship</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('tet-ctet')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'tet-ctet' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        <span>TET &amp; CTET (200 Mocks)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('stories')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'stories' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>Stories &amp; Audio</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('cricket')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'cricket' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>Current Affairs</span>
                       </button>
                     </div>
                   </div>
@@ -1274,7 +1390,9 @@ const AppContent: React.FC = () => {
                 {currentTab === 'dashboard' && (
                   <StudentDashboard
                     onNavigateTab={handleNavigateTab}
-                    onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
+                    onOpenMembership={(plan, targetClass, targetBoard, planSku) =>
+                      openMembershipWithPlan(plan || 'premium', targetClass, targetBoard, planSku)
+                    }
                     viewMode={viewMode}
                     onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
                     onMenuAction={handleMenuAction}
@@ -1454,6 +1572,7 @@ const AppContent: React.FC = () => {
             isOpen={isMembershipOpen}
             onClose={() => setIsMembershipOpen(false)}
             initialSelectedPlan={membershipInitialPlan}
+            initialPlanSku={membershipPlanSku}
             initialSelectedClass={membershipTargetClass}
             initialSelectedBoard={membershipTargetBoard}
             onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
@@ -1485,6 +1604,7 @@ const AppContent: React.FC = () => {
           <AuthModal
             isOpen={isAuthModalOpen || isAuthOpen}
             defaultTab={authDefaultTab}
+            initialRegisterRole={authInitialRegisterRole}
             initialEmail={authInitialEmail}
             initialBoard={publicBoard}
             initialClass={publicClass}
@@ -1495,6 +1615,7 @@ const AppContent: React.FC = () => {
               setIsAuthModalOpen(false);
               setIsAuthOpen(false);
               setAuthDefaultTab('login');
+              setAuthInitialRegisterRole('student');
             }}
           />
         )}

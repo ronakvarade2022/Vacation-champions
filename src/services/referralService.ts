@@ -76,7 +76,7 @@ export type AmbassadorTier = 'None' | 'Bronze' | 'Silver' | 'Gold' | 'Diamond';
 
 export interface ReferralAccountRecord extends ReferralAccount {
   userName: string;
-  userRole: 'student' | 'parent';
+  userRole: 'student' | 'parent' | 'teacher';
   className: string;
   city: string;
   referralLink?: string;
@@ -110,7 +110,7 @@ export interface ReferralTransactionRecord extends ReferralTransaction {
 }
 
 export interface ReferralPayoutRequestRecord extends PayoutRequest {
-  userRole?: 'student' | 'parent';
+  userRole?: 'student' | 'parent' | 'teacher';
   mobile?: string;
   email?: string;
   payoutMethod?: 'BANK' | 'UPI' | 'SUBSCRIPTION_CREDIT';
@@ -193,7 +193,7 @@ async function buildFallbackAccountFromFirestore(
   hint?: {
     userName?: string;
     userType?: ReferralUserType;
-    userRole?: 'student' | 'parent';
+    userRole?: 'student' | 'parent' | 'teacher';
     className?: string;
     schoolName?: string;
     city?: string;
@@ -268,7 +268,7 @@ async function buildFallbackAccountFromFirestore(
     userType: (refData?.userType as ReferralUserType) || hint?.userType || 'student',
     name: resolvedName,
     userName: resolvedName,
-    userRole: (refData?.userRole as 'student' | 'parent') || hint?.userRole || 'student',
+    userRole: (refData?.userRole as 'student' | 'parent' | 'teacher') || hint?.userRole || 'student',
     className:
       refData?.className ||
       stuData?.classLevel ||
@@ -493,7 +493,7 @@ export const referralService = {
     userName?: string;
     name?: string;
     userType?: ReferralUserType;
-    userRole?: 'student' | 'parent';
+    userRole?: 'student' | 'parent' | 'teacher';
     className?: string;
     schoolName?: string;
     city?: string;
@@ -548,7 +548,7 @@ export const referralService = {
   async trackSignup(params: {
     newUserId: string;
     newUserName: string;
-    newUserRole?: 'student' | 'parent';
+    newUserRole?: 'student' | 'parent' | 'teacher';
     newUserClass?: string;
     schoolName?: string;
     city?: string;

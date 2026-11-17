@@ -12,6 +12,12 @@ import {
   MsceStdLevel,
 } from '../data/msceMockExamEngine';
 import confetti from 'canvas-confetti';
+import { PlanSkuId } from '../types';
+import {
+  getCategorySubscriptionInfo,
+  getVisibleExamCategoriesForStudent,
+  hasCategoryAccess,
+} from '../utils/subscriptionAccess';
 import {
   Trophy,
   GraduationCap,
@@ -39,6 +45,8 @@ import {
   TrendingUp,
   History,
   ShieldCheck,
+  Lock,
+  Crown,
 } from 'lucide-react';
 import {
   UniversalExamShell,
@@ -68,7 +76,15 @@ interface ActiveExamSessionStorage {
 
 const ACTIVE_SESSION_STORAGE_KEY = 'vc_msce_active_mock_exam_session_v1';
 
-export const MsceFullMockExamsSection: React.FC = () => {
+interface MsceFullMockExamsSectionProps {
+  onOpenAuth?: () => void;
+  onOpenMembership?: (planSku?: PlanSkuId) => void;
+}
+
+export const MsceFullMockExamsSection: React.FC<MsceFullMockExamsSectionProps> = ({
+  onOpenAuth,
+  onOpenMembership,
+}) => {
   const {
     currentStudent,
     updateStudentScholarshipMedium,
@@ -77,11 +93,34 @@ export const MsceFullMockExamsSection: React.FC = () => {
     customMsceMockQuestions,
   } = useApp();
 
-  // Standard Switcher: Std 4th (PSE) vs Std 7th (UPS)
+  const visibleCats = getVisibleExamCategoriesForStudent(currentStudent);
+  const [lockedMockNotice, setLockedMockNotice] = useState<string | null>(null);
+
+  // Standard Switcher: Std 4th (PSE) vs Std 7th (UPS) scoped by student class / role
   const [selectedStd, setSelectedStd] = useState<MsceStdLevel>(() => {
+    if (currentStudent && currentStudent.accountRole !== 'teacher') {
+      if (visibleCats.showScholarship7th && !visibleCats.showScholarship4th) {
+        return 'Std 7th';
+      }
+      return 'Std 4th';
+    }
     if (currentStudent?.classLevel === 'Class 7') return 'Std 7th';
     return 'Std 4th';
   });
+
+  useEffect(() => {
+    if (!currentStudent || currentStudent.accountRole === 'teacher') return;
+    if (visibleCats.showScholarship7th && !visibleCats.showScholarship4th) {
+      setSelectedStd('Std 7th');
+    } else if (visibleCats.showScholarship4th && !visibleCats.showScholarship7th) {
+      setSelectedStd('Std 4th');
+    }
+  }, [currentStudent?.id, currentStudent?.accountRole, visibleCats.showScholarship4th, visibleCats.showScholarship7th]);
+
+  const activeCategoryId = selectedStd === 'Std 7th' ? 'scholarship_7th' : 'scholarship_4th';
+  const activePlanSku: PlanSkuId = selectedStd === 'Std 7th' ? 'SCHOLARSHIP_7TH' : 'SCHOLARSHIP_4TH';
+  const hasPaidScholarshipAccess = hasCategoryAccess(currentStudent, activeCategoryId);
+  const categorySubInfo = getCategorySubscriptionInfo(currentStudent, activeCategoryId);
 
   // Sub-view inside Full Mock Examinations: 'tests' | 'progress' | 'batches'
   const [subView, setSubView] = useState<'tests' | 'progress' | 'batches'>('tests');
@@ -147,13 +186,17 @@ export const MsceFullMockExamsSection: React.FC = () => {
     }
   }, [currentStudent?.scholarshipMedium]);
 
-  // Restore active exam session from localStorage if page was refreshed during an active exam
+  // Restore active exam session from localStorage if authorized
   useEffect(() => {
     try {
       const raw = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
       if (!raw) return;
       const savedSession: ActiveExamSessionStorage = JSON.parse(raw);
       if (!savedSession || !savedSession.deadlineMs) return;
+      const draftCat = savedSession.stdLevel === 'Std 7th' ? 'scholarship_7th' : 'scholarship_4th';
+      if (savedSession.mockTestNumber > 1 && !hasCategoryAccess(currentStudent, draftCat)) {
+        return;
+      }
       const now = Date.now();
       const secsLeft = Math.max(0, Math.floor((savedSession.deadlineMs - now) / 1000));
       const builtQs = buildMsceMockPaper(
@@ -180,7 +223,7 @@ export const MsceFullMockExamsSection: React.FC = () => {
       // Ignore corrupt session
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentStudent?.id]);
 
   // Persist active exam session to localStorage whenever answers or currentIdx change
   useEffect(() => {
@@ -270,6 +313,19 @@ export const MsceFullMockExamsSection: React.FC = () => {
     fullExam: boolean,
     explicitMedium?: MsceMedium
   ) => {
+    const reqCategory = stdLevel === 'Std 7th' ? 'scholarship_7th' : 'scholarship_4th';
+    const reqSku: PlanSkuId = stdLevel === 'Std 7th' ? 'SCHOLARSHIP_7TH' : 'SCHOLARSHIP_4TH';
+    if (mockTestNumber > 1 && !hasCategoryAccess(currentStudent, reqCategory)) {
+      setLockedMockNotice(
+        `Mock Test 01 is open as a Free Preview for ${stdLevel}. Mock Tests 02 to 25 (Paper 1 & 2) unlock with the ${stdLevel} Scholarship Plan (₹99 / 365 Days).`
+      );
+      if (onOpenMembership) {
+        onOpenMembership(reqSku);
+      }
+      return;
+    }
+    setLockedMockNotice(null);
+
     const medToUse = explicitMedium || savedMedium;
     if (!medToUse) {
       setPendingStartRequest({
@@ -570,85 +626,98 @@ export const MsceFullMockExamsSection: React.FC = () => {
           </div>
         </div>
 
-        {/* TWO OFFICIAL STANDARD SUBSECTIONS: STD 4TH (PSE) & STD 7TH (UPS) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          <button
-            type="button"
-            disabled={flowState === 'taking'}
-            onClick={() => {
-              setSelectedStd('Std 4th');
-              setFlowState('browse');
-            }}
-            className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
-              selectedStd === 'Std 4th'
-                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-white shadow-lg'
-                : 'bg-white/10 hover:bg-white/15 text-white border-white/20'
-            }`}
-          >
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🎓</span>
-                <span className="font-display font-black text-sm sm:text-base">
-                  STD. 4TH – PRIMARY SCHOLARSHIP (PSE)
-                </span>
-              </div>
-              <p
-                className={`text-xs font-bold ${
-                  selectedStd === 'Std 4th' ? 'text-slate-900' : 'text-indigo-200'
-                }`}
-              >
-                Mock Test 01 to Mock Test 25 • 150 Questions • 300 Marks Each
-              </p>
-            </div>
-            <span
-              className={`px-3 py-1 rounded-xl text-xs font-black ${
+        {/* TWO OFFICIAL STANDARD SUBSECTIONS: STD 4TH (PSE) & STD 7TH (UPS) - ROLE SCOPED */}
+        <div
+          className={`grid grid-cols-1 ${
+            (visibleCats.showScholarship4th && visibleCats.showScholarship7th) ||
+            (!visibleCats.showScholarship4th && !visibleCats.showScholarship7th)
+              ? 'md:grid-cols-2'
+              : 'md:grid-cols-1'
+          } gap-3.5`}
+        >
+          {(visibleCats.showScholarship4th || !visibleCats.showScholarship7th) && (
+            <button
+              type="button"
+              disabled={flowState === 'taking'}
+              onClick={() => {
+                setSelectedStd('Std 4th');
+                setLockedMockNotice(null);
+                setFlowState('browse');
+              }}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
                 selectedStd === 'Std 4th'
-                  ? 'bg-slate-950 text-amber-300'
-                  : 'bg-white/15 text-white'
+                  ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-white shadow-lg'
+                  : 'bg-white/10 hover:bg-white/15 text-white border-white/20'
               }`}
             >
-              25 Mock Tests
-            </span>
-          </button>
-
-          <button
-            type="button"
-            disabled={flowState === 'taking'}
-            onClick={() => {
-              setSelectedStd('Std 7th');
-              setFlowState('browse');
-            }}
-            className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
-              selectedStd === 'Std 7th'
-                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-white shadow-lg'
-                : 'bg-white/10 hover:bg-white/15 text-white border-white/20'
-            }`}
-          >
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🎓</span>
-                <span className="font-display font-black text-sm sm:text-base">
-                  STD. 7TH – UPPER PRIMARY SCHOLARSHIP (UPS)
-                </span>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🎓</span>
+                  <span className="font-display font-black text-sm sm:text-base">
+                    STD. 4TH – PRIMARY SCHOLARSHIP (PSE)
+                  </span>
+                </div>
+                <p
+                  className={`text-xs font-bold ${
+                    selectedStd === 'Std 4th' ? 'text-slate-900' : 'text-indigo-200'
+                  }`}
+                >
+                  Mock Test 01 (Free) &bull; Mock Tests 02–25 ({hasCategoryAccess(currentStudent, 'scholarship_4th') ? 'Unlocked ✓' : '₹99 Plan'})
+                </p>
               </div>
-              <p
-                className={`text-xs font-bold ${
-                  selectedStd === 'Std 7th' ? 'text-slate-900' : 'text-indigo-200'
+              <span
+                className={`px-3 py-1 rounded-xl text-xs font-black ${
+                  selectedStd === 'Std 4th'
+                    ? 'bg-slate-950 text-amber-300'
+                    : 'bg-white/15 text-white'
                 }`}
               >
-                Mock Test 01 to Mock Test 25 • 150 Questions • 300 Marks Each
-              </p>
-            </div>
-            <span
-              className={`px-3 py-1 rounded-xl text-xs font-black ${
+                25 Mock Tests
+              </span>
+            </button>
+          )}
+
+          {(visibleCats.showScholarship7th || !visibleCats.showScholarship4th) && (
+            <button
+              type="button"
+              disabled={flowState === 'taking'}
+              onClick={() => {
+                setSelectedStd('Std 7th');
+                setLockedMockNotice(null);
+                setFlowState('browse');
+              }}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
                 selectedStd === 'Std 7th'
-                  ? 'bg-slate-950 text-amber-300'
-                  : 'bg-white/15 text-white'
+                  ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-white shadow-lg'
+                  : 'bg-white/10 hover:bg-white/15 text-white border-white/20'
               }`}
             >
-              25 Mock Tests
-            </span>
-          </button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🎓</span>
+                  <span className="font-display font-black text-sm sm:text-base">
+                    STD. 7TH – UPPER PRIMARY SCHOLARSHIP (UPS)
+                  </span>
+                </div>
+                <p
+                  className={`text-xs font-bold ${
+                    selectedStd === 'Std 7th' ? 'text-slate-900' : 'text-indigo-200'
+                  }`}
+                >
+                  Mock Test 01 (Free) &bull; Mock Tests 02–25 ({hasCategoryAccess(currentStudent, 'scholarship_7th') ? 'Unlocked ✓' : '₹99 Plan'})
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-xl text-xs font-black ${
+                  selectedStd === 'Std 7th'
+                    ? 'bg-slate-950 text-amber-300'
+                    : 'bg-white/15 text-white'
+                }`}
+              >
+                25 Mock Tests
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Automatic Medium-Wise Subject & Language Configuration Banner */}
@@ -1670,6 +1739,55 @@ export const MsceFullMockExamsSection: React.FC = () => {
                 </span>
               </div>
 
+              {/* Category Unlock / Status Banner */}
+              <div className={`rounded-2xl p-4 border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                hasPaidScholarshipAccess
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                  : 'bg-amber-50 border-amber-300 text-amber-950'
+              }`}>
+                <div className="flex items-center gap-2.5 font-bold">
+                  {hasPaidScholarshipAccess ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>
+                        All 25 {selectedStd} Scholarship Full Mock Tests (Paper 1 &amp; Paper 2) are Active ({categorySubInfo.daysRemainingDisplay}).
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>
+                        {lockedMockNotice ||
+                          `Mock Test 01 is a Free Preview for ${selectedStd}. Unlock Mock Tests 02 to 25 (Paper 1 & 2) with the ${selectedStd} Scholarship Plan (₹99 / 365 Days).`}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {!hasPaidScholarshipAccess && (
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {!currentStudent && onOpenAuth && (
+                      <button
+                        type="button"
+                        onClick={onOpenAuth}
+                        className="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold cursor-pointer"
+                      >
+                        Sign In Free
+                      </button>
+                    )}
+                    {onOpenMembership && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenMembership(activePlanSku)}
+                        className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black flex items-center gap-1 cursor-pointer"
+                      >
+                        <Crown className="w-3.5 h-3.5" />
+                        <span>Unlock {selectedStd} (₹99)</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* 25 Full Mock Tests Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {visibleTestNumbers.map((testNum) => {
@@ -1677,6 +1795,7 @@ export const MsceFullMockExamsSection: React.FC = () => {
                   const isPublished = publishedMsceMockTests[pubKey] !== false;
                   const p1Best = progressStats.p1BestByTest[testNum];
                   const p2Best = progressStats.p2BestByTest[testNum];
+                  const isTestLocked = testNum > 1 && !hasPaidScholarshipAccess;
                   const tierBadge =
                     testNum <= 5
                       ? 'Basic Scholarship Level'
@@ -1705,7 +1824,11 @@ export const MsceFullMockExamsSection: React.FC = () => {
                   return (
                     <div
                       key={testNum}
-                      className="bg-white rounded-3xl p-5 border-2 border-amber-200/90 hover:border-amber-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                      className={`bg-white rounded-3xl p-5 border-2 shadow-xs transition-all flex flex-col justify-between space-y-4 ${
+                        isTestLocked
+                          ? 'border-slate-200 hover:border-amber-400'
+                          : 'border-amber-200/90 hover:border-amber-500 hover:shadow-md'
+                      }`}
                     >
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
@@ -1713,9 +1836,19 @@ export const MsceFullMockExamsSection: React.FC = () => {
                             {selectedStd === 'Std 4th' ? '🎓 Std. 4th' : '🎓 Std. 7th'} – Mock Test{' '}
                             {String(testNum).padStart(2, '0')}
                           </span>
-                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-800 font-bold text-[10px]">
-                            {tierBadge}
-                          </span>
+                          {isTestLocked ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-black text-[10px] flex items-center gap-1">
+                              <Lock className="w-2.5 h-2.5" /> ₹99 Plan
+                            </span>
+                          ) : testNum === 1 && !hasPaidScholarshipAccess ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px]">
+                              Free Preview
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-800 font-bold text-[10px]">
+                              {tierBadge}
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between gap-2">
@@ -1769,39 +1902,52 @@ export const MsceFullMockExamsSection: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* 3 Action Buttons: Start Paper 1 | Start Paper 2 | Full Examination Mode */}
-                      <div className="space-y-2 pt-2 border-t border-slate-100">
-                        <div className="grid grid-cols-2 gap-2">
+                      {/* 3 Action Buttons: Start Paper 1 | Start Paper 2 | Full Examination Mode OR Unlock */}
+                      {isTestLocked ? (
+                        <div className="pt-2 border-t border-slate-100">
                           <button
                             type="button"
-                            onClick={() =>
-                              openPreExamInstructions(selectedStd, testNum, 1, false)
-                            }
-                            className="py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs cursor-pointer transition-all text-center shadow-2xs"
+                            onClick={() => openPreExamInstructions(selectedStd, testNum, 1, false)}
+                            className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
                           >
-                            Start Paper 1
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openPreExamInstructions(selectedStd, testNum, 2, false)
-                            }
-                            className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer transition-all text-center shadow-2xs"
-                          >
-                            Start Paper 2
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Unlock Mock Test #{String(testNum).padStart(2, '0')} ({selectedStd} • ₹99)</span>
                           </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openPreExamInstructions(selectedStd, testNum, 1, true)
-                          }
-                          className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-black text-[11px] cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>Full Exam Mode (Paper 1 + Paper 2 • 300 Marks)</span>
-                        </button>
-                      </div>
+                      ) : (
+                        <div className="space-y-2 pt-2 border-t border-slate-100">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openPreExamInstructions(selectedStd, testNum, 1, false)
+                              }
+                              className="py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs cursor-pointer transition-all text-center shadow-2xs"
+                            >
+                              Start Paper 1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openPreExamInstructions(selectedStd, testNum, 2, false)
+                              }
+                              className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer transition-all text-center shadow-2xs"
+                            >
+                              Start Paper 2
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openPreExamInstructions(selectedStd, testNum, 1, true)
+                            }
+                            className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-black text-[11px] cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Full Exam Mode (Paper 1 + Paper 2 • 300 Marks)</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

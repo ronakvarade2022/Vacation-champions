@@ -10,17 +10,21 @@ import {
   Clock,
   GraduationCap,
   Layers,
+  Lock,
+  Crown,
   ShieldCheck,
   Target,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { PlanSkuId } from '../types';
 import { TetCtetModuleId } from '../types/tetCtet';
 import {
   TET_CTET_MODULE_LIST,
-  TET_CTET_MODULES,
   TET_CTET_TOTAL_MOCKS,
   TET_CTET_TOTAL_QUESTIONS_BANK,
 } from '../data/tetCtetSyllabi';
+import { getCategorySubscriptionInfo, hasCategoryAccess } from '../utils/subscriptionAccess';
+import { getDefaultPlanSkuForCategory, getModuleRequiredCategoryId } from '../data/planCatalog';
 import type { TetCtetModuleSubTab } from './TetCtetModuleView';
 
 const TetCtetModuleView = lazy(() =>
@@ -50,10 +54,22 @@ const TetCtetEmblemSvg: React.FC<{ className?: string }> = ({ className = 'w-16 
   </svg>
 );
 
-export const TetCtetView: React.FC = () => {
-  const { tetCtetAttempts, tetCtetBatches } = useApp();
+interface TetCtetViewProps {
+  onOpenAuth?: () => void;
+  onOpenMembership?: (planSku?: PlanSkuId) => void;
+}
+
+export const TetCtetView: React.FC<TetCtetViewProps> = ({
+  onOpenAuth,
+  onOpenMembership,
+}) => {
+  const { currentStudent, tetCtetAttempts, tetCtetBatches } = useApp();
   const [selectedModule, setSelectedModule] = useState<TetCtetModuleId | null>(null);
   const [initialSubTab, setInitialSubTab] = useState<TetCtetModuleSubTab>('mock-tests');
+
+  const mahaTetInfo = getCategorySubscriptionInfo(currentStudent, 'maha_tet');
+  const ctetP1Info = getCategorySubscriptionInfo(currentStudent, 'ctet_paper_1');
+  const ctetP2Info = getCategorySubscriptionInfo(currentStudent, 'ctet_paper_2');
 
   const openModule = (moduleId: TetCtetModuleId, subTab: TetCtetModuleSubTab = 'mock-tests') => {
     setInitialSubTab(subTab);
@@ -87,6 +103,8 @@ export const TetCtetView: React.FC = () => {
           initialSubTab={initialSubTab}
           onSelectModule={(nextId) => setSelectedModule(nextId)}
           onBackToLanding={() => setSelectedModule(null)}
+          onOpenAuth={onOpenAuth}
+          onOpenMembership={onOpenMembership}
         />
       </Suspense>
     );
@@ -166,6 +184,32 @@ export const TetCtetView: React.FC = () => {
               <span className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0">
                 <GraduationCap className="w-6 h-6" />
               </span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs">
+              {mahaTetInfo.isPaidActive ? (
+                <span className="font-black text-emerald-800 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>MAHA TET Active ({mahaTetInfo.daysRemainingDisplay})</span>
+                </span>
+              ) : (
+                <>
+                  <span className="font-bold text-blue-950 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Mock Test 01 Free Preview · All 100 Tests: ₹149</span>
+                  </span>
+                  {onOpenMembership && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenMembership('MAHA_TET')}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer flex items-center gap-1"
+                    >
+                      <Crown className="w-3 h-3" />
+                      <span>Unlock MAHA TET (₹149)</span>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
@@ -254,6 +298,46 @@ export const TetCtetView: React.FC = () => {
               <span className="w-12 h-12 rounded-2xl bg-purple-700 text-white flex items-center justify-center shrink-0">
                 <Award className="w-6 h-6" />
               </span>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-purple-50 border border-purple-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2 font-bold text-purple-950">
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${ctetP1Info.isPaidActive ? 'bg-emerald-100 text-emerald-800' : 'bg-white border border-purple-200 text-purple-900'}`}>
+                  P1: {ctetP1Info.isPaidActive ? 'Active ✓' : 'Mock 01 Free · ₹149'}
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${ctetP2Info.isPaidActive ? 'bg-emerald-100 text-emerald-800' : 'bg-white border border-purple-200 text-purple-900'}`}>
+                  P2: {ctetP2Info.isPaidActive ? 'Active ✓' : 'Mock 01 Free · ₹149'}
+                </span>
+              </div>
+              {(!ctetP1Info.isPaidActive || !ctetP2Info.isPaidActive) && onOpenMembership && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {!ctetP1Info.isPaidActive && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenMembership('CTET_PAPER_1')}
+                      className="px-2.5 py-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-black text-[11px] cursor-pointer"
+                    >
+                      P1 ₹149
+                    </button>
+                  )}
+                  {!ctetP2Info.isPaidActive && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenMembership('CTET_PAPER_2')}
+                      className="px-2.5 py-1 rounded-lg bg-violet-700 hover:bg-violet-800 text-white font-black text-[11px] cursor-pointer"
+                    >
+                      P2 ₹149
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('CTET_COMBO')}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer"
+                  >
+                    P1+P2 ₹229
+                  </button>
+                </div>
+              )}
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
@@ -350,15 +434,30 @@ export const TetCtetView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {TET_CTET_MODULE_LIST.map((mod) => {
             const modAttemptsCount = tetCtetAttempts.filter((a) => a.moduleId === mod.moduleId).length;
+            const modCategory = getModuleRequiredCategoryId(mod.moduleId);
+            const isModUnlocked = hasCategoryAccess(currentStudent, modCategory);
+            const modSku = getDefaultPlanSkuForCategory(modCategory);
             return (
               <div
                 key={mod.moduleId}
-                className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col justify-between gap-4 hover:border-indigo-300 transition-colors"
+                className={`rounded-2xl border p-4 flex flex-col justify-between gap-4 transition-colors ${
+                  isModUnlocked
+                    ? 'bg-emerald-50/40 border-emerald-300'
+                    : 'bg-slate-50 border-slate-200 hover:border-indigo-300'
+                }`}
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-800">
                     <span>{mod.code}</span>
-                    <span className="font-mono tabular-nums">{mod.classesRange}</span>
+                    {isModUnlocked ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                        Unlocked ✓
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> ₹149
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-base font-display font-black text-slate-900">
                     {mod.examTitle} · {mod.paperTitle}
@@ -375,21 +474,62 @@ export const TetCtetView: React.FC = () => {
                     onClick={() => openModule(mod.moduleId, 'mock-tests')}
                     className="flex-1 min-h-[40px] px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs cursor-pointer transition-colors"
                   >
-                    Open Module
+                    {isModUnlocked ? 'Open Module' : 'Preview & Explore'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openModule(mod.moduleId, 'performance')}
-                    aria-label={`View ${mod.examTitle} Paper ${mod.paper} Analytics`}
-                    className="min-h-[40px] px-3 py-2 rounded-xl bg-white hover:bg-indigo-50 text-slate-800 border border-slate-300 text-xs font-bold cursor-pointer flex items-center justify-center"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                  </button>
+                  {!isModUnlocked && onOpenMembership ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenMembership(modSku)}
+                      aria-label={`Unlock ${mod.examTitle} Paper ${mod.paper}`}
+                      className="min-h-[40px] px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs cursor-pointer flex items-center justify-center shrink-0"
+                    >
+                      Unlock
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openModule(mod.moduleId, 'performance')}
+                      aria-label={`View ${mod.examTitle} Paper ${mod.paper} Analytics`}
+                      className="min-h-[40px] px-3 py-2 rounded-xl bg-white hover:bg-indigo-50 text-slate-800 border border-slate-300 text-xs font-bold cursor-pointer flex items-center justify-center"
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+
+        {/* Combined Teacher Packs Callout */}
+        {onOpenMembership && (!mahaTetInfo.isPaidActive || !ctetP1Info.isPaidActive || !ctetP2Info.isPaidActive) && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div>
+              <p className="font-display font-black text-sm text-amber-300">
+                Save More with Combined Teacher Plans
+              </p>
+              <p className="text-indigo-100 mt-0.5">
+                Purchase individual plans (₹149 each) or combine MAHA TET + CTET P1 + CTET P2 (₹299) or add All Classes 1–10 + 4th &amp; 7th Scholarship in one Bundle (₹499).
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => onOpenMembership('TET_CTET_COMBO')}
+                className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black cursor-pointer"
+              >
+                TET + CTET Combo (₹299)
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenMembership('TEACHER_ALL_ACCESS')}
+                className="px-3.5 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black cursor-pointer"
+              >
+                All-Access Bundle (₹499)
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* =====================================================================

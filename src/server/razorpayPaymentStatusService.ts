@@ -2,6 +2,11 @@ import {
   getResolvedRazorpayCredentials,
   createRazorpayClient
 } from '../../firebase/index.ts';
+import {
+  getPlanCatalogItem,
+  resolvePlanSku,
+  type PlanSkuId
+} from '../data/planCatalog.ts';
 
 export interface RazorpayApiPaymentEntity {
   id: string;
@@ -35,6 +40,7 @@ export interface ConfirmedPaymentCaptureResult {
   amountRupees: number;
   currency: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
   subscriptionTier: 'standard' | 'premium';
   method: string;
   email: string;
@@ -158,6 +164,7 @@ export async function verifyAndConfirmCapturedPayment(params: {
   paymentId: string;
   orderId?: string;
   expectedPlanId?: 'basic' | 'premium';
+  expectedPlanSku?: PlanSkuId | string;
   fallbackMethod?: string;
   autoCaptureIfAuthorized?: boolean;
 }): Promise<ConfirmedPaymentCaptureResult> {
@@ -165,6 +172,7 @@ export async function verifyAndConfirmCapturedPayment(params: {
     paymentId,
     orderId = '',
     expectedPlanId,
+    expectedPlanSku,
     fallbackMethod = 'UPI',
     autoCaptureIfAuthorized = true
   } = params;
@@ -183,6 +191,7 @@ export async function verifyAndConfirmCapturedPayment(params: {
       amountRupees: 0,
       currency: 'INR',
       planId: expectedPlanId || 'premium',
+      planSku: resolvePlanSku(expectedPlanSku, expectedPlanId),
       subscriptionTier:
         (expectedPlanId || 'premium') === 'premium' ? 'premium' : 'standard',
       method: String(fallbackMethod || 'RAZORPAY').toUpperCase(),
@@ -197,7 +206,13 @@ export async function verifyAndConfirmCapturedPayment(params: {
     let payment = await fetchRazorpayPaymentById(cleanPaymentId);
 
     const inferredPlanId: 'premium' = 'premium';
-    const expectedPaise = 9900;
+    const resolvedSku = resolvePlanSku(
+      expectedPlanSku || payment.notes?.planSku,
+      expectedPlanId || payment.notes?.planId,
+      Number(payment.amount || 0)
+    );
+    const planItem = getPlanCatalogItem(resolvedSku);
+    const expectedPaise = planItem.amountPaise;
 
     // Auto-capture if the payment is currently authorized
     if (payment.status === 'authorized' && autoCaptureIfAuthorized) {
@@ -288,8 +303,8 @@ export async function verifyAndConfirmCapturedPayment(params: {
       };
     }
 
-    // Verify exact amount in paise (9900)
-    if (expectedPlanId && Number(payment.amount) !== expectedPaise) {
+    // Verify exact amount in paise matching resolved SKU
+    if ((expectedPlanId || expectedPlanSku) && Number(payment.amount) !== expectedPaise) {
       return {
         confirmed: false,
         status: payment.status,
@@ -300,6 +315,7 @@ export async function verifyAndConfirmCapturedPayment(params: {
         amountRupees: Math.round(Number(payment.amount || 0) / 100),
         currency: payment.currency || 'INR',
         planId: inferredPlanId,
+        planSku: resolvedSku,
         subscriptionTier:
           inferredPlanId === 'premium' ? 'premium' : 'standard',
         method: String(payment.method || fallbackMethod).toUpperCase(),
@@ -322,6 +338,7 @@ export async function verifyAndConfirmCapturedPayment(params: {
         amountRupees: Math.round(Number(payment.amount || 0) / 100),
         currency: payment.currency,
         planId: inferredPlanId,
+        planSku: resolvedSku,
         subscriptionTier:
           inferredPlanId === 'premium' ? 'premium' : 'standard',
         method: String(payment.method || fallbackMethod).toUpperCase(),
@@ -342,6 +359,7 @@ export async function verifyAndConfirmCapturedPayment(params: {
       amountRupees: Math.round(Number(payment.amount) / 100),
       currency: payment.currency || 'INR',
       planId: inferredPlanId,
+      planSku: resolvedSku,
       subscriptionTier: inferredPlanId === 'premium' ? 'premium' : 'standard',
       method: String(payment.method || fallbackMethod).toUpperCase(),
       email: String(payment.email || ''),

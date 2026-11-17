@@ -34,7 +34,21 @@ import {
   limit,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { BoardClassKey, ClassLevel, ClassSubscriptionRecord, EducationBoard, StudentProfile } from '../types';
+import {
+  BoardClassKey,
+  CategoryId,
+  CategorySubscriptionRecord,
+  ClassLevel,
+  ClassSubscriptionRecord,
+  EducationBoard,
+  PlanSkuId,
+  StudentProfile
+} from '../types';
+import {
+  ALL_CATEGORY_IDS,
+  getPlanCatalogItem,
+  resolvePlanSku
+} from '../data/planCatalog';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -1051,11 +1065,12 @@ export async function findReferrerByCodeInFirestore(
   };
 }
 
-// 10. Persist Subscription Upgrade to Firestore (sets 1-year / 365-day expiration & board+class-wise activation)
+// 10. Persist Subscription Upgrade to Firestore (supports Board+Class and Multi-Category SKUs without overwriting unrelated active subscriptions)
 export async function saveSubscriptionToFirestore(
   studentId: string,
   subscriptionData: {
     plan: 'free' | 'basic' | 'premium';
+    planSku?: PlanSkuId;
     selectedBoard?: EducationBoard | string;
     selectedClass?: string;
     planPurchasedAt?: string;
@@ -1069,14 +1084,19 @@ export async function saveSubscriptionToFirestore(
   success: boolean;
   alreadyActivated?: boolean;
   plan: 'free' | 'basic' | 'premium';
+  planSku?: PlanSkuId;
   activatedBoard?: EducationBoard;
   activatedClassLevel?: string | null;
+  activatedCategoryKeys?: CategoryId[];
   planPurchasedAt: string;
   planExpiresAt: string | null;
   validityDays: number | 'Lifetime';
   error?: unknown;
 }> {
   const isPaid = subscriptionData.plan === 'basic' || subscriptionData.plan === 'premium';
+  const resolvedSku = resolvePlanSku(subscriptionData.planSku, undefined, subscriptionData.amountInr);
+  const catalogItem = getPlanCatalogItem(resolvedSku);
+  const isCategoryPlan = isPaid && catalogItem.unlockedCategories.length > 0;
   const computedDates = computePaidPlanExpiryIsoDate(subscriptionData.currentExpiresAt);
 
   const planPurchasedAt =
@@ -1085,42 +1105,65 @@ export async function saveSubscriptionToFirestore(
     ? subscriptionData.planExpiresAt || computedDates.expiresAt
     : null;
   const targetBoard = normalizeBoardValue(subscriptionData.selectedBoard || 'Maharashtra');
-  const activatedClassLevel = isPaid ? subscriptionData.selectedClass || null : null;
+  const activatedClassLevel = isPaid && !isCategoryPlan ? subscriptionData.selectedClass || null : null;
   const validityDays: number | 'Lifetime' = isPaid ? PAID_SUBSCRIPTION_VALIDITY_DAYS : 'Lifetime';
-  const planLabel = isPaid
-    ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year)${activatedClassLevel ? ` (${targetBoard} • ${activatedClassLevel})` : ''}`
-    : 'FREE PLAN – ₹0 – Lifetime';
   const amountInr =
     subscriptionData.amountInr ??
-    (isPaid ? 99 : 0);
+    (isPaid ? catalogItem.amountInr : 0);
+  const planLabel = isPaid
+    ? isCategoryPlan
+      ? `${catalogItem.title} – ₹${amountInr} – 365 Days`
+      : `PREMIUM PLAN – ₹${amountInr} – 365 Days (1 Year)${activatedClassLevel ? ` (${targetBoard} • ${activatedClassLevel})` : ''}`
+    : 'FREE PLAN – ₹0 – Lifetime';
 
   try {
     const studentRef = doc(db, 'students', studentId);
-    const targetClass = normalizeClassLevelValue(subscriptionData.selectedClass);
+    const targetClass = !isCategoryPlan ? normalizeClassLevelValue(subscriptionData.selectedClass) : null;
     const targetCompositeKey = targetClass ? buildBoardClassKey(targetBoard, targetClass) : null;
     let existingData: any = null;
 
     try {
       existingData = await getCachedStudentDoc(studentId);
-      if (existingData) {
-        const existingTargetRec =
-          (targetCompositeKey && existingData?.classSubscriptions?.[targetCompositeKey]) ||
-          (targetBoard === 'Maharashtra' && targetClass && existingData?.classSubscriptions?.[targetClass]);
-        if (
-          subscriptionData.paymentId &&
-          (existingTargetRec?.paymentId === subscriptionData.paymentId ||
-            (!targetClass && existingData?.lastPaymentId === subscriptionData.paymentId))
-        ) {
-          return {
-            success: true,
-            alreadyActivated: true,
-            plan: subscriptionData.plan,
-            activatedBoard: targetBoard,
-            activatedClassLevel: existingData?.activatedClassLevel || activatedClassLevel,
-            planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
-            planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
-            validityDays,
-          };
+      if (existingData && subscriptionData.paymentId) {
+        if (isCategoryPlan) {
+          const alreadyHasCategoryPayment = catalogItem.unlockedCategories.every(
+            (catId) => existingData?.categorySubscriptions?.[catId]?.paymentId === subscriptionData.paymentId
+          );
+          if (alreadyHasCategoryPayment) {
+            return {
+              success: true,
+              alreadyActivated: true,
+              plan: subscriptionData.plan,
+              planSku: resolvedSku,
+              activatedBoard: existingData?.activatedBoard || undefined,
+              activatedClassLevel: existingData?.activatedClassLevel || null,
+              activatedCategoryKeys: existingData?.activatedCategoryKeys || [],
+              planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
+              planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
+              validityDays,
+            };
+          }
+        } else {
+          const existingTargetRec =
+            (targetCompositeKey && existingData?.classSubscriptions?.[targetCompositeKey]) ||
+            (targetBoard === 'Maharashtra' && targetClass && existingData?.classSubscriptions?.[targetClass]);
+          if (
+            existingTargetRec?.paymentId === subscriptionData.paymentId ||
+            (!targetClass && existingData?.lastPaymentId === subscriptionData.paymentId)
+          ) {
+            return {
+              success: true,
+              alreadyActivated: true,
+              plan: subscriptionData.plan,
+              planSku: resolvedSku,
+              activatedBoard: targetBoard,
+              activatedClassLevel: existingData?.activatedClassLevel || activatedClassLevel,
+              activatedCategoryKeys: existingData?.activatedCategoryKeys || [],
+              planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
+              planExpiresAt: existingData?.planExpiresAt || planExpiresAt,
+              validityDays,
+            };
+          }
         }
       }
     } catch {
@@ -1132,7 +1175,31 @@ export async function saveSubscriptionToFirestore(
         ? { ...existingData.classSubscriptions }
         : {};
 
-    if (isPaid && targetClass && targetCompositeKey) {
+    const existingCategoryMap: Partial<Record<CategoryId, CategorySubscriptionRecord>> =
+      existingData?.categorySubscriptions && typeof existingData.categorySubscriptions === 'object'
+        ? { ...existingData.categorySubscriptions }
+        : {};
+
+    const nowIso = new Date().toISOString();
+
+    if (isPaid && isCategoryPlan) {
+      for (const catId of catalogItem.unlockedCategories) {
+        const prevCat = existingCategoryMap[catId];
+        const catDates = computePaidPlanExpiryIsoDate(prevCat?.expiresAt || subscriptionData.currentExpiresAt);
+        existingCategoryMap[catId] = {
+          categoryId: catId,
+          planSku: resolvedSku,
+          status: 'ACTIVE',
+          purchasedAt: subscriptionData.planPurchasedAt || catDates.purchasedAt,
+          expiresAt: subscriptionData.planExpiresAt || catDates.expiresAt,
+          paymentId: subscriptionData.paymentId || undefined,
+          orderId: subscriptionData.orderId || undefined,
+          amountInr,
+          validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+          updatedAt: nowIso,
+        };
+      }
+    } else if (isPaid && targetClass && targetCompositeKey) {
       existingClassMap[targetCompositeKey] = {
         board: targetBoard,
         classLevel: targetClass,
@@ -1144,7 +1211,7 @@ export async function saveSubscriptionToFirestore(
         orderId: subscriptionData.orderId || undefined,
         amountInr,
         validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
       };
     }
 
@@ -1175,9 +1242,23 @@ export async function saveSubscriptionToFirestore(
         if (b === 'Maharashtra') activatedSet.add(norm);
       }
     }
-    if (isPaid && targetClass) {
+    if (isPaid && !isCategoryPlan && targetClass) {
       activatedKeySet.add(buildBoardClassKey(targetBoard, targetClass));
       if (targetBoard === 'Maharashtra') activatedSet.add(targetClass);
+    }
+
+    const activatedCategorySet = new Set<CategoryId>();
+    if (Array.isArray(existingData?.activatedCategoryKeys)) {
+      for (const ck of existingData.activatedCategoryKeys) {
+        if (ALL_CATEGORY_IDS.includes(ck as CategoryId)) {
+          activatedCategorySet.add(ck as CategoryId);
+        }
+      }
+    }
+    for (const [ck, rec] of Object.entries(existingCategoryMap)) {
+      if (ALL_CATEGORY_IDS.includes(ck as CategoryId) && rec && rec.status === 'ACTIVE') {
+        activatedCategorySet.add(ck as CategoryId);
+      }
     }
 
     const resolvedPrimaryBoard = normalizeBoardValue(
@@ -1194,24 +1275,29 @@ export async function saveSubscriptionToFirestore(
         id: studentId,
         plan: subscriptionData.plan,
         planLabel,
-        board: targetBoard,
-        classLevel: targetClass || existingData?.classLevel || undefined,
+        board: isCategoryPlan ? (existingData?.board ? normalizeBoardValue(existingData.board) : targetBoard) : targetBoard,
+        classLevel: isCategoryPlan ? existingData?.classLevel : (targetClass || existingData?.classLevel || undefined),
         primaryBoard: resolvedPrimaryBoard,
         primaryClassLevel: resolvedPrimaryClass,
-        activatedBoard: isPaid ? targetBoard : null,
-        activatedClassLevel,
+        activatedBoard: isCategoryPlan ? (existingData?.activatedBoard || null) : (isPaid ? targetBoard : null),
+        activatedClassLevel: isCategoryPlan ? (existingData?.activatedClassLevel || null) : activatedClassLevel,
         activatedClasses: Array.from(activatedSet),
         activatedClassKeys: Array.from(activatedKeySet),
         classSubscriptions: existingClassMap,
+        activatedCategoryKeys: Array.from(activatedCategorySet),
+        categorySubscriptions: existingCategoryMap,
         isLifetimeFree: subscriptionData.plan === 'free',
-        planPurchasedAt,
-        planExpiresAt,
+        planPurchasedAt: existingData?.planPurchasedAt || planPurchasedAt,
+        planExpiresAt:
+          existingData?.planExpiresAt && planExpiresAt && existingData.planExpiresAt > planExpiresAt
+            ? existingData.planExpiresAt
+            : planExpiresAt,
         subscriptionValidityDays: validityDays,
         subscriptionStatus: 'ACTIVE',
         lastPaymentId: subscriptionData.paymentId || null,
         lastOrderId: subscriptionData.orderId || null,
         lastPaymentAmountInr: amountInr,
-        subscriptionUpdatedAt: new Date().toISOString(),
+        subscriptionUpdatedAt: nowIso,
       })
     );
     await setDoc(studentRef, cleanSub, { merge: true });
@@ -1219,8 +1305,10 @@ export async function saveSubscriptionToFirestore(
     return {
       success: true,
       plan: subscriptionData.plan,
-      activatedBoard: targetBoard,
-      activatedClassLevel,
+      planSku: resolvedSku,
+      activatedBoard: isCategoryPlan ? existingData?.activatedBoard : targetBoard,
+      activatedClassLevel: isCategoryPlan ? existingData?.activatedClassLevel : activatedClassLevel,
+      activatedCategoryKeys: Array.from(activatedCategorySet),
       planPurchasedAt,
       planExpiresAt,
       validityDays,
@@ -1230,6 +1318,7 @@ export async function saveSubscriptionToFirestore(
     return {
       success: false,
       plan: subscriptionData.plan,
+      planSku: resolvedSku,
       activatedBoard: targetBoard,
       activatedClassLevel,
       planPurchasedAt,
@@ -1251,6 +1340,8 @@ export async function saveTransactionToFirestore(transaction: {
   selectedBoard?: EducationBoard | string;
   selectedClass?: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
+  activatedCategories?: CategoryId[];
   planTitle: string;
   amount: number;
   currency: string;
@@ -1279,6 +1370,10 @@ export async function saveTransactionToFirestore(transaction: {
         parentMobile: String(transaction.parentMobile || '').slice(0, 20),
         selectedBoard: transaction.selectedBoard ? normalizeBoardValue(transaction.selectedBoard) : undefined,
         selectedClass: transaction.selectedClass || undefined,
+        planSku: transaction.planSku || undefined,
+        activatedCategories: Array.isArray(transaction.activatedCategories)
+          ? transaction.activatedCategories
+          : undefined,
         amount: Number(transaction.amount) || 99,
         currency: 'INR',
         status: transaction.status || 'SUCCESS',
@@ -1306,6 +1401,8 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
   activatedClasses?: ClassLevel[];
   activatedClassKeys?: BoardClassKey[];
   classSubscriptions?: Partial<Record<string, ClassSubscriptionRecord>>;
+  activatedCategoryKeys?: CategoryId[];
+  categorySubscriptions?: Partial<Record<CategoryId, CategorySubscriptionRecord>>;
   planPurchasedAt?: string;
   planExpiresAt?: string | null;
 }> {
@@ -1330,7 +1427,7 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
         normalizeClassLevelValue(data?.classLevel) ||
         undefined,
       activatedBoard: data?.activatedBoard ? normalizeBoardValue(data.activatedBoard) : null,
-      activatedClassLevel: data?.activatedClassLevel || data?.classLevel || null,
+      activatedClassLevel: data?.activatedClassLevel || null,
       activatedClasses: Array.isArray(data?.activatedClasses)
         ? (data.activatedClasses
             .map((c: string) => normalizeClassLevelValue(c))
@@ -1347,6 +1444,15 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
       classSubscriptions:
         data?.classSubscriptions && typeof data.classSubscriptions === 'object'
           ? data.classSubscriptions
+          : undefined,
+      activatedCategoryKeys: Array.isArray(data?.activatedCategoryKeys)
+        ? (data.activatedCategoryKeys.filter((k: string) =>
+            ALL_CATEGORY_IDS.includes(k as CategoryId)
+          ) as CategoryId[])
+        : [],
+      categorySubscriptions:
+        data?.categorySubscriptions && typeof data.categorySubscriptions === 'object'
+          ? data.categorySubscriptions
           : undefined,
       planPurchasedAt: data?.planPurchasedAt || undefined,
       planExpiresAt: data?.planExpiresAt || null,

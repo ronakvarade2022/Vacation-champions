@@ -63,7 +63,8 @@ service cloud.firestore {
              (!('board' in data) || (data.board in ['Maharashtra', 'CBSE', 'ICSE'])) &&
              (!('primaryBoard' in data) || (data.primaryBoard in ['Maharashtra', 'CBSE', 'ICSE'])) &&
              (!('classLevel' in data) || (data.classLevel is string && data.classLevel.size() <= 20)) &&
-             (!('plan' in data) || (data.plan in ['free', 'basic', 'premium']));
+             (!('plan' in data) || (data.plan in ['free', 'basic', 'premium'])) &&
+             (!('selectedTeacherCategories' in data) || (data.selectedTeacherCategories is list && data.selectedTeacherCategories.size() <= 12));
     }
 
     // ParentProfile Schema Validator
@@ -150,6 +151,8 @@ service cloud.firestore {
           (!('activatedClasses' in incoming()) || incoming().activatedClasses.size() == 0) &&
           (!('activatedClassKeys' in incoming()) || incoming().activatedClassKeys.size() == 0) &&
           (!('classSubscriptions' in incoming()) || incoming().classSubscriptions.size() == 0) &&
+          (!('activatedCategoryKeys' in incoming()) || incoming().activatedCategoryKeys.size() == 0) &&
+          (!('categorySubscriptions' in incoming()) || incoming().categorySubscriptions.size() == 0) &&
           (!('primaryBoard' in incoming()) || incoming().primaryBoard == incoming().get('board', 'Maharashtra')) &&
           (!('primaryClassLevel' in incoming()) || incoming().primaryClassLevel == incoming().classLevel) &&
           (!('lastPaymentId' in incoming()) || incoming().lastPaymentId == null) &&
@@ -176,6 +179,7 @@ service cloud.firestore {
                   incoming().get('board', 'Maharashtra') == existing().get('primaryBoard', existing().get('board', 'Maharashtra')) &&
                   incoming().classLevel == existing().get('primaryClassLevel', existing().get('classLevel', ''))
                 ) ||
+                'all_classes' in existing().get('activatedCategoryKeys', []) ||
                 (incoming().get('board', 'Maharashtra') + '__' + incoming().classLevel) in existing().get('activatedClassKeys', []) ||
                 (
                   incoming().get('board', 'Maharashtra') == 'Maharashtra' &&
@@ -201,6 +205,8 @@ service cloud.firestore {
               incoming().get('activatedClasses', null) == existing().get('activatedClasses', null) &&
               incoming().get('activatedClassKeys', null) == existing().get('activatedClassKeys', null) &&
               incoming().get('classSubscriptions', null) == existing().get('classSubscriptions', null) &&
+              incoming().get('activatedCategoryKeys', null) == existing().get('activatedCategoryKeys', null) &&
+              incoming().get('categorySubscriptions', null) == existing().get('categorySubscriptions', null) &&
               incoming().get('planPurchasedAt', null) == existing().get('planPurchasedAt', null) &&
               incoming().get('planExpiresAt', null) == existing().get('planExpiresAt', null) &&
               incoming().get('lastPaymentId', null) == existing().get('lastPaymentId', null) &&
@@ -208,7 +214,7 @@ service cloud.firestore {
             ) ||
             (
               incoming().plan == 'premium' &&
-              incoming().get('activatedBoard', 'Maharashtra') in ['Maharashtra', 'CBSE', 'ICSE'] &&
+              (!('activatedBoard' in incoming()) || incoming().activatedBoard in ['Maharashtra', 'CBSE', 'ICSE']) &&
               incoming().get('lastPaymentId', '') is string &&
               incoming().get('lastPaymentId', '').matches('^pay_[A-Za-z0-9]{8,40}$') &&
               incoming().get('lastOrderId', '') is string &&
@@ -308,7 +314,7 @@ service cloud.firestore {
           incoming().orderId.matches('^(order|qr)_[A-Za-z0-9]{8,40}$') &&
           incoming().signature is string &&
           incoming().signature.size() >= 16 &&
-          incoming().amount == 99 &&
+          incoming().amount in [99, 149, 229, 299, 499] &&
           incoming().status == 'SUCCESS'
         )
       );

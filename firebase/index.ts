@@ -9,6 +9,12 @@ import {
   evaluateSubscriptionValidity,
   PAID_SUBSCRIPTION_VALIDITY_DAYS
 } from '../src/utils/subscriptionDateUtils.ts';
+import {
+  getPlanCatalogItem,
+  resolvePlanSku,
+  type CategoryId,
+  type PlanSkuId
+} from '../src/data/planCatalog.ts';
 
 try {
   setLogLevel('silent');
@@ -189,6 +195,7 @@ export function createRazorpayClient(): Razorpay | null {
  */
 export async function createRazorpayOrderBackend(params: {
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId | string;
   studentId: string;
   studentName?: string;
   email?: string;
@@ -202,17 +209,17 @@ export async function createRazorpayOrderBackend(params: {
   if (!studentId) {
     throw new Error('Student authentication required.');
   }
-  if (params.planId !== 'premium') {
-    throw new Error(
-      'Invalid plan selected. Only the ₹99 Premium Plan is available.'
-    );
+  if (params.planId !== 'premium' && !params.planSku) {
+    throw new Error('Invalid plan selected.');
   }
 
+  const resolvedSku = resolvePlanSku(params.planSku, params.planId);
+  const planItem = getPlanCatalogItem(resolvedSku);
   const normalizedBoard = normalizeBackendBoard(selectedBoard);
   const normalizedClass = normalizeBackendClassLevel(selectedClass) || '';
   const planId = 'premium' as const;
-  const amountInPaise = 9900;
-  const amountInRupees = 99;
+  const amountInPaise = planItem.amountPaise;
+  const amountInRupees = planItem.amountInr;
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-8)}`;
   const creds = getResolvedRazorpayCredentials();
   const rzp = createRazorpayClient();
@@ -223,7 +230,6 @@ export async function createRazorpayOrderBackend(params: {
     );
   }
 
-  // Enforce a 15-second timeout when contacting Razorpay Orders API
   const orderPromise = rzp.orders.create({
     amount: amountInPaise,
     currency: 'INR',
@@ -238,8 +244,10 @@ export async function createRazorpayOrderBackend(params: {
       selectedClass: normalizedClass,
       classLevel: normalizedClass,
       planId: 'premium',
+      planSku: resolvedSku,
+      activatedCategories: planItem.unlockedCategories.join(','),
       subscriptionTier: 'premium',
-      validityDays: '365',
+      validityDays: String(planItem.validityDays),
       referralCode: String(referralCode || '').slice(0, 100)
     }
   });
@@ -271,6 +279,9 @@ export async function createRazorpayOrderBackend(params: {
     keyId: creds.keyId,
     receiptNumber,
     planId,
+    planSku: resolvedSku,
+    unlockedCategories: planItem.unlockedCategories,
+    planTitle: planItem.title,
     selectedBoard: normalizedBoard,
     selectedClass: normalizedClass || undefined,
     isMock: false,
@@ -315,6 +326,7 @@ export function verifyRazorpaySignatureBackend(params: {
  */
 export async function createRazorpayQrCodeBackend(params: {
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId | string;
   studentId: string;
   studentName?: string;
   email?: string;
@@ -327,18 +339,23 @@ export async function createRazorpayQrCodeBackend(params: {
   if (!studentId) {
     throw new Error('Student authentication required.');
   }
-  if (params.planId !== 'premium') {
-    throw new Error('Invalid plan selected. Only the ₹99 Premium Plan is available.');
+  if (params.planId !== 'premium' && !params.planSku) {
+    throw new Error('Invalid plan selected.');
   }
 
+  const resolvedSku = resolvePlanSku(params.planSku, params.planId);
+  const planItem = getPlanCatalogItem(resolvedSku);
   const normalizedBoard = normalizeBackendBoard(selectedBoard);
   const normalizedClass = normalizeBackendClassLevel(selectedClass) || '';
   const planId = 'premium' as const;
-  const amountInPaise = 9900;
-  const amountInRupees = 99;
-  const planTitle = normalizedClass
-    ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹99 – 365 Days`
-    : `PREMIUM PLAN (${normalizedBoard}) – ₹99 – 365 Days (1 Year)`;
+  const amountInPaise = planItem.amountPaise;
+  const amountInRupees = planItem.amountInr;
+  const planTitle =
+    resolvedSku === 'BOARD_CLASS'
+      ? normalizedClass
+        ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹${amountInRupees} – 365 Days`
+        : `PREMIUM PLAN (${normalizedBoard}) – ₹${amountInRupees} – 365 Days (1 Year)`
+      : `${planItem.title} – ₹${amountInRupees} – 365 Days (1 Year)`;
   const creds = getResolvedRazorpayCredentials();
 
   if (!creds.isConfigured || !creds.keySecret) {
@@ -371,8 +388,10 @@ export async function createRazorpayQrCodeBackend(params: {
         selectedClass: normalizedClass,
         classLevel: normalizedClass,
         planId: 'premium',
+        planSku: resolvedSku,
+        activatedCategories: planItem.unlockedCategories.join(','),
         subscriptionTier: 'premium',
-        validityDays: '365',
+        validityDays: String(planItem.validityDays),
         referralCode: String(referralCode || '').slice(0, 100)
       }
     })
@@ -397,6 +416,8 @@ export async function createRazorpayQrCodeBackend(params: {
     amountRupees: amountInRupees,
     currency: 'INR',
     planId,
+    planSku: resolvedSku,
+    unlockedCategories: planItem.unlockedCategories,
     selectedBoard: normalizedBoard,
     selectedClass: normalizedClass || undefined,
     planTitle,
@@ -412,6 +433,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
   qrId: string;
   studentId: string;
   planId?: 'basic' | 'premium';
+  planSku?: PlanSkuId | string;
   studentName?: string;
   email?: string;
   mobile?: string;
@@ -441,9 +463,15 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
     throw new Error('Unable to query QR code status from Razorpay API.');
   }
 
+  const resolvedSku = resolvePlanSku(
+    qrData?.notes?.planSku,
+    params.planSku || params.planId,
+    Number(qrData?.payment_amount || 0)
+  );
+  const planItem = getPlanCatalogItem(resolvedSku);
   const resolvedPlanId: 'premium' = 'premium';
-  const expectedAmountPaise = 9900;
-  const amountRupees = 99;
+  const expectedAmountPaise = planItem.amountPaise;
+  const amountRupees = planItem.amountInr;
   const resolvedBoard = normalizeBackendBoard(
     qrData?.notes?.selectedBoard || qrData?.notes?.board || selectedBoard
   );
@@ -481,6 +509,7 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
       selectedBoard: resolvedBoard,
       selectedClass: resolvedClass,
       planId: resolvedPlanId,
+      planSku: resolvedSku,
       paymentId: String(paymentId),
       orderId: String(orderId),
       signature: `qr_verified_${paymentId}`,
@@ -496,6 +525,9 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
       orderId,
       method,
       amount: amountRupees,
+      planSku: activation.planSku,
+      activatedCategoryKeys: activation.activatedCategoryKeys,
+      categorySubscriptions: activation.categorySubscriptions,
       selectedBoard: activation.selectedBoard,
       selectedClass: activation.selectedClass,
       transaction: {
@@ -508,6 +540,8 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
         selectedBoard: activation.selectedBoard,
         selectedClass: activation.selectedClass,
         planId: resolvedPlanId,
+        planSku: activation.planSku,
+        activatedCategories: activation.unlockedCategories,
         planTitle: activation.planLabel,
         amount: amountRupees,
         currency: 'INR',
@@ -528,7 +562,10 @@ export async function checkRazorpayQrCodeStatusBackend(params: {
         selectedClass: activation.selectedClass,
         activatedClasses: activation.activatedClasses,
         activatedClassKeys: activation.activatedClassKeys,
+        activatedCategoryKeys: activation.activatedCategoryKeys,
+        categorySubscriptions: activation.categorySubscriptions,
         planId: resolvedPlanId,
+        planSku: activation.planSku,
         planTitle: activation.planLabel,
         amount: amountRupees,
         startDate: activation.startDateIso,
@@ -622,6 +659,7 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   selectedBoard?: string;
   selectedClass?: string;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId | string;
   paymentId: string;
   orderId: string;
   signature?: string;
@@ -635,6 +673,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   selectedClass: string;
   boardClassKey: string;
   plan: 'basic' | 'premium';
+  planSku: PlanSkuId;
+  unlockedCategories: CategoryId[];
   subscriptionTier: 'standard' | 'premium';
   planLabel: string;
   startDateIso: string;
@@ -644,6 +684,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   activatedClasses: string[];
   activatedClassKeys: string[];
   classSubscriptions: Record<string, any>;
+  activatedCategoryKeys: CategoryId[];
+  categorySubscriptions: Record<string, any>;
 }> {
   const {
     studentId,
@@ -659,9 +701,11 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     amountInr
   } = params;
 
+  const resolvedSku = resolvePlanSku(params.planSku, params.planId, amountInr);
+  const planItem = getPlanCatalogItem(resolvedSku);
   const normalizedPlan: 'premium' = 'premium';
   const subscriptionTier: 'premium' = 'premium';
-  const verifiedAmount = amountInr || 99;
+  const verifiedAmount = planItem.amountInr;
   const now = new Date();
   const safeStudentId = String(studentId).trim();
 
@@ -685,7 +729,10 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     'Class 1';
   const targetCompositeKey = buildBackendBoardClassKey(resolvedBoard, resolvedClass);
 
-  const planLabel = `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹99 – 365 Days (1 Year)`;
+  const isCategoryPlan = planItem.unlockedCategories.length > 0;
+  const planLabel = isCategoryPlan
+    ? `${planItem.title} – ₹${verifiedAmount} – 365 Days (1 Year)`
+    : `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹${verifiedAmount} – 365 Days (1 Year)`;
 
   // Reconstruct existing multi-board & multi-class subscriptions map keyed cleanly by `Board__Class`
   const existingMap: Record<string, any> = {};
@@ -710,7 +757,7 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
   }
 
   // Legacy single-class backfill (preserve Maharashtra defaults)
-  if (existingData?.plan && existingData.plan !== 'free') {
+  if (existingData?.plan && existingData.plan !== 'free' && existingData.activatedClassLevel) {
     const legacyBoard = normalizeBackendBoard(
       existingData.activatedBoard || existingData.primaryBoard || existingData.board || 'Maharashtra'
     );
@@ -732,6 +779,15 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
         amountInr: 99,
         validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
       };
+    }
+  }
+
+  // Reconstruct existing category subscriptions map
+  const existingCatMap: Record<string, any> = {};
+  if (existingData?.categorySubscriptions && typeof existingData.categorySubscriptions === 'object') {
+    for (const [catKey, rawRec] of Object.entries(existingData.categorySubscriptions)) {
+      if (!rawRec || typeof rawRec !== 'object') continue;
+      existingCatMap[catKey] = { ...(rawRec as any), categoryId: catKey };
     }
   }
 
@@ -757,10 +813,24 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     };
   };
 
+  const collectActiveCategories = (catMap: Record<string, any>): CategoryId[] => {
+    const activeCats: CategoryId[] = [];
+    for (const [catId, rec] of Object.entries(catMap)) {
+      if (!rec || rec.status === 'EXPIRED') continue;
+      if (evaluateSubscriptionValidity('premium', rec.purchasedAt, rec.expiresAt, now).isExpired) {
+        continue;
+      }
+      if (!activeCats.includes(catId as CategoryId)) {
+        activeCats.push(catId as CategoryId);
+      }
+    }
+    return activeCats;
+  };
+
   // Idempotency check: check if this exact paymentId was already processed
-  const existingMatchingEntry = Object.values(existingMap).find(
-    (entry: any) => entry && entry.paymentId === paymentId
-  );
+  const existingMatchingEntry =
+    Object.values(existingMap).find((entry: any) => entry && entry.paymentId === paymentId) ||
+    Object.values(existingCatMap).find((entry: any) => entry && entry.paymentId === paymentId);
   if (
     existingMatchingEntry ||
     (existingData?.lastPaymentId && existingData.lastPaymentId === paymentId)
@@ -776,6 +846,7 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
       now
     );
     const { activatedClasses, activatedClassKeys } = collectActiveKeys(existingMap);
+    const activatedCategoryKeys = collectActiveCategories(existingCatMap);
     return {
       success: true,
       alreadyProcessed: true,
@@ -783,8 +854,10 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
       selectedClass: refClass,
       boardClassKey: refKey,
       plan: normalizedPlan,
+      planSku: resolvedSku,
+      unlockedCategories: planItem.unlockedCategories,
       subscriptionTier,
-      planLabel: `PREMIUM PLAN (${refBoard} • ${refClass}) – ₹99 – 365 Days (1 Year)`,
+      planLabel,
       startDateIso:
         validity.purchaseDateIst || refEntry?.purchasedAt || refEntry?.planPurchasedAt || '',
       expiryDateIso:
@@ -793,44 +866,80 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
       receiptNumber: `REC-VC-${paymentId.slice(-6).toUpperCase()}`,
       activatedClasses,
       activatedClassKeys,
-      classSubscriptions: existingMap
+      classSubscriptions: existingMap,
+      activatedCategoryKeys,
+      categorySubscriptions: existingCatMap
     };
   }
 
-  // Compute accurate 365-day activation / renewal dates ONLY for `targetCompositeKey`
-  const targetExistingEntry = existingMap[targetCompositeKey];
-  const candidateExistingExpiry = targetExistingEntry?.expiresAt || undefined;
-  const candidateExistingPlan = targetExistingEntry?.plan || 'free';
+  let updatedClassSubscriptions: Record<string, any> = { ...existingMap };
+  let updatedCategorySubscriptions: Record<string, any> = { ...existingCatMap };
+  let startDateIso = '';
+  let expiryDateIso = '';
+  let daysRemaining = PAID_SUBSCRIPTION_VALIDITY_DAYS;
+  let verifiedAtUtcIso = now.toISOString();
 
-  const activation = computeSubscriptionActivationDates({
-    verificationTimestamp: now,
-    existingPlan: candidateExistingPlan,
-    existingExpiresAt: candidateExistingExpiry
-  });
-
-  const startDateIso = activation.purchasedDateIst;
-  const expiryDateIso = activation.expiryDateIst;
-  const daysRemaining = activation.daysRemaining;
-  const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
-
-  const updatedClassSubscriptions: Record<string, any> = {
-    ...existingMap,
-    [targetCompositeKey]: {
-      board: resolvedBoard,
-      classLevel: resolvedClass,
-      plan: normalizedPlan,
-      status: 'ACTIVE',
-      purchasedAt: startDateIso,
-      expiresAt: expiryDateIso,
-      paymentId: String(paymentId),
-      orderId: String(orderId),
-      amountInr: verifiedAmount,
-      validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      updatedAt: activation.verifiedAtUtcIso
+  if (isCategoryPlan) {
+    // Activate each unlocked category cleanly without clobbering existing board/class subscriptions
+    for (const catId of planItem.unlockedCategories) {
+      const prevCat = existingCatMap[catId];
+      const catAct = computeSubscriptionActivationDates({
+        verificationTimestamp: now,
+        existingPlan: prevCat ? 'premium' : 'free',
+        existingExpiresAt: prevCat?.expiresAt
+      });
+      if (!startDateIso) {
+        startDateIso = catAct.purchasedDateIst;
+        expiryDateIso = catAct.expiryDateIst;
+        daysRemaining = catAct.daysRemaining;
+        verifiedAtUtcIso = catAct.verifiedAtUtcIso;
+      }
+      updatedCategorySubscriptions[catId] = {
+        categoryId: catId,
+        planSku: resolvedSku,
+        status: 'ACTIVE',
+        purchasedAt: catAct.purchasedDateIst,
+        expiresAt: catAct.expiryDateIst,
+        paymentId: String(paymentId),
+        orderId: String(orderId),
+        amountInr: verifiedAmount,
+        validityDays: planItem.validityDays,
+        updatedAt: catAct.verifiedAtUtcIso
+      };
     }
-  };
+  } else {
+    const targetExistingEntry = existingMap[targetCompositeKey];
+    const activation = computeSubscriptionActivationDates({
+      verificationTimestamp: now,
+      existingPlan: targetExistingEntry?.plan || 'free',
+      existingExpiresAt: targetExistingEntry?.expiresAt || undefined
+    });
+    startDateIso = activation.purchasedDateIst;
+    expiryDateIso = activation.expiryDateIst;
+    daysRemaining = activation.daysRemaining;
+    verifiedAtUtcIso = activation.verifiedAtUtcIso;
 
+    updatedClassSubscriptions = {
+      ...existingMap,
+      [targetCompositeKey]: {
+        board: resolvedBoard,
+        classLevel: resolvedClass,
+        plan: normalizedPlan,
+        status: 'ACTIVE',
+        purchasedAt: startDateIso,
+        expiresAt: expiryDateIso,
+        paymentId: String(paymentId),
+        orderId: String(orderId),
+        amountInr: verifiedAmount,
+        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+        updatedAt: verifiedAtUtcIso
+      }
+    };
+  }
+
+  const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
   const { activatedClasses, activatedClassKeys } = collectActiveKeys(updatedClassSubscriptions);
+  const activatedCategoryKeys = collectActiveCategories(updatedCategorySubscriptions);
 
   const preservedPrimaryBoard = normalizeBackendBoard(
     existingData?.primaryBoard || existingData?.board || resolvedBoard
@@ -841,39 +950,42 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     resolvedClass;
 
   try {
-    // 1. Update Student Profile Document in Firestore (/students/{studentId}) via Firebase Admin SDK
-    await serverSetDoc(
-      'students',
-      safeStudentId,
-      {
-        id: safeStudentId,
-        board: resolvedBoard,
-        classLevel: resolvedClass,
-        primaryBoard: preservedPrimaryBoard,
-        primaryClassLevel: preservedPrimaryClass,
-        activatedBoard: resolvedBoard,
-        activatedClassLevel: resolvedClass,
-        activatedClasses,
-        activatedClassKeys,
-        classSubscriptions: updatedClassSubscriptions,
-        plan: normalizedPlan,
-        subscriptionTier,
-        planLabel,
-        isLifetimeFree: false,
-        planPurchasedAt: startDateIso,
-        planExpiresAt: expiryDateIso,
-        subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
-        subscriptionStatus: 'ACTIVE',
-        lastPaymentId: paymentId,
-        lastOrderId: orderId,
-        lastPaymentAmountInr: verifiedAmount,
-        verifiedAtUtc: activation.verifiedAtUtcIso,
-        subscriptionUpdatedAt: activation.verifiedAtUtcIso
-      },
-      { merge: true }
-    );
+    const studentPatch: Record<string, any> = {
+      id: safeStudentId,
+      primaryBoard: preservedPrimaryBoard,
+      primaryClassLevel: preservedPrimaryClass,
+      activatedClasses,
+      activatedClassKeys,
+      classSubscriptions: updatedClassSubscriptions,
+      activatedCategoryKeys,
+      categorySubscriptions: updatedCategorySubscriptions,
+      plan: normalizedPlan,
+      subscriptionTier,
+      planLabel,
+      isLifetimeFree: false,
+      planPurchasedAt: existingData?.planPurchasedAt || startDateIso,
+      planExpiresAt:
+        existingData?.planExpiresAt && existingData.planExpiresAt > expiryDateIso
+          ? existingData.planExpiresAt
+          : expiryDateIso,
+      subscriptionValidityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+      subscriptionStatus: 'ACTIVE',
+      lastPaymentId: paymentId,
+      lastOrderId: orderId,
+      lastPaymentAmountInr: verifiedAmount,
+      verifiedAtUtc: verifiedAtUtcIso,
+      subscriptionUpdatedAt: verifiedAtUtcIso
+    };
 
-    // 2. Save Verified Transaction Document in Firestore (/transactions/tx_{paymentId}) via Firebase Admin SDK
+    if (!isCategoryPlan) {
+      studentPatch.board = resolvedBoard;
+      studentPatch.classLevel = resolvedClass;
+      studentPatch.activatedBoard = resolvedBoard;
+      studentPatch.activatedClassLevel = resolvedClass;
+    }
+
+    await serverSetDoc('students', safeStudentId, studentPatch, { merge: true });
+
     const safePaymentId = String(paymentId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const txDocId = safePaymentId.startsWith('tx_')
       ? safePaymentId
@@ -889,10 +1001,12 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
         studentName: String(studentName || 'Student').slice(0, 100),
         parentEmail: String(email || '').slice(0, 150),
         parentMobile: String(mobile || '').slice(0, 20),
-        selectedBoard: resolvedBoard,
-        selectedClass: resolvedClass,
-        classLevel: resolvedClass,
+        selectedBoard: isCategoryPlan ? undefined : resolvedBoard,
+        selectedClass: isCategoryPlan ? undefined : resolvedClass,
+        classLevel: isCategoryPlan ? existingData?.classLevel : resolvedClass,
         planId: normalizedPlan,
+        planSku: resolvedSku,
+        activatedCategories: planItem.unlockedCategories,
         subscriptionTier,
         planTitle: planLabel,
         amount: verifiedAmount,
@@ -924,6 +1038,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     selectedClass: resolvedClass,
     boardClassKey: targetCompositeKey,
     plan: normalizedPlan,
+    planSku: resolvedSku,
+    unlockedCategories: planItem.unlockedCategories,
     subscriptionTier,
     planLabel,
     startDateIso,
@@ -932,6 +1048,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     receiptNumber,
     activatedClasses,
     activatedClassKeys,
-    classSubscriptions: updatedClassSubscriptions
+    classSubscriptions: updatedClassSubscriptions,
+    activatedCategoryKeys,
+    categorySubscriptions: updatedCategorySubscriptions
   };
 }

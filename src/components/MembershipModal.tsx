@@ -12,38 +12,62 @@ import {
 import {
   ALL_CLASS_LEVELS,
   getBoardShortLabel,
+  getCategorySubscriptionInfo,
   getClassSubscriptionInfo,
   getStudentPlanInfo,
   getPremiumActivatedBannerMessage,
-  formatStandardOrdinal
+  formatStandardOrdinal,
+  hasCategoryAccess,
 } from '../utils/subscriptionAccess';
+import {
+  PLAN_CATALOG,
+  PLAN_CATALOG_LIST,
+  PlanCatalogItem,
+  getPlanCatalogItem,
+  formatCategoriesListLabel,
+} from '../data/planCatalog';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import {
   X, CheckCircle2, ShieldCheck, Crown, Lock, CreditCard, Smartphone,
   AlertCircle, Sparkles, RefreshCw, Copy, Check, Loader2,
-  QrCode, ArrowLeft, Timer, CheckCircle, Gift, GraduationCap
+  QrCode, ArrowLeft, Timer, CheckCircle, Gift, GraduationCap, Award, Layers
 } from 'lucide-react';
-import { ClassLevel, EducationBoard, PaymentTransaction } from '../types';
+import { ClassLevel, EducationBoard, PaymentTransaction, PlanSkuId } from '../types';
 
 interface MembershipModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSelectedPlan?: 'basic' | 'premium';
+  initialPlanSku?: PlanSkuId;
   initialSelectedClass?: ClassLevel;
   initialSelectedBoard?: EducationBoard;
   onRequestAuth?: (defaultTab?: 'login' | 'register') => void;
   onSwitchActiveClass?: (cls: ClassLevel, board?: EducationBoard) => void;
 }
 
+type ModalPlanGroupTab = 'classes' | 'exams' | 'bundles';
+
+function resolveGroupTabForSku(sku: PlanSkuId): ModalPlanGroupTab {
+  if (sku === 'BOARD_CLASS') return 'classes';
+  const item = getPlanCatalogItem(sku);
+  return item.isCombo ? 'bundles' : 'exams';
+}
+
 export const MembershipModal: React.FC<MembershipModalProps> = ({
   isOpen,
   onClose,
+  initialPlanSku = 'BOARD_CLASS',
   initialSelectedClass,
   initialSelectedBoard,
   onRequestAuth,
   onSwitchActiveClass,
 }) => {
   const { currentStudent, activateVerifiedMembership, switchActiveClass } = useApp();
+
+  const [selectedPlanSku, setSelectedPlanSku] = useState<PlanSkuId>(initialPlanSku || 'BOARD_CLASS');
+  const [planGroupTab, setPlanGroupTab] = useState<ModalPlanGroupTab>(() =>
+    resolveGroupTabForSku(initialPlanSku || 'BOARD_CLASS')
+  );
 
   const [targetBoard, setTargetBoard] = useState<EducationBoard>(
     initialSelectedBoard || currentStudent?.board || 'Maharashtra'
@@ -92,6 +116,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      const nextSku: PlanSkuId = initialPlanSku || 'BOARD_CLASS';
+      setSelectedPlanSku(nextSku);
+      setPlanGroupTab(resolveGroupTabForSku(nextSku));
       setTargetBoard(initialSelectedBoard || currentStudent?.board || 'Maharashtra');
       setTargetClass(initialSelectedClass || currentStudent?.classLevel || 'Class 5');
       setStep('select');
@@ -130,7 +157,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [isOpen, initialSelectedClass, initialSelectedBoard, currentStudent?.board, currentStudent?.classLevel, currentStudent?.referredByCode]);
+  }, [isOpen, initialPlanSku, initialSelectedClass, initialSelectedBoard, currentStudent?.board, currentStudent?.classLevel, currentStudent?.referredByCode]);
 
   // QR Code active countdown timer & auto-polling effect
   useEffect(() => {
@@ -160,12 +187,16 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             'premium',
             referralCodeInput.trim(),
             targetClass,
-            targetBoard
+            targetBoard,
+            selectedPlanSku
           );
           if (checkRes.paid && checkRes.status === 'PAID') {
             clearQrTimers();
             setQrStatus('PAID');
-            setQrStatusNotice(`Payment Verified! Activating ₹99 Premium subscription for ${getBoardShortLabel(targetBoard)} • ${targetClass}...`);
+            const paidCatalog = getPlanCatalogItem(checkRes.planSku || selectedPlanSku);
+            setQrStatusNotice(
+              `Payment Verified! Activating ${paidCatalog.shortTitle} (₹${paidCatalog.amountInr})...`
+            );
             if ((checkRes as any).referral?.credited) {
               setReferralCreditedNotice(
                 `₹5 Referral Cashback Credited! (Referrer: ${(checkRes as any).referral.referrerName})`
@@ -195,10 +226,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [step, qrData, currentStudent, referralCodeInput, targetClass, targetBoard]);
+  }, [step, qrData, currentStudent, referralCodeInput, targetClass, targetBoard, selectedPlanSku]);
 
   if (!isOpen) return null;
 
+  const activeCatalogItem: PlanCatalogItem = getPlanCatalogItem(selectedPlanSku);
   const targetClassInfo = getClassSubscriptionInfo(currentStudent, targetClass, undefined, targetBoard);
   const planInfo = getStudentPlanInfo(currentStudent, undefined, targetClass, targetBoard);
 
@@ -209,8 +241,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Option 1: Create Server LIVE Order (₹99) & Immediately Open Official Razorpay Checkout
-  const handleInitiateCheckout = async () => {
+  // Option 1: Create Server LIVE Order & Immediately Open Official Razorpay Checkout
+  const handleInitiateCheckout = async (skuOverride?: PlanSkuId) => {
+    const skuToBuy: PlanSkuId = skuOverride || selectedPlanSku;
+    const itemToBuy = getPlanCatalogItem(skuToBuy);
+    if (skuOverride && skuOverride !== selectedPlanSku) {
+      setSelectedPlanSku(skuOverride);
+    }
+
     if (isCheckoutBusyRef.current) {
       console.info('[Razorpay] Ignoring duplicate click while order/checkout is initializing.');
       return;
@@ -221,7 +259,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     setIsDomainMismatchError(false);
 
     if (!currentStudent || !currentStudent.id) {
-      const authErr = 'Please sign in to your student account before purchasing the ₹99 Premium subscription plan.';
+      const authErr = `Please sign in to your Student or Teacher account before purchasing ${itemToBuy.title} (₹${itemToBuy.amountInr}).`;
       setErrorMsg(authErr);
       setStep('failed');
       return;
@@ -232,10 +270,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = referralCodeInput.trim().toUpperCase();
 
     try {
-      // Ensure Razorpay script is loaded in parallel with ₹99 order creation for (targetBoard, targetClass)
       const [scriptReady, orderData] = await Promise.all([
         loadRazorpayScript(),
-        createRazorpayOrder(currentStudent, 'premium', activeRefCode, targetClass, targetBoard)
+        createRazorpayOrder(currentStudent, 'premium', activeRefCode, targetClass, targetBoard, skuToBuy)
       ]);
 
       if (!scriptReady || typeof (window as any).Razorpay !== 'function') {
@@ -257,6 +294,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
         orderData,
         student: currentStudent,
         planId: 'premium',
+        planSku: skuToBuy,
         selectedBoard: targetBoard,
         selectedClass: targetClass,
         referralCode: activeRefCode || undefined,
@@ -317,15 +355,21 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     }
   };
 
-  // Option 2: Generate Dynamic Razorpay UPI QR Code (₹99 Premium)
-  const handleInitiateQrPayment = async () => {
+  // Option 2: Generate Dynamic Razorpay UPI QR Code
+  const handleInitiateQrPayment = async (skuOverride?: PlanSkuId) => {
+    const skuToBuy: PlanSkuId = skuOverride || selectedPlanSku;
+    const itemToBuy = getPlanCatalogItem(skuToBuy);
+    if (skuOverride && skuOverride !== selectedPlanSku) {
+      setSelectedPlanSku(skuOverride);
+    }
+
     if (isCheckoutBusyRef.current) return;
     setErrorMsg('');
     setFailedOrderId('');
     setIsDomainMismatchError(false);
 
     if (!currentStudent || !currentStudent.id) {
-      setErrorMsg('Please sign in to your student account before purchasing the ₹99 Premium subscription plan.');
+      setErrorMsg(`Please sign in to your Student or Teacher account before purchasing ${itemToBuy.title} (₹${itemToBuy.amountInr}).`);
       setStep('failed');
       return;
     }
@@ -336,11 +380,21 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = referralCodeInput.trim().toUpperCase();
 
     try {
-      const data = await createRazorpayQrCode(currentStudent, 'premium', activeRefCode, targetClass, targetBoard);
+      const data = await createRazorpayQrCode(
+        currentStudent,
+        'premium',
+        activeRefCode,
+        targetClass,
+        targetBoard,
+        skuToBuy
+      );
       setQrData(data);
       setQrCountdown(data.expiresInSeconds || 600);
       setQrStatus('WAITING');
-      setQrStatusNotice(`Scan using Google Pay, PhonePe, Paytm or any UPI App to pay ₹99 for ${getBoardShortLabel(targetBoard)} • ${targetClass}.`);
+      const scopeDesc = itemToBuy.requiresBoardClass
+        ? `${getBoardShortLabel(targetBoard)} • ${targetClass}`
+        : itemToBuy.shortTitle;
+      setQrStatusNotice(`Scan using Google Pay, PhonePe, Paytm or any UPI App to pay ₹${itemToBuy.amountInr} for ${scopeDesc}.`);
       setStep('qr_code');
       isCheckoutBusyRef.current = false;
       setIsCreatingOrder(false);
@@ -357,7 +411,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
   const handleManualCheckQrStatus = async () => {
     if (!qrData || !currentStudent || isCheckingQr) return;
     setIsCheckingQr(true);
-    setQrStatusNotice(`Checking ₹99 payment (${getBoardShortLabel(targetBoard)} • ${targetClass}) with Razorpay & Bank...`);
+    setQrStatusNotice(
+      `Checking ₹${activeCatalogItem.amountInr} payment (${activeCatalogItem.shortTitle}) with Razorpay & Bank...`
+    );
     try {
       const checkRes = await checkRazorpayQrStatus(
         qrData.qrId,
@@ -365,7 +421,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
         'premium',
         referralCodeInput.trim(),
         targetClass,
-        targetBoard
+        targetBoard,
+        selectedPlanSku
       );
       if (checkRes.paid && checkRes.status === 'PAID') {
         clearQrTimers();
@@ -447,7 +504,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   Registration Required Before Purchase
                 </p>
                 <p className="text-xs font-semibold text-slate-700">
-                  You are currently browsing as a visitor. Sign in or create a free class-wise account first so your ₹99 (365-day) Premium Plan links safely to your student profile.
+                  Sign in or create a free Student or Teacher account first so your purchased Classes 1–10, Scholarship, TET, CTET, or Bundle plan links permanently to your profile.
                 </p>
               </div>
               {onRequestAuth && (
@@ -477,8 +534,65 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
+          {/* Plan Category Group Switcher (Classes 1-10 | Individual Exams | Combined & Teacher Bundles) */}
+          {step === 'select' && (
+            <div className="mb-5 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setPlanGroupTab('classes');
+                  setSelectedPlanSku('BOARD_CLASS');
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  planGroupTab === 'classes'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4 text-amber-400" />
+                <span>Classes 1–10 (₹99)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPlanGroupTab('exams');
+                  if (selectedPlanSku === 'BOARD_CLASS' || getPlanCatalogItem(selectedPlanSku).isCombo) {
+                    setSelectedPlanSku(currentStudent?.classLevel === 'Class 7' ? 'SCHOLARSHIP_7TH' : 'SCHOLARSHIP_4TH');
+                  }
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  planGroupTab === 'exams'
+                    ? 'bg-indigo-700 text-white shadow-xs'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                <Award className="w-4 h-4 text-amber-400" />
+                <span>Scholarship, TET &amp; CTET</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPlanGroupTab('bundles');
+                  if (!getPlanCatalogItem(selectedPlanSku).isCombo) {
+                    setSelectedPlanSku(
+                      currentStudent?.accountRole === 'teacher' ? 'TET_CTET_COMBO' : 'SCHOLARSHIP_COMBO'
+                    );
+                  }
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  planGroupTab === 'bundles'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-amber-300" />
+                <span>Combined &amp; Teacher Bundles</span>
+              </button>
+            </div>
+          )}
+
           {/* Board & Class 1 to 10 Subscription Selector Strip */}
-          {currentStudent && step === 'select' && (
+          {currentStudent && step === 'select' && planGroupTab === 'classes' && (
             <div className="mb-5 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -580,8 +694,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
-          {/* Active Subscription Banner */}
-          {currentStudent && (
+          {/* Active Subscription Banner (Shown when browsing Classes 1–10 tab) */}
+          {currentStudent && planGroupTab === 'classes' && (
             <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -654,7 +768,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs font-bold flex items-center gap-2">
                   <Lock className="w-4 h-4 text-amber-700 shrink-0" />
                   <span>
-                    <strong>{getBoardShortLabel(targetBoard)} • {targetClass}</strong> stays locked independently until its ₹99 payment is verified. Your existing active boards &amp; classes remain unaffected.
+                    <strong>{getBoardShortLabel(targetBoard)} • {targetClass}</strong> stays locked independently until its ₹99 payment is verified. Your existing active boards, classes &amp; exam categories remain unaffected.
                   </span>
                 </div>
               )}
@@ -668,7 +782,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     <button
                       type="button"
                       disabled={isCreatingOrder}
-                      onClick={() => handleInitiateCheckout()}
+                      onClick={() => handleInitiateCheckout('BOARD_CLASS')}
                       className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-black text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
                     >
                       <span>Renew {targetClass} (₹99) →</span>
@@ -676,7 +790,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     <button
                       type="button"
                       disabled={isCreatingOrder}
-                      onClick={() => handleInitiateQrPayment()}
+                      onClick={() => handleInitiateQrPayment('BOARD_CLASS')}
                       className="px-3 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs cursor-pointer flex items-center gap-1.5"
                     >
                       <QrCode className="w-3.5 h-3.5 text-amber-300" />
@@ -688,7 +802,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
-          {/* ==================== STEP 1: SELECT PLAN (FREE ₹0 OR PREMIUM ₹99) ==================== */}
+          {/* ==================== STEP 1: SELECT PLAN ==================== */}
           {step === 'select' && (
             <div className="space-y-6">
               {/* Order Creation Loading Banner */}
@@ -696,11 +810,147 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center gap-3 text-indigo-950 animate-in fade-in duration-150">
                   <Loader2 className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
                   <span className="text-xs sm:text-sm font-black">
-                    Generating Razorpay {gatewayMode} payment request for Standard {formatStandardOrdinal(targetClass)} ({targetClass}) PREMIUM PLAN – ₹99 (365 Days / 1 Year)...
+                    Generating Razorpay {gatewayMode} payment request for {activeCatalogItem.title} – ₹{activeCatalogItem.amountInr} ({activeCatalogItem.validityDays} Days)...
                   </span>
                 </div>
               )}
 
+              {/* INDIVIDUAL EXAMS OR COMBINED BUNDLES GRID */}
+              {planGroupTab !== 'classes' ? (
+                <div className="space-y-4">
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div>
+                      <p className="font-black text-indigo-950">
+                        {planGroupTab === 'exams'
+                          ? 'Individual Exam Plans (Scholarship, MAHA TET & CTET)'
+                          : 'Combined & Teacher All-Access Plans'}
+                      </p>
+                      <p className="text-slate-600 font-medium">
+                        Add any category plan directly onto your existing Student or Teacher account — existing active plans remain intact.
+                      </p>
+                    </div>
+                    {currentStudent && (
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200">
+                        Account: {currentStudent.name} ({currentStudent.accountRole === 'teacher' ? 'Teacher' : currentStudent.classLevel})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {PLAN_CATALOG_LIST.filter((item) => {
+                      if (item.sku === 'BOARD_CLASS') return false;
+                      return planGroupTab === 'bundles' ? item.isCombo : !item.isCombo;
+                    }).map((item) => {
+                      const isSelected = selectedPlanSku === item.sku;
+                      const unlockedAlready =
+                        item.unlockedCategories.length > 0 &&
+                        item.unlockedCategories.every((catId) => hasCategoryAccess(currentStudent, catId));
+                      const catStatusSummary = item.unlockedCategories
+                        .map((catId) => {
+                          const info = getCategorySubscriptionInfo(currentStudent, catId);
+                          return info.isPaidActive ? `${info.label}: Active (${info.daysRemainingDisplay})` : null;
+                        })
+                        .filter(Boolean);
+
+                      return (
+                        <div
+                          key={item.sku}
+                          onClick={() => setSelectedPlanSku(item.sku)}
+                          className={`p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 transition-all cursor-pointer relative ${
+                            isSelected
+                              ? 'border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 shadow-lg ring-2 ring-amber-300'
+                              : unlockedAlready
+                              ? 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400'
+                              : 'border-slate-200 bg-white hover:border-indigo-300'
+                          }`}
+                        >
+                          {item.badge && (
+                            <span
+                              className={`absolute -top-3 right-4 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs ${
+                                unlockedAlready
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-900 text-amber-300'
+                              }`}
+                            >
+                              {unlockedAlready ? '✓ Active on Account' : item.badge}
+                            </span>
+                          )}
+
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="text-base font-black text-slate-900">
+                                  {item.title}
+                                </h3>
+                                <p className="text-xs text-slate-600 mt-0.5">{item.subtitle}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-3xl font-black text-amber-600">
+                                ₹{item.amountInr}
+                              </span>
+                              <span className="text-xs font-bold text-slate-500">
+                                / {item.validityDays} Days (1 Year)
+                              </span>
+                            </div>
+
+                            <ul className="space-y-1.5 text-xs text-slate-700 font-semibold">
+                              {item.highlights.map((hl) => (
+                                <li key={hl} className="flex items-start gap-2">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <span>{hl}</span>
+                                </li>
+                              ))}
+                            </ul>
+
+                            {catStatusSummary.length > 0 && (
+                              <div className="p-2.5 rounded-xl bg-emerald-100/80 border border-emerald-300 text-[11px] font-bold text-emerald-900">
+                                {catStatusSummary.join(' · ')}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-bold text-slate-500">
+                              {item.unlockedCategories.length} Categor{item.unlockedCategories.length === 1 ? 'y' : 'ies'} Unlocked
+                            </span>
+                            {currentStudent ? (
+                              <button
+                                type="button"
+                                disabled={isCreatingOrder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleInitiateCheckout(item.sku);
+                                }}
+                                className={`px-4 py-2 rounded-xl font-black text-xs cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 shadow-sm'
+                                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                                }`}
+                              >
+                                {unlockedAlready ? `Extend +365d (₹${item.amountInr})` : `Select & Pay ₹${item.amountInr}`}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  resetModal();
+                                  onRequestAuth?.('login');
+                                }}
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                              >
+                                Sign In to Unlock
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* PLAN 1: FREE PLAN – ₹0 – Lifetime */}
                 <div
@@ -868,6 +1118,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   )}
                 </div>
               </div>
+              )}
 
               {/* Two Payment Options Bar: Online Checkout vs Dynamic UPI QR */}
               {currentStudent && (
@@ -875,10 +1126,10 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
                     <div>
                       <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                        SELECTED PLAN: PREMIUM PLAN (₹99 – 365 Days / 1 Year)
+                        SELECTED PLAN: {activeCatalogItem.title.toUpperCase()} (₹{activeCatalogItem.amountInr} – {activeCatalogItem.validityDays} Days)
                       </span>
                       <h4 className="text-base sm:text-lg font-extrabold mt-0.5">
-                        Choose Your Payment Method (₹99)
+                        Choose Your Payment Method (₹{activeCatalogItem.amountInr})
                       </h4>
                     </div>
                     <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
@@ -902,7 +1153,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       ) : (
                         <>
                           <CreditCard className="w-5 h-5" />
-                          <span>Pay Online (Razorpay Checkout) – ₹99</span>
+                          <span>Pay Online (Razorpay Checkout) – ₹{activeCatalogItem.amountInr}</span>
                         </>
                       )}
                     </button>
@@ -915,7 +1166,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                       className="p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-slate-950 font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5"
                     >
                       <QrCode className="w-5 h-5 text-slate-950" />
-                      <span>Pay with UPI QR Code – ₹99</span>
+                      <span>Pay with UPI QR Code – ₹{activeCatalogItem.amountInr}</span>
                     </button>
                   </div>
                 </div>
@@ -925,7 +1176,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex items-center gap-2.5 text-xs text-slate-600">
                   <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span>
-                    <strong>Strict Payment Verification:</strong> Both Online Checkout &amp; UPI QR Codes are verified directly via Razorpay before activating your 1-year (365-day) ₹99 Premium plan.
+                    <strong>Strict Payment Verification:</strong> Both Online Checkout &amp; UPI QR Codes are verified directly via Razorpay before activating your 1-year (365-day) plan.
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
@@ -960,13 +1211,19 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               <div className="p-6 rounded-3xl bg-gradient-to-b from-indigo-950 via-slate-900 to-indigo-950 text-white shadow-2xl text-center space-y-4 border border-indigo-800">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                    RAZORPAY DYNAMIC UPI QR CODE • {getBoardShortLabel(targetBoard).toUpperCase()} • {targetClass.toUpperCase()} (₹99)
+                    RAZORPAY DYNAMIC UPI QR CODE • {activeCatalogItem.shortTitle.toUpperCase()} (₹{activeCatalogItem.amountInr})
                   </span>
                   <h3 className="text-xl font-black mt-0.5">
-                    Scan &amp; Pay ₹99 ({getBoardShortLabel(targetBoard)} • {targetClass})
+                    Scan &amp; Pay ₹{activeCatalogItem.amountInr} ({activeCatalogItem.requiresBoardClass ? `${getBoardShortLabel(targetBoard)} • ${targetClass}` : activeCatalogItem.shortTitle})
                   </h3>
                   <p className="text-xs text-indigo-200 mt-0.5">
-                    Account: <strong>{currentStudent?.name}</strong> • Unlocking: <strong>{getBoardShortLabel(targetBoard)} {targetClass}</strong> (365 Days / 1 Year Access)
+                    Account: <strong>{currentStudent?.name}</strong> • Unlocking:{' '}
+                    <strong>
+                      {activeCatalogItem.requiresBoardClass
+                        ? `${getBoardShortLabel(targetBoard)} ${targetClass}`
+                        : formatCategoriesListLabel(activeCatalogItem.unlockedCategories) || activeCatalogItem.shortTitle}
+                    </strong>{' '}
+                    (365 Days Access)
                   </p>
                 </div>
 
@@ -981,7 +1238,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   ) : qrData.imageUrl ? (
                     <img
                       src={qrData.imageUrl}
-                      alt="Razorpay Dynamic UPI QR Code for ₹99 Premium Plan"
+                      alt={`Razorpay Dynamic UPI QR Code for ${activeCatalogItem.shortTitle}`}
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-contain"
@@ -1000,8 +1257,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     Payment Instructions:
                   </p>
                   <p>1. Open Google Pay, PhonePe, Paytm, or BHIM on your phone.</p>
-                  <p>2. Scan the dynamic QR code above and approve the ₹99 payment.</p>
-                  <p>3. Keep this screen open — your Premium membership activates automatically upon verification.</p>
+                  <p>2. Scan the dynamic QR code above and approve the ₹{activeCatalogItem.amountInr} payment.</p>
+                  <p>3. Keep this screen open — your membership activates automatically upon verification.</p>
                 </div>
 
                 {/* Status Indicator */}
@@ -1010,7 +1267,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     {qrStatus === 'WAITING' && (
                       <>
                         <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                        <span className="text-amber-300">Pending Payment (₹99) — Waiting for Scan...</span>
+                        <span className="text-amber-300">Pending Payment (₹{activeCatalogItem.amountInr}) — Waiting for Scan...</span>
                       </>
                     )}
                     {qrStatus === 'VERIFYING' && (
@@ -1060,7 +1317,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <RefreshCw className="w-4 h-4" />
-                    <span>Generate New QR Code (₹99)</span>
+                    <span>Generate New QR Code (₹{activeCatalogItem.amountInr})</span>
                   </button>
                 ) : (
                   <button
@@ -1100,32 +1357,41 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             <div className="py-12 text-center space-y-4">
               <div className="w-16 h-16 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin mx-auto" />
               <h3 className="text-lg font-display font-bold text-slate-900">
-                Verifying Payment Signature & Activating 365-Day (1 Year) Subscription...
+                Verifying Payment Signature &amp; Activating 365-Day Subscription...
               </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Confirming cryptographic payment signature and capture status with Razorpay & Firebase for your ₹99 Premium Plan. Please do not close this window.
+                Confirming cryptographic payment signature and capture status with Razorpay &amp; Firebase for {activeCatalogItem.title} (₹{activeCatalogItem.amountInr}). Please do not close this window.
               </p>
             </div>
           )}
 
           {/* ==================== STEP 4: SUCCESS ==================== */}
-          {step === 'success' && lastTransaction && (
+          {step === 'success' && lastTransaction && (() => {
+            const txCatalog = getPlanCatalogItem(lastTransaction.planSku || selectedPlanSku);
+            const txCategories =
+              lastTransaction.activatedCategories && lastTransaction.activatedCategories.length > 0
+                ? lastTransaction.activatedCategories
+                : txCatalog.unlockedCategories;
+            const txAmount = lastTransaction.amount || txCatalog.amountInr;
+            return (
             <div className="py-6 text-center space-y-6">
               <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
               <div>
                 <span className="text-xs font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
-                  PAYMENT VERIFIED & SAVED TO FIREBASE
+                  PAYMENT VERIFIED &amp; SAVED TO FIREBASE
                 </span>
                 <h3 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 mt-2">
-                  Welcome to PREMIUM PLAN – ₹99! 👑
+                  {txCatalog.title} Activated! (₹{txAmount}) 👑
                 </h3>
                 <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 font-black text-xs sm:text-sm max-w-lg mx-auto">
-                  {getPremiumActivatedBannerMessage(
-                    (lastTransaction.selectedClass as ClassLevel) || targetClass,
-                    (lastTransaction.selectedBoard as EducationBoard) || targetBoard
-                  )}
+                  {txCategories.length > 0
+                    ? `Unlocked Categories: ${formatCategoriesListLabel(txCategories)} (365 Days Full Access)`
+                    : getPremiumActivatedBannerMessage(
+                        (lastTransaction.selectedClass as ClassLevel) || targetClass,
+                        (lastTransaction.selectedBoard as EducationBoard) || targetBoard
+                      )}
                 </div>
                 {referralCreditedNotice && (
                   <p className="mt-2 inline-block px-3 py-1 rounded-xl bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300">
@@ -1151,21 +1417,23 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <span className="text-slate-400">Account Holder:</span>
                   <span className="font-bold text-slate-800">{lastTransaction.studentName}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Activated Board &amp; Class:</span>
-                  <span className="font-extrabold text-emerald-700">
-                    {getBoardShortLabel((lastTransaction.selectedBoard as EducationBoard) || targetBoard)} • Standard {formatStandardOrdinal((lastTransaction.selectedClass as ClassLevel) || targetClass)} ({(lastTransaction.selectedClass as ClassLevel) || targetClass})
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Unlocked Scope:</span>
+                  <span className="font-extrabold text-emerald-700 text-right">
+                    {txCategories.length > 0
+                      ? formatCategoriesListLabel(txCategories)
+                      : `${getBoardShortLabel((lastTransaction.selectedBoard as EducationBoard) || targetBoard)} • Standard ${formatStandardOrdinal((lastTransaction.selectedClass as ClassLevel) || targetClass)} (${(lastTransaction.selectedClass as ClassLevel) || targetClass})`}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Activated Plan:</span>
                   <span className="font-bold text-indigo-700">
-                    Premium Plan (₹99 – 365 Days / 1 Year)
+                    {txCatalog.shortTitle} (₹{txAmount} – 365 Days)
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Amount Paid:</span>
-                  <span className="font-extrabold text-emerald-600">₹99.00</span>
+                  <span className="font-extrabold text-emerald-600">₹{txAmount}.00</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Purchase Date (IST):</span>
@@ -1189,7 +1457,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 Go to My Unlocked Dashboard →
               </button>
             </div>
-          )}
+            );
+          })()}
 
           {/* ==================== STEP 5: FAILED / CANCELLED ==================== */}
           {step === 'failed' && (
@@ -1205,7 +1474,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   Subscription Upgrade Was Not Activated
                 </h3>
                 <p className="text-xs text-slate-600 mt-1.5 max-w-md mx-auto leading-relaxed font-medium">
-                  {errorMsg || 'Your payment could not be completed or verified. Paid plans are only activated after a verified ₹99 payment.'}
+                  {errorMsg || `Your payment could not be completed or verified. Paid plans are only activated after a verified ₹${activeCatalogItem.amountInr} payment.`}
                 </p>
                 {failedOrderId && (
                   <p className="text-[11px] font-mono text-slate-400 mt-1">
@@ -1262,7 +1531,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>Retry Online Checkout (₹99)</span>
+                  <span>Retry Online Checkout (₹{activeCatalogItem.amountInr})</span>
                 </button>
                 <button
                   type="button"
@@ -1274,7 +1543,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-slate-950 font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <QrCode className="w-4 h-4" />
-                  <span>Try UPI QR Code (₹99)</span>
+                  <span>Try UPI QR Code (₹{activeCatalogItem.amountInr})</span>
                 </button>
                 <button
                   type="button"

@@ -14,6 +14,8 @@ import {
   GraduationCap,
   History,
   Layers,
+  Lock,
+  Crown,
   Play,
   RefreshCw,
   ShieldCheck,
@@ -21,6 +23,13 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { PlanSkuId } from '../types';
+import {
+  getModuleRequiredCategoryId,
+  getDefaultPlanSkuForCategory,
+  formatCategoryShortLabel,
+} from '../data/planCatalog';
+import { getCategorySubscriptionInfo } from '../utils/subscriptionAccess';
 import {
   TetCtetAttemptRecord,
   TetCtetLanguage,
@@ -73,6 +82,8 @@ interface TetCtetModuleViewProps {
   initialSubTab?: TetCtetModuleSubTab;
   onSelectModule: (moduleId: TetCtetModuleId) => void;
   onBackToLanding: () => void;
+  onOpenAuth?: () => void;
+  onOpenMembership?: (planSku?: PlanSkuId) => void;
 }
 
 interface ActiveSimulatorSession {
@@ -103,6 +114,8 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   initialSubTab = 'mock-tests',
   onSelectModule,
   onBackToLanding,
+  onOpenAuth,
+  onOpenMembership,
 }) => {
   const {
     currentStudent,
@@ -117,12 +130,19 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   } = useApp();
 
   const modMeta = TET_CTET_MODULES[moduleId];
+  const requiredCategory = getModuleRequiredCategoryId(moduleId);
+  const defaultPlanSku = getDefaultPlanSkuForCategory(requiredCategory);
+  const categorySubInfo = getCategorySubscriptionInfo(currentStudent, requiredCategory);
+  const hasPaidCategoryAccess = categorySubInfo.isPaidActive;
+  const categoryLabel = formatCategoryShortLabel(requiredCategory);
+
   const [activeSubTab, setActiveSubTab] = useState<TetCtetModuleSubTab>(initialSubTab);
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<number | 'ALL'>('ALL');
   const [topicSubjectFilter, setTopicSubjectFilter] = useState<string>('ALL');
   const [subjectSetNumbers, setSubjectSetNumbers] = useState<Record<string, number>>({});
   const [performanceScope, setPerformanceScope] = useState<'module' | 'all'>('module');
   const [activeSession, setActiveSession] = useState<ActiveSimulatorSession | null>(null);
+  const [lockedNotice, setLockedNotice] = useState<string | null>(null);
   const [reportTick, setReportTick] = useState<number>(0);
 
   useEffect(() => {
@@ -254,7 +274,21 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     else updateTetCtetPreferences({ ctetMedium: nextMed });
   };
 
+  const promptLockedUpgrade = (message: string) => {
+    setLockedNotice(message);
+    if (onOpenMembership) {
+      onOpenMembership(defaultPlanSku);
+    }
+  };
+
   const handleLaunchMockTest = async (testNumber: number) => {
+    if (testNumber > 1 && !hasPaidCategoryAccess) {
+      promptLockedUpgrade(
+        `Mock Test 01 is open as a Free Preview. Mock Tests 02–50 require the ${categoryLabel} Plan (₹149 / 365 Days).`
+      );
+      return;
+    }
+    setLockedNotice(null);
     const { buildTetCtetMockPaper } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetMockPaper({
       exam: modMeta.exam,
@@ -276,6 +310,13 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   };
 
   const handleLaunchSubjectPractice = async (subjectId: TetCtetSubjectId, label: string, setIndex = 1) => {
+    if (setIndex > 1 && !hasPaidCategoryAccess) {
+      promptLockedUpgrade(
+        `Practice Set S1 is open as a Free Preview. Practice Sets S2–S5 require the ${categoryLabel} Plan (₹149 / 365 Days).`
+      );
+      return;
+    }
+    setLockedNotice(null);
     const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
@@ -298,6 +339,13 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   };
 
   const handleLaunchTopicPractice = async (subjectId: TetCtetSubjectId, topic: string, topicIdx = 0) => {
+    if (topicIdx > 0 && !hasPaidCategoryAccess) {
+      promptLockedUpgrade(
+        `Topic 01 per subject is a Free Preview. All remaining Topic Mastery Drills unlock with ${categoryLabel} (₹149 / 365 Days).`
+      );
+      return;
+    }
+    setLockedNotice(null);
     const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
@@ -321,6 +369,13 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   };
 
   const handleLaunchRevisionTest = async (revNum: number, focusSubjectId?: TetCtetSubjectId) => {
+    if (revNum > 1 && !hasPaidCategoryAccess) {
+      promptLockedUpgrade(
+        `Revision 01 is a Free Preview. Revision Sprints 02–10 require the ${categoryLabel} Plan (₹149 / 365 Days).`
+      );
+      return;
+    }
+    setLockedNotice(null);
     const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
@@ -345,6 +400,13 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   };
 
   const handleLaunchPyqTest = async (paperIdx: number, count: number, yearLabel: string) => {
+    if (paperIdx > 1 && !hasPaidCategoryAccess) {
+      promptLockedUpgrade(
+        `2024 Pattern Paper is open as a Free Preview. All 2018–2023 PYQ Simulations unlock with ${categoryLabel} (₹149 / 365 Days).`
+      );
+      return;
+    }
+    setLockedNotice(null);
     const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
@@ -509,6 +571,66 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Category Subscription & Paid Access Bar */}
+        <div
+          className={`rounded-2xl border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+            hasPaidCategoryAccess
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              : 'bg-amber-50 border-amber-300 text-amber-950'
+          }`}
+        >
+          <div className="flex items-center gap-2 font-bold">
+            {hasPaidCategoryAccess ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>
+                  Active Plan: {categoryLabel} ({categorySubInfo.daysRemainingDisplay}) — All 50 Mock Tests, Subject Practice &amp; Drills Unlocked.
+                </span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>
+                  {lockedNotice ||
+                    `Free Preview Active (Mock Test 01, Subject Set S1, Topic #1, Revision #1 & 2024 PYQ). Unlock all 50 mocks & full drills with ${categoryLabel} (₹149 / 365 Days).`}
+                </span>
+              </>
+            )}
+          </div>
+          {!hasPaidCategoryAccess && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {!currentStudent && onOpenAuth && (
+                <button
+                  type="button"
+                  onClick={onOpenAuth}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 text-white font-bold cursor-pointer"
+                >
+                  Sign In Free
+                </button>
+              )}
+              {onOpenMembership && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(defaultPlanSku)}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer flex items-center gap-1"
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>Unlock {categoryLabel} (₹149)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('TET_CTET_COMBO')}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold cursor-pointer"
+                  >
+                    TET + CTET Combo (₹299)
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Official Language 1, Language 2, Medium & Paper 2 Stream Selector */}
@@ -763,12 +885,15 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                           const best = mockBestByNumber.get(tNum);
                           const qaRec = MOCK_TEST_QA_STATUS_BY_KEY[`${moduleId}_T${tNum}`];
                           const qaLocked = tetCtetEnforceGreenOnly && qaRec?.status !== 'GREEN';
+                          const planLocked = tNum > 1 && !hasPaidCategoryAccess;
                           return (
                             <div
                               key={tNum}
                               className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-colors ${
                                 qaLocked
                                   ? 'bg-slate-100/80 border-slate-200 opacity-85'
+                                  : planLocked
+                                  ? 'bg-slate-50 border-slate-200 hover:border-amber-400'
                                   : 'bg-slate-50/70 border-slate-200 hover:border-indigo-300'
                               }`}
                             >
@@ -777,7 +902,15 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                                   <span className="font-mono tabular-nums text-xs font-black text-indigo-800">
                                     MOCK TEST {String(tNum).padStart(2, '0')}
                                   </span>
-                                  {qaRec?.status === 'GREEN' ? (
+                                  {planLocked ? (
+                                    <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                                      <Lock className="w-2.5 h-2.5" /> ₹149
+                                    </span>
+                                  ) : tNum === 1 && !hasPaidCategoryAccess ? (
+                                    <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                                      Free Preview
+                                    </span>
+                                  ) : qaRec?.status === 'GREEN' ? (
                                     <span className="text-[10px] font-black uppercase text-emerald-700">
                                       Verified GREEN
                                     </span>
@@ -813,6 +946,15 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                                   <span>
                                     {qaRec?.status === 'YELLOW' ? 'QA Review Pending' : 'Not Published Yet'}
                                   </span>
+                                </button>
+                              ) : planLocked ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchMockTest(tNum)}
+                                  className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>Unlock (₹149 Plan)</span>
                                 </button>
                               ) : (
                                 <button
@@ -853,6 +995,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {paperSlots.map((slot) => {
               const selectedSet = subjectSetNumbers[slot.subjectId] || 1;
+              const isSetLocked = selectedSet > 1 && !hasPaidCategoryAccess;
               return (
                 <div
                   key={slot.subjectId}
@@ -872,28 +1015,34 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
 
                     <div className="pt-2">
                       <span className="text-[11px] font-bold text-slate-600 block mb-1.5">
-                        Select Practice Set (30 Questions · 30 Mins):
+                        Select Practice Set (S1 Free Preview · S2–S5 Paid):
                       </span>
                       <div className="flex items-center gap-1.5">
-                        {[1, 2, 3, 4, 5].map((sNum) => (
-                          <button
-                            key={sNum}
-                            type="button"
-                            onClick={() =>
-                              setSubjectSetNumbers((prev) => ({
-                                ...prev,
-                                [slot.subjectId]: sNum,
-                              }))
-                            }
-                            className={`flex-1 min-h-[36px] rounded-lg font-mono tabular-nums text-xs font-black cursor-pointer border transition-colors ${
-                              selectedSet === sNum
-                                ? 'bg-slate-900 text-white border-slate-900'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            S{sNum}
-                          </button>
-                        ))}
+                        {[1, 2, 3, 4, 5].map((sNum) => {
+                          const sLocked = sNum > 1 && !hasPaidCategoryAccess;
+                          return (
+                            <button
+                              key={sNum}
+                              type="button"
+                              onClick={() =>
+                                setSubjectSetNumbers((prev) => ({
+                                  ...prev,
+                                  [slot.subjectId]: sNum,
+                                }))
+                              }
+                              className={`flex-1 min-h-[36px] rounded-lg font-mono tabular-nums text-xs font-black cursor-pointer border transition-colors flex items-center justify-center gap-0.5 ${
+                                selectedSet === sNum
+                                  ? 'bg-slate-900 text-white border-slate-900'
+                                  : sLocked
+                                  ? 'bg-amber-50/70 text-amber-900 border-amber-200 hover:bg-amber-100'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {sLocked && <Lock className="w-2.5 h-2.5" />}
+                              <span>S{sNum}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -903,10 +1052,23 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                     onClick={() =>
                       handleLaunchSubjectPractice(slot.subjectId, slot.label, selectedSet)
                     }
-                    className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                    className={`w-full min-h-[44px] px-4 py-2.5 rounded-xl font-display font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+                      isSetLocked
+                        ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                        : 'bg-indigo-700 hover:bg-indigo-800 text-white'
+                    }`}
                   >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>Start Set {selectedSet} (30 Qs)</span>
+                    {isSetLocked ? (
+                      <>
+                        <Lock className="w-4 h-4" />
+                        <span>Unlock Set {selectedSet} (₹149 Plan)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>Start Set {selectedSet} (30 Qs)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               );
@@ -977,29 +1139,45 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {unit.topics.map((topic, idx) => (
-                      <div
-                        key={topic}
-                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3"
-                      >
-                        <div className="min-w-0">
-                          <span className="text-[11px] font-mono tabular-nums font-bold text-slate-500">
-                            Topic {String(idx + 1).padStart(2, '0')} · 20 Qs · 20 Mins
-                          </span>
-                          <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
-                            {topic}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleLaunchTopicPractice(unit.subjectId, topic, idx)}
-                          className="min-h-[40px] px-3.5 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
+                    {unit.topics.map((topic, idx) => {
+                      const isTopicLocked = idx > 0 && !hasPaidCategoryAccess;
+                      return (
+                        <div
+                          key={topic}
+                          className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3"
                         >
-                          <span>Practise</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-mono tabular-nums font-bold text-slate-500">
+                              Topic {String(idx + 1).padStart(2, '0')} · 20 Qs · 20 Mins {idx === 0 && !hasPaidCategoryAccess ? '· Free' : ''}
+                            </span>
+                            <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                              {topic}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleLaunchTopicPractice(unit.subjectId, topic, idx)}
+                            className={`min-h-[40px] px-3.5 py-2 rounded-xl font-display font-black text-xs whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1 ${
+                              isTopicLocked
+                                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                                : 'bg-indigo-700 hover:bg-indigo-800 text-white'
+                            }`}
+                          >
+                            {isTopicLocked ? (
+                              <>
+                                <Lock className="w-3.5 h-3.5" />
+                                <span>Unlock</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Practise</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -1056,31 +1234,52 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              {Array.from({ length: 10 }, (_, idx) => idx + 1).map((revNum) => (
-                <div
-                  key={revNum}
-                  className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col justify-between gap-3"
-                >
-                  <div>
-                    <span className="font-mono tabular-nums text-xs font-black text-indigo-800">
-                      REVISION {String(revNum).padStart(2, '0')}
-                    </span>
-                    <h4 className="text-sm font-display font-black text-slate-900 mt-1">
-                      Full-Paper Sprint {revNum}
-                    </h4>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      30 Mixed Qs · 30 Mins · All Sections
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchRevisionTest(revNum)}
-                    className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs cursor-pointer"
+              {Array.from({ length: 10 }, (_, idx) => idx + 1).map((revNum) => {
+                const isRevLocked = revNum > 1 && !hasPaidCategoryAccess;
+                return (
+                  <div
+                    key={revNum}
+                    className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col justify-between gap-3"
                   >
-                    Launch Revision
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-mono tabular-nums text-xs font-black text-indigo-800">
+                          REVISION {String(revNum).padStart(2, '0')}
+                        </span>
+                        {!isRevLocked && revNum === 1 && !hasPaidCategoryAccess && (
+                          <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                            Free
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-sm font-display font-black text-slate-900 mt-1">
+                        Full-Paper Sprint {revNum}
+                      </h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        30 Mixed Qs · 30 Mins · All Sections
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleLaunchRevisionTest(revNum)}
+                      className={`w-full min-h-[40px] px-3 py-2 rounded-xl font-display font-black text-xs cursor-pointer flex items-center justify-center gap-1 ${
+                        isRevLocked
+                          ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                          : 'bg-slate-900 hover:bg-slate-800 text-white'
+                      }`}
+                    >
+                      {isRevLocked ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Unlock ₹149</span>
+                        </>
+                      ) : (
+                        <span>Launch Revision</span>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1108,41 +1307,62 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
               { year: '2021 Pattern', focus: 'CBT Pattern Transition & Conceptual Mathematics/EVS' },
               { year: '2019 Pattern', focus: 'Standard Child Psychology & Curriculum Milestones' },
               { year: '2018 Pattern', focus: 'Core Content Recall & Fundamental Pedagogy Rules' },
-            ].map((item, idx) => (
-              <div
-                key={item.year}
-                className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <span className="font-mono text-xs font-black text-indigo-800">
-                    {modMeta.examTitle} · {item.year}
-                  </span>
-                  <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
-                    {item.focus}
-                  </h3>
-                  <p className="text-xs text-slate-600">
-                    Choose a 30-Q Quick Pattern Sprint or Full 150-Q CBT Pattern Simulation.
-                  </p>
-                </div>
+            ].map((item, idx) => {
+              const isPyqLocked = idx > 0 && !hasPaidCategoryAccess;
+              return (
+                <div
+                  key={item.year}
+                  className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-black text-indigo-800">
+                        {modMeta.examTitle} · {item.year}
+                      </span>
+                      {idx === 0 && !hasPaidCategoryAccess && (
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          Free Preview
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
+                      {item.focus}
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      Choose a 30-Q Quick Pattern Sprint or Full 150-Q CBT Pattern Simulation.
+                    </p>
+                  </div>
 
-                <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchPyqTest(idx + 1, 30, item.year)}
-                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs whitespace-nowrap cursor-pointer"
-                  >
-                    30-Q Sprint
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLaunchPyqTest(idx + 1, 150, item.year)}
-                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs whitespace-nowrap cursor-pointer"
-                  >
-                    150-Q Full Paper
-                  </button>
+                  {isPyqLocked ? (
+                    <button
+                      type="button"
+                      onClick={() => handleLaunchPyqTest(idx + 1, 30, item.year)}
+                      className="min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Unlock ₹149</span>
+                    </button>
+                  ) : (
+                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleLaunchPyqTest(idx + 1, 30, item.year)}
+                        className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs whitespace-nowrap cursor-pointer"
+                      >
+                        30-Q Sprint
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleLaunchPyqTest(idx + 1, 150, item.year)}
+                        className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs whitespace-nowrap cursor-pointer"
+                      >
+                        150-Q Full Paper
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -2,7 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { 
   StudentProfile, 
   RegistrationResult,
+  CategoryId,
+  CategorySubscriptionRecord,
   ClassSubscriptionRecord,
+  PlanSkuId,
   QuizQuestion, 
   QuizAttempt, 
   StoryItem, 
@@ -32,6 +35,11 @@ import {
   CustomScholarshipQuestionRecord,
   CustomGkQuestionItem
 } from '../types';
+import {
+  formatCategoriesListLabel,
+  getPlanCatalogItem,
+  resolvePlanSku
+} from '../data/planCatalog';
 import {
   acquireSingleDeviceSession,
   clearLocalActiveSessionState,
@@ -301,6 +309,7 @@ interface AppContextType {
   switchActiveBoardAndClass: (targetBoard: EducationBoard, targetClass: ClassLevel) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
   promoteOrUpdateStudentClass: (newClass: ClassLevel, reason?: string) => { success: boolean; message: string };
   updateStudentClass: (newClass: ClassLevel) => void;
+  updateTeacherSelectedCategories: (categories: CategoryId[]) => Promise<void>;
 
   // Online Worksheets (Classes 1 to 10 across Maharashtra, CBSE, ICSE)
   submitWorksheetAttempt: (attemptData: Omit<WorksheetAttemptRecord, 'id' | 'completedAt'>) => WorksheetAttemptRecord;
@@ -663,6 +672,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               activatedClasses: Array.isArray(safeS.activatedClasses) ? safeS.activatedClasses : undefined,
               activatedClassKeys: Array.isArray(safeS.activatedClassKeys) ? safeS.activatedClassKeys : undefined,
               classSubscriptions: safeS.classSubscriptions || undefined,
+              activatedCategoryKeys: Array.isArray(safeS.activatedCategoryKeys) ? safeS.activatedCategoryKeys : undefined,
+              categorySubscriptions: safeS.categorySubscriptions || undefined,
+              selectedTeacherCategories: Array.isArray(safeS.selectedTeacherCategories) ? safeS.selectedTeacherCategories : undefined,
               referralCode: uniqueCode,
               referralLink: buildStudentReferralLink(uniqueCode),
               isPhoneVerified: Boolean(safeS.isPhoneVerified),
@@ -723,6 +735,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? safeParsed.activatedClassKeys
             : undefined,
           classSubscriptions: safeParsed.classSubscriptions || undefined,
+          activatedCategoryKeys: Array.isArray(safeParsed.activatedCategoryKeys)
+            ? safeParsed.activatedCategoryKeys
+            : undefined,
+          categorySubscriptions: safeParsed.categorySubscriptions || undefined,
+          selectedTeacherCategories: Array.isArray(safeParsed.selectedTeacherCategories)
+            ? safeParsed.selectedTeacherCategories
+            : undefined,
           referralCode: code,
           referralLink: buildStudentReferralLink(code)
         };
@@ -1608,6 +1627,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           fbSub.classSubscriptions || profile.classSubscriptions
             ? { ...(profile.classSubscriptions || {}), ...(fbSub.classSubscriptions || {}) }
             : undefined;
+        const mergedCategorySubs =
+          fbSub.categorySubscriptions || profile.categorySubscriptions
+            ? { ...(profile.categorySubscriptions || {}), ...(fbSub.categorySubscriptions || {}) }
+            : undefined;
         const mergedActivatedClasses =
           fbSub.activatedClasses && fbSub.activatedClasses.length > 0
             ? fbSub.activatedClasses
@@ -1616,6 +1639,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           fbSub.activatedClassKeys && fbSub.activatedClassKeys.length > 0
             ? fbSub.activatedClassKeys
             : profile.activatedClassKeys;
+        const mergedActivatedCategoryKeys = Array.from(
+          new Set([
+            ...(profile.activatedCategoryKeys || []),
+            ...(fbSub.activatedCategoryKeys || []),
+          ])
+        );
         const resolvedPrimary =
           fbSub.primaryClassLevel || profile.primaryClassLevel || profile.classLevel;
         const resolvedBoard = normalizeBoardValue(fbSub.board || profile.board || 'Maharashtra');
@@ -1632,10 +1661,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : profile.activatedBoard,
           primaryClassLevel: resolvedPrimary,
           activatedClassLevel:
-            (fbSub.activatedClassLevel as ClassLevel) || profile.activatedClassLevel || profile.classLevel,
+            (fbSub.activatedClassLevel as ClassLevel) || profile.activatedClassLevel,
           activatedClasses: mergedActivatedClasses,
           activatedClassKeys: mergedActivatedKeys,
           classSubscriptions: mergedClassSubs,
+          activatedCategoryKeys: mergedActivatedCategoryKeys.length > 0 ? mergedActivatedCategoryKeys : profile.activatedCategoryKeys,
+          categorySubscriptions: mergedCategorySubs,
           planPurchasedAt: fbSub.planPurchasedAt || profile.planPurchasedAt,
           planExpiresAt: fbSub.planExpiresAt || profile.planExpiresAt,
         };
@@ -1649,7 +1680,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (prev.board || 'Maharashtra') === (next.board || 'Maharashtra') &&
           (prev.planExpiresAt || null) === (next.planExpiresAt || null) &&
           JSON.stringify(prev.classSubscriptions || {}) === JSON.stringify(next.classSubscriptions || {}) &&
-          JSON.stringify(prev.activatedClassKeys || []) === JSON.stringify(next.activatedClassKeys || [])
+          JSON.stringify(prev.activatedClassKeys || []) === JSON.stringify(next.activatedClassKeys || []) &&
+          JSON.stringify(prev.categorySubscriptions || {}) === JSON.stringify(next.categorySubscriptions || {}) &&
+          JSON.stringify(prev.activatedCategoryKeys || []) === JSON.stringify(next.activatedCategoryKeys || [])
         ) {
           return prev;
         }
@@ -1914,6 +1947,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activatedClasses: [],
       activatedClassKeys: [],
       classSubscriptions: {},
+      activatedCategoryKeys: [],
+      categorySubscriptions: {},
+      selectedTeacherCategories:
+        resolvedAccountRole === 'teacher' && Array.isArray(data.selectedTeacherCategories)
+          ? data.selectedTeacherCategories
+          : undefined,
       schoolName: (data.schoolName || '').trim(), // Optional field
       parentName: data.parentName || (resolvedAccountRole === 'teacher' ? 'Teacher Portal Account' : data.name),
       firebaseUid: options?.verifiedFirebaseUid,
@@ -3668,6 +3707,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const student = currentStudent;
+    const resolvedSku: PlanSkuId = resolvePlanSku(
+      transaction.planSku,
+      transaction.planId,
+      transaction.amount
+    );
+    const catalogItem = getPlanCatalogItem(resolvedSku);
+    const unlockedCategories: CategoryId[] =
+      transaction.activatedCategories && transaction.activatedCategories.length > 0
+        ? transaction.activatedCategories
+        : catalogItem.unlockedCategories;
+    const isCategoryPlan = unlockedCategories.length > 0;
+
     const targetBoard: EducationBoard = normalizeBoardValue(
       transaction.selectedBoard || student.board || 'Maharashtra'
     );
@@ -3677,105 +3728,171 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'Class 1';
     const compositeKey = buildBoardClassKey(targetBoard, targetClass);
 
-    const txWithBoardClass: PaymentTransaction = {
+    const txWithMeta: PaymentTransaction = {
       ...transaction,
-      selectedBoard: targetBoard,
-      selectedClass: targetClass
+      planSku: resolvedSku,
+      activatedCategories: unlockedCategories,
+      selectedBoard: isCategoryPlan ? undefined : targetBoard,
+      selectedClass: isCategoryPlan ? undefined : targetClass
     };
 
     // Prevent duplicate subscription activation or duplicate points for an already-processed payment
     const alreadyProcessedLocally = transactions.some(
       t =>
         t.status === 'SUCCESS' &&
-        (t.paymentId === txWithBoardClass.paymentId ||
-          (Boolean(txWithBoardClass.orderId) && t.orderId === txWithBoardClass.orderId))
+        (t.paymentId === txWithMeta.paymentId ||
+          (Boolean(txWithMeta.orderId) && t.orderId === txWithMeta.orderId))
     );
 
     if (alreadyProcessedLocally) {
-      saveTransactionToFirestore(txWithBoardClass).catch(() => {});
+      saveTransactionToFirestore(txWithMeta).catch(() => {});
       return;
     }
 
-    const existingCompositeMap = getRawBoardClassSubscriptionsMap(student);
-    const existingClassMap = getRawClassSubscriptionsMap(student);
-    const targetExistingExpiry = existingCompositeMap[compositeKey]?.expiresAt;
-    const computedDates = computePaidPlanExpiryIsoDate(targetExistingExpiry);
-    const resolvedPurchasedAt = txWithBoardClass.membershipStartDate || computedDates.purchasedAt;
-    const resolvedExpiresAt =
-      customExpiryDate || txWithBoardClass.membershipExpiryDate || computedDates.expiresAt;
-
-    const newSubRecord: ClassSubscriptionRecord = {
-      board: targetBoard,
-      boardClassKey: compositeKey,
-      classLevel: targetClass,
-      plan: txWithBoardClass.planId,
-      status: 'ACTIVE',
-      purchasedAt: resolvedPurchasedAt,
-      expiresAt: resolvedExpiresAt,
-      paymentId: txWithBoardClass.paymentId,
-      orderId: txWithBoardClass.orderId,
-      amountInr: txWithBoardClass.amount || 99,
-      validityDays: 365,
-      updatedAt: new Date().toISOString()
-    };
-
-    const updatedClassSubscriptions: Record<string, ClassSubscriptionRecord> = {
-      ...existingClassMap,
-      ...existingCompositeMap,
-      [compositeKey]: newSubRecord
-    };
-
     const updatedBadges = [...student.badges];
-    if (txWithBoardClass.planId === 'premium' && !updatedBadges.includes('badge-champion-premium')) {
+    if (txWithMeta.planId === 'premium' && !updatedBadges.includes('badge-champion-premium')) {
       updatedBadges.push('badge-champion-premium');
     }
 
-    const tempForActiveList: StudentProfile = {
-      ...student,
-      classSubscriptions: updatedClassSubscriptions
-    };
-    const updatedActivatedPairs = getActivatedBoardClassesList(tempForActiveList);
-    const updatedActivatedKeys = Array.from(new Set([...updatedActivatedPairs.map(i => i.boardClassKey), compositeKey]));
-    const updatedActivatedClasses = Array.from(
-      new Set([
-        ...updatedActivatedKeys
-          .map(k => parseBoardClassKey(k)?.classLevel)
-          .filter((cls): cls is ClassLevel => Boolean(cls)),
-        targetClass
-      ])
-    );
+    let updatedStudent: StudentProfile;
+    let resolvedPurchasedAt: string;
+    let resolvedExpiresAt: string;
+    let existingTargetExpiry: string | undefined;
 
-    const updatedStudent: StudentProfile = {
-      ...student,
-      board: targetBoard,
-      primaryBoard: getPrimaryBaseBoard(student),
-      classLevel: targetClass,
-      primaryClassLevel: getPrimaryBaseClass(student),
-      plan: txWithBoardClass.planId,
-      activatedBoard: targetBoard,
-      activatedClassLevel: targetClass,
-      activatedClasses: updatedActivatedClasses,
-      activatedClassKeys: updatedActivatedKeys,
-      classSubscriptions: updatedClassSubscriptions,
-      planPurchasedAt: resolvedPurchasedAt,
-      planExpiresAt: resolvedExpiresAt,
-      lastPaymentId: txWithBoardClass.paymentId,
-      lastOrderId: txWithBoardClass.orderId,
-      points: student.points + (txWithBoardClass.planId === 'premium' ? 250 : 100),
-      badges: updatedBadges,
-      lastActiveDate: new Date().toISOString()
-    };
+    if (isCategoryPlan) {
+      const existingCatMap: Partial<Record<CategoryId, CategorySubscriptionRecord>> = {
+        ...(student.categorySubscriptions || {})
+      };
+      existingTargetExpiry = unlockedCategories
+        .map(catId => existingCatMap[catId]?.expiresAt)
+        .filter((val): val is string => Boolean(val))
+        .sort()
+        .pop();
+      const computedDates = computePaidPlanExpiryIsoDate(existingTargetExpiry);
+      resolvedPurchasedAt = txWithMeta.membershipStartDate || computedDates.purchasedAt;
+      resolvedExpiresAt =
+        customExpiryDate || txWithMeta.membershipExpiryDate || computedDates.expiresAt;
+      const nowIso = new Date().toISOString();
+
+      for (const catId of unlockedCategories) {
+        const prevRec = existingCatMap[catId];
+        const perCatDates = computePaidPlanExpiryIsoDate(prevRec?.expiresAt);
+        existingCatMap[catId] = {
+          categoryId: catId,
+          planSku: resolvedSku,
+          status: 'ACTIVE',
+          purchasedAt: txWithMeta.membershipStartDate || perCatDates.purchasedAt,
+          expiresAt: customExpiryDate || txWithMeta.membershipExpiryDate || perCatDates.expiresAt,
+          paymentId: txWithMeta.paymentId,
+          orderId: txWithMeta.orderId,
+          amountInr: txWithMeta.amount || catalogItem.amountInr,
+          validityDays: 365,
+          updatedAt: nowIso
+        };
+      }
+
+      const updatedCategoryKeys = Array.from(
+        new Set([
+          ...(student.activatedCategoryKeys || []),
+          ...unlockedCategories
+        ])
+      );
+
+      updatedStudent = {
+        ...student,
+        plan: 'premium',
+        activatedCategoryKeys: updatedCategoryKeys,
+        categorySubscriptions: existingCatMap,
+        planPurchasedAt: student.planPurchasedAt || resolvedPurchasedAt,
+        planExpiresAt:
+          student.planExpiresAt && student.planExpiresAt > resolvedExpiresAt
+            ? student.planExpiresAt
+            : resolvedExpiresAt,
+        lastPaymentId: txWithMeta.paymentId,
+        lastOrderId: txWithMeta.orderId,
+        points: student.points + 250,
+        badges: updatedBadges,
+        lastActiveDate: nowIso
+      };
+    } else {
+      const existingCompositeMap = getRawBoardClassSubscriptionsMap(student);
+      const existingClassMap = getRawClassSubscriptionsMap(student);
+      existingTargetExpiry = existingCompositeMap[compositeKey]?.expiresAt;
+      const computedDates = computePaidPlanExpiryIsoDate(existingTargetExpiry);
+      resolvedPurchasedAt = txWithMeta.membershipStartDate || computedDates.purchasedAt;
+      resolvedExpiresAt =
+        customExpiryDate || txWithMeta.membershipExpiryDate || computedDates.expiresAt;
+
+      const newSubRecord: ClassSubscriptionRecord = {
+        board: targetBoard,
+        boardClassKey: compositeKey,
+        classLevel: targetClass,
+        plan: txWithMeta.planId,
+        status: 'ACTIVE',
+        purchasedAt: resolvedPurchasedAt,
+        expiresAt: resolvedExpiresAt,
+        paymentId: txWithMeta.paymentId,
+        orderId: txWithMeta.orderId,
+        amountInr: txWithMeta.amount || 99,
+        validityDays: 365,
+        updatedAt: new Date().toISOString()
+      };
+
+      const updatedClassSubscriptions: Record<string, ClassSubscriptionRecord> = {
+        ...existingClassMap,
+        ...existingCompositeMap,
+        [compositeKey]: newSubRecord
+      };
+
+      const tempForActiveList: StudentProfile = {
+        ...student,
+        classSubscriptions: updatedClassSubscriptions
+      };
+      const updatedActivatedPairs = getActivatedBoardClassesList(tempForActiveList);
+      const updatedActivatedKeys = Array.from(new Set([...updatedActivatedPairs.map(i => i.boardClassKey), compositeKey]));
+      const updatedActivatedClasses = Array.from(
+        new Set([
+          ...updatedActivatedKeys
+            .map(k => parseBoardClassKey(k)?.classLevel)
+            .filter((cls): cls is ClassLevel => Boolean(cls)),
+          targetClass
+        ])
+      );
+
+      updatedStudent = {
+        ...student,
+        board: targetBoard,
+        primaryBoard: getPrimaryBaseBoard(student),
+        classLevel: targetClass,
+        primaryClassLevel: getPrimaryBaseClass(student),
+        plan: txWithMeta.planId,
+        activatedBoard: targetBoard,
+        activatedClassLevel: targetClass,
+        activatedClasses: updatedActivatedClasses,
+        activatedClassKeys: updatedActivatedKeys,
+        classSubscriptions: updatedClassSubscriptions,
+        planPurchasedAt: resolvedPurchasedAt,
+        planExpiresAt: resolvedExpiresAt,
+        lastPaymentId: txWithMeta.paymentId,
+        lastOrderId: txWithMeta.orderId,
+        points: student.points + (txWithMeta.planId === 'premium' ? 250 : 100),
+        badges: updatedBadges,
+        lastActiveDate: new Date().toISOString()
+      };
+    }
 
     setCurrentStudent(updatedStudent);
-    setCurrentUser(prev =>
-      prev ? { ...prev, board: targetBoard, classLevel: targetClass } : prev
-    );
+    if (!isCategoryPlan) {
+      setCurrentUser(prev =>
+        prev ? { ...prev, board: targetBoard, classLevel: targetClass } : prev
+      );
+    }
     setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
-    setTransactions(prev => [txWithBoardClass, ...prev.filter(t => t.paymentId !== txWithBoardClass.paymentId)]);
+    setTransactions(prev => [txWithMeta, ...prev.filter(t => t.paymentId !== txWithMeta.paymentId)]);
 
     (async () => {
       try {
-        await saveTransactionToFirestore(txWithBoardClass);
+        await saveTransactionToFirestore(txWithMeta);
       } catch {
         // Ignore if already saved by backend
       }
@@ -3786,15 +3903,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       try {
         await saveSubscriptionToFirestore(updatedStudent.id, {
-          plan: txWithBoardClass.planId,
-          selectedBoard: targetBoard,
-          selectedClass: targetClass,
+          plan: txWithMeta.planId,
+          planSku: resolvedSku,
+          selectedBoard: isCategoryPlan ? undefined : targetBoard,
+          selectedClass: isCategoryPlan ? undefined : targetClass,
           planPurchasedAt: resolvedPurchasedAt,
           planExpiresAt: resolvedExpiresAt,
-          currentExpiresAt: targetExistingExpiry,
-          paymentId: txWithBoardClass.paymentId,
-          orderId: txWithBoardClass.orderId,
-          amountInr: txWithBoardClass.amount
+          currentExpiresAt: existingTargetExpiry,
+          paymentId: txWithMeta.paymentId,
+          orderId: txWithMeta.orderId,
+          amountInr: txWithMeta.amount
         });
       } catch {
         // Non-blocking
@@ -3814,13 +3932,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const syncBody = JSON.stringify({
         studentId: updatedStudent.id,
-        plan: txWithBoardClass.planId,
-        selectedBoard: targetBoard,
-        selectedClass: targetClass,
+        plan: txWithMeta.planId,
+        planSku: resolvedSku,
+        selectedBoard: isCategoryPlan ? undefined : targetBoard,
+        selectedClass: isCategoryPlan ? undefined : targetClass,
         planPurchasedAt: resolvedPurchasedAt,
         planExpiresAt: resolvedExpiresAt,
-        paymentId: txWithBoardClass.paymentId,
-        orderId: txWithBoardClass.orderId
+        paymentId: txWithMeta.paymentId,
+        orderId: txWithMeta.orderId
       });
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -3845,11 +3964,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     })().catch(() => {});
 
-    addNotification(
-      `${targetBoard} • ${targetClass} Membership Activated! 👑`,
-      `Your Premium Access is Activated for ${getBoardDisplayName(targetBoard)} • Standard ${formatStandardOrdinal(targetClass)} (${targetClass}) — Valid 365 Days until ${formatDateIstDisplay(resolvedExpiresAt)}. Payment ID: ${txWithBoardClass.paymentId}.`,
-      'membership'
-    );
+    if (isCategoryPlan) {
+      addNotification(
+        `${catalogItem.shortTitle} Activated! 👑`,
+        `Your access is Activated for ${formatCategoriesListLabel(unlockedCategories)} — Valid 365 Days until ${formatDateIstDisplay(resolvedExpiresAt)}. Payment ID: ${txWithMeta.paymentId}.`,
+        'membership'
+      );
+    } else {
+      addNotification(
+        `${targetBoard} • ${targetClass} Membership Activated! 👑`,
+        `Your Premium Access is Activated for ${getBoardDisplayName(targetBoard)} • Standard ${formatStandardOrdinal(targetClass)} (${targetClass}) — Valid 365 Days until ${formatDateIstDisplay(resolvedExpiresAt)}. Payment ID: ${txWithMeta.paymentId}.`,
+        'membership'
+      );
+    }
   };
 
   // Admin-approved migration helper to update an existing paid subscription's expiry date to purchaseDate + 365 days
@@ -4455,6 +4582,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       recordScholarshipAttempt,
       updateStudentScholarshipMedium,
+      updateTeacherSelectedCategories: async (categories: CategoryId[]) => {
+        if (!currentStudent) return;
+        const cleanCategories = Array.from(new Set(categories));
+        const updatedStudent: StudentProfile = {
+          ...currentStudent,
+          selectedTeacherCategories: cleanCategories,
+        };
+        setCurrentStudent(updatedStudent);
+        setStudentsList((prev) =>
+          prev.map((s) => (s.id === updatedStudent.id ? updatedStudent : s))
+        );
+        await saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+      },
       recordMsceMockAttempt,
       publishedMsceMockTests,
       toggleMsceMockTestPublished,

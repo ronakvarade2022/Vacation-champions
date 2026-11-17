@@ -1,3 +1,10 @@
+import type {
+  CategoryId,
+  PlanSkuId,
+  CategorySubscriptionRecord,
+} from '../data/planCatalog';
+export type { CategoryId, PlanSkuId, CategorySubscriptionRecord };
+
 export type EducationBoard = 'Maharashtra' | 'CBSE' | 'ICSE';
 
 export type BoardClassKey = `${EducationBoard}__${ClassLevel}`;
@@ -128,6 +135,9 @@ export interface StudentProfile {
   activatedClasses?: ClassLevel[];
   activatedClassKeys?: BoardClassKey[];
   classSubscriptions?: Partial<Record<string, ClassSubscriptionRecord>>;
+  activatedCategoryKeys?: CategoryId[];
+  categorySubscriptions?: Partial<Record<CategoryId, CategorySubscriptionRecord>>;
+  selectedTeacherCategories?: CategoryId[];
   lastPaymentId?: string;
   lastOrderId?: string;
   // Referral & School Governance extensions
@@ -528,8 +538,10 @@ export interface PaymentTransaction {
   selectedBoard?: EducationBoard;
   selectedClass?: ClassLevel;
   planId: 'basic' | 'premium';
+  planSku?: PlanSkuId;
+  activatedCategories?: CategoryId[];
   planTitle: string;
-  amount: number; // 99
+  amount: number; // 99, 149, 229, 299, or 499
   currency: 'INR';
   orderId: string;
   paymentId: string;

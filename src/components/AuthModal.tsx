@@ -4,7 +4,7 @@ import {
   Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin, Smartphone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ClassLevel, EducationBoard } from '../types';
+import { CategoryId, ClassLevel, EducationBoard } from '../types';
 import {
   auth,
   registerFirebaseEmailUser,
@@ -24,6 +24,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot';
+  initialRegisterRole?: 'student' | 'teacher';
   initialEmail?: string;
   initialBoard?: EducationBoard;
   initialClass?: ClassLevel;
@@ -46,10 +47,62 @@ const CLASS_LEVELS: ClassLevel[] = [
 
 const AVATARS = ['🦁', '🐯', '🐼', '🦊', '🚀', '🌟', '🦋', '🐬', '👩‍🏫', '👨‍🏫'];
 
+const ALL_TEACHER_REGISTRATION_CATEGORIES: CategoryId[] = [
+  'all_classes',
+  'scholarship_4th',
+  'scholarship_7th',
+  'maha_tet',
+  'ctet_paper_1',
+  'ctet_paper_2',
+];
+
+const TEACHER_CATEGORY_OPTIONS: {
+  id: CategoryId | 'ctet_both';
+  label: string;
+  subtitle: string;
+}[] = [
+  {
+    id: 'all_classes',
+    label: 'Classes 1 to 10',
+    subtitle: 'Maharashtra, CBSE & ICSE Curriculum, Worksheets & Quizzes',
+  },
+  {
+    id: 'scholarship_4th',
+    label: '4th Scholarship',
+    subtitle: 'MSCE Pune Std 4th (PSE) Mock Tests & Practice Sets',
+  },
+  {
+    id: 'scholarship_7th',
+    label: '7th Scholarship',
+    subtitle: 'MSCE Pune Std 7th (UPS) Mock Tests & Practice Sets',
+  },
+  {
+    id: 'maha_tet',
+    label: 'Maharashtra TET',
+    subtitle: 'MAHA TET Paper 1 & Paper 2 (100 Full Mock Exams)',
+  },
+  {
+    id: 'ctet_paper_1',
+    label: 'CTET Paper 1',
+    subtitle: 'Central TET Primary Stage (Classes 1 to 5 • 50 Mocks)',
+  },
+  {
+    id: 'ctet_paper_2',
+    label: 'CTET Paper 2',
+    subtitle: 'Central TET Elementary Stage (Classes 6 to 8 • 50 Mocks)',
+  },
+  {
+    id: 'ctet_both',
+    label: 'Both CTET Papers',
+    subtitle: 'CTET Paper 1 + CTET Paper 2 Combined Selection',
+  },
+];
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   defaultTab = 'login',
+  initialRegisterRole = 'student',
   initialEmail = '',
   initialBoard,
   initialClass,
@@ -68,6 +121,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     acquireSessionAfterRegistration,
     recoverBlockedDeviceSession,
     sessionSecurityNotice,
+    updateTeacherSelectedCategories,
   } = useApp();
 
   const [tab, setTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>(defaultTab);
@@ -99,6 +153,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regAvatar, setRegAvatar] = useState('🌟');
   const [regSchool, setRegSchool] = useState('');
   const [regCity, setRegCity] = useState('Pune');
+  const [regTeacherCategories, setRegTeacherCategories] = useState<CategoryId[]>(
+    ALL_TEACHER_REGISTRATION_CATEGORIES
+  );
   const [regReferralCode, setRegReferralCode] = useState('');
   const [referralValidationInfo, setReferralValidationInfo] = useState<{
     checked: boolean;
@@ -138,6 +195,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   useEffect(() => {
     setTab(defaultTab);
+    if (defaultTab === 'teacher') {
+      setRegRoleType('teacher');
+      setRegAvatar('👩‍🏫');
+    } else if (defaultTab === 'register' && initialRegisterRole) {
+      setRegRoleType(initialRegisterRole);
+      if (initialRegisterRole === 'teacher') setRegAvatar('👩‍🏫');
+    }
     if (initialEmail) {
       setLoginEmail(initialEmail);
       setResetEmail(initialEmail);
@@ -156,7 +220,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setExistingAccountPassword('');
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
-  }, [defaultTab, initialEmail, initialBoard, initialClass, isOpen, sessionSecurityNotice]);
+  }, [defaultTab, initialRegisterRole, initialEmail, initialBoard, initialClass, isOpen, sessionSecurityNotice]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {
@@ -240,6 +304,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const isValidMobile = (mobile: string) => /^[6-9]\d{9}$/.test(mobile.trim());
+
+  const isTeacherOptionSelected = (optId: CategoryId | 'ctet_both'): boolean => {
+    if (optId === 'ctet_both') {
+      return (
+        regTeacherCategories.includes('ctet_paper_1') &&
+        regTeacherCategories.includes('ctet_paper_2')
+      );
+    }
+    return regTeacherCategories.includes(optId);
+  };
+
+  const toggleTeacherCategoryOption = (optId: CategoryId | 'ctet_both') => {
+    setRegTeacherCategories((prev) => {
+      const next = new Set<CategoryId>(prev);
+      if (optId === 'ctet_both') {
+        const bothSelected = next.has('ctet_paper_1') && next.has('ctet_paper_2');
+        if (bothSelected) {
+          next.delete('ctet_paper_1');
+          next.delete('ctet_paper_2');
+        } else {
+          next.add('ctet_paper_1');
+          next.add('ctet_paper_2');
+        }
+      } else {
+        if (next.has(optId)) {
+          next.delete(optId);
+        } else {
+          next.add(optId);
+        }
+      }
+      return Array.from(next);
+    });
+  };
 
   // --- 1. Student/Teacher Login via Email & Password ---
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -387,6 +484,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     // Check latest status after authentication (in case active classes synced from Firestore)
     const loggedStudent = 'student' in loginRes ? loginRes.student : 'teacher' in loginRes ? loginRes.teacher : undefined;
+    if (
+      loggedStudent &&
+      (loggedStudent.accountRole === 'teacher' || regRoleType === 'teacher') &&
+      regTeacherCategories.length > 0
+    ) {
+      const mergedCats = Array.from(
+        new Set<CategoryId>([
+          ...(loggedStudent.selectedTeacherCategories || []),
+          ...regTeacherCategories,
+        ])
+      );
+      await updateTeacherSelectedCategories(mergedCats).catch(() => {});
+    }
     const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass, undefined, regBoard);
 
     onSuccess?.();
@@ -497,6 +607,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    if (regRoleType === 'teacher' && regTeacherCategories.length === 0) {
+      setError('Please select at least one category for Teacher / TET Aspirant registration.');
+      return;
+    }
+
     // NOTE: School Name is strictly OPTIONAL for both Students and Teachers!
     setIsLoading(true);
 
@@ -551,6 +666,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         board: regBoard,
         classLevel: regClass,
         accountRole: regRoleType,
+        selectedTeacherCategories:
+          regRoleType === 'teacher' ? regTeacherCategories : undefined,
         avatar: regAvatar || (regRoleType === 'teacher' ? '👩‍🏫' : '🌟'),
         schoolName: regSchool.trim(), // Optional — may be empty string
         parentName: '',
@@ -594,7 +711,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         await referralService.registerAccount({
           userId: regResult.student.id,
           userName: regResult.student.name,
-          userRole: 'student',
+          userRole: regRoleType,
           className: regResult.student.classLevel,
           schoolName: regResult.student.schoolName || '',
           city: regCity.trim() || 'Pune',
@@ -605,7 +722,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           await referralService.trackSignup({
             newUserId: regResult.student.id,
             newUserName: regResult.student.name,
-            newUserRole: 'student',
+            newUserRole: regRoleType,
             newUserClass: regResult.student.classLevel,
             schoolName: regResult.student.schoolName || '',
             city: regCity.trim() || 'Pune',
@@ -703,7 +820,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           .trackSignup({
             newUserId: res.teacher.id,
             newUserName: res.teacher.name,
-            newUserRole: 'student',
+            newUserRole: 'teacher',
             newUserClass: res.teacher.classLevel,
             schoolName: res.teacher.schoolName || '',
             city: 'Pune',
@@ -753,7 +870,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <h2 className="text-2xl font-black">
             {tab === 'login' && 'Student Portal Login'}
             {tab === 'teacher' && 'Teacher Portal Login'}
-            {tab === 'register' && (regRoleType === 'teacher' ? 'Teacher Class-Wise Registration' : 'Student Class-Wise Registration')}
+            {tab === 'register' && (regRoleType === 'teacher' ? 'Teacher / TET Aspirant Registration' : 'Student Registration (Classes 1 to 10)')}
             {tab === 'forgot' && 'Forgot / Reset Password'}
             {tab === 'admin' && 'Platform Admin Console'}
           </h2>
@@ -762,8 +879,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </p>
           <p className="text-indigo-100 text-xs sm:text-sm mt-1">
             {tab === 'login' && 'Sign in with your registered Email Address & Password'}
-            {tab === 'teacher' && 'Sign in to the dedicated Teacher Portal for your registered class (Standards 1st to 10th)'}
-            {tab === 'register' && 'Select Class 1st to 10th • Use your existing Mobile & Email anytime to add additional classes'}
+            {tab === 'teacher' && 'Access Classes 1–10, 4th & 7th Scholarship, MAHA TET, and CTET Papers 1 & 2 on one Teacher account'}
+            {tab === 'register' && 'Select Class 1st to 10th • Use your existing Mobile & Email anytime to add classes or exam plans'}
             {tab === 'forgot' && 'Enter your registered email address to receive a secure Firebase password reset link'}
             {tab === 'admin' && 'Authorized Administrator sign-in to manage platform settings'}
           </p>
@@ -1021,10 +1138,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 space-y-1">
                 <div className="font-black flex items-center gap-1.5">
                   <GraduationCap className="w-4 h-4 text-emerald-700" />
-                  <span>Dedicated Class-Wise Teacher Portal (Standards 1st to 10th)</span>
+                  <span>Teacher Portal (Classes 1–10 · Scholarship · TET &amp; CTET)</span>
                 </div>
                 <p className="text-[11px] text-slate-700 leading-relaxed">
-                  Teachers get complete access to their registered class’s subjects, online worksheets, 4-level quizzes, stories with audio, current affairs, scholarship sets, and solutions.
+                  Browse Classes 1–10 (All Boards), 4th &amp; 7th Scholarship, MAHA TET, and CTET Papers 1 &amp; 2 with free preview tests. Full mock tests and paid content unlock per individual or combined plan on your Teacher account.
                 </p>
               </div>
 
@@ -1293,10 +1410,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* ==================== NEW REGISTRATION TAB (STUDENT & TEACHER) ==================== */}
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3.5">
-              {/* Role Selector: Student Registration vs Teacher Registration */}
+              {/* 1. Account Type Selection at the Beginning of Registration: Student vs Teacher / TET Aspirant */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Select Portal Account Type *
+                  Select Account Type *
                 </label>
                 <div className="grid grid-cols-2 gap-2.5">
                   <button
@@ -1311,7 +1428,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
-                    <span>🎓 Student Registration</span>
+                    <span>🎓 Student</span>
                   </button>
                   <button
                     type="button"
@@ -1325,16 +1442,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
-                    <span>👩‍🏫 Teacher Registration</span>
+                    <span>👩‍🏫 Teacher / TET Aspirant</span>
                   </button>
                 </div>
               </div>
 
-              {/* Class-Wise & Multi-Class Account Banner */}
+              {/* Free Registration & Access Info Banner */}
               <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
                 <span className="text-[11px] font-bold text-indigo-950 leading-snug">
-                  <strong>Class-Wise Registration &amp; Additional Classes:</strong> Select any class from <strong>Class 1 to Class 10</strong> below. Already registered? Enter your <strong>existing Mobile Number &amp; Email</strong> to activate an additional class (₹99 / 365 Days) on the same account!
+                  {regRoleType === 'teacher' ? (
+                    <>
+                      <strong>Free Teacher / TET Aspirant Registration:</strong> Select multiple applicable categories below (Classes 1–10, 4th &amp; 7th Scholarship, Maharashtra TET, CTET Paper 1, CTET Paper 2, or Both CTET Papers). All selected categories appear on your Teacher Dashboard with free preview tests; paid mock tests unlock per purchased plan.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Free Student Registration (Classes 1 to 10):</strong> Select your class from <strong>Class 1 to Class 10</strong> below. Class 4 students automatically get access to the <strong>4th Scholarship</strong> section, and Class 7 students get access to the <strong>7th Scholarship</strong> section!
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -1545,7 +1670,79 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {/* 5. Select Education Board & Class from Class 1 to Class 10 */}
+              {/* 5A. Teacher / TET Aspirant Multi-Category Selection (Shown when Teacher / TET Aspirant is selected) */}
+              {regRoleType === 'teacher' && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider">
+                        Select Teacher / TET Aspirant Categories *
+                      </label>
+                      <p className="text-[11px] text-slate-600 font-medium">
+                        Select one or multiple applicable categories for your Teacher Dashboard:
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRegTeacherCategories(
+                          regTeacherCategories.length === ALL_TEACHER_REGISTRATION_CATEGORIES.length
+                            ? ['maha_tet']
+                            : ALL_TEACHER_REGISTRATION_CATEGORIES
+                        )
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black cursor-pointer shrink-0"
+                    >
+                      {regTeacherCategories.length === ALL_TEACHER_REGISTRATION_CATEGORIES.length
+                        ? 'Select Only TET'
+                        : 'Select All'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {TEACHER_CATEGORY_OPTIONS.map((opt) => {
+                      const isChecked = isTeacherOptionSelected(opt.id);
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => toggleTeacherCategoryOption(opt.id)}
+                          className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                            isChecked
+                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                              : 'bg-white text-slate-800 border-slate-200 hover:border-emerald-400'
+                          }`}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center shrink-0 border ${
+                              isChecked
+                                ? 'bg-white text-emerald-700 border-white'
+                                : 'bg-slate-50 border-slate-300 text-transparent'
+                            }`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-black block leading-tight">
+                              {opt.label}
+                            </span>
+                            <span
+                              className={`text-[10px] block leading-snug mt-0.5 ${
+                                isChecked ? 'text-emerald-100' : 'text-slate-500'
+                              }`}
+                            >
+                              {opt.subtitle}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 5B. Select Education Board & Class from Class 1 to Class 10 */}
+              {(regRoleType === 'student' || regTeacherCategories.includes('all_classes')) && (
               <div className="space-y-2.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -1580,14 +1777,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <div className="flex items-center justify-between pt-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Select Class ({getBoardShortLabel(regBoard)} • Class 1 to Class 10) *
+                    {regRoleType === 'teacher'
+                      ? `Default Classroom View (${getBoardShortLabel(regBoard)} • Classes 1 to 10)`
+                      : `Select Class (${getBoardShortLabel(regBoard)} • Class 1 to Class 10) *`}
                   </label>
                   <span className="text-[10px] font-bold text-emerald-700">
                     {existingAccountMatch
                       ? existingAccountMatch.alreadyUnlockedTargetClass
                         ? 'Unlocked on Account'
                         : '₹99 / 365 Days to Activate'
-                      : 'Free Base Plan Included'}
+                      : 'Free Registration Included'}
                   </span>
                 </div>
                 <div className="relative">
@@ -1604,6 +1803,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     ))}
                   </select>
                 </div>
+
+                {regRoleType === 'student' && (regClass === 'Class 4' || regClass === 'Class 7') && (
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-[11px] font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>
+                      {regClass === 'Class 4'
+                        ? 'Class 4 includes access to the 4th Scholarship (MSCE PSE) section on your Student Dashboard!'
+                        : 'Class 7 includes access to the 7th Scholarship (MSCE UPS) section on your Student Dashboard!'}
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-5 gap-1.5">
                   {CLASS_LEVELS.map((c) => {
@@ -1640,6 +1850,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   })}
                 </div>
               </div>
+              )}
 
               {/* 6. School Name (OPTIONAL for both Students and Teachers) & City */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1726,7 +1937,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 {isLoading
                   ? 'Creating Account...'
-                  : `Register ${regRoleType === 'teacher' ? 'Teacher' : 'Student'} (${getBoardShortLabel(regBoard)} • Standard ${formatStandardOrdinal(regClass)})`}
+                  : regRoleType === 'teacher'
+                  ? `Register Teacher / TET Aspirant (${regTeacherCategories.length} Categor${regTeacherCategories.length === 1 ? 'y' : 'ies'} Selected)`
+                  : `Register Student (${getBoardShortLabel(regBoard)} • Standard ${formatStandardOrdinal(regClass)})`}
               </button>
             </form>
           )}

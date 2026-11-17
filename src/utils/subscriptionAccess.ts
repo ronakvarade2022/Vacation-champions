@@ -1,11 +1,19 @@
 import {
   BoardClassKey,
+  CategoryId,
+  CategorySubscriptionRecord,
   ClassLevel,
   ClassSubscriptionRecord,
   EducationBoard,
+  PlanSkuId,
   StudentProfile,
   SubjectName,
 } from '../types';
+import {
+  ALL_CATEGORY_IDS,
+  formatCategoryShortLabel,
+  getDefaultPlanSkuForCategory,
+} from '../data/planCatalog';
 import {
   evaluateSubscriptionValidity,
   formatDateIstDisplay,
@@ -263,24 +271,120 @@ export function getRawBoardClassSubscriptionsMap(
     }
   }
 
+  const hasCategoryOnlyPurchases = Boolean(
+    (student.categorySubscriptions && Object.keys(student.categorySubscriptions).length > 0) ||
+      (student.activatedCategoryKeys && student.activatedCategoryKeys.length > 0)
+  );
+
   // Backward compatibility: legacy single-class paid users without `classSubscriptions` map
-  if (student.plan && student.plan !== 'free') {
-    const legacyBoard = normalizeBoardValue(student.activatedBoard || studentDefaultBoard);
-    const legacyClass =
-      normalizeClassLevelValue(student.activatedClassLevel) ||
-      normalizeClassLevelValue(student.classLevel) ||
-      'Class 1';
-    const legacyKey = buildBoardClassKey(legacyBoard, legacyClass);
-    if (!map[legacyKey]) {
-      map[legacyKey] = {
-        board: legacyBoard,
-        classLevel: legacyClass,
-        plan: student.plan,
+  // Never assume Class 1 for category-only buyers who lack an explicit activatedClassLevel
+  if (
+    student.plan &&
+    student.plan !== 'free' &&
+    (!hasCategoryOnlyPurchases || Boolean(student.activatedClassLevel))
+  ) {
+    const explicitLegacyClass = normalizeClassLevelValue(student.activatedClassLevel);
+    const legacyClass = explicitLegacyClass || (!hasCategoryOnlyPurchases ? normalizeClassLevelValue(student.classLevel) : null);
+    if (legacyClass) {
+      const legacyBoard = normalizeBoardValue(student.activatedBoard || studentDefaultBoard);
+      const legacyKey = buildBoardClassKey(legacyBoard, legacyClass);
+      if (!map[legacyKey]) {
+        map[legacyKey] = {
+          board: legacyBoard,
+          classLevel: legacyClass,
+          plan: student.plan,
+          status: 'ACTIVE',
+          purchasedAt: student.planPurchasedAt,
+          expiresAt: student.planExpiresAt,
+          paymentId: student.lastPaymentId,
+          orderId: student.lastOrderId,
+          amountInr: 99,
+          validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+        };
+      }
+    }
+  }
+
+  return map;
+}
+
+export const LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO = '2026-11-16';
+
+export function getRawCategorySubscriptionsMap(
+  student: StudentProfile | null | undefined
+): Partial<Record<CategoryId, CategorySubscriptionRecord>> {
+  if (!student) return {};
+  const map: Partial<Record<CategoryId, CategorySubscriptionRecord>> = {};
+
+  if (student.categorySubscriptions && typeof student.categorySubscriptions === 'object') {
+    for (const [rawKey, rawRec] of Object.entries(student.categorySubscriptions)) {
+      if (!rawRec || !ALL_CATEGORY_IDS.includes(rawKey as CategoryId)) continue;
+      map[rawKey as CategoryId] = {
+        ...rawRec,
+        categoryId: rawKey as CategoryId,
+      };
+    }
+  }
+
+  // Backward compatibility: non-teacher Class 4 or Class 7 paid students purchased prior to category SKU launch
+  if (student.accountRole !== 'teacher' && student.plan && student.plan !== 'free') {
+    const purchaseRef = String(student.planPurchasedAt || '');
+    const isLegacyPurchase = !purchaseRef || purchaseRef < LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO;
+    const mhMap = getRawBoardClassSubscriptionsMap(student);
+    const rec4 = mhMap[buildBoardClassKey('Maharashtra', 'Class 4')];
+    const rec7 = mhMap[buildBoardClassKey('Maharashtra', 'Class 7')];
+    if (
+      rec4 &&
+      (rec4.plan === 'premium' || rec4.plan === 'basic') &&
+      (!rec4.purchasedAt || rec4.purchasedAt < LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO) &&
+      !map.scholarship_4th
+    ) {
+      map.scholarship_4th = {
+        categoryId: 'scholarship_4th',
+        planSku: 'SCHOLARSHIP_4TH',
+        status: rec4.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE',
+        purchasedAt: rec4.purchasedAt || student.planPurchasedAt || '2026-01-01',
+        expiresAt: rec4.expiresAt || student.planExpiresAt || '2027-01-01',
+        paymentId: rec4.paymentId,
+        orderId: rec4.orderId,
+        amountInr: rec4.amountInr || 99,
+        validityDays: rec4.validityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS,
+      };
+    } else if (isLegacyPurchase && student.classLevel === 'Class 4' && !map.scholarship_4th && (!student.categorySubscriptions && !student.activatedCategoryKeys?.length)) {
+      map.scholarship_4th = {
+        categoryId: 'scholarship_4th',
+        planSku: 'SCHOLARSHIP_4TH',
         status: 'ACTIVE',
-        purchasedAt: student.planPurchasedAt,
-        expiresAt: student.planExpiresAt,
-        paymentId: student.lastPaymentId,
-        orderId: student.lastOrderId,
+        purchasedAt: student.planPurchasedAt || '2026-01-01',
+        expiresAt: student.planExpiresAt || '2027-01-01',
+        amountInr: 99,
+        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+      };
+    }
+    if (
+      rec7 &&
+      (rec7.plan === 'premium' || rec7.plan === 'basic') &&
+      (!rec7.purchasedAt || rec7.purchasedAt < LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO) &&
+      !map.scholarship_7th
+    ) {
+      map.scholarship_7th = {
+        categoryId: 'scholarship_7th',
+        planSku: 'SCHOLARSHIP_7TH',
+        status: rec7.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE',
+        purchasedAt: rec7.purchasedAt || student.planPurchasedAt || '2026-01-01',
+        expiresAt: rec7.expiresAt || student.planExpiresAt || '2027-01-01',
+        paymentId: rec7.paymentId,
+        orderId: rec7.orderId,
+        amountInr: rec7.amountInr || 99,
+        validityDays: rec7.validityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS,
+      };
+    } else if (isLegacyPurchase && student.classLevel === 'Class 7' && !map.scholarship_7th && (!student.categorySubscriptions && !student.activatedCategoryKeys?.length)) {
+      map.scholarship_7th = {
+        categoryId: 'scholarship_7th',
+        planSku: 'SCHOLARSHIP_7TH',
+        status: 'ACTIVE',
+        purchasedAt: student.planPurchasedAt || '2026-01-01',
+        expiresAt: student.planExpiresAt || '2027-01-01',
         amountInr: 99,
         validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
       };
@@ -288,6 +392,184 @@ export function getRawBoardClassSubscriptionsMap(
   }
 
   return map;
+}
+
+export interface CategorySubscriptionInfo {
+  categoryId: CategoryId;
+  label: string;
+  defaultSku: PlanSkuId;
+  status: 'ACTIVE_PAID' | 'EXPIRED' | 'LOCKED';
+  isPaidActive: boolean;
+  isExpired: boolean;
+  isLocked: boolean;
+  isExpiringToday: boolean;
+  planSku?: PlanSkuId;
+  purchasedAt?: string;
+  purchasedDisplay: string;
+  expiresAt?: string;
+  expiryDisplay: string;
+  daysRemaining: number | null;
+  daysRemainingDisplay: string;
+}
+
+export function getCategorySubscriptionInfo(
+  student: StudentProfile | null | undefined,
+  categoryId: CategoryId,
+  referenceNow?: Date | string | number
+): CategorySubscriptionInfo {
+  const label = formatCategoryShortLabel(categoryId);
+  const defaultSku = getDefaultPlanSkuForCategory(categoryId);
+
+  if (!student) {
+    return {
+      categoryId,
+      label,
+      defaultSku,
+      status: 'LOCKED',
+      isPaidActive: false,
+      isExpired: false,
+      isLocked: true,
+      isExpiringToday: false,
+      purchasedDisplay: 'Not Purchased',
+      expiryDisplay: 'Locked',
+      daysRemaining: null,
+      daysRemainingDisplay: 'Locked • Paid Plan Required',
+    };
+  }
+
+  const catMap = getRawCategorySubscriptionsMap(student);
+  const record = catMap[categoryId];
+
+  if (!record) {
+    return {
+      categoryId,
+      label,
+      defaultSku,
+      status: 'LOCKED',
+      isPaidActive: false,
+      isExpired: false,
+      isLocked: true,
+      isExpiringToday: false,
+      purchasedDisplay: 'Not Purchased',
+      expiryDisplay: 'Locked',
+      daysRemaining: null,
+      daysRemainingDisplay: 'Locked • Purchase Plan',
+    };
+  }
+
+  const validity = evaluateSubscriptionValidity(
+    'premium',
+    record.purchasedAt,
+    record.expiresAt,
+    referenceNow
+  );
+
+  if (validity.isExpired || record.status === 'EXPIRED') {
+    return {
+      categoryId,
+      label,
+      defaultSku,
+      status: 'EXPIRED',
+      isPaidActive: false,
+      isExpired: true,
+      isLocked: true,
+      isExpiringToday: false,
+      planSku: record.planSku,
+      purchasedAt: record.purchasedAt,
+      purchasedDisplay: validity.purchaseDateDisplay,
+      expiresAt: record.expiresAt,
+      expiryDisplay: `Expired on ${validity.expiryDateDisplay}`,
+      daysRemaining: 0,
+      daysRemainingDisplay: 'Expired • Renew Plan',
+    };
+  }
+
+  const daysRem = validity.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS;
+  return {
+    categoryId,
+    label,
+    defaultSku,
+    status: 'ACTIVE_PAID',
+    isPaidActive: true,
+    isExpired: false,
+    isLocked: false,
+    isExpiringToday: validity.isExpiringToday,
+    planSku: record.planSku,
+    purchasedAt: record.purchasedAt,
+    purchasedDisplay: validity.purchaseDateDisplay,
+    expiresAt: record.expiresAt,
+    expiryDisplay: validity.expiryDateIst
+      ? `${validity.expiryDateDisplay} (${validity.expiryDateIst})`
+      : 'Active (365 Days)',
+    daysRemaining: daysRem,
+    daysRemainingDisplay: validity.isExpiringToday
+      ? 'Expires Today (11:59 PM IST)'
+      : `${daysRem} ${daysRem === 1 ? 'Day' : 'Days'} Left`,
+  };
+}
+
+export function hasCategoryAccess(
+  student: StudentProfile | null | undefined,
+  categoryId: CategoryId,
+  referenceNow?: Date | string | number
+): boolean {
+  return getCategorySubscriptionInfo(student, categoryId, referenceNow).isPaidActive;
+}
+
+export function getActivatedCategoriesList(
+  student: StudentProfile | null | undefined,
+  referenceNow?: Date | string | number
+): CategorySubscriptionInfo[] {
+  if (!student) return [];
+  return ALL_CATEGORY_IDS.map((catId) =>
+    getCategorySubscriptionInfo(student, catId, referenceNow)
+  ).filter((info) => info.isPaidActive);
+}
+
+export function getVisibleExamCategoriesForStudent(student: StudentProfile | null | undefined): {
+  isTeacher: boolean;
+  showAllClasses: boolean;
+  showScholarship4th: boolean;
+  showScholarship7th: boolean;
+  showMahaTet: boolean;
+  showCtetP1: boolean;
+  showCtetP2: boolean;
+} {
+  if (!student) {
+    // Public browsing showcase before sign-in shows all exam categories (free previews only until purchase)
+    return {
+      isTeacher: false,
+      showAllClasses: true,
+      showScholarship4th: true,
+      showScholarship7th: true,
+      showMahaTet: true,
+      showCtetP1: true,
+      showCtetP2: true,
+    };
+  }
+
+  if (student.accountRole === 'teacher') {
+    return {
+      isTeacher: true,
+      showAllClasses: true,
+      showScholarship4th: true,
+      showScholarship7th: true,
+      showMahaTet: true,
+      showCtetP1: true,
+      showCtetP2: true,
+    };
+  }
+
+  const cls = normalizeClassLevelValue(student.classLevel);
+  return {
+    isTeacher: false,
+    showAllClasses: false,
+    showScholarship4th: cls === 'Class 4' || hasCategoryAccess(student, 'scholarship_4th'),
+    showScholarship7th: cls === 'Class 7' || hasCategoryAccess(student, 'scholarship_7th'),
+    showMahaTet: hasCategoryAccess(student, 'maha_tet'),
+    showCtetP1: hasCategoryAccess(student, 'ctet_paper_1'),
+    showCtetP2: hasCategoryAccess(student, 'ctet_paper_2'),
+  };
 }
 
 /**
@@ -404,6 +686,30 @@ export function getBoardClassSubscriptionInfo(
         : `${daysRem} ${daysRem === 1 ? 'Day' : 'Days'} Left`,
       paymentId: record.paymentId,
       orderId: record.orderId,
+    };
+  }
+
+  // Check if All-Access Bundle ('all_classes') is active for Classes 1–10 across all boards
+  const allClassesInfo = getCategorySubscriptionInfo(student, 'all_classes', referenceNow);
+  if (allClassesInfo.isPaidActive && (!record || record.plan === 'free')) {
+    const daysRem = allClassesInfo.daysRemaining ?? PAID_SUBSCRIPTION_VALIDITY_DAYS;
+    return {
+      board: b,
+      boardClassKey,
+      classLevel: normalizedTarget,
+      status: 'ACTIVE_PAID',
+      isPaidActive: true,
+      isFreeBase: isBasePair,
+      isExpired: false,
+      isLocked: false,
+      isAccessible: true,
+      isExpiringToday: allClassesInfo.isExpiringToday,
+      purchasedAt: allClassesInfo.purchasedAt,
+      purchasedDisplay: allClassesInfo.purchasedDisplay,
+      expiresAt: allClassesInfo.expiresAt,
+      expiryDisplay: allClassesInfo.expiryDisplay,
+      daysRemaining: daysRem,
+      daysRemainingDisplay: allClassesInfo.daysRemainingDisplay,
     };
   }
 
@@ -901,8 +1207,9 @@ export function canAccessFeature(
 } {
   const { effectivePlan } = getStudentPlanInfo(student, referenceNow);
   const activeClassesCount = getActivatedBoardClassesList(student, referenceNow).length;
-  const isTeacher = student?.accountRole === 'teacher';
+  const hasAllClassesBundle = hasCategoryAccess(student, 'all_classes', referenceNow);
 
+  // Core tabs & category hubs remain browseable (paid content inside Scholarship / Worksheets / TET-CTET is gated per category & plan)
   if (
     featureTab === 'dashboard' ||
     featureTab === 'profile' ||
@@ -912,8 +1219,9 @@ export function canAccessFeature(
     featureTab === 'quizzes' ||
     featureTab === 'worksheets' ||
     featureTab === 'study-material' ||
-    featureTab === 'referrals' ||
-    isTeacher
+    featureTab === 'scholarship' ||
+    featureTab === 'tet-ctet' ||
+    featureTab === 'referrals'
   ) {
     return {
       allowed: true,
@@ -928,7 +1236,6 @@ export function canAccessFeature(
     stories: 'Story World (45 Audio Stories)',
     drawing: 'Drawing Champions Studio',
     cricket: 'Cricket Champions Daily Quiz Arena',
-    scholarship: 'Maharashtra MSCE Scholarship Arena',
     'future-skills': 'AI Learning Academy & Future Skills',
     'ai-academy': 'AI Learning Academy (8 Modules, 24 Lessons)',
     certificates: 'Champion Certificates & Trophies',
@@ -937,7 +1244,8 @@ export function canAccessFeature(
   };
   const featureTitle = premiumTitleMap[featureTab] || 'Premium Dashboard Feature';
 
-  if (effectivePlan === 'premium' || effectivePlan === 'basic' || activeClassesCount > 0) {
+  // Verified paid plan (class-wise or all_classes bundle) required for Students AND Teachers alike (no free teacher bypass)
+  if (effectivePlan === 'premium' || effectivePlan === 'basic' || activeClassesCount > 0 || hasAllClassesBundle) {
     return {
       allowed: true,
       requiredPlan: 'premium',
@@ -950,7 +1258,7 @@ export function canAccessFeature(
     allowed: false,
     requiredPlan: 'premium',
     featureTitle,
-    upgradeMessage: `${featureTitle} is unlocked with the Premium Plan (₹99 – 365 Days / 1 Year), which gives you complete access to all subjects, study materials, and worksheets for your selected Board & Class!`,
+    upgradeMessage: `${featureTitle} is unlocked with the ₹99 Class Annual Plan or All-Access Bundle (365 Days / 1 Year), giving you complete access to all subjects, study materials, and worksheets!`,
   };
 }
 
