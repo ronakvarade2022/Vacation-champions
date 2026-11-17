@@ -37,8 +37,26 @@ export default defineConfig(() => {
           manualChunks(id: string) {
             if (id.includes('node_modules')) {
               if (id.includes('firebase')) return 'vendor-firebase';
-              if (id.includes('react') || id.includes('lucide-react')) return 'vendor-ui';
-              return 'vendor-misc';
+              if (
+                id.includes('node_modules/react/') ||
+                id.includes('node_modules/react-dom/') ||
+                id.includes('node_modules/scheduler/') ||
+                id.includes('lucide-react')
+              ) {
+                return 'vendor-ui';
+              }
+              return undefined;
+            }
+            // Keep lightweight curriculum, utils & TET syllabus metadata out of heavy bank chunks
+            if (
+              id.includes('src/utils/') ||
+              id.includes('src/data/tetCtetSyllabi') ||
+              id.includes('src/data/boards/boardMeta') ||
+              id.includes('src/data/boards/cbseCurriculumConfig') ||
+              id.includes('src/data/boards/icseCurriculumConfig') ||
+              id.includes('src/data/classCurriculumConfig')
+            ) {
+              return 'data-curriculum-meta';
             }
             if (id.includes('src/data/tetCtetVerifiedBatchManifest') || id.includes('src/data/tetCtetCentralAuditEngine')) {
               return 'data-tet-manifest';
@@ -72,7 +90,8 @@ export default defineConfig(() => {
               return 'data-worksheets';
             }
             if (
-              id.includes('src/data/boards/') ||
+              id.includes('src/data/boards/cbseDemoData') ||
+              id.includes('src/data/boards/icseDemoData') ||
               id.includes('src/data/questions/') ||
               id.includes('src/services/questionBankService') ||
               id.includes('src/services/curriculumQuestionBank')

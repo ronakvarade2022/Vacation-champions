@@ -28,6 +28,20 @@ import {
 } from './adminCacheService';
 import { getLocalSessionHeaders } from './deviceSessionService';
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = 8000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getBearerAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     ...getLocalSessionHeaders(),
@@ -353,7 +367,7 @@ export const referralService = {
         mobile,
         schoolName,
       });
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `/api/referrals/account/${encodeURIComponent(cleanId)}?${qs.toString()}`
       );
       if (res.ok) {
@@ -494,7 +508,7 @@ export const referralService = {
     );
 
     try {
-      const res = await fetch('/api/referrals/register', {
+      const res = await fetchWithTimeout('/api/referrals/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -600,7 +614,7 @@ export const referralService = {
     }
 
     try {
-      const res = await fetch('/api/referrals/track-signup', {
+      const res = await fetchWithTimeout('/api/referrals/track-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
@@ -635,7 +649,7 @@ export const referralService = {
     }
 
     try {
-      const res = await fetch('/api/referrals/validate-code', {
+      const res = await fetchWithTimeout('/api/referrals/validate-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -663,11 +677,11 @@ export const referralService = {
 
   async recordInviteClick(userId: string) {
     try {
-      const res = await fetch('/api/referrals/invite-click', {
+      const res = await fetchWithTimeout('/api/referrals/invite-click', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
-      });
+      }, 4000);
       if (res.ok) return await res.json();
     } catch {
       // Ignore network notice on click telemetry
@@ -692,7 +706,7 @@ export const referralService = {
     bankIfsc?: string;
   }) {
     const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
-    const res = await fetch('/api/referrals/payout-request', {
+    const res = await fetchWithTimeout('/api/referrals/payout-request', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -710,7 +724,7 @@ export const referralService = {
     credentialsDocUrl?: string;
   }) {
     const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
-    const res = await fetch('/api/referrals/teacher-verify', {
+    const res = await fetchWithTimeout('/api/referrals/teacher-verify', {
       method: 'POST',
       headers,
       body: JSON.stringify(params),
@@ -726,7 +740,7 @@ export const referralService = {
     leaderboard: any[];
   }> {
     try {
-      const res = await fetch('/api/referrals/leaderboard');
+      const res = await fetchWithTimeout('/api/referrals/leaderboard');
       if (res.ok) {
         const data = await res.json();
         if (data?.success) {
@@ -787,7 +801,7 @@ export const referralService = {
       'admin:referral_stats',
       async () => {
         const headers = await getBearerAuthHeaders();
-        const res = await fetch('/api/referrals/admin/stats', { headers });
+        const res = await fetchWithTimeout('/api/referrals/admin/stats', { headers });
         return res.json();
       },
       { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
@@ -800,7 +814,7 @@ export const referralService = {
     notes?: string
   ) {
     const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
-    const res = await fetch('/api/referrals/admin/verify-teacher', {
+    const res = await fetchWithTimeout('/api/referrals/admin/verify-teacher', {
       method: 'POST',
       headers,
       body: JSON.stringify({ userId, status, notes }),
@@ -816,7 +830,7 @@ export const referralService = {
     notes?: string
   ) {
     const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
-    const res = await fetch('/api/referrals/admin/payout-action', {
+    const res = await fetchWithTimeout('/api/referrals/admin/payout-action', {
       method: 'POST',
       headers,
       body: JSON.stringify({ payoutId, action, transactionRef, notes }),
@@ -827,7 +841,7 @@ export const referralService = {
 
   async updateConfig(updates: Partial<ReferralSystemConfig>) {
     const headers = await getBearerAuthHeaders({ 'Content-Type': 'application/json' });
-    const res = await fetch('/api/referrals/admin/update-config', {
+    const res = await fetchWithTimeout('/api/referrals/admin/update-config', {
       method: 'POST',
       headers,
       body: JSON.stringify(updates),

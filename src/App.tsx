@@ -1,102 +1,127 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 
-const SubjectQuizView = lazy(() =>
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  importer: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return lazy(async () => {
+    try {
+      return await importer();
+    } catch (firstError) {
+      await new Promise((r) => setTimeout(r, 350));
+      try {
+        return await importer();
+      } catch (secondError) {
+        if (typeof window !== 'undefined') {
+          const reloadKey = 'msz_chunk_retry_ts';
+          const lastRetry = Number(sessionStorage.getItem(reloadKey) || '0');
+          if (Date.now() - lastRetry > 15_000) {
+            sessionStorage.setItem(reloadKey, String(Date.now()));
+            window.location.reload();
+          }
+        }
+        throw secondError || firstError;
+      }
+    }
+  });
+}
+
+const SubjectQuizView = lazyWithRetry(() =>
   import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
 );
-const DemoSectionView = lazy(() =>
+const DemoSectionView = lazyWithRetry(() =>
   import('./components/DemoSectionView').then((m) => ({ default: m.DemoSectionView }))
 );
-const MembershipModal = lazy(() =>
+const MembershipModal = lazyWithRetry(() =>
   import('./components/MembershipModal').then((m) => ({ default: m.MembershipModal }))
 );
-const PlanUpgradePromptModal = lazy(() =>
+const PlanUpgradePromptModal = lazyWithRetry(() =>
   import('./components/PlanUpgradePromptModal').then((m) => ({ default: m.PlanUpgradePromptModal }))
 );
-const AuthModal = lazy(() =>
+const AuthModal = lazyWithRetry(() =>
   import('./components/AuthModal').then((m) => ({ default: m.AuthModal }))
 );
-const PasswordResetModal = lazy(() =>
+const PasswordResetModal = lazyWithRetry(() =>
   import('./components/PasswordResetModal').then((m) => ({ default: m.PasswordResetModal }))
 );
-const HelpSupportView = lazy(() =>
+const HelpSupportView = lazyWithRetry(() =>
   import('./components/HelpSupportView').then((m) => ({ default: m.HelpSupportView }))
 );
-const GrievanceRedressalView = lazy(() =>
+const GrievanceRedressalView = lazyWithRetry(() =>
   import('./components/GrievanceRedressalView').then((m) => ({ default: m.GrievanceRedressalView }))
 );
-const TermsAndPrivacyView = lazy(() =>
+const TermsAndPrivacyView = lazyWithRetry(() =>
   import('./components/TermsAndPrivacyView').then((m) => ({ default: m.TermsAndPrivacyView }))
 );
-const AboutUsView = lazy(() =>
+const AboutUsView = lazyWithRetry(() =>
   import('./components/AboutUsView').then((m) => ({ default: m.AboutUsView }))
 );
-const ContactUsView = lazy(() =>
+const ContactUsView = lazyWithRetry(() =>
   import('./components/ContactUsView').then((m) => ({ default: m.ContactUsView }))
 );
-const FaqsView = lazy(() =>
+const FaqsView = lazyWithRetry(() =>
   import('./components/FaqsView').then((m) => ({ default: m.FaqsView }))
 );
-const AdminDashboard = lazy(() =>
+const AdminDashboard = lazyWithRetry(() =>
   import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
 );
-const StoryWorldView = lazy(() =>
+const StoryWorldView = lazyWithRetry(() =>
   import('./components/StoryWorldView').then((m) => ({ default: m.StoryWorldView }))
 );
-const DrawingChampionsView = lazy(() =>
+const DrawingChampionsView = lazyWithRetry(() =>
   import('./components/DrawingChampionsView').then((m) => ({ default: m.DrawingChampionsView }))
 );
-const PuzzleChampionsView = lazy(() =>
+const PuzzleChampionsView = lazyWithRetry(() =>
   import('./components/PuzzleChampionsView').then((m) => ({ default: m.PuzzleChampionsView }))
 );
-const CertificatesView = lazy(() =>
+const CertificatesView = lazyWithRetry(() =>
   import('./components/CertificatesView').then((m) => ({ default: m.CertificatesView }))
 );
-const CricketChampionsView = lazy(() =>
+const CricketChampionsView = lazyWithRetry(() =>
   import('./components/CricketChampionsView').then((m) => ({ default: m.CricketChampionsView }))
 );
-const ScholarshipChampionsView = lazy(() =>
+const ScholarshipChampionsView = lazyWithRetry(() =>
   import('./components/ScholarshipChampionsView').then((m) => ({
     default: m.ScholarshipChampionsView,
   }))
 );
-const TetCtetView = lazy(() =>
+const TetCtetView = lazyWithRetry(() =>
   import('./components/TetCtetView').then((m) => ({
     default: m.TetCtetView,
   }))
 );
-const StudentProfileView = lazy(() =>
+const StudentProfileView = lazyWithRetry(() =>
   import('./components/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
 );
-const ShivajiStoriesView = lazy(() =>
+const ShivajiStoriesView = lazyWithRetry(() =>
   import('./components/ShivajiStoriesView').then((m) => ({ default: m.ShivajiStoriesView }))
 );
-const SudokuView = lazy(() =>
+const SudokuView = lazyWithRetry(() =>
   import('./components/SudokuView').then((m) => ({ default: m.SudokuView }))
 );
-const FutureSkillsView = lazy(() =>
+const FutureSkillsView = lazyWithRetry(() =>
   import('./components/FutureSkillsView').then((m) => ({ default: m.FutureSkillsView }))
 );
-const ReferralHubView = lazy(() =>
+const ReferralHubView = lazyWithRetry(() =>
   import('./components/ReferralHubView').then((m) => ({ default: m.ReferralHubView }))
 );
-const WorksheetsView = lazy(() =>
+const WorksheetsView = lazyWithRetry(() =>
   import('./components/WorksheetsView').then((m) => ({ default: m.WorksheetsView }))
 );
-const StudyMaterialsView = lazy(() =>
+const StudyMaterialsView = lazyWithRetry(() =>
   import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
 );
-const PublicZoneExplorerView = lazy(() =>
+const PublicZoneExplorerView = lazyWithRetry(() =>
   import('./components/PublicZoneExplorerView').then((m) => ({ default: m.PublicZoneExplorerView }))
 );
-const AllCoursesExplorerView = lazy(() =>
+const AllCoursesExplorerView = lazyWithRetry(() =>
   import('./components/AllCoursesExplorerView').then((m) => ({ default: m.AllCoursesExplorerView }))
 );
-const OtherProgramsView = lazy(() =>
+const OtherProgramsView = lazyWithRetry(() =>
   import('./components/OtherProgramsView').then((m) => ({ default: m.OtherProgramsView }))
 );
 
@@ -246,13 +271,32 @@ const AppContent: React.FC = () => {
     }
   }, [currentTab, activeRole, currentUser?.role, currentStudent?.id, currentStudent?.accountRole, currentStudent?.classLevel, activeBoard]);
 
-  // Warm-cache AuthModal & MembershipModal chunks during deep idle time after LCP
+  // Warm-cache lightweight modals during idle time (skip on Data Saver / slow 2G mobile networks)
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      void import('./components/AuthModal');
-      void import('./components/MembershipModal');
-    }, 2500);
-    return () => window.clearTimeout(t);
+    const conn = typeof navigator !== 'undefined' ? (navigator as any).connection : undefined;
+    if (conn?.saveData || conn?.effectiveType === '2g' || conn?.effectiveType === 'slow-2g') {
+      return;
+    }
+
+    const idlePrefetch = (factory: () => Promise<any>, delay: number) => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        return (window as any).requestIdleCallback(() => { void factory(); }, { timeout: delay + 2000 });
+      }
+      return setTimeout(() => { void factory(); }, delay);
+    };
+
+    const h1 = idlePrefetch(() => Promise.all([
+      import('./components/AuthModal'),
+      import('./components/MembershipModal'),
+    ]), 2500);
+
+    return () => {
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        try { (window as any).cancelIdleCallback(h1); } catch {}
+      } else {
+        clearTimeout(h1);
+      }
+    };
   }, []);
 
   // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...)
@@ -1625,10 +1669,64 @@ const AppContent: React.FC = () => {
   );
 };
 
+class AppErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error?.message || 'Unexpected loading issue' };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[MyStudyZone ErrorBoundary]:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl border border-amber-200 shadow-lg p-6 text-center space-y-4">
+            <h1 className="text-xl font-display font-extrabold text-slate-900">
+              MyStudyZone Quick Recovery
+            </h1>
+            <p className="text-sm text-slate-600">
+              A temporary network or browser issue interrupted loading this view. Your account, tests, and progress are completely safe.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm cursor-pointer"
+              >
+                Reload Page
+              </button>
+              <button
+                type="button"
+                onClick={() => this.setState({ hasError: false, message: '' })}
+                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm cursor-pointer"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <AppErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </AppErrorBoundary>
   );
 }

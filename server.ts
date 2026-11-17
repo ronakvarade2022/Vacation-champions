@@ -1,4 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
+import compression from 'compression';
 import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -82,6 +83,7 @@ dotenv.config();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
+app.use(compression({ threshold: 1024 }));
 
 // In-memory persistent transaction and membership stores (backed by server runtime)
 interface ServerTransaction {
@@ -3148,11 +3150,24 @@ async function startServer() {
     console.log('[Dev Mode] Vite middlewares mounted to Express (HMR WebSocket disabled).');
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        maxAge: '1y',
+        immutable: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html') || filePath.endsWith('manifest.json')) {
+            res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+          } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
     app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
-    console.log('[Production Mode] Static dist served.');
+    console.log('[Production Mode] Compressed static dist served with immutable asset caching.');
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {

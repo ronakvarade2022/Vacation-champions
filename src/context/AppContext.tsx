@@ -1146,12 +1146,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  // Skip writing back unchanged initial state on first mount so homepage renders without 20+ redundant JSON.stringify calls
+  const hasMountedStorageSyncRef = React.useRef(false);
+  useEffect(() => {
+    hasMountedStorageSyncRef.current = true;
+  }, []);
+
   // Sync to local storage safely without exceeding browser quota
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_students_list', JSON.stringify(studentsList));
   }, [studentsList]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     if (currentStudent) {
       safeSetLocalStorage('vc_current_student', JSON.stringify(currentStudent));
     }
@@ -1167,15 +1175,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [allQuestions]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_rejected_questions', JSON.stringify(rejectedDuplicates));
   }, [rejectedDuplicates]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_saved_drawings', JSON.stringify(savedDrawings));
   }, [savedDrawings]);
 
   useEffect(() => {
-    if (!banksHydratedRef.current.drawings) return;
+    if (!hasMountedStorageSyncRef.current || !banksHydratedRef.current.drawings) return;
     // Only persist custom/modified drawing templates
     const builtInMap = builtInDrawingMapRef.current;
     const modifiedOrCustom = drawingTemplates.filter(t => {
@@ -1186,84 +1196,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [drawingTemplates]);
 
   useEffect(() => {
-    if (!banksHydratedRef.current.stories) return;
+    if (!hasMountedStorageSyncRef.current || !banksHydratedRef.current.stories) return;
     const builtInIds = builtInStoryIdsRef.current;
     const customOrModified = allStories.filter(s => s.isCustom || !builtInIds.has(s.id) || s.published === false);
     safeSetLocalStorage('vc_custom_stories', JSON.stringify(customOrModified));
   }, [allStories]);
 
   useEffect(() => {
-    if (!banksHydratedRef.current.shivaji) return;
+    if (!hasMountedStorageSyncRef.current || !banksHydratedRef.current.shivaji) return;
     const builtInIds = builtInShivajiIdsRef.current;
     const customOrModified = shivajiStories.filter(s => s.isCustom || !builtInIds.has(s.id) || s.published === false);
     safeSetLocalStorage('vc_custom_shivaji_stories', JSON.stringify(customOrModified));
   }, [shivajiStories]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_custom_scholarship_questions', JSON.stringify(customScholarshipQuestions));
   }, [customScholarshipQuestions]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_published_msce_mock_tests', JSON.stringify(publishedMsceMockTests));
   }, [publishedMsceMockTests]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_custom_msce_mock_questions', JSON.stringify(customMsceMockQuestions));
   }, [customMsceMockQuestions]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_tet_ctet_preferences', JSON.stringify(tetCtetPreferences));
   }, [tetCtetPreferences]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_tet_ctet_batches', JSON.stringify(tetCtetBatches));
   }, [tetCtetBatches]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_custom_tet_ctet_questions', JSON.stringify(customTetCtetQuestions));
   }, [customTetCtetQuestions]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_rejected_tet_ctet_ids', JSON.stringify(rejectedTetCtetIds));
   }, [rejectedTetCtetIds]);
 
   useEffect(() => {
-    if (!banksHydratedRef.current.gk) return;
+    if (!hasMountedStorageSyncRef.current || !banksHydratedRef.current.gk) return;
     const customOrModified = gkQuestions.filter(q => q.isCustom || q.published === false);
     safeSetLocalStorage('vc_custom_gk_questions', JSON.stringify(customOrModified));
   }, [gkQuestions]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     const builtInIds = new Set(DEFAULT_LEARNING_PROGRAMS.map(p => p.id));
     const customOrModified = learningPrograms.filter(p => p.isCustom || !builtInIds.has(p.id) || p.published === false);
     safeSetLocalStorage('vc_custom_learning_programs', JSON.stringify(customOrModified));
   }, [learningPrograms]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_quiz_attempts', JSON.stringify(allAttempts));
   }, [allAttempts]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_platform_settings', JSON.stringify(platformSettings));
   }, [platformSettings]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_parents_list', JSON.stringify(parentsList));
   }, [parentsList]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     safeSetLocalStorage('vc_announcements', JSON.stringify(announcements));
   }, [announcements]);
 
   useEffect(() => {
+    if (!hasMountedStorageSyncRef.current) return;
     if (currentUser) {
       safeSetLocalStorage('vc_current_user', JSON.stringify(currentUser));
     } else {
@@ -1309,20 +1334,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Defer Firestore connection check & hydrate Special Learning config/content without blocking initial render
+  // Defer Firestore hydration to browser idle time so initial homepage and dashboard render in 0ms without network contention
   useEffect(() => {
-    const connTimer = window.setTimeout(() => {
-      void testFirestoreConnection();
-    }, 1500);
-
     let cancelledConfig = false;
-    const cfgTimer = window.setTimeout(() => {
-      void (async () => {
-        const [remoteCfg, remoteSpecialDocs] = await Promise.all([
-          loadPlatformConfigFromFirestore(),
-          loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin'),
-        ]);
-        if (cancelledConfig) return;
+    let idleHandle: any = null;
+
+    const scheduleBackgroundHydration = () => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleHandle = (window as any).requestIdleCallback(
+          () => {
+            void runHydration();
+          },
+          { timeout: 4500 }
+        );
+      } else {
+        idleHandle = setTimeout(() => {
+          void runHydration();
+        }, 3500);
+      }
+    };
+
+    const runHydration = async () => {
+      if (cancelledConfig) return;
+      const [remoteCfg, remoteSpecialDocs] = await Promise.all([
+        loadPlatformConfigFromFirestore().catch(() => null),
+        loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin').catch(() => []),
+      ]);
+      if (cancelledConfig) return;
 
         if (remoteCfg) {
           setPlatformSettings(prev => ({
@@ -1407,10 +1445,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
               return Array.from(map.values());
             });
-          }
         }
-      })();
-    }, 250);
+      }
+    };
+
+    scheduleBackgroundHydration();
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) return;
@@ -1472,8 +1511,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => {
       cancelledConfig = true;
-      window.clearTimeout(connTimer);
-      window.clearTimeout(cfgTimer);
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window && typeof idleHandle === 'number') {
+        try { (window as any).cancelIdleCallback(idleHandle); } catch {}
+      } else if (idleHandle) {
+        clearTimeout(idleHandle);
+      }
       unsubscribe();
     };
   }, []);
@@ -3780,18 +3822,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         paymentId: txWithBoardClass.paymentId,
         orderId: txWithBoardClass.orderId
       });
-      const res = await fetch('/api/subscription/sync', {
-        method: 'POST',
-        headers,
-        body: syncBody
-      });
-      const contentType = (res.headers.get('content-type') || '').toLowerCase();
-      if (res.status === 404 || contentType.includes('text/html')) {
-        await fetch('/.netlify/functions/api/subscription/sync', {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch('/api/subscription/sync', {
           method: 'POST',
           headers,
-          body: syncBody
+          body: syncBody,
+          signal: controller.signal
         });
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (res.status === 404 || contentType.includes('text/html')) {
+          await fetch('/.netlify/functions/api/subscription/sync', {
+            method: 'POST',
+            headers,
+            body: syncBody,
+            signal: controller.signal
+          });
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     })().catch(() => {});
 
