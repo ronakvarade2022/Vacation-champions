@@ -38,7 +38,10 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
   onOpenAuth,
   onOpenMembership,
 }) => {
-  const { shivajiStories, currentStudent } = useApp();
+  const { shivajiStories, currentStudent, ensureContentBankHydrated } = useApp();
+  useEffect(() => {
+    void ensureContentBankHydrated('shivaji');
+  }, [ensureContentBankHydrated]);
   const hasFullAccess = canAccessFeature(currentStudent, 'shivaji').allowed;
   const liveStories = useMemo(
     () => shivajiStories.filter(s => s.published !== false),

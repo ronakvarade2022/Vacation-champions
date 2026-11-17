@@ -33,7 +33,10 @@ export const CricketChampionsView: React.FC<CricketChampionsViewProps> = ({
   onOpenAuth,
   onOpenMembership,
 }) => {
-  const { currentStudent, submitQuizAttempt, gkQuestions } = useApp();
+  const { currentStudent, submitQuizAttempt, gkQuestions, ensureContentBankHydrated } = useApp();
+  useEffect(() => {
+    void ensureContentBankHydrated('gk');
+  }, [ensureContentBankHydrated]);
   const hasFullAccess = canAccessFeature(currentStudent, 'cricket').allowed;
   const [lockedLevelNotice, setLockedLevelNotice] = useState<string | null>(null);
 

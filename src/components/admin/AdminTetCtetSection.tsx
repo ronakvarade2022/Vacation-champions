@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -24,23 +24,24 @@ import {
   TET_CTET_MODULE_LIST,
   TET_CTET_MODULES,
 } from '../../data/tetCtetSyllabi';
-import {
-  buildTetCtetMockPaper,
-  checkTetCtetCandidateDuplicate,
-} from '../../data/tetCtetQuestionEngine';
-import {
+import type {
   ConsolidatedTetCtetAuditReport,
   MockTestPublicationStatus,
-  runCentralizedTetCtetAudit,
-  validateSingleTetCtetQuestion,
 } from '../../data/tetCtetCentralAuditEngine';
 import { LATEST_TET_CTET_CENTRAL_AUDIT } from '../../data/tetCtetCentralAuditSnapshot';
 import {
   getTetCtetAuditSummary,
   TET_CTET_AUDIT_BATCHES,
 } from '../../data/tetCtetAuditTracker';
-import { formatHhMmSs } from '../TetCtetExamSimulator';
 import { AdminQuestionErrorReportsSection } from './AdminQuestionErrorReportsSection';
+
+function formatHhMmSs(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hrs = Math.floor(safe / 3600);
+  const mins = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
 
 type AdminTetTab = 'batches' | 'inspector' | 'audit' | 'monitor' | 'error-reports';
 
@@ -120,23 +121,36 @@ export const AdminTetCtetSection: React.FC = () => {
       });
   }, [tetCtetBatches, batchModuleFilter]);
 
-  // Inspected Mock Paper
-  const inspectedQuestions = useMemo(() => {
-    const mod = TET_CTET_MODULES[inspectModule];
-    const paperQs = buildTetCtetMockPaper({
-      exam: mod.exam,
-      paper: mod.paper,
-      testNumber: inspectTestNum,
-      language1: mod.defaultL1,
-      language2: mod.defaultL2,
-      medium: mod.supportedMediums[0],
-      stream: 'MATH_SCIENCE',
-      customOverrides: customTetCtetQuestions,
-      rejectedIds: rejectedTetCtetIds,
+  // Inspected Mock Paper (loaded on demand when activeTab === 'inspector')
+  const [rawInspectedPaper, setRawInspectedPaper] = useState<TetCtetQuestion[]>([]);
+  useEffect(() => {
+    if (activeTab !== 'inspector') return;
+    let cancelled = false;
+    void import('../../data/tetCtetQuestionEngine').then(({ buildTetCtetMockPaper }) => {
+      if (cancelled) return;
+      const mod = TET_CTET_MODULES[inspectModule];
+      const paperQs = buildTetCtetMockPaper({
+        exam: mod.exam,
+        paper: mod.paper,
+        testNumber: inspectTestNum,
+        language1: mod.defaultL1,
+        language2: mod.defaultL2,
+        medium: mod.supportedMediums[0],
+        stream: 'MATH_SCIENCE',
+        customOverrides: customTetCtetQuestions,
+        rejectedIds: rejectedTetCtetIds,
+      });
+      setRawInspectedPaper(paperQs);
     });
-    if (inspectSubject === 'ALL') return paperQs;
-    return paperQs.filter((q) => q.subjectId === inspectSubject);
-  }, [inspectModule, inspectTestNum, inspectSubject, customTetCtetQuestions, rejectedTetCtetIds]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, inspectModule, inspectTestNum, customTetCtetQuestions, rejectedTetCtetIds]);
+
+  const inspectedQuestions = useMemo(() => {
+    if (inspectSubject === 'ALL') return rawInspectedPaper;
+    return rawInspectedPaper.filter((q) => q.subjectId === inspectSubject);
+  }, [rawInspectedPaper, inspectSubject]);
 
   // Consolidated student TET/CTET attempts across registered students + guest session
   const allCandidateAttempts = useMemo(() => {
@@ -160,7 +174,8 @@ export const AdminTetCtetSection: React.FC = () => {
     );
   }, [studentsList, tetCtetAttempts]);
 
-  const handleRunFullAudit = (mode: 'incremental' | 'full' = 'incremental') => {
+  const handleRunFullAudit = async (mode: 'incremental' | 'full' = 'incremental') => {
+    const { runCentralizedTetCtetAudit } = await import('../../data/tetCtetCentralAuditEngine');
     const rep = runCentralizedTetCtetAudit({
       auditMode: mode,
       customOverrides: customTetCtetQuestions,
@@ -177,9 +192,15 @@ export const AdminTetCtetSection: React.FC = () => {
     }
   };
 
-  const handleSaveEditedQuestion = (e: React.FormEvent) => {
+  const handleSaveEditedQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingQuestion) return;
+
+    const [{ validateSingleTetCtetQuestion }, { checkTetCtetCandidateDuplicate }] =
+      await Promise.all([
+        import('../../data/tetCtetCentralAuditEngine'),
+        import('../../data/tetCtetQuestionEngine'),
+      ]);
 
     // Check against sibling stems + strict automated validation rules
     const otherHashes = new Set<string>(

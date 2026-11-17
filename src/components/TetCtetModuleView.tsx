@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -40,17 +40,24 @@ import {
   TET_CTET_MODULE_LIST,
   TET_CTET_MODULES,
 } from '../data/tetCtetSyllabi';
-import {
-  buildTetCtetMockPaper,
-  buildTetCtetPracticeSet,
-} from '../data/tetCtetQuestionEngine';
 import { MOCK_TEST_QA_STATUS_BY_KEY } from '../data/tetCtetCentralAuditSnapshot';
-import { formatHhMmSs, TetCtetExamSimulator } from './TetCtetExamSimulator';
 import {
   getStudentQuestionErrorReports,
   subscribeToQuestionErrorReports,
 } from '../services/questionErrorReportService';
 import { getReportStatusBadgeStyle } from './TetCtetReportQuestionModal';
+
+const TetCtetExamSimulator = lazy(() =>
+  import('./TetCtetExamSimulator').then((m) => ({ default: m.TetCtetExamSimulator }))
+);
+
+function formatHhMmSs(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hrs = Math.floor(safe / 3600);
+  const mins = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
 
 export type TetCtetModuleSubTab =
   | 'mock-tests'
@@ -247,7 +254,8 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     else updateTetCtetPreferences({ ctetMedium: nextMed });
   };
 
-  const handleLaunchMockTest = (testNumber: number) => {
+  const handleLaunchMockTest = async (testNumber: number) => {
+    const { buildTetCtetMockPaper } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetMockPaper({
       exam: modMeta.exam,
       paper: modMeta.paper,
@@ -267,7 +275,8 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     });
   };
 
-  const handleLaunchSubjectPractice = (subjectId: TetCtetSubjectId, label: string, setIndex = 1) => {
+  const handleLaunchSubjectPractice = async (subjectId: TetCtetSubjectId, label: string, setIndex = 1) => {
+    const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
       paper: modMeta.paper,
@@ -288,7 +297,8 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     });
   };
 
-  const handleLaunchTopicPractice = (subjectId: TetCtetSubjectId, topic: string, topicIdx = 0) => {
+  const handleLaunchTopicPractice = async (subjectId: TetCtetSubjectId, topic: string, topicIdx = 0) => {
+    const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
       paper: modMeta.paper,
@@ -310,7 +320,8 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     });
   };
 
-  const handleLaunchRevisionTest = (revNum: number, focusSubjectId?: TetCtetSubjectId) => {
+  const handleLaunchRevisionTest = async (revNum: number, focusSubjectId?: TetCtetSubjectId) => {
+    const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
       paper: modMeta.paper,
@@ -333,7 +344,8 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     });
   };
 
-  const handleLaunchPyqTest = (paperIdx: number, count: number, yearLabel: string) => {
+  const handleLaunchPyqTest = async (paperIdx: number, count: number, yearLabel: string) => {
+    const { buildTetCtetPracticeSet } = await import('../data/tetCtetQuestionEngine');
     const qs = buildTetCtetPracticeSet({
       exam: modMeta.exam,
       paper: modMeta.paper,
@@ -356,51 +368,62 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   // If CBT Simulator is active, render simulator workspace cleanly
   if (activeSession) {
     return (
-      <TetCtetExamSimulator
-        exam={modMeta.exam}
-        paper={modMeta.paper}
-        moduleId={moduleId}
-        mode={activeSession.mode}
-        mockTestNumber={activeSession.mockTestNumber}
-        practiceTitle={activeSession.practiceTitle}
-        questions={activeSession.questions}
-        language1={language1}
-        language2={language2}
-        medium={activeMedium}
-        stream={modMeta.paper === 2 ? activeStream : undefined}
-        durationSeconds={activeSession.durationSeconds}
-        studentId={currentStudent?.id || 'guest_tet_ctet'}
-        studentName={currentStudent?.name || 'Student Candidate'}
-        autoStartSkipInstructions={activeSession.autoStartSkipInstructions}
-        onSaveAttempt={recordTetCtetAttempt}
-        onPractiseWeakTopic={(weakSubj) => {
-          const qs = buildTetCtetPracticeSet({
-            exam: modMeta.exam,
-            paper: modMeta.paper,
-            poolType: 'TOPIC_PRACTICE',
-            subjectId: weakSubj,
-            topicFilter: 'Targeted Remediation',
-            setIndex: Math.floor(Math.random() * 5) + 1,
-            count: 20,
-            language1,
-            language2,
-            medium: activeMedium,
-            stream: activeStream,
-          });
-          setActiveSession({
-            mode: 'TOPIC_PRACTICE',
-            practiceTitle: `Weak-Area Practice (${weakSubj})`,
-            questions: qs,
-            durationSeconds: 20 * 60,
-            autoStartSkipInstructions: true,
-          });
-        }}
-        onExit={() => setActiveSession(null)}
-        onOpenPerformanceTab={() => {
-          setActiveSession(null);
-          setActiveSubTab('performance');
-        }}
-      />
+      <Suspense
+        fallback={
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xs space-y-4 animate-pulse">
+            <div className="h-7 w-64 bg-slate-200 rounded-xl" />
+            <div className="h-4 w-96 max-w-full bg-slate-100 rounded-lg" />
+          </div>
+        }
+      >
+        <TetCtetExamSimulator
+          exam={modMeta.exam}
+          paper={modMeta.paper}
+          moduleId={moduleId}
+          mode={activeSession.mode}
+          mockTestNumber={activeSession.mockTestNumber}
+          practiceTitle={activeSession.practiceTitle}
+          questions={activeSession.questions}
+          language1={language1}
+          language2={language2}
+          medium={activeMedium}
+          stream={modMeta.paper === 2 ? activeStream : undefined}
+          durationSeconds={activeSession.durationSeconds}
+          studentId={currentStudent?.id || 'guest_tet_ctet'}
+          studentName={currentStudent?.name || 'Student Candidate'}
+          autoStartSkipInstructions={activeSession.autoStartSkipInstructions}
+          onSaveAttempt={recordTetCtetAttempt}
+          onPractiseWeakTopic={(weakSubj) => {
+            void import('../data/tetCtetQuestionEngine').then(({ buildTetCtetPracticeSet }) => {
+              const qs = buildTetCtetPracticeSet({
+                exam: modMeta.exam,
+                paper: modMeta.paper,
+                poolType: 'TOPIC_PRACTICE',
+                subjectId: weakSubj,
+                topicFilter: 'Targeted Remediation',
+                setIndex: Math.floor(Math.random() * 5) + 1,
+                count: 20,
+                language1,
+                language2,
+                medium: activeMedium,
+                stream: activeStream,
+              });
+              setActiveSession({
+                mode: 'TOPIC_PRACTICE',
+                practiceTitle: `Weak-Area Practice (${weakSubj})`,
+                questions: qs,
+                durationSeconds: 20 * 60,
+                autoStartSkipInstructions: true,
+              });
+            });
+          }}
+          onExit={() => setActiveSession(null)}
+          onOpenPerformanceTab={() => {
+            setActiveSession(null);
+            setActiveSubTab('performance');
+          }}
+        />
+      </Suspense>
     );
   }
 

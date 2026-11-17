@@ -37,7 +37,10 @@ export const StoryWorldView: React.FC<StoryWorldViewProps> = ({
   onOpenAuth,
   onOpenMembership,
 }) => {
-  const { allStories, currentStudent, markStoryCompleted } = useApp();
+  const { allStories, currentStudent, markStoryCompleted, ensureContentBankHydrated } = useApp();
+  useEffect(() => {
+    void ensureContentBankHydrated('stories');
+  }, [ensureContentBankHydrated]);
   const hasFullAccess = canAccessFeature(currentStudent, 'stories').allowed;
   const [lockedStoryNotice, setLockedStoryNotice] = useState<string | null>(null);
 

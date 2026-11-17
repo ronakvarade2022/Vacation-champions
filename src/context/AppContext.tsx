@@ -224,6 +224,9 @@ interface AppContextType {
   sectionVisibility: SectionVisibilityConfig;
   isSectionVisible: (sectionId: SpecialLearningSectionId) => boolean;
   updateSectionVisibility: (next: SectionVisibilityConfig) => Promise<void>;
+  ensureContentBankHydrated: (
+    scope?: 'all' | 'questions' | 'stories' | 'shivaji' | 'drawings' | 'puzzles' | 'gk'
+  ) => Promise<void>;
   
   // Student & Teacher Portal Authentication & Session Guarding
   switchRole: (targetRole: UserRole) => { allowed: boolean; message?: string };
@@ -926,6 +929,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stories: false,
     shivaji: false,
     drawings: false,
+    puzzles: false,
     gk: false,
   });
   const builtInDrawingMapRef = React.useRef<Map<string, DrawingTemplate>>(new Map());
@@ -933,6 +937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const builtInShivajiIdsRef = React.useRef<Set<string>>(new Set());
   const questionBankSvcRef = React.useRef<typeof import('../services/questionBankService') | null>(null);
   const seedQuestionsPromiseRef = React.useRef<Promise<QuizQuestion[]> | null>(null);
+  const bankHydrationPromisesRef = React.useRef<Record<string, Promise<void> | undefined>>({});
 
   const ensureQuestionBankLoaded = useCallback(async (): Promise<{
     svc: typeof import('../services/questionBankService');
@@ -974,92 +979,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { svc: questionBankSvcRef.current!, mergedQuestions };
   }, [allQuestions]);
 
-  // Asynchronously hydrate secondary content banks after initial paint so Homepage/Dashboard opens immediately
-  useEffect(() => {
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const [storiesMod, shivajiMod, drawingsMod, puzzlesMod, cricketMod] = await Promise.all([
-            import('../data/storiesMaster'),
-            import('../data/shivajiStoriesData'),
-            import('../data/drawingsData'),
-            import('../data/puzzlesData'),
-            import('../data/cricketQuizData'),
-          ]);
-          if (cancelled) return;
+  // On-demand lazy hydration so Homepage and Dashboard never download 1.58 MB of content banks until needed
+  const ensureContentBankHydrated = useCallback(
+    async (
+      scope: 'all' | 'questions' | 'stories' | 'shivaji' | 'drawings' | 'puzzles' | 'gk' = 'all'
+    ): Promise<void> => {
+      const tasks: Promise<unknown>[] = [];
 
-          // 1. Stories
-          builtInStoryIdsRef.current = new Set(storiesMod.ALL_45_STORIES.map((s) => s.id));
-          setAllStories((prev) => {
-            const map = new Map<string, StoryItem>(
-              storiesMod.ALL_45_STORIES.map((s) => [s.id, { ...s, published: true }])
-            );
-            prev.forEach((item) => map.set(item.id, item));
-            banksHydratedRef.current.stories = true;
-            return Array.from(map.values());
-          });
-
-          // 2. Shivaji Maharaj Stories
-          builtInShivajiIdsRef.current = new Set(shivajiMod.SHIVAJI_STORIES.map((s) => s.id));
-          setShivajiStories((prev) => {
-            const map = new Map<string, ShivajiStory>(
-              shivajiMod.SHIVAJI_STORIES.map((s) => [s.id, { ...s, published: true }])
-            );
-            prev.forEach((item) => map.set(item.id, item));
-            banksHydratedRef.current.shivaji = true;
-            return Array.from(map.values()).sort((a, b) => a.order - b.order);
-          });
-
-          // 3. Drawing Templates
-          builtInDrawingMapRef.current = new Map(
-            drawingsMod.READY_MADE_DRAWING_TEMPLATES.map((t) => [t.id, t])
-          );
-          setDrawingTemplates((prev) => {
-            const map = new Map<string, DrawingTemplate>(
-              drawingsMod.READY_MADE_DRAWING_TEMPLATES.map((t) => [t.id, t])
-            );
-            prev.forEach((t) => map.set(t.id, t));
-            banksHydratedRef.current.drawings = true;
-            return Array.from(map.values());
-          });
-
-          // 4. Puzzles
-          setAllPuzzles((prev) => (prev.length > 0 ? prev : puzzlesMod.SEED_PUZZLES));
-
-          // 5. Cricket & GK Questions
-          const builtInGk: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap((lvl) =>
-            (cricketMod.DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map((q) => ({
-              ...q,
-              published: true,
-              isCustom: false,
-            }))
-          );
-          setGkQuestions((prev) => {
-            const map = new Map<string, CustomGkQuestionItem>(builtInGk.map((q) => [q.id, q]));
-            prev.forEach((item) => map.set(item.id, item));
-            banksHydratedRef.current.gk = true;
-            return Array.from(map.values());
-          });
-        } catch (err) {
-          console.warn('Deferred content hydration notice:', err);
-        }
-      })();
-    }, 60);
-
-    // Hydrate curriculum question bank during browser idle time after first paint
-    const idleTimer = window.setTimeout(() => {
-      if (!cancelled) {
-        void ensureQuestionBankLoaded();
+      if ((scope === 'all' || scope === 'questions') && !banksHydratedRef.current.questions) {
+        tasks.push(ensureQuestionBankLoaded());
       }
-    }, 350);
 
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      window.clearTimeout(idleTimer);
-    };
-  }, [ensureQuestionBankLoaded]);
+      if ((scope === 'all' || scope === 'stories') && !banksHydratedRef.current.stories) {
+        if (!bankHydrationPromisesRef.current.stories) {
+          bankHydrationPromisesRef.current.stories = import('../data/storiesMaster').then(
+            (storiesMod) => {
+              builtInStoryIdsRef.current = new Set(storiesMod.ALL_45_STORIES.map((s) => s.id));
+              setAllStories((prev) => {
+                const map = new Map<string, StoryItem>(
+                  storiesMod.ALL_45_STORIES.map((s) => [s.id, { ...s, published: true }])
+                );
+                prev.forEach((item) => map.set(item.id, item));
+                banksHydratedRef.current.stories = true;
+                return Array.from(map.values());
+              });
+            }
+          );
+        }
+        tasks.push(bankHydrationPromisesRef.current.stories);
+      }
+
+      if ((scope === 'all' || scope === 'shivaji') && !banksHydratedRef.current.shivaji) {
+        if (!bankHydrationPromisesRef.current.shivaji) {
+          bankHydrationPromisesRef.current.shivaji = import('../data/shivajiStoriesData').then(
+            (shivajiMod) => {
+              builtInShivajiIdsRef.current = new Set(shivajiMod.SHIVAJI_STORIES.map((s) => s.id));
+              setShivajiStories((prev) => {
+                const map = new Map<string, ShivajiStory>(
+                  shivajiMod.SHIVAJI_STORIES.map((s) => [s.id, { ...s, published: true }])
+                );
+                prev.forEach((item) => map.set(item.id, item));
+                banksHydratedRef.current.shivaji = true;
+                return Array.from(map.values()).sort((a, b) => a.order - b.order);
+              });
+            }
+          );
+        }
+        tasks.push(bankHydrationPromisesRef.current.shivaji);
+      }
+
+      if ((scope === 'all' || scope === 'drawings') && !banksHydratedRef.current.drawings) {
+        if (!bankHydrationPromisesRef.current.drawings) {
+          bankHydrationPromisesRef.current.drawings = import('../data/drawingsData').then(
+            (drawingsMod) => {
+              builtInDrawingMapRef.current = new Map(
+                drawingsMod.READY_MADE_DRAWING_TEMPLATES.map((t) => [t.id, t])
+              );
+              setDrawingTemplates((prev) => {
+                const map = new Map<string, DrawingTemplate>(
+                  drawingsMod.READY_MADE_DRAWING_TEMPLATES.map((t) => [t.id, t])
+                );
+                prev.forEach((t) => map.set(t.id, t));
+                banksHydratedRef.current.drawings = true;
+                return Array.from(map.values());
+              });
+            }
+          );
+        }
+        tasks.push(bankHydrationPromisesRef.current.drawings);
+      }
+
+      if ((scope === 'all' || scope === 'puzzles') && !banksHydratedRef.current.puzzles) {
+        if (!bankHydrationPromisesRef.current.puzzles) {
+          bankHydrationPromisesRef.current.puzzles = import('../data/puzzlesData').then(
+            (puzzlesMod) => {
+              banksHydratedRef.current.puzzles = true;
+              setAllPuzzles((prev) => (prev.length > 0 ? prev : puzzlesMod.SEED_PUZZLES));
+            }
+          );
+        }
+        tasks.push(bankHydrationPromisesRef.current.puzzles);
+      }
+
+      if ((scope === 'all' || scope === 'gk') && !banksHydratedRef.current.gk) {
+        if (!bankHydrationPromisesRef.current.gk) {
+          bankHydrationPromisesRef.current.gk = import('../data/cricketQuizData').then(
+            (cricketMod) => {
+              const builtInGk: CustomGkQuestionItem[] = ([1, 2, 3, 4] as QuizLevel[]).flatMap(
+                (lvl) =>
+                  (cricketMod.DAILY_CRICKET_QUESTIONS_BANK[lvl] || []).map((q) => ({
+                    ...q,
+                    published: true,
+                    isCustom: false,
+                  }))
+              );
+              setGkQuestions((prev) => {
+                const map = new Map<string, CustomGkQuestionItem>(builtInGk.map((q) => [q.id, q]));
+                prev.forEach((item) => map.set(item.id, item));
+                banksHydratedRef.current.gk = true;
+                return Array.from(map.values());
+              });
+            }
+          );
+        }
+        tasks.push(bankHydrationPromisesRef.current.gk);
+      }
+
+      if (tasks.length > 0) {
+        await Promise.all(tasks);
+      }
+    },
+    [ensureQuestionBankLoaded]
+  );
 
   const [allAttempts, setAllAttempts] = useState<QuizAttempt[]>(() => {
     const saved = localStorage.getItem('vc_quiz_attempts');
@@ -1282,99 +1313,101 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 1500);
 
     let cancelledConfig = false;
-    (async () => {
-      const [remoteCfg, remoteSpecialDocs] = await Promise.all([
-        loadPlatformConfigFromFirestore(),
-        loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin'),
-      ]);
-      if (cancelledConfig) return;
+    const cfgTimer = window.setTimeout(() => {
+      void (async () => {
+        const [remoteCfg, remoteSpecialDocs] = await Promise.all([
+          loadPlatformConfigFromFirestore(),
+          loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin'),
+        ]);
+        if (cancelledConfig) return;
 
-      if (remoteCfg) {
-        setPlatformSettings(prev => ({
-          ...prev,
-          timers: { ...prev.timers, ...(remoteCfg.timers || {}) },
-          sectionVisibility: {
-            ...DEFAULT_SECTION_VISIBILITY,
-            ...prev.sectionVisibility,
-            ...(remoteCfg.sectionVisibility || {}),
-          },
-        }));
-      }
-
-      if (remoteSpecialDocs.length > 0) {
-        const storyDocs = remoteSpecialDocs.filter(d => d.contentType === 'story');
-        if (storyDocs.length > 0) {
-          setAllStories(prev => {
-            const map = new Map(prev.map(i => [i.id, i]));
-            storyDocs.forEach(d => {
-              const p = d.payload as unknown as StoryItem;
-              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
-            });
-            return Array.from(map.values());
-          });
+        if (remoteCfg) {
+          setPlatformSettings(prev => ({
+            ...prev,
+            timers: { ...prev.timers, ...(remoteCfg.timers || {}) },
+            sectionVisibility: {
+              ...DEFAULT_SECTION_VISIBILITY,
+              ...prev.sectionVisibility,
+              ...(remoteCfg.sectionVisibility || {}),
+            },
+          }));
         }
 
-        const shivajiDocs = remoteSpecialDocs.filter(d => d.contentType === 'shivaji_story');
-        if (shivajiDocs.length > 0) {
-          setShivajiStories(prev => {
-            const map = new Map(prev.map(i => [i.id, i]));
-            shivajiDocs.forEach(d => {
-              const p = d.payload as unknown as ShivajiStory;
-              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+        if (remoteSpecialDocs.length > 0) {
+          const storyDocs = remoteSpecialDocs.filter(d => d.contentType === 'story');
+          if (storyDocs.length > 0) {
+            setAllStories(prev => {
+              const map = new Map(prev.map(i => [i.id, i]));
+              storyDocs.forEach(d => {
+                const p = d.payload as unknown as StoryItem;
+                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+              });
+              return Array.from(map.values());
             });
-            return Array.from(map.values()).sort((a, b) => a.order - b.order);
-          });
-        }
+          }
 
-        const schDocs = remoteSpecialDocs.filter(d => d.contentType === 'scholarship_question');
-        if (schDocs.length > 0) {
-          setCustomScholarshipQuestions(prev => {
-            const map = new Map(prev.map(i => [i.id, i]));
-            schDocs.forEach(d => {
-              const p = d.payload as unknown as CustomScholarshipQuestionRecord;
-              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+          const shivajiDocs = remoteSpecialDocs.filter(d => d.contentType === 'shivaji_story');
+          if (shivajiDocs.length > 0) {
+            setShivajiStories(prev => {
+              const map = new Map(prev.map(i => [i.id, i]));
+              shivajiDocs.forEach(d => {
+                const p = d.payload as unknown as ShivajiStory;
+                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+              });
+              return Array.from(map.values()).sort((a, b) => a.order - b.order);
             });
-            return Array.from(map.values());
-          });
-        }
+          }
 
-        const drawDocs = remoteSpecialDocs.filter(d => d.contentType === 'drawing_template');
-        if (drawDocs.length > 0) {
-          setDrawingTemplates(prev => {
-            const map = new Map(prev.map(i => [i.id, i]));
-            drawDocs.forEach(d => {
-              const p = d.payload as unknown as DrawingTemplate;
-              if (p?.id) map.set(p.id, { ...p, published: d.published });
+          const schDocs = remoteSpecialDocs.filter(d => d.contentType === 'scholarship_question');
+          if (schDocs.length > 0) {
+            setCustomScholarshipQuestions(prev => {
+              const map = new Map(prev.map(i => [i.id, i]));
+              schDocs.forEach(d => {
+                const p = d.payload as unknown as CustomScholarshipQuestionRecord;
+                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+              });
+              return Array.from(map.values());
             });
-            return Array.from(map.values());
-          });
-        }
+          }
 
-        const gkDocs = remoteSpecialDocs.filter(d => d.contentType === 'gk_question');
-        if (gkDocs.length > 0) {
-          setGkQuestions(prev => {
-            const map = new Map(prev.map(i => [i.id, i]));
-            gkDocs.forEach(d => {
-              const p = d.payload as unknown as CustomGkQuestionItem;
-              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+          const drawDocs = remoteSpecialDocs.filter(d => d.contentType === 'drawing_template');
+          if (drawDocs.length > 0) {
+            setDrawingTemplates(prev => {
+              const map = new Map(prev.map(i => [i.id, i]));
+              drawDocs.forEach(d => {
+                const p = d.payload as unknown as DrawingTemplate;
+                if (p?.id) map.set(p.id, { ...p, published: d.published });
+              });
+              return Array.from(map.values());
             });
-            return Array.from(map.values());
-          });
-        }
+          }
 
-        const progDocs = remoteSpecialDocs.filter(d => d.contentType === 'learning_program');
-        if (progDocs.length > 0) {
-          setLearningPrograms(prev => {
-            const map = new Map(prev.map(i => [i.id, i]));
-            progDocs.forEach(d => {
-              const p = d.payload as unknown as SpecialLearningProgramItem;
-              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+          const gkDocs = remoteSpecialDocs.filter(d => d.contentType === 'gk_question');
+          if (gkDocs.length > 0) {
+            setGkQuestions(prev => {
+              const map = new Map(prev.map(i => [i.id, i]));
+              gkDocs.forEach(d => {
+                const p = d.payload as unknown as CustomGkQuestionItem;
+                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+              });
+              return Array.from(map.values());
             });
-            return Array.from(map.values());
-          });
+          }
+
+          const progDocs = remoteSpecialDocs.filter(d => d.contentType === 'learning_program');
+          if (progDocs.length > 0) {
+            setLearningPrograms(prev => {
+              const map = new Map(prev.map(i => [i.id, i]));
+              progDocs.forEach(d => {
+                const p = d.payload as unknown as SpecialLearningProgramItem;
+                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+              });
+              return Array.from(map.values());
+            });
+          }
         }
-      }
-    })();
+      })();
+    }, 250);
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) return;
@@ -1437,6 +1470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       cancelledConfig = true;
       window.clearTimeout(connTimer);
+      window.clearTimeout(cfgTimer);
       unsubscribe();
     };
   }, []);
@@ -4295,6 +4329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sectionVisibility,
       isSectionVisible,
       updateSectionVisibility,
+      ensureContentBankHydrated,
 
       switchRole,
       loginAsTeacher,
@@ -4422,6 +4457,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       platformSettings,
       sectionVisibility,
       isSectionVisible,
+      ensureContentBankHydrated,
       activeDeviceSession,
       sessionSecurityNotice,
       isAuthModalOpen,

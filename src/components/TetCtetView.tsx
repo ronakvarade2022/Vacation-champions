@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Award,
@@ -21,7 +21,11 @@ import {
   TET_CTET_TOTAL_MOCKS,
   TET_CTET_TOTAL_QUESTIONS_BANK,
 } from '../data/tetCtetSyllabi';
-import { TetCtetModuleSubTab, TetCtetModuleView } from './TetCtetModuleView';
+import type { TetCtetModuleSubTab } from './TetCtetModuleView';
+
+const TetCtetModuleView = lazy(() =>
+  import('./TetCtetModuleView').then((m) => ({ default: m.TetCtetModuleView }))
+);
 
 const TetCtetEmblemSvg: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
   <svg viewBox="0 0 80 80" fill="none" className={className} aria-hidden="true">
@@ -70,12 +74,21 @@ export const TetCtetView: React.FC = () => {
 
   if (selectedModule) {
     return (
-      <TetCtetModuleView
-        moduleId={selectedModule}
-        initialSubTab={initialSubTab}
-        onSelectModule={(nextId) => setSelectedModule(nextId)}
-        onBackToLanding={() => setSelectedModule(null)}
-      />
+      <Suspense
+        fallback={
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xs space-y-4 animate-pulse max-w-7xl mx-auto">
+            <div className="h-7 w-64 bg-slate-200 rounded-xl" />
+            <div className="h-4 w-96 max-w-full bg-slate-100 rounded-lg" />
+          </div>
+        }
+      >
+        <TetCtetModuleView
+          moduleId={selectedModule}
+          initialSubTab={initialSubTab}
+          onSelectModule={(nextId) => setSelectedModule(nextId)}
+          onBackToLanding={() => setSelectedModule(null)}
+        />
+      </Suspense>
     );
   }
 

@@ -149,8 +149,13 @@ export const AdminDashboard: React.FC = () => {
     updateQuestionStatus,
     adminPromoteOrCorrectClass,
     adminApplyApproved365DayMigration,
+    ensureContentBankHydrated,
     logout,
   } = useApp();
+
+  useEffect(() => {
+    void ensureContentBankHydrated('all');
+  }, [ensureContentBankHydrated]);
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [activeSection, setActiveSection] = useState<AdminSectionId>('questions');

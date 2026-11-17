@@ -1,9 +1,26 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
-import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
+
+const loadStudentDashboardModule = () =>
+  import('./components/StudentDashboard').then((m) => ({ default: m.StudentDashboard }));
+
+// Preload StudentDashboard immediately only if a signed-in student/teacher session exists
+try {
+  if (
+    typeof window !== 'undefined' &&
+    localStorage.getItem('vc_is_logged_out') !== 'true' &&
+    localStorage.getItem('vc_current_student')
+  ) {
+    void loadStudentDashboardModule();
+  }
+} catch {
+  // Ignore storage access errors
+}
+
+const StudentDashboard = lazy(loadStudentDashboardModule);
 
 const SubjectQuizView = lazy(() =>
   import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
@@ -246,12 +263,12 @@ const AppContent: React.FC = () => {
     }
   }, [currentTab, activeRole, currentUser?.role, currentStudent?.id, currentStudent?.accountRole, currentStudent?.classLevel, activeBoard]);
 
-  // Warm-cache AuthModal & MembershipModal chunks after initial paint so button clicks open modals with zero delay
+  // Warm-cache AuthModal & MembershipModal chunks during deep idle time after LCP
   useEffect(() => {
     const t = window.setTimeout(() => {
       void import('./components/AuthModal');
       void import('./components/MembershipModal');
-    }, 600);
+    }, 2500);
     return () => window.clearTimeout(t);
   }, []);
 

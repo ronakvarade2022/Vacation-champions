@@ -67,8 +67,13 @@ export const DrawingChampionsView: React.FC<DrawingChampionsViewProps> = ({ onOp
     drawingTemplates,
     savedDrawings, 
     saveDrawingSubmission,
-    deleteDrawingSubmission 
+    deleteDrawingSubmission,
+    ensureContentBankHydrated,
   } = useApp();
+
+  useEffect(() => {
+    void ensureContentBankHydrated('drawings');
+  }, [ensureContentBankHydrated]);
 
   const liveTemplates = React.useMemo(
     () => drawingTemplates.filter(t => t.published !== false),

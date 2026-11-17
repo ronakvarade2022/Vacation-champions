@@ -1,14 +1,11 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-N4CHVK8H"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-</script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <link rel="preload" as="image" href="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.webp" type="image/webp" fetchpriority="high" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#d97706" />
@@ -23,6 +20,21 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="MyStudyZone (mystudyzone.in) – Classes 1 to 10 Online Learning Platform" />
     <meta name="twitter:description" content="Learn Smarter, Practise Better and Achieve Higher Marks. MyStudyZone – Complete Learning Platform for Classes 1 to 10." />
+    <style>
+      html,body{margin:0;padding:0;background-color:#fffbeb;color:#0f172a;font-family:'Plus Jakarta Sans',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;-webkit-text-size-adjust:100%;touch-action:manipulation}
+    </style>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      />
+    </noscript>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -35,13 +47,10 @@
         "description": "MyStudyZone – Complete Online Learning Platform for Classes 1 to 10 across Maharashtra State Board, CBSE, and ICSE."
       }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preload" as="image" href="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.webp" type="image/webp" fetchpriority="high">
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Razorpay Official Standard Checkout Script (Deferred so homepage renders immediately) -->
-    <script defer src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
       // Gracefully handle Vite WebSocket / HMR disconnects in preview environments
       window.addEventListener('unhandledrejection', function(event) {
         if (event && event.reason) {
@@ -51,6 +60,23 @@
             console.debug('[Vite HMR Guard] Handled gracefully:', msg);
           }
         }
+      });
+      // Defer GTM & Razorpay Checkout SDK until after initial page paint so Homepage FCP/LCP are never delayed
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var gtm = document.createElement('script');
+          gtm.async = true;
+          gtm.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-N4CHVK8H';
+          document.head.appendChild(gtm);
+        }, 1800);
+        setTimeout(function() {
+          if (!window.Razorpay && !document.querySelector('script[src^="https://checkout.razorpay.com/v1/checkout.js"]')) {
+            var rzp = document.createElement('script');
+            rzp.async = true;
+            rzp.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            document.head.appendChild(rzp);
+          }
+        }, 3200);
       });
     </script>
   </head>

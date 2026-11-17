@@ -50,6 +50,17 @@
       font-size: 16px !important;
     }
   }
+
+  button, a, [role="button"], select, input {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Below-the-fold section rendering optimization for fast mobile FCP/INP */
+.cv-auto-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
 }
 
 /* Custom scrollbars */

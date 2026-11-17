@@ -27,7 +27,10 @@ const MEMORY_CARDS_PAIRS = [
 ];
 
 export const PuzzleChampionsView: React.FC = () => {
-  const { currentStudent, allPuzzles, solvePuzzle } = useApp();
+  const { currentStudent, allPuzzles, solvePuzzle, ensureContentBankHydrated } = useApp();
+  useEffect(() => {
+    void ensureContentBankHydrated('puzzles');
+  }, [ensureContentBankHydrated]);
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [selectedPuzzle, setSelectedPuzzle] = useState<PuzzleItem | null>(null);
