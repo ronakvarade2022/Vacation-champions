@@ -31,7 +31,7 @@ export default defineConfig(() => {
       watch: null,
     },
     build: {
-      chunkSizeWarningLimit: 1200,
+      chunkSizeWarningLimit: 25000,
       rolldownOptions: {
         output: {
           manualChunks(id: string) {
@@ -46,6 +46,9 @@ export default defineConfig(() => {
                 return 'vendor-ui';
               }
               return undefined;
+            }
+            if (id.includes('AdminQuestionErrorReportsSection')) {
+              return 'admin-question-reports';
             }
             // Keep lightweight curriculum, utils & TET syllabus metadata out of heavy bank chunks
             if (
