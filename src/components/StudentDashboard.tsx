@@ -29,7 +29,7 @@ import {
   ALL_10_CLASSES_META,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
-import { NavSubActionId } from '../data/navigationConfig';
+import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 
 interface StudentDashboardProps {
@@ -44,6 +44,8 @@ interface StudentDashboardProps {
   onToggleViewMode?: () => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
   onOpenDemo?: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
+  activeMainSection?: MainMenuId;
+  onSelectMainSection?: (sectionId: MainMenuId) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -53,6 +55,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onToggleViewMode,
   onMenuAction,
   onOpenDemo,
+  activeMainSection,
+  onSelectMainSection,
 }) => {
   const {
     currentStudent,
@@ -144,6 +148,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         onStartLearningClick={() => onNavigateTab('all-courses')}
         viewMode={viewMode}
         onToggleViewMode={onToggleViewMode}
+        activeMainSection={activeMainSection}
+        onSelectMainSection={onSelectMainSection}
         progressMetrics={{
           isLoggedIn: true,
           studentName: currentStudent.name,

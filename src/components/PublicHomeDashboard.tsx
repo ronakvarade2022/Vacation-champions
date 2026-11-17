@@ -10,7 +10,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
-import { NavSubActionId } from '../data/navigationConfig';
+import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 
 export type HomeScrollTarget =
@@ -41,6 +41,8 @@ interface PublicHomeDashboardProps {
   isDesktopMode?: boolean;
   onToggleViewMode?: () => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
+  activeMainSection?: MainMenuId;
+  onSelectMainSection?: (sectionId: MainMenuId) => void;
 }
 
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
@@ -59,6 +61,8 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   isDesktopMode = false,
   onToggleViewMode,
   onMenuAction,
+  activeMainSection,
+  onSelectMainSection,
 }) => {
   return (
     <div className={`${isDesktopMode ? 'space-y-8' : 'space-y-10'} pb-12`}>
@@ -81,6 +85,8 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
           onStartLearningClick={() => onNavigateZone('all-courses')}
           viewMode={isDesktopMode ? 'desktop' : 'auto'}
           onToggleViewMode={onToggleViewMode}
+          activeMainSection={activeMainSection}
+          onSelectMainSection={onSelectMainSection}
           progressMetrics={{
             isLoggedIn: false,
             coursesCompleted: 0,

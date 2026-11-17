@@ -55,6 +55,7 @@ interface HeaderProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onMenuAction: (actionId: NavSubActionId) => void;
+  onSelectMainSection?: (sectionId: MainMenuId) => void;
   onOpenAuth: (defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot') => void;
   onOpenPanel: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
   onOpenMembership: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
@@ -67,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   setCurrentTab,
   onMenuAction,
+  onSelectMainSection,
   onOpenAuth,
   onOpenPanel,
   onOpenMembership,
@@ -166,13 +168,14 @@ export const Header: React.FC<HeaderProps> = ({
 
   const isTeacherAccount = currentStudent?.accountRole === 'teacher' || activeRole === 'teacher';
   const isStudentAccount = Boolean(currentStudent && currentStudent.accountRole !== 'teacher' && activeRole === 'student');
+  const isAdminActive = Boolean(currentUser?.role === 'admin' && activeRole === 'admin');
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs w-full">
-      {/* Top Role Portals Bar: Always-visible Student Portal & Teacher Portal (Desktop & Mobile 360px safe) */}
+      {/* Top Role Portals Bar: Always-visible Student Portal, Teacher Portal & Admin Portal (Desktop & Mobile 360px safe) */}
       <div className="bg-slate-900 text-white border-b border-slate-800">
-        <div className={`${containerWidthClass} px-3 sm:px-6 lg:px-8 py-1.5 flex items-center justify-between gap-2`}>
-          <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 truncate">
+        <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-1.5 flex items-center justify-between gap-2`}>
+          <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 truncate">
             <BookOpenCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>Classes 1–10 · 4th &amp; 7th Scholarship · MAHA TET · CTET Portals</span>
           </span>
@@ -180,7 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div
             role="navigation"
             aria-label="Portal Access"
-            className="grid grid-cols-2 sm:flex items-center gap-1.5 sm:gap-2 w-full md:w-auto sm:justify-end"
+            className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto sm:justify-end"
           >
             <button
               type="button"
@@ -189,7 +192,7 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenPanel('student', 'login');
               }}
-              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[32px] px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
                 isStudentAccount
                   ? 'bg-indigo-600 text-white border-indigo-400 shadow-xs'
                   : 'bg-white/10 hover:bg-indigo-600/80 text-white border-white/15'
@@ -206,7 +209,7 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenPanel('teacher', 'login');
               }}
-              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-extrabold flex items-center justify-center gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[32px] px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
                 isTeacherAccount
                   ? 'bg-emerald-600 text-white border-emerald-400 shadow-xs'
                   : 'bg-white/10 hover:bg-emerald-600/80 text-white border-white/15'
@@ -214,6 +217,23 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-300 shrink-0" />
               <span>Teacher Portal</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenDropdownMenu(null);
+                setMobileMenuOpen(false);
+                onOpenPanel('admin', 'login');
+              }}
+              className={`min-h-[32px] px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+                isAdminActive
+                  ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-xs'
+                  : 'bg-white/10 hover:bg-amber-500/80 hover:text-slate-950 text-white border-white/15'
+              }`}
+            >
+              <ShieldCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isAdminActive ? 'text-slate-950' : 'text-amber-300'}`} />
+              <span>Admin Portal</span>
             </button>
           </div>
         </div>
@@ -244,7 +264,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </button>
 
-        {/* Desktop Navigation Bar (Direct Main Section Tabs — No Cluttered Hover Dropdowns) */}
+        {/* Desktop Navigation Bar (Direct Main Section Tabs) */}
         {isLearningRole && (
           <nav
             ref={navContainerRef}
@@ -265,6 +285,10 @@ export const Header: React.FC<HeaderProps> = ({
                   type="button"
                   onClick={() => {
                     setOpenDropdownMenu(null);
+                    if (menu.id !== 'account' && onSelectMainSection) {
+                      onSelectMainSection(menu.id);
+                      return;
+                    }
                     const secEl = document.getElementById(`main-sec-${menu.id}`);
                     if (secEl) {
                       secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -839,7 +863,14 @@ export const Header: React.FC<HeaderProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleTriggerSubAction(menu.defaultActionId)}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        if (menu.id !== 'account' && onSelectMainSection) {
+                          onSelectMainSection(menu.id);
+                          return;
+                        }
+                        handleTriggerSubAction(menu.defaultActionId);
+                      }}
                       className="text-[11px] font-extrabold text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <span>Open</span>

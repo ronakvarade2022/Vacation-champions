@@ -206,6 +206,14 @@ const AppContent: React.FC = () => {
   >('overview');
   const [explorerZone, setExplorerZone] = useState<ExplorerZoneType>('study-material');
   const [explorerSubFocus, setExplorerSubFocus] = useState<string>('notes');
+  const [dashboardMainSection, setDashboardMainSection] = useState<MainMenuId>('special-learning');
+
+  const handleSelectDashboardSection = (sectionId: MainMenuId) => {
+    setDashboardMainSection(sectionId);
+    if (currentTab !== 'dashboard' && currentTab !== 'public-home') {
+      setCurrentTab('dashboard');
+    }
+  };
 
   // Desktop Site / Mobile View preference (persisted in localStorage)
   const [viewMode, setViewMode] = useState<'auto' | 'desktop'>(() => {
@@ -709,6 +717,9 @@ const AppContent: React.FC = () => {
     if ((currentTab === 'dashboard' || currentTab === 'public-home') && homeScrollTarget === 'plans-pricing') {
       return 'plans';
     }
+    if (currentTab === 'dashboard' || currentTab === 'public-home') {
+      return dashboardMainSection;
+    }
     return 'home';
   };
 
@@ -759,6 +770,7 @@ const AppContent: React.FC = () => {
         currentTab={currentTab}
         setCurrentTab={(tab) => handleNavigateTab(tab)}
         onMenuAction={handleMenuAction}
+        onSelectMainSection={handleSelectDashboardSection}
         activeMenuId={getActiveMenuId()}
         onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
         onOpenPanel={handleOpenRolePanel}
@@ -938,6 +950,8 @@ const AppContent: React.FC = () => {
               isDesktopMode={viewMode === 'desktop'}
               onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
               onMenuAction={handleMenuAction}
+              activeMainSection={dashboardMainSection}
+              onSelectMainSection={handleSelectDashboardSection}
             />
           ) : currentTab === 'referrals' ? (
             <ReferralHubView
@@ -1155,6 +1169,8 @@ const AppContent: React.FC = () => {
                 isDesktopMode={viewMode === 'desktop'}
                 onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
                 onMenuAction={handleMenuAction}
+                activeMainSection={dashboardMainSection}
+                onSelectMainSection={handleSelectDashboardSection}
               />
             )}
 
@@ -1397,6 +1413,8 @@ const AppContent: React.FC = () => {
                     onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
                     onMenuAction={handleMenuAction}
                     onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
+                    activeMainSection={dashboardMainSection}
+                    onSelectMainSection={handleSelectDashboardSection}
                   />
                 )}
 

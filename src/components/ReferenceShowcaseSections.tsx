@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   CheckCircle2,
@@ -22,12 +22,9 @@ import {
   Smartphone,
   Megaphone,
   GraduationCap,
-  HelpCircle,
-  Info,
-  Phone,
-  ShieldAlert,
-  FileText,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from '../data/navigationConfig';
@@ -45,7 +42,6 @@ import {
   ScholarshipChampionBannerSvg,
   HeroBoardEmblemIcon,
 } from './DashboardIllustrations';
-import { SectionOrientationGuide } from './SectionOrientationGuide';
 
 export interface RealStudentProgressMetrics {
   isLoggedIn: boolean;
@@ -71,6 +67,8 @@ interface ReferenceShowcaseSectionsProps {
   viewMode?: 'auto' | 'desktop';
   onToggleViewMode?: () => void;
   progressMetrics: RealStudentProgressMetrics;
+  activeMainSection?: MainMenuId;
+  onSelectMainSection?: (sectionId: MainMenuId) => void;
 }
 
 export const MAIN_SECTION_ICONS: Record<
@@ -81,6 +79,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: string;
     headerGradient: string;
     borderClass: string;
+    tagline: string;
+    pillEmoji: string;
   }
 > = {
   home: {
@@ -89,6 +89,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#e0f2fe] via-[#f0f9ff] to-[#fef3c7]',
     borderClass: 'border-sky-200',
+    tagline: 'Welcome • Explore • Quick Access',
+    pillEmoji: '🏠',
   },
   courses: {
     icon: BookOpen,
@@ -96,13 +98,17 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#e0f2fe] via-[#bae6fd]/60 to-[#f0f9ff]',
     borderClass: 'border-sky-300',
+    tagline: 'Classes 1 to 10 • All Subjects',
+    pillEmoji: '📖',
   },
   'special-learning': {
     icon: Star,
-    badgeBg: 'bg-amber-500',
+    badgeBg: 'bg-amber-400',
     iconColor: 'text-slate-950',
     headerGradient: 'from-[#fef3c7] via-[#fffbeb] to-[#fde68a]/60',
     borderClass: 'border-amber-300',
+    tagline: 'Explore • Learn • Enjoy',
+    pillEmoji: '🎓',
   },
   'study-material': {
     icon: BarChart3,
@@ -110,6 +116,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#dcfce7] via-[#f0fdf4] to-[#fef3c7]',
     borderClass: 'border-emerald-300',
+    tagline: 'Notes • Worksheets • Summaries',
+    pillEmoji: '📊',
   },
   'practice-zone': {
     icon: Target,
@@ -117,6 +125,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#ecfccb] via-[#f7fee7] to-[#e0f2fe]',
     borderClass: 'border-lime-300',
+    tagline: 'Practice • Solve • Master',
+    pillEmoji: '🎯',
   },
   'exam-zone': {
     icon: ClipboardCheck,
@@ -124,6 +134,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#fce7f3] via-[#fdf2f8] to-[#e0e7ff]',
     borderClass: 'border-pink-300',
+    tagline: 'Mock Tests • Scholarship • TET & CTET',
+    pillEmoji: '📋',
   },
   performance: {
     icon: TrendingUp,
@@ -131,6 +143,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#e0e7ff] via-[#eef2ff] to-[#dcfce7]',
     borderClass: 'border-indigo-300',
+    tagline: 'Results • Certificates • Rankings',
+    pillEmoji: '📈',
   },
   plans: {
     icon: Crown,
@@ -138,6 +152,8 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#ffedd5] via-[#fff7ed] to-[#fef3c7]',
     borderClass: 'border-orange-300',
+    tagline: 'Free Forever • ₹99 / 365 Days Full Access',
+    pillEmoji: '🏵️',
   },
   account: {
     icon: User,
@@ -145,8 +161,21 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#f3e8ff] via-[#faf5ff] to-[#e0f2fe]',
     borderClass: 'border-purple-300',
+    tagline: 'Profile • Purchases • Support',
+    pillEmoji: '👤',
   },
 };
+
+const DASHBOARD_ACCORDION_MENU_IDS: MainMenuId[] = [
+  'home',
+  'courses',
+  'special-learning',
+  'study-material',
+  'practice-zone',
+  'exam-zone',
+  'performance',
+  'plans',
+];
 
 export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps> = ({
   selectedBoard,
@@ -162,7 +191,26 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   viewMode = 'auto',
   onToggleViewMode,
   progressMetrics,
+  activeMainSection,
+  onSelectMainSection,
 }) => {
+  const [expandedSectionId, setExpandedSectionId] = useState<MainMenuId>(
+    activeMainSection && activeMainSection !== 'account' ? activeMainSection : 'special-learning'
+  );
+
+  useEffect(() => {
+    if (activeMainSection && activeMainSection !== 'account') {
+      setExpandedSectionId(activeMainSection);
+    }
+  }, [activeMainSection]);
+
+  const handleSelectAccordionSection = (sectionId: MainMenuId) => {
+    setExpandedSectionId(sectionId);
+    if (onSelectMainSection) {
+      onSelectMainSection(sectionId);
+    }
+  };
+
   const triggerSubAction = (actionId: NavSubActionId) => {
     if (onMenuAction) {
       onMenuAction(actionId);
@@ -210,54 +258,133 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     }
   };
 
-  // Three Education Board Cards Inside the Main Hero Banner
-  const heroEducationBoards = [
-    {
-      id: 'Maharashtra' as EducationBoard,
-      actionId: 'course-maharashtra' as NavSubActionId,
-      title: 'MAHARASHTRA STATE BOARD',
-      subtitle: 'Classes 1 to 10 · State Syllabus',
-      cardBg: 'from-[#eff6ff] via-[#dbeafe] to-[#bfdbfe]',
-      borderClass: 'border-[#2563eb] hover:border-[#1d4ed8]',
-      shadowClass: 'shadow-[0_5px_0_#1d4ed8] hover:shadow-[0_6px_0_#1e40af]',
-      titleColor: 'text-[#1e3a8a]',
-      subtitleColor: 'text-[#1d4ed8]',
-      ctaBg: 'bg-[#1d4ed8] text-white',
-    },
-    {
-      id: 'CBSE' as EducationBoard,
-      actionId: 'course-cbse' as NavSubActionId,
-      title: 'CBSE BOARD',
-      subtitle: 'Classes 1 to 10 · NCERT Syllabus',
-      cardBg: 'from-[#f0fdf4] via-[#dcfce7] to-[#bbf7d0]',
-      borderClass: 'border-[#16a34a] hover:border-[#15803d]',
-      shadowClass: 'shadow-[0_5px_0_#15803d] hover:shadow-[0_6px_0_#166534]',
-      titleColor: 'text-[#14532d]',
-      subtitleColor: 'text-[#15803d]',
-      ctaBg: 'bg-[#15803d] text-white',
-    },
-    {
-      id: 'ICSE' as EducationBoard,
-      actionId: 'course-icse' as NavSubActionId,
-      title: 'ICSE BOARD',
-      subtitle: 'Classes 1 to 10 · CISCE Syllabus',
-      cardBg: 'from-[#fff7ed] via-[#ffedd5] to-[#fed7aa]',
-      borderClass: 'border-[#ea580c] hover:border-[#c2410c]',
-      shadowClass: 'shadow-[0_5px_0_#c2410c] hover:shadow-[0_6px_0_#9a3412]',
-      titleColor: 'text-[#7c2d12]',
-      subtitleColor: 'text-[#c2410c]',
-      ctaBg: 'bg-[#ea580c] text-white',
-    },
-  ];
-
   // Progress Ring calculation
   const pct = Math.min(100, Math.max(0, progressMetrics.progressPercent));
   const ringRadius = 42;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - (pct / 100) * ringCircumference;
 
-  // Subjects for selected Board & Class (displayed horizontally inside Section 2: Courses)
+  // Subjects for selected Board & Class (displayed inside Section 2: Courses)
   const currentSubjects = getSubjectsForClass(selectedClass, selectedBoard);
+
+  // Reference-matched 12 Special Learning Cards (preserving exact titles, illustrations, colours & destinations)
+  const specialLearningReferenceCards: {
+    id: string;
+    title: string;
+    illustrationType:
+      | 'courses'
+      | 'maths'
+      | 'science'
+      | 'english'
+      | 'drawing'
+      | 'stories'
+      | 'shivaji'
+      | 'puzzles'
+      | 'sudoku'
+      | 'cricket'
+      | 'ai'
+      | 'scholarship';
+    cardGradient: string;
+    borderClass: string;
+    onClick: () => void;
+  }[] = [
+    {
+      id: 'sl-card-courses',
+      title: 'Courses & Classes',
+      illustrationType: 'courses',
+      cardGradient: 'from-[#bae6fd] via-[#93c5fd] to-[#7dd3fc]',
+      borderClass: 'border-sky-400',
+      onClick: () => onNavigateTab('all-courses'),
+    },
+    {
+      id: 'sl-card-maths',
+      title: 'Maths Practice',
+      illustrationType: 'maths',
+      cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#a3e635]',
+      borderClass: 'border-lime-500',
+      onClick: () => triggerSubAction('pz-maths'),
+    },
+    {
+      id: 'sl-card-science',
+      title: 'Science & Discovery',
+      illustrationType: 'science',
+      cardGradient: 'from-[#fbcfe8] via-[#f9a8d4] to-[#f472b6]',
+      borderClass: 'border-pink-400',
+      onClick: () => triggerSubAction('pz-science'),
+    },
+    {
+      id: 'sl-card-english',
+      title: 'English & Grammar',
+      illustrationType: 'english',
+      cardGradient: 'from-[#fed7aa] via-[#fdba74] to-[#fb923c]',
+      borderClass: 'border-orange-400',
+      onClick: () => triggerSubAction('pz-english'),
+    },
+    {
+      id: 'sl-card-drawing',
+      title: 'Drawing Studio',
+      illustrationType: 'drawing',
+      cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
+      borderClass: 'border-purple-400',
+      onClick: () => triggerSubAction('sl-drawing'),
+    },
+    {
+      id: 'sl-card-stories',
+      title: 'Story World',
+      illustrationType: 'stories',
+      cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
+      borderClass: 'border-emerald-400',
+      onClick: () => triggerSubAction('sl-stories'),
+    },
+    {
+      id: 'sl-card-shivaji',
+      title: 'Shivaji Stories',
+      illustrationType: 'shivaji',
+      cardGradient: 'from-[#fde68a] via-[#fcd34d] to-[#fbbf24]',
+      borderClass: 'border-amber-500',
+      onClick: () => triggerSubAction('sl-shivaji'),
+    },
+    {
+      id: 'sl-card-puzzles',
+      title: 'Brain Puzzles',
+      illustrationType: 'puzzles',
+      cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#60a5fa]',
+      borderClass: 'border-sky-400',
+      onClick: () => triggerSubAction('pz-puzzles'),
+    },
+    {
+      id: 'sl-card-sudoku',
+      title: 'Sudoku Game',
+      illustrationType: 'sudoku',
+      cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
+      borderClass: 'border-emerald-500',
+      onClick: () => triggerSubAction('pz-sudoku'),
+    },
+    {
+      id: 'sl-card-cricket',
+      title: 'Cricket & GK',
+      illustrationType: 'cricket',
+      cardGradient: 'from-[#bae6fd] via-[#93c5fd] to-[#60a5fa]',
+      borderClass: 'border-blue-400',
+      onClick: () => triggerSubAction('sl-gk'),
+    },
+    {
+      id: 'sl-card-ai',
+      title: 'AI Learning Academy',
+      illustrationType: 'ai',
+      cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
+      borderClass: 'border-purple-400',
+      onClick: () => triggerSubAction('sl-ai-academy'),
+    },
+    {
+      id: 'sl-card-scholarship',
+      title: 'Scholarship Corner',
+      illustrationType: 'scholarship',
+      cardGradient: 'from-[#fef08a] via-[#d9f99d] to-[#a3e635]',
+      borderClass: 'border-lime-500',
+      onClick: () => triggerSubAction('sl-scholarship'),
+    },
+  ];
 
   // Helper to get existing icon illustration and colour theme for any sub-action item
   const getSubItemIconVisuals = (
@@ -275,6 +402,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       | 'scholarship'
       | 'courses'
       | 'maths'
+      | 'science'
       | 'english'
       | 'gk'
       | 'memory'
@@ -376,6 +504,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         borderClass: 'border-[#9333ea]/40',
       };
     }
+    if (subId === 'pz-science') {
+      return {
+        illustrationType: 'science',
+        cardGradient: 'from-[#fbcfe8] via-[#f9a8d4] to-[#f472b6]',
+        borderClass: 'border-pink-400',
+      };
+    }
     if (subId === 'pz-puzzles') {
       return {
         illustrationType: 'puzzles',
@@ -400,8 +535,8 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     if (subId === 'pz-english' || subId === 'pz-vocabulary') {
       return {
         illustrationType: 'english',
-        cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
-        borderClass: 'border-[#16a34a]/40',
+        cardGradient: 'from-[#fed7aa] via-[#fdba74] to-[#fb923c]',
+        borderClass: 'border-orange-400',
       };
     }
     if (menuId === 'courses') {
@@ -446,13 +581,6 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         borderClass: 'border-[#ea580c]/40',
       };
     }
-    if (menuId === 'account') {
-      return {
-        illustrationType: 'writing',
-        cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
-        borderClass: 'border-[#9333ea]/40',
-      };
-    }
     return {
       illustrationType: 'courses',
       cardGradient: 'from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc]',
@@ -460,19 +588,24 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     };
   };
 
+  const activeMenuGroup =
+    MAIN_NAV_MENUS.find((m) => m.id === expandedSectionId) ||
+    MAIN_NAV_MENUS.find((m) => m.id === 'special-learning')!;
+  const activeSectionMeta = MAIN_SECTION_ICONS[activeMenuGroup.id];
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-5 sm:space-y-6">
       {/* =====================================================================
-          TOP 4 SHORTCUT TABS (Active Class · Free Demo · Courses · Desktop Site)
+          TOP SHORTCUT TABS (Active Class · Free Demo · Courses · Desktop Site)
           ===================================================================== */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
         <button
           type="button"
-          onClick={() => onNavigateTab('all-courses')}
+          onClick={() => handleSelectAccordionSection('courses')}
           aria-label={`Active Class: ${getBoardShortLabel(selectedBoard)} ${selectedClass}`}
-          className="h-12 sm:h-13 rounded-2xl bg-gradient-to-b from-[#fef3c7] via-[#fde68a] to-[#fcd34d] hover:brightness-105 text-[#0f2952] font-display font-black text-xs sm:text-sm shadow-md border-2 border-amber-500 flex items-center justify-center gap-2 px-3 cursor-pointer transition-all active:scale-[0.99]"
+          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#fef3c7] via-[#fde68a] to-[#fcd34d] hover:brightness-105 text-[#0f2952] font-display font-black text-xs sm:text-sm shadow-sm border-2 border-amber-400 flex items-center justify-center gap-2 px-3 cursor-pointer transition-all active:scale-[0.99]"
         >
-          <GraduationCap className="w-5 h-5 text-amber-800 shrink-0" />
+          <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-800 shrink-0" />
           <span className="truncate">
             Active Class: {selectedClass} ({getBoardShortLabel(selectedBoard)})
           </span>
@@ -481,18 +614,18 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         <button
           type="button"
           onClick={() => onOpenDemo('live-quiz')}
-          className="h-12 sm:h-13 rounded-2xl bg-gradient-to-b from-[#e0d4fc] via-[#c4b5fd] to-[#a78bfa] hover:brightness-105 text-[#1e1b4b] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#8b5cf6]/50 flex items-center justify-center gap-2.5 cursor-pointer transition-all active:scale-[0.99]"
+          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#e0d4fc] via-[#c4b5fd] to-[#a78bfa] hover:brightness-105 text-[#1e1b4b] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#8b5cf6]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
         >
-          <span className="text-xl drop-shadow-xs">🚀</span>
+          <span className="text-lg sm:text-xl drop-shadow-xs">🚀</span>
           <span>Free Demo</span>
         </button>
 
         <button
           type="button"
           onClick={() => onNavigateTab('all-courses')}
-          className="h-12 sm:h-13 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#1e1b4b] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2.5 cursor-pointer transition-all active:scale-[0.99]"
+          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#1e1b4b] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
         >
-          <span className="text-xl drop-shadow-xs">📖</span>
+          <span className="text-lg sm:text-xl drop-shadow-xs">📖</span>
           <span>Courses</span>
         </button>
 
@@ -501,16 +634,16 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
           onClick={() => {
             if (onToggleViewMode) onToggleViewMode();
           }}
-          className="h-12 sm:h-13 rounded-2xl bg-gradient-to-b from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8] hover:brightness-105 text-[#0c4a6e] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#0284c7]/50 flex items-center justify-center gap-2.5 cursor-pointer transition-all active:scale-[0.99]"
+          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8] hover:brightness-105 text-[#0c4a6e] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#0284c7]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
         >
           {viewMode === 'desktop' ? (
             <>
-              <Smartphone className="w-5 h-5 text-[#0369a1]" />
+              <Smartphone className="w-4 h-4 sm:w-5 sm:h-5 text-[#0369a1]" />
               <span>Mobile View</span>
             </>
           ) : (
             <>
-              <Monitor className="w-5 h-5 text-[#0369a1]" />
+              <Monitor className="w-4 h-4 sm:w-5 sm:h-5 text-[#0369a1]" />
               <span>Desktop Site</span>
             </>
           )}
@@ -518,577 +651,308 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </div>
 
       {/* =====================================================================
-          MAIN EDUCATIONAL HERO BANNER (Uploaded Banner + Interactive Board Cards)
+          SECOND SECTION – ATTACHED MYSTUDYZONE PROMOTIONAL BANNER
+          Uses exact attached reference image (/assets/aistudio/IMG-20261117-WA0052_8bad2f82.jpg)
+          Positioned below top header/portal selection and above the main navigation menu.
           ===================================================================== */}
       <section
-        aria-label="Welcome to MyStudyZone Educational Hero Banner"
-        className="rounded-3xl bg-white border-2 border-sky-200/80 shadow-xl overflow-hidden"
+        aria-label="Welcome to MyStudyZone Promotional Banner"
+        className="rounded-3xl bg-white border-2 border-sky-300 shadow-lg overflow-hidden"
       >
-        <div className="relative w-full aspect-[3/1] bg-sky-50/60">
-          <picture>
-            <source
-              srcSet="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.webp"
-              type="image/webp"
-            />
-            <img
-              src="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.png"
-              alt="Welcome to MyStudyZone – Your Learning World (Classes 1 to 10) – Select Your Education Board: Maharashtra State Board, CBSE Board, ICSE Board"
-              width={2172}
-              height={724}
-              fetchPriority="high"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover block select-none"
-            />
-          </picture>
+        <div className="relative w-full aspect-[1000/282] overflow-hidden bg-sky-100">
+          <img
+            src="/assets/aistudio/IMG-20261117-WA0052_8bad2f82.jpg"
+            alt="Welcome to MyStudyZone! Your Learning World! Learn • Play • Excel — Start Learning"
+            width={1024}
+            height={1536}
+            fetchPriority="high"
+            decoding="async"
+            className="w-[102.4%] max-w-none -ml-[1.2%] -mt-[14.6%] block select-none pointer-events-none"
+          />
 
-          {/* Interactive Clickable Element: ▶ START LEARNING Button */}
+          {/* Interactive Clickable Hotspot over "▶ Start Learning" button in the banner */}
           <button
             type="button"
             onClick={onStartLearningClick}
-            aria-label="Start Learning – Open Student Learning Courses"
+            aria-label="Start Learning"
             title="Start Learning"
             style={{
-              left: '7.1%',
-              top: '46.8%',
-              width: '15.0%',
-              height: '11.2%',
+              left: '19.5%',
+              top: '65.5%',
+              width: '22.5%',
+              height: '25.5%',
             }}
-            className="absolute z-10 rounded-full cursor-pointer transition-all duration-150 hover:ring-4 hover:ring-white/80 hover:bg-white/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
+            className="absolute z-10 rounded-full cursor-pointer transition-all duration-150 hover:ring-4 hover:ring-white/90 hover:bg-white/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
           >
-            <span className="sr-only">START LEARNING</span>
-          </button>
-
-          {/* Interactive Clickable Element 1: MAHARASHTRA STATE BOARD Card & Explore Button */}
-          <button
-            type="button"
-            onClick={() => triggerSubAction('course-maharashtra')}
-            aria-label="Maharashtra State Board – Classes 1 to 10 – State Syllabus – Explore"
-            title="Explore Maharashtra State Board (Classes 1 to 10)"
-            style={{
-              left: '8.1%',
-              top: '69.2%',
-              width: '27.6%',
-              height: '16.5%',
-            }}
-            className={`absolute z-10 rounded-2xl cursor-pointer transition-all duration-150 hover:ring-3 hover:ring-[#1d4ed8] hover:bg-blue-500/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1d4ed8] ${
-              selectedBoard === 'Maharashtra' ? 'ring-2 ring-[#1e3a8a]/60' : ''
-            }`}
-          >
-            <span className="sr-only">
-              MAHARASHTRA STATE BOARD – Classes 1 to 10 · State Syllabus – Explore
-            </span>
-          </button>
-
-          {/* Interactive Clickable Element 2: CBSE BOARD Card & Explore Button */}
-          <button
-            type="button"
-            onClick={() => triggerSubAction('course-cbse')}
-            aria-label="CBSE Board – Classes 1 to 10 – NCERT Syllabus – Explore"
-            title="Explore CBSE Board (Classes 1 to 10)"
-            style={{
-              left: '36.3%',
-              top: '69.2%',
-              width: '27.6%',
-              height: '16.5%',
-            }}
-            className={`absolute z-10 rounded-2xl cursor-pointer transition-all duration-150 hover:ring-3 hover:ring-[#15803d] hover:bg-emerald-500/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#15803d] ${
-              selectedBoard === 'CBSE' ? 'ring-2 ring-[#14532d]/60' : ''
-            }`}
-          >
-            <span className="sr-only">
-              CBSE BOARD – Classes 1 to 10 · NCERT Syllabus – Explore
-            </span>
-          </button>
-
-          {/* Interactive Clickable Element 3: ICSE BOARD Card & Explore Button */}
-          <button
-            type="button"
-            onClick={() => triggerSubAction('course-icse')}
-            aria-label="ICSE Board – Classes 1 to 10 – CISCE Syllabus – Explore"
-            title="Explore ICSE Board (Classes 1 to 10)"
-            style={{
-              left: '64.5%',
-              top: '69.2%',
-              width: '27.6%',
-              height: '16.5%',
-            }}
-            className={`absolute z-10 rounded-2xl cursor-pointer transition-all duration-150 hover:ring-3 hover:ring-[#ea580c] hover:bg-orange-500/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ea580c] ${
-              selectedBoard === 'ICSE' ? 'ring-2 ring-[#7c2d12]/60' : ''
-            }`}
-          >
-            <span className="sr-only">
-              ICSE BOARD – Classes 1 to 10 · CISCE Syllabus – Explore
-            </span>
+            <span className="sr-only">Start Learning</span>
           </button>
         </div>
-
-        {/* Mobile-Friendly Vertical Interactive Controls */}
-        {viewMode !== 'desktop' && (
-          <div className="md:hidden px-3.5 pb-4 pt-2 bg-gradient-to-b from-white to-sky-50/70 border-t border-slate-100 space-y-3">
-            <button
-              type="button"
-              onClick={onStartLearningClick}
-              className="w-full min-h-[46px] py-2.5 px-5 rounded-full bg-gradient-to-b from-[#fb923c] via-[#f97316] to-[#ea580c] hover:brightness-105 text-white font-display font-black text-sm shadow-md shadow-orange-600/30 border-2 border-white flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
-            >
-              <span className="w-6 h-6 rounded-full bg-white text-[#ea580c] flex items-center justify-center shadow-2xs shrink-0">
-                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-              </span>
-              <span>START LEARNING</span>
-            </button>
-
-            <div className="flex items-center justify-between gap-2 px-1">
-              <p className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
-                Select Your Education Board (Classes 1 to 10)
-              </p>
-              <span className="text-[10px] font-extrabold text-[#ea580c]">
-                Tap to Explore →
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2.5">
-              {heroEducationBoards.map((boardCard) => {
-                const isSelected = selectedBoard === boardCard.id;
-
-                return (
-                  <button
-                    key={boardCard.id}
-                    type="button"
-                    onClick={() => triggerSubAction(boardCard.actionId)}
-                    className={`group w-full rounded-2xl bg-gradient-to-r ${boardCard.cardBg} border-2 ${
-                      boardCard.borderClass
-                    } ${boardCard.shadowClass} ${
-                      isSelected ? 'ring-2 ring-offset-1 ring-[#0f2952]' : ''
-                    } p-3 text-left transition-all duration-150 active:translate-y-0.5 cursor-pointer flex items-center justify-between gap-3`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <HeroBoardEmblemIcon
-                        board={boardCard.id}
-                        className="w-11 h-11 shrink-0 drop-shadow-xs"
-                      />
-                      <div className="min-w-0">
-                        <span
-                          className={`block font-display font-black text-xs sm:text-sm leading-tight tracking-tight ${boardCard.titleColor}`}
-                        >
-                          {boardCard.title}
-                        </span>
-                        <span
-                          className={`block text-[11px] font-bold mt-0.5 ${boardCard.subtitleColor}`}
-                        >
-                          {boardCard.subtitle}
-                        </span>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`px-3.5 py-2 rounded-full font-display font-black text-xs whitespace-nowrap shrink-0 flex items-center justify-center gap-1 shadow-xs ${boardCard.ctaBg}`}
-                    >
-                      <span>Explore</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </section>
 
       {/* =====================================================================
-          SHORT INTRODUCTION & ORIENTATION GUIDE
+          THIRD SECTION – MAIN DASHBOARD NAVIGATION MENU (SINGLE-OPEN ACCORDION)
+          All 8 main menu sections remain visible with their existing icons & arrows.
+          Clicking any section expands its subsections directly below the main menu.
           ===================================================================== */}
-      <SectionOrientationGuide
-        sectionNumber="Complete Dashboard Directory"
-        sectionTitle="Welcome to MyStudyZone (Classes 1 to 10)"
-        whatIsThis="All main website sections are arranged vertically below, with their related subsections and icons displayed horizontally directly underneath each main heading."
-        whatCanILearn={`Complete ${getBoardShortLabel(selectedBoard)} (${selectedClass}) syllabus, 4-level quizzes, worksheets, audio stories, drawing, Sudoku, and scholarship exams.`}
-        whatShouldIClick="Find your Main Section heading below and click any Subsection tab directly underneath it to open that page immediately."
-        accentTheme="blue"
-      />
-
-      {/* =====================================================================
-          VERTICAL SEQUENCE OF ALL 9 MAIN SECTIONS
-          WITH HORIZONTAL SUBSECTIONS DIRECTLY UNDERNEATH EACH MAIN SECTION
-          ===================================================================== */}
-      <div className="space-y-8">
-        {MAIN_NAV_MENUS.map((menu, sectionIndex) => {
-          const sectionMeta = MAIN_SECTION_ICONS[menu.id];
-          const MainSectionIcon = sectionMeta.icon;
-
-          // Additional policy & support links under Section 9: My Account so 100% of website pages are included
-          const extraAccountSubsections =
-            menu.id === 'account'
-              ? [
-                  {
-                    id: 'sub-faqs',
-                    label: 'FAQs',
-                    description: 'Frequently asked questions for students & parents',
-                    badgeText: 'FAQs',
-                    icon: HelpCircle,
-                    iconBg: 'bg-amber-500 text-slate-950',
-                    cardGradient: 'from-[#fef3c7] via-[#fde68a] to-[#fcd34d]',
-                    borderClass: 'border-amber-400',
-                    onClick: () => onNavigateTab('faqs'),
-                  },
-                  {
-                    id: 'sub-about',
-                    label: 'About Us',
-                    description: 'Mission, educational vision & platform overview',
-                    badgeText: 'About',
-                    icon: Info,
-                    iconBg: 'bg-sky-600 text-white',
-                    cardGradient: 'from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc]',
-                    borderClass: 'border-sky-400',
-                    onClick: () => onNavigateTab('about'),
-                  },
-                  {
-                    id: 'sub-contact',
-                    label: 'Contact Us',
-                    description: 'Official student & parent support contact details',
-                    badgeText: 'Contact',
-                    icon: Phone,
-                    iconBg: 'bg-emerald-600 text-white',
-                    cardGradient: 'from-[#dcfce7] via-[#bbf7d0] to-[#86efac]',
-                    borderClass: 'border-emerald-400',
-                    onClick: () => onNavigateTab('contact'),
-                  },
-                  {
-                    id: 'sub-grievance',
-                    label: 'Grievance Redressal',
-                    description: 'Dedicated grievance officer & resolution desk',
-                    badgeText: 'Grievance',
-                    icon: ShieldAlert,
-                    iconBg: 'bg-rose-600 text-white',
-                    cardGradient: 'from-[#ffe4e6] via-[#fecdd3] to-[#fda4af]',
-                    borderClass: 'border-rose-400',
-                    onClick: () => onNavigateTab('grievance'),
-                  },
-                  {
-                    id: 'sub-terms',
-                    label: 'Terms, Privacy & Refund Policy',
-                    description: 'Terms of use, privacy policy, refund & educational disclaimer',
-                    badgeText: 'Policies',
-                    icon: FileText,
-                    iconBg: 'bg-indigo-600 text-white',
-                    cardGradient: 'from-[#e0e7ff] via-[#c7d2fe] to-[#a5b4fc]',
-                    borderClass: 'border-indigo-400',
-                    onClick: () => onNavigateTab('terms'),
-                  },
-                ]
-              : [];
-
-          // Extra Leaderboard subsection under Section 7: Performance so Leaderboard & Certificates are both distinct
-          const extraPerformanceSubsections =
-            menu.id === 'performance'
-              ? [
-                  {
-                    id: 'sub-leaderboard',
-                    label: 'Leaderboard & Rankings',
-                    description: 'All-India student XP leaderboard, streaks & hall of fame',
-                    badgeText: 'Leaderboard',
-                    icon: Trophy,
-                    iconBg: 'bg-emerald-600 text-white',
-                    cardGradient: 'from-[#dcfce7] via-[#bbf7d0] to-[#86efac]',
-                    borderClass: 'border-emerald-400',
-                    onClick: () => onNavigateTab('leaderboard'),
-                  },
-                ]
-              : [];
+      <section
+        aria-label="Main Dashboard Navigation Menu"
+        className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden divide-y divide-slate-200/80"
+      >
+        {DASHBOARD_ACCORDION_MENU_IDS.map((menuId) => {
+          const menu = MAIN_NAV_MENUS.find((m) => m.id === menuId);
+          if (!menu) return null;
+          const meta = MAIN_SECTION_ICONS[menu.id];
+          const IconComp = meta.icon;
+          const isSelected = expandedSectionId === menu.id;
+          const cleanLabel = menu.label.replace('🎓 ', '').toUpperCase();
 
           return (
-            <section
+            <button
               key={menu.id}
-              id={`main-sec-${menu.id}`}
-              aria-label={`${menu.label} Main Section`}
-              className={`rounded-3xl bg-white border-2 ${sectionMeta.borderClass} shadow-lg p-4 sm:p-6 space-y-5 scroll-mt-24`}
+              type="button"
+              id={`accordion-menu-${menu.id}`}
+              aria-expanded={isSelected}
+              aria-controls="dashboard-expanded-subsections"
+              onClick={() => handleSelectAccordionSection(menu.id)}
+              className={`w-full px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a]/85 to-[#fef3c7] text-[#0f2952] font-black shadow-inner'
+                  : 'bg-white hover:bg-sky-50/70 text-[#0f2952]'
+              }`}
             >
-              {/* -------------------------------------------------------------
-                  MAIN SECTION HEADING (Vertical Sequence Item)
-                  ------------------------------------------------------------- */}
-              <div
-                className={`rounded-2xl bg-gradient-to-r ${sectionMeta.headerGradient} border ${sectionMeta.borderClass} p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl ${sectionMeta.badgeBg} ${sectionMeta.iconColor} flex items-center justify-center shadow-md shrink-0`}
-                  >
-                    <MainSectionIcon className="w-6 h-6" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#0f2952] text-amber-300 font-display font-black text-[10px] uppercase tracking-wider">
-                        Main Section {sectionIndex + 1}
-                      </span>
-                      <h2 className="text-lg sm:text-2xl font-display font-black text-[#0f2952] tracking-tight">
-                        {menu.label}
-                      </h2>
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">
-                      {menu.whatIsThis}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => triggerSubAction(menu.defaultActionId)}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#1d4ed8] text-white font-display font-black text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer shadow-sm transition-all shrink-0"
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-xs shrink-0`}
                 >
-                  <span>Open {menu.label.replace('🎓 ', '')}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                  <IconComp className="w-4 h-4 sm:w-5 sm:h-5" />
+                </span>
+                <span className="font-display font-black text-xs sm:text-sm md:text-base tracking-wide uppercase text-[#0f2952] truncate">
+                  {cleanLabel}
+                </span>
               </div>
 
-              {/* -------------------------------------------------------------
-                  SUBSECTIONS – HORIZONTAL ARRANGEMENT DIRECTLY BELOW HEADING
-                  ------------------------------------------------------------- */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2 px-1">
-                  <span className="text-[11px] font-display font-black uppercase tracking-wider text-slate-600">
-                    {menu.label.replace('🎓 ', '')} Subsections (Horizontal Row)
-                  </span>
-                  <span className="text-[11px] font-bold text-slate-500">
-                    Swipe or scroll horizontally →
-                  </span>
-                </div>
-
-                <div className="flex items-stretch gap-3.5 overflow-x-auto pb-2.5 pt-0.5">
-                  {menu.items.map((item) => {
-                    const visuals = getSubItemIconVisuals(item.id, menu.id);
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => triggerSubAction(item.id)}
-                        className={`min-w-[235px] sm:min-w-[255px] max-w-[285px] shrink-0 group rounded-2xl bg-gradient-to-r ${visuals.cardGradient} border-2 ${visuals.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
-                      >
-                        <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                          {visuals.emojiIcon ? (
-                            <span className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-sm text-2xl">
-                              {visuals.emojiIcon}
-                            </span>
-                          ) : visuals.boardEmblem ? (
-                            <HeroBoardEmblemIcon
-                              board={visuals.boardEmblem}
-                              className="w-13 h-13 drop-shadow-xs"
-                            />
-                          ) : (
-                            <SpecialCardIllustration
-                              type={visuals.illustrationType || 'courses'}
-                              className="w-full h-full drop-shadow-xs"
-                            />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
-                            {item.label}
-                          </span>
-                          <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
-                            {item.description}
-                          </p>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-2 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
-                            <span>{item.badgeText || 'Open'}</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {/* Extra Performance Subsections (Leaderboard) */}
-                  {extraPerformanceSubsections.map((extra) => {
-                    const ExtraIcon = extra.icon;
-                    return (
-                      <button
-                        key={extra.id}
-                        type="button"
-                        onClick={extra.onClick}
-                        className={`min-w-[235px] sm:min-w-[255px] max-w-[285px] shrink-0 group rounded-2xl bg-gradient-to-r ${extra.cardGradient} border-2 ${extra.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
-                      >
-                        <span
-                          className={`w-13 h-13 rounded-2xl ${extra.iconBg} flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform`}
-                        >
-                          <ExtraIcon className="w-6 h-6" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
-                            {extra.label}
-                          </span>
-                          <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
-                            {extra.description}
-                          </p>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-2 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
-                            <span>{extra.badgeText}</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {/* Extra Account & Support Subsections (FAQs, About, Contact, Grievance, Terms/Privacy) */}
-                  {extraAccountSubsections.map((extra) => {
-                    const ExtraIcon = extra.icon;
-                    return (
-                      <button
-                        key={extra.id}
-                        type="button"
-                        onClick={extra.onClick}
-                        className={`min-w-[235px] sm:min-w-[255px] max-w-[285px] shrink-0 group rounded-2xl bg-gradient-to-r ${extra.cardGradient} border-2 ${extra.borderClass} p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
-                      >
-                        <span
-                          className={`w-13 h-13 rounded-2xl ${extra.iconBg} flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform`}
-                        >
-                          <ExtraIcon className="w-6 h-6" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
-                            {extra.label}
-                          </span>
-                          <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
-                            {extra.description}
-                          </p>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-2 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
-                            <span>{extra.badgeText}</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className={`hidden sm:inline-block text-[11px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                    isSelected
+                      ? 'bg-[#0f2952] text-amber-300'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {isSelected ? 'Expanded' : meta.tagline}
+                </span>
+                {isSelected ? (
+                  <ChevronUp className="w-5 h-5 text-[#0f2952] stroke-[2.75]" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-slate-600 stroke-[2.5]" />
+                )}
               </div>
+            </button>
+          );
+        })}
+      </section>
 
-              {/* -------------------------------------------------------------
-                  SECTION 1 (HOME) NESTED HORIZONTAL WIDGETS:
-                  Daily Challenge & Important Announcements
-                  ------------------------------------------------------------- */}
-              {menu.id === 'home' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2 border-t border-slate-100">
-                  {/* Daily Challenge Card */}
-                  <div className="lg:col-span-6 rounded-3xl bg-white border-2 border-purple-200 shadow-md overflow-hidden flex flex-col justify-between">
-                    <div className="px-5 py-3 bg-gradient-to-r from-[#581c87] via-[#6b21a8] to-[#4338ca] text-white flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-xl">🏆</span>
-                        <h3 className="text-base sm:text-lg font-display font-black tracking-tight">
-                          Daily Challenge
-                        </h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
-                          else onOpenDemo('live-quiz');
-                        }}
-                        className="px-3 py-1 rounded-full bg-white text-[#4338ca] font-extrabold text-xs flex items-center gap-1 cursor-pointer hover:bg-purple-50 transition-colors"
-                      >
-                        <span>Start Now</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
+      {/* =====================================================================
+          FOURTH SECTION – DYNAMIC SUBSECTIONS (DIRECTLY BELOW THE MAIN MENU)
+          Only ONE main section is expanded at a time.
+          ===================================================================== */}
+      <section
+        id="dashboard-expanded-subsections"
+        aria-label={`${activeMenuGroup.label.replace('🎓 ', '')} Subsections`}
+        className="rounded-3xl bg-white/95 border-2 border-sky-200/90 shadow-md overflow-hidden"
+      >
+        {/* Reference-Matched Navy Pill Section Header Bar */}
+        <div className="bg-gradient-to-r from-[#e0f2fe] via-[#bae6fd]/60 to-[#e0f2fe] px-3 sm:px-5 py-2.5 border-b border-sky-200/80 flex flex-wrap items-center justify-between gap-2">
+          <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white px-4 sm:px-5 py-1.5 sm:py-2 rounded-full shadow-sm">
+            <span className="text-base sm:text-lg leading-none">{activeSectionMeta.pillEmoji}</span>
+            <h2 className="text-sm sm:text-lg font-display font-black tracking-tight">
+              {activeMenuGroup.label.replace('🎓 ', '')}
+            </h2>
+          </div>
+
+          <span className="text-xs sm:text-base font-display font-black italic text-[#0f2952] pr-2">
+            {activeSectionMeta.tagline}
+          </span>
+        </div>
+
+        {/* Expanded Subsections Content Body */}
+        <div className="p-3.5 sm:p-5 space-y-4">
+          {expandedSectionId === 'special-learning' ? (
+            <>
+              {/* 4x3 Grid of the Exact 12 Special Learning Cards from Reference Image */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5">
+                {specialLearningReferenceCards.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={card.onClick}
+                    className={`group rounded-2xl bg-gradient-to-r ${card.cardGradient} border-2 ${card.borderClass} p-2.5 sm:p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-2.5 sm:gap-3.5 text-left min-h-[78px] sm:min-h-[88px]`}
+                  >
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <SpecialCardIllustration
+                        type={card.illustrationType}
+                        className="w-full h-full drop-shadow-xs"
+                      />
                     </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="block font-display font-black text-xs sm:text-base text-[#0f2952] leading-snug">
+                        {card.title}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
 
-                    <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                      <div className="sm:col-span-8 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="flex items-center gap-2.5 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200/80">
-                            <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0">
-                              <Calendar className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <span className="text-[11px] font-bold text-slate-500 block">
-                                Today&apos;s Quiz
-                              </span>
-                              <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-                                25 Questions
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2.5 bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200/80">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
-                              <Clock className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <span className="text-[11px] font-bold text-slate-500 block">
-                                Time
-                              </span>
-                              <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-                                15 Min
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
-                            else onOpenDemo('live-quiz');
-                          }}
-                          className="w-full py-2.5 px-5 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
-                        >
-                          <Play className="w-4 h-4 fill-current" />
-                          <span>Play Now</span>
-                        </button>
+              {/* Additional Special Learning Quick-Access Studios (TET/CTET, Moral Stories, Creative Activities) */}
+              <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-600">
+                  More Special Learning Studios:
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => triggerSubAction('sl-tet-ctet')}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    <span>🎓 TET &amp; CTET Exam Prep (200 Mocks)</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerSubAction('sl-moral')}
+                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    <span>💛 Moral Stories</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerSubAction('sl-creative')}
+                    className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    <span>🎨 Creative Activities</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Responsive Grid of Colourful Subsection Cards for Selected Main Menu */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
+                {activeMenuGroup.items.map((item) => {
+                  const visuals = getSubItemIconVisuals(item.id, activeMenuGroup.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => triggerSubAction(item.id)}
+                      className={`group rounded-2xl bg-gradient-to-r ${visuals.cardGradient} border-2 ${visuals.borderClass} p-3 sm:p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                    >
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        {visuals.emojiIcon ? (
+                          <span className="w-13 h-13 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-sm text-2xl">
+                            {visuals.emojiIcon}
+                          </span>
+                        ) : visuals.boardEmblem ? (
+                          <HeroBoardEmblemIcon
+                            board={visuals.boardEmblem}
+                            className="w-13 h-13 drop-shadow-xs"
+                          />
+                        ) : (
+                          <SpecialCardIllustration
+                            type={visuals.illustrationType || 'courses'}
+                            className="w-full h-full drop-shadow-xs"
+                          />
+                        )}
                       </div>
-
-                      <div className="sm:col-span-4 flex items-center justify-center">
-                        <DailyChallengeBoyMascot className="w-24 h-24" />
+                      <div className="min-w-0 flex-1">
+                        <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
+                          {item.label}
+                        </span>
+                        <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
+                          {item.description}
+                        </p>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-1.5 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
+                          <span>{item.badgeText || 'Open'}</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </span>
                       </div>
+                    </button>
+                  );
+                })}
+
+                {expandedSectionId === 'performance' && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('leaderboard')}
+                    className="group rounded-2xl bg-gradient-to-r from-[#dcfce7] via-[#bbf7d0] to-[#86efac] border-2 border-emerald-400 p-3 sm:p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left"
+                  >
+                    <span className="w-13 h-13 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform">
+                      <Trophy className="w-6 h-6" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
+                        Leaderboard &amp; Rankings
+                      </span>
+                      <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
+                        All-India student XP leaderboard, streaks &amp; hall of fame
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-1.5 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
+                        <span>Leaderboard</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              {/* Extra Home Quick Overview & Important Announcements when HOME is selected */}
+              {expandedSectionId === 'home' && (
+                <div className="rounded-2xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border border-indigo-400/30 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
+                      <Megaphone className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
+                          Important Announcements
+                        </span>
+                        <span className="text-xs font-bold text-sky-200">
+                          Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed">
+                        100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10), 4th &amp; 7th Scholarship, and TET/CTET.
+                      </p>
                     </div>
                   </div>
 
-                  {/* Important Announcements Card */}
-                  <div className="lg:col-span-6 rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border-2 border-indigo-400/30 shadow-md flex flex-col justify-between gap-4">
-                    <div className="flex items-start gap-3.5">
-                      <div className="w-11 h-11 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
-                        <Megaphone className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
-                            Important Announcements
-                          </span>
-                          <span className="text-xs font-bold text-sky-200">
-                            Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
-                          </span>
-                        </div>
-                        <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed">
-                          100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10). Try the Free Demo or unlock 365 days of full access for just ₹99 one-time payment.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
-                      <button
-                        type="button"
-                        onClick={() => onOpenDemo('live-quiz')}
-                        className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>Try Free Demo</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onOpenMembership(selectedClass, selectedBoard)}
-                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                      >
-                        <Crown className="w-3.5 h-3.5" />
-                        <span>₹99 / 365 Days Plan</span>
-                      </button>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onOpenDemo('live-quiz')}
+                      className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Try Free Demo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenMembership(selectedClass, selectedBoard)}
+                      className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>₹99 / 365 Days Plan</span>
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* -------------------------------------------------------------
-                  SECTION 2 (COURSES) NESTED HORIZONTAL ROWS:
-                  1. Class-Wise Tabs (Class 1 to Class 10)
-                  2. Subject-Wise Tabs (All Subjects for Selected Board & Class)
-                  ------------------------------------------------------------- */}
-              {menu.id === 'courses' && (
+              {/* Extra Class-Wise & Subject-Wise Tabs when COURSES is selected */}
+              {expandedSectionId === 'courses' && (
                 <div className="space-y-4 pt-3 border-t border-slate-100">
-                  {/* Class-Wise Horizontal Row (Classes 1 to 10) */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2 px-1">
                       <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
@@ -1144,7 +1008,6 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                     </div>
                   </div>
 
-                  {/* Subject-Wise Horizontal Row (All Subjects for Selected Board & Class) */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2 px-1">
                       <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
@@ -1186,89 +1049,184 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                   </div>
                 </div>
               )}
+            </>
+          )}
+        </div>
+      </section>
 
-              {/* -------------------------------------------------------------
-                  SECTION 7 (PERFORMANCE) NESTED PROGRESS SUMMARY CARD
-                  ------------------------------------------------------------- */}
-              {menu.id === 'performance' && (
-                <div className="rounded-2xl bg-sky-50/60 border border-sky-200/90 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                  <div className="sm:col-span-3 flex flex-col items-center justify-center">
-                    <div className="relative w-24 h-24 flex items-center justify-center">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r={ringRadius}
-                          fill="none"
-                          stroke="#e2e8f0"
-                          strokeWidth="10"
-                        />
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r={ringRadius}
-                          fill="none"
-                          stroke="url(#progressRingGrad)"
-                          strokeWidth="10"
-                          strokeLinecap="round"
-                          strokeDasharray={ringCircumference}
-                          strokeDashoffset={ringOffset}
-                        />
-                        <defs>
-                          <linearGradient id="progressRingGrad" x1="0" y1="0" x2="1" y2="1">
-                            <stop offset="0%" stopColor="#22c55e" />
-                            <stop offset="100%" stopColor="#0ea5e9" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-xl font-display font-black text-[#0f2952]">
-                          {pct}%
-                        </span>
-                      </div>
-                    </div>
+      {/* =====================================================================
+          BOTTOM SECTION – MY LEARNING PROGRESS & DAILY CHALLENGE
+          Appears ONLY ONCE at the bottom of the expanded subsection area.
+          ===================================================================== */}
+      <section
+        aria-label="My Learning Progress and Daily Challenge"
+        className="grid grid-cols-1 lg:grid-cols-12 gap-4"
+      >
+        {/* Left Card: My Learning Progress */}
+        <div className="lg:col-span-6 rounded-3xl bg-white border-2 border-sky-300 shadow-md overflow-hidden flex flex-col justify-between">
+          <div className="px-4 sm:px-5 py-3 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#1d4ed8] text-white flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl leading-none">📊</span>
+              <h3 className="text-base sm:text-lg font-display font-black tracking-tight">
+                My Learning Progress
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => triggerSubAction('perf-tracking')}
+              className="text-xs sm:text-sm font-extrabold text-sky-100 hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>View Details</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+            {/* Circular Progress Ring */}
+            <div className="sm:col-span-4 flex flex-col items-center justify-center">
+              <div className="relative w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={ringRadius}
+                    fill="none"
+                    stroke="#e2e8f0"
+                    strokeWidth="10"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={ringRadius}
+                    fill="none"
+                    stroke="url(#progressRingGradBottom)"
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray={ringCircumference}
+                    strokeDashoffset={ringOffset}
+                  />
+                  <defs>
+                    <linearGradient id="progressRingGradBottom" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#22c55e" />
+                      <stop offset="100%" stopColor="#0ea5e9" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl sm:text-2xl font-display font-black text-[#0f2952]">
+                    {pct}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress Metrics List */}
+            <div className="sm:col-span-5 space-y-2.5 text-xs sm:text-sm font-bold text-[#0f2952]">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Courses Completed : <strong>{progressMetrics.coursesCompleted}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>
+                  Practice Tests : <strong>{progressMetrics.practiceTests}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>
+                  Achievements : <strong>{progressMetrics.achievements}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Keep Going Star Mascot */}
+            <div className="sm:col-span-3 flex items-center justify-center">
+              <KeepGoingStarMascot className="w-24 h-24" />
+            </div>
+          </div>
+        </div>
+
+        {/* Right Card: Daily Challenge */}
+        <div className="lg:col-span-6 rounded-3xl bg-white border-2 border-purple-300 shadow-md overflow-hidden flex flex-col justify-between">
+          <div className="px-4 sm:px-5 py-3 bg-gradient-to-r from-[#581c87] via-[#7e22ce] to-[#4338ca] text-white flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl leading-none">🏆</span>
+              <h3 className="text-base sm:text-lg font-display font-black tracking-tight">
+                Daily Challenge
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
+                else onOpenDemo('live-quiz');
+              }}
+              className="px-3.5 py-1 rounded-full bg-white text-[#4338ca] font-extrabold text-xs flex items-center gap-1 cursor-pointer hover:bg-purple-50 transition-colors shadow-2xs"
+            >
+              <span>Start Now</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+            <div className="sm:col-span-8 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2.5 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200/80">
+                  <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0">
+                    <Calendar className="w-5 h-5" />
                   </div>
-
-                  <div className="sm:col-span-6 space-y-2">
-                    <h3 className="text-sm sm:text-base font-display font-black text-[#0f2952]">
-                      My Live Learning Progress Summary
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm font-bold text-slate-800">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>
-                          Courses Completed: <strong>{progressMetrics.coursesCompleted}</strong>
-                        </span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
-                        <span>
-                          Practice Tests: <strong>{progressMetrics.practiceTests}</strong>
-                        </span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
-                        <span>
-                          Achievements: <strong>{progressMetrics.achievements}</strong>
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="sm:col-span-3 flex items-center justify-center">
-                    <KeepGoingStarMascot className="w-20 h-20" />
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 block">
+                      Today&apos;s Quiz
+                    </span>
+                    <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                      25 Questions
+                    </span>
                   </div>
                 </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
+
+                <div className="flex items-center gap-2.5 bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200/80">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 block">
+                      Time
+                    </span>
+                    <span className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                      15 Min
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (progressMetrics.isLoggedIn) onNavigateTab('quizzes');
+                  else onOpenDemo('live-quiz');
+                }}
+                className="w-full py-2.5 px-5 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black text-sm sm:text-base shadow-md border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>Play Now</span>
+              </button>
+            </div>
+
+            <div className="sm:col-span-4 flex items-center justify-center">
+              <DailyChallengeBoyMascot className="w-24 h-24" />
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* =====================================================================
           BOTTOM NAVIGATION BAR WITH PERMANENT 🎁 REFER & EARN TAB
           ===================================================================== */}
-      <nav aria-label="Bottom Navigation Menu" className="space-y-4 pt-2">
+      <nav aria-label="Bottom Navigation Menu" className="space-y-4 pt-1">
         <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
           {[
             {
@@ -1373,7 +1331,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         >
           <ScholarshipChampionBannerSvg className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
           <div className="relative z-10 text-center max-w-xl mx-auto space-y-1">
-            <h2 className="text-xl sm:text-3xl font-display font-black italic text-[#0f2952] drop-shadow-xs group-hover:scale-[1.01] transition-transform">
+            <h2 className="text-xl sm:text-3xl font-display font-extrabold italic text-[#0f2952] drop-shadow-xs group-hover:scale-[1.01] transition-transform">
               Be a Scholarship Champion!
             </h2>
             <p className="text-xs sm:text-base font-display font-extrabold italic text-[#1e3a8a]">
@@ -1385,3 +1343,4 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     </div>
   );
 };
+
