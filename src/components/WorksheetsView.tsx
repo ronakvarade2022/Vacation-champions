@@ -20,6 +20,12 @@ import {
   AlertTriangle,
   X
 } from 'lucide-react';
+import { UniversalExamShell, ExamPaletteItem } from './exam/UniversalExamShell';
+import {
+  enterElementFullscreen,
+  exitElementFullscreen,
+  requestReturnToDashboard,
+} from '../hooks/useExamFullscreen';
 import { useApp } from '../context/AppContext';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import {
@@ -69,6 +75,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     initialSubject || 'ALL'
   );
   const [activeWorksheet, setActiveWorksheet] = useState<OnlineWorksheet | null>(null);
+  const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [writtenNotes, setWrittenNotes] = useState<Record<string, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -200,9 +207,11 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
     setLockedModalWorksheet(null);
     setActiveWorksheet(ws);
+    setActiveQuestionIdx(0);
     setSelectedAnswers({});
     setWrittenNotes({});
     setIsSubmitted(false);
+    void enterElementFullscreen();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -220,6 +229,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
       setActiveWorksheet(null);
       return;
     }
+
+    void exitElementFullscreen();
 
     let obtainedMarks = 0;
     activeWorksheet.questions.forEach(q => {
@@ -289,6 +300,126 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     const totalQuestions = activeWorksheet.questions.length;
     const percentage = Math.round((currentObtainedMarks / activeWorksheet.totalMarks) * 100);
     const isDemoWorksheet = freeDemoWorksheetIds.includes(activeWorksheet.id);
+
+    // Interactive Solving View uses Universal Full-Screen Examination Shell
+    if (!isSubmitted && activeWorksheet.questions.length > 0) {
+      const safeIdx = Math.min(Math.max(0, activeQuestionIdx), activeWorksheet.questions.length - 1);
+      const q = activeWorksheet.questions[safeIdx];
+      const fmtMeta = WORKSHEET_FORMAT_LABELS[q.format];
+      const userSelected = selectedAnswers[q.id];
+      const needsWrittenBox =
+        q.format === 'short_answer' ||
+        q.format === 'long_answer' ||
+        q.format === 'math_exercise' ||
+        q.format === 'science_activity';
+
+      const paletteItems: ExamPaletteItem[] = activeWorksheet.questions.map((wq, idx) => ({
+        index: idx,
+        label: `Q${wq.number}`,
+        status: selectedAnswers[wq.id] !== undefined ? 'answered' : 'not-visited',
+      }));
+
+      const sectionBar = (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void exitElementFullscreen();
+                setActiveWorksheet(null);
+              }}
+              className="min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Worksheets Library</span>
+            </button>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[11px]">
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Online Interactive Only ({answeredCount}/{totalQuestions} answered)</span>
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-slate-600">
+            Total Marks: {activeWorksheet.totalMarks} • Est. {activeWorksheet.durationMinutes} Mins
+          </span>
+        </div>
+      );
+
+      const alertNode = securityNotice ? (
+        <div className="bg-rose-50 border border-rose-300 rounded-xl px-3.5 py-2 flex items-center justify-between gap-3 text-rose-900 text-xs font-bold">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{securityNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSecurityNotice(null)}
+            className="px-2.5 py-1 rounded-lg bg-rose-200/70 hover:bg-rose-200 text-rose-900 text-[11px] font-extrabold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : undefined;
+
+      const writtenBoxNode = needsWrittenBox ? (
+        <div className="space-y-1">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Your Written Working / Steps (Optional Practice Space):
+          </label>
+          <textarea
+            rows={2}
+            value={writtenNotes[q.id] || ''}
+            onChange={(e) => setWrittenNotes((prev) => ({ ...prev, [q.id]: e.target.value }))}
+            placeholder="Type your steps, formula, or short answer here before selecting the final verified option below..."
+            className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 bg-slate-50/70 select-text"
+          />
+        </div>
+      ) : undefined;
+
+      return (
+        <UniversalExamShell
+          examTitle={activeWorksheet.title}
+          subjectName={`${subjMeta.icon} ${activeWorksheet.subject}`}
+          subtitle={`${getBoardShortLabel(wsActiveBoard)} • ${activeWorksheet.classLevel} • ${activeWorksheet.chapterName}`}
+          questionNumber={safeIdx + 1}
+          totalQuestions={totalQuestions}
+          marksLabel={`[${q.marks} Marks]`}
+          topicLabel={q.chapterTitle}
+          formatBadge={{ label: `${fmtMeta.icon} ${fmtMeta.label}`, className: fmtMeta.badgeColor }}
+          alertBanner={alertNode}
+          sectionTabsSlot={sectionBar}
+          questionText={q.prompt.replace(/^\[.*?\]\s*/, '')}
+          afterStemSlot={writtenBoxNode}
+          options={q.options}
+          selectedOptionIndex={userSelected}
+          optionBadgeType="alpha"
+          optionsLayout="grid-2"
+          onSelectOption={(oIdx) => handleSelectOption(q.id, oIdx)}
+          paletteItems={paletteItems}
+          currentIndex={safeIdx}
+          onJumpToQuestion={(idx) => setActiveQuestionIdx(idx)}
+          onPrevious={() => setActiveQuestionIdx((prev) => Math.max(0, prev - 1))}
+          canPrevious={safeIdx > 0}
+          onClearAnswer={() => {
+            setSelectedAnswers((prev) => {
+              const next = { ...prev };
+              delete next[q.id];
+              return next;
+            });
+          }}
+          canClearAnswer={userSelected !== undefined}
+          onNext={() => setActiveQuestionIdx((prev) => Math.min(totalQuestions - 1, prev + 1))}
+          nextLabel="Save & Next"
+          onSubmitTest={handleSubmitWorksheet}
+          submitLabel={`Submit Worksheet (${answeredCount}/${totalQuestions})`}
+          onBackToDashboard={() => {
+            setActiveWorksheet(null);
+            void requestReturnToDashboard();
+          }}
+          progressSavedMessage="You will exit the active worksheet screen without submitting answers."
+          disableCopyPrint={true}
+        />
+      );
+    }
 
     return (
       <>
@@ -424,7 +555,9 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                     onClick={() => {
                       setSelectedAnswers({});
                       setWrittenNotes({});
+                      setActiveQuestionIdx(0);
                       setIsSubmitted(false);
+                      void enterElementFullscreen();
                     }}
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-emerald-900 hover:bg-emerald-50 font-extrabold text-xs transition-all cursor-pointer shadow-sm"
                   >

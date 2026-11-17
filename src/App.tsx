@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
+import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>
@@ -257,6 +258,18 @@ const AppContent: React.FC = () => {
       setCurrentTab('admin');
     }
   }, [activeRole, currentUser?.role]);
+
+  useEffect(() => {
+    const handleReturnToDashboard = () => {
+      setHomeScrollTarget('home-overview');
+      setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    window.addEventListener(EXAM_RETURN_TO_DASHBOARD_EVENT, handleReturnToDashboard);
+    return () => {
+      window.removeEventListener(EXAM_RETURN_TO_DASHBOARD_EVENT, handleReturnToDashboard);
+    };
+  }, [currentStudent]);
 
   // Keep browser tab title dynamic and professional for each portal
   useEffect(() => {

@@ -4,6 +4,7 @@ import {
   buildMsceMockPaper,
   getMscePaperConfigForMedium,
   getMsceTenBatches,
+  getVerifiedMockTestStatusMap,
   MsceMedium,
   MsceMockAttemptRecord,
   MsceMockQuestion,
@@ -39,6 +40,16 @@ import {
   History,
   ShieldCheck,
 } from 'lucide-react';
+import {
+  UniversalExamShell,
+  type ExamPaletteItem,
+  type ExamPaletteStatus,
+} from './exam/UniversalExamShell';
+import {
+  enterElementFullscreen,
+  exitElementFullscreen,
+  requestReturnToDashboard,
+} from '../hooks/useExamFullscreen';
 
 const MSCE_90_MINUTES_SECONDS = 90 * 60; // 5400 seconds = 90 minutes
 
@@ -228,6 +239,11 @@ export const MsceFullMockExamsSection: React.FC = () => {
     [effectiveMedium]
   );
 
+  const verifiedTestStatusMap = useMemo(
+    () => getVerifiedMockTestStatusMap(selectedStd, effectiveMedium, customMsceMockQuestions),
+    [selectedStd, effectiveMedium, customMsceMockQuestions]
+  );
+
   // Format seconds as MM:SS or HH:MM:SS
   const formatCountdown = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -299,6 +315,7 @@ export const MsceFullMockExamsSection: React.FC = () => {
     setRemainingSeconds(MSCE_90_MINUTES_SECONDS);
     setShowSubmitConfirmModal(false);
     setFlowState('taking');
+    void enterElementFullscreen();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -393,6 +410,7 @@ export const MsceFullMockExamsSection: React.FC = () => {
     setLatestAttemptRecord(savedAttempt);
     setShowSubmitConfirmModal(false);
     setFlowState('result');
+    void exitElementFullscreen();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (percentage >= 60) {
@@ -810,6 +828,15 @@ export const MsceFullMockExamsSection: React.FC = () => {
                     Full Examination Mode (Paper 1 + Paper 2)
                   </span>
                 )}
+                {verifiedTestStatusMap[activeTestNum]?.isVerifiedMockTest ? (
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-xs uppercase">
+                    🟢 VERIFIED MOCK TEST ({verifiedTestStatusMap[activeTestNum].verifiedCount}/150 Qs)
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-black text-xs uppercase">
+                    ⏳ Verification Pending
+                  </span>
+                )}
               </div>
               <h3 className="text-xl sm:text-2xl font-display font-black text-slate-900 mt-2">
                 Official MSCE Pune Pre-Examination Instructions
@@ -949,367 +976,194 @@ export const MsceFullMockExamsSection: React.FC = () => {
         </div>
       )}
 
-      {/* ACTIVE 75-QUESTION EXAMINATION INTERFACE */}
-      {flowState === 'taking' && activeQuestion && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left 8 Columns: Question Display & Controls */}
-          <div className="lg:col-span-8 bg-white rounded-3xl p-5 sm:p-8 border-2 border-amber-300 shadow-md space-y-6">
-            {/* Top Status & 90-Minute Countdown Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200">
-              <div className="space-y-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-3 py-1 rounded-full bg-slate-900 text-amber-300 font-black text-xs">
-                    {selectedStd} • Mock Test {String(activeTestNum).padStart(2, '0')} • Paper {activePaperNum}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-extrabold text-xs">
-                    {effectiveMedium} Medium
-                  </span>
-                </div>
-                <p className="text-xs font-bold text-slate-500 pt-1">
-                  Question {activeQuestion.questionNumber} of 75 • {activeQuestion.subjectLabel} • Topic: {activeQuestion.topic}
-                </p>
-              </div>
+      {/* ACTIVE 75-QUESTION EXAMINATION INTERFACE (FULL-SCREEN UNIVERSAL SHELL) */}
+      {flowState === 'taking' && activeQuestion && (() => {
+        const buildPaletteItem = (q: MsceMockQuestion, idx: number): ExamPaletteItem => {
+          const isAns = answers[idx] !== undefined;
+          const isRev = Boolean(markedForReview[idx]);
+          let status: ExamPaletteStatus = 'not-visited';
+          if (isAns && isRev) status = 'answered-marked';
+          else if (isRev) status = 'marked';
+          else if (isAns) status = 'answered';
+          return {
+            index: idx,
+            label: q.questionNumber,
+            status,
+          };
+        };
 
-              {/* 90-Minute Countdown Timer */}
-              <div
-                className={`px-4 py-2 rounded-2xl border-2 font-mono font-black text-sm flex items-center gap-2 ${
-                  remainingSeconds <= 300
-                    ? 'bg-rose-50 text-rose-700 border-rose-400 animate-pulse'
-                    : 'bg-amber-50 text-amber-950 border-amber-400'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>{formatCountdown(remainingSeconds)} / 90:00</span>
-              </div>
-            </div>
+        const allPaletteItems = paperQuestions.map(buildPaletteItem);
+        const sec1Items = allPaletteItems.slice(0, 25);
+        const sec2Items = allPaletteItems.slice(25, 75);
 
-            {/* Section Quick Jump Tabs (Section 1: Q1–25 | Section 2: Q26–75) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setCurrentIdx(0)}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                  activeQuestion.questionNumber <= 25
-                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                    : 'bg-slate-50 hover:bg-amber-50 text-slate-800 border-slate-200'
-                }`}
-              >
-                <div className="text-xs font-black">
-                  Section 1: {activePaperNum === 1 ? `First Language (${paperConfig.paper1FirstLanguage})` : `Second Language (${paperConfig.paper2SecondLanguage})`}
-                </div>
-                <div
-                  className={`text-[11px] font-semibold ${
-                    activeQuestion.questionNumber <= 25 ? 'text-amber-100' : 'text-slate-500'
+        return (
+          <UniversalExamShell
+            examTitle={`${selectedStd} • Mock Test ${String(activeTestNum).padStart(2, '0')} • Paper ${activePaperNum}`}
+            subjectName={activeQuestion.subjectLabel}
+            subtitle={`${effectiveMedium} Medium`}
+            verificationBadge={activeQuestion.verification?.greenVerified ? 'green' : 'pending'}
+            questionNumber={activeQuestion.questionNumber}
+            totalQuestions={75}
+            marksLabel="+2 Marks"
+            topicLabel={activeQuestion.topic}
+            remainingSeconds={remainingSeconds}
+            timerFormat="mmss"
+            urgentThresholdSeconds={300}
+            warningThresholdSeconds={600}
+            sectionTabsSlot={
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentIdx(0)}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeQuestion.questionNumber <= 25
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-white hover:bg-amber-50 text-slate-800 border-slate-200'
                   }`}
                 >
-                  Questions 1 to 25 (25 Questions • 50 Marks)
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCurrentIdx(25)}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                  activeQuestion.questionNumber >= 26
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                    : 'bg-slate-50 hover:bg-indigo-50 text-slate-800 border-slate-200'
-                }`}
-              >
-                <div className="text-xs font-black">
-                  Section 2: {activePaperNum === 1 ? `Mathematics (${paperConfig.paper1MathsLanguage})` : `Intelligence Test (${paperConfig.paper2IntelligenceLanguage})`}
-                </div>
-                <div
-                  className={`text-[11px] font-semibold ${
-                    activeQuestion.questionNumber >= 26 ? 'text-indigo-100' : 'text-slate-500'
-                  }`}
-                >
-                  Questions 26 to 75 (50 Questions • 100 Marks)
-                </div>
-              </button>
-            </div>
-
-            {/* Question Card */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-black text-indigo-900 bg-indigo-100 px-2.5 py-0.5 rounded-lg">
-                  Question #{activeQuestion.questionNumber}
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-lg bg-slate-200 text-slate-800 font-bold text-[11px]">
-                    {activeQuestion.topic}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 font-black text-[11px]">
-                    +2 Marks
-                  </span>
-                </div>
-              </div>
-
-              <h3 className="text-base sm:text-lg font-display font-extrabold text-slate-900 leading-relaxed whitespace-pre-line">
-                {activeQuestion.question}
-              </h3>
-            </div>
-
-            {/* 4 Multiple-Choice Options */}
-            <div className="space-y-3">
-              {activeQuestion.options.map((optText, optIdx) => {
-                const isSelected = answers[currentIdx] === optIdx;
-                return (
-                  <button
-                    key={optIdx}
-                    type="button"
-                    onClick={() =>
-                      setAnswers((prev) => ({
-                        ...prev,
-                        [currentIdx]: optIdx,
-                      }))
-                    }
-                    className={`w-full p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-3 text-xs sm:text-sm ${
-                      isSelected
-                        ? 'bg-amber-600 border-amber-600 text-white font-bold shadow-sm'
-                        : 'bg-white hover:bg-amber-50/50 border-slate-200 hover:border-amber-400 text-slate-900 font-medium'
+                  <div className="text-xs font-black truncate">
+                    Section 1: {activePaperNum === 1 ? `First Language (${paperConfig.paper1FirstLanguage})` : `Second Language (${paperConfig.paper2SecondLanguage})`}
+                  </div>
+                  <div
+                    className={`text-[10px] font-semibold ${
+                      activeQuestion.questionNumber <= 25 ? 'text-amber-100' : 'text-slate-500'
                     }`}
                   >
-                    <span className="flex items-center gap-3">
-                      <span
-                        className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                          isSelected
-                            ? 'bg-white text-amber-900'
-                            : 'bg-slate-100 text-slate-800'
-                        }`}
-                      >
-                        {optIdx + 1}
-                      </span>
-                      <span>{optText}</span>
-                    </span>
-                    {isSelected && <CheckCircle2 className="w-5 h-5 text-white shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Bottom Navigation Controls */}
-            <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={currentIdx === 0}
-                  onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-800 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Previous</span>
+                    Q1 to Q25 (25 Questions • 50 Marks)
+                  </div>
                 </button>
 
                 <button
                   type="button"
-                  disabled={answers[currentIdx] === undefined}
-                  onClick={() =>
-                    setAnswers((prev) => {
-                      const next = { ...prev };
-                      delete next[currentIdx];
-                      return next;
-                    })
-                  }
-                  className="px-3.5 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 disabled:opacity-40 text-slate-700 font-bold text-xs cursor-pointer"
-                >
-                  Clear Answer
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setMarkedForReview((prev) => ({
-                      ...prev,
-                      [currentIdx]: !prev[currentIdx],
-                    }))
-                  }
-                  className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
-                    markedForReview[currentIdx]
-                      ? 'bg-purple-100 border-purple-400 text-purple-900'
-                      : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
+                  onClick={() => setCurrentIdx(25)}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeQuestion.questionNumber >= 26
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-white hover:bg-indigo-50 text-slate-800 border-slate-200'
                   }`}
                 >
-                  <Bookmark className="w-3.5 h-3.5" />
-                  <span>
-                    {markedForReview[currentIdx] ? 'Marked for Review' : 'Mark for Review'}
-                  </span>
+                  <div className="text-xs font-black truncate">
+                    Section 2: {activePaperNum === 1 ? `Mathematics (${paperConfig.paper1MathsLanguage})` : `Intelligence Test (${paperConfig.paper2IntelligenceLanguage})`}
+                  </div>
+                  <div
+                    className={`text-[10px] font-semibold ${
+                      activeQuestion.questionNumber >= 26 ? 'text-indigo-100' : 'text-slate-500'
+                    }`}
+                  >
+                    Q26 to Q75 (50 Questions • 100 Marks)
+                  </div>
                 </button>
               </div>
+            }
+            questionText={activeQuestion.question}
+            options={activeQuestion.options}
+            selectedOptionIndex={answers[currentIdx]}
+            optionBadgeType="numeric"
+            onSelectOption={(optIdx) =>
+              setAnswers((prev) => ({
+                ...prev,
+                [currentIdx]: optIdx,
+              }))
+            }
+            paletteItems={allPaletteItems}
+            paletteSections={[
+              { title: 'Section 1: Language (Q1 – Q25)', items: sec1Items },
+              {
+                title: `Section 2: ${activePaperNum === 1 ? 'Mathematics' : 'Intelligence Test'} (Q26 – Q75)`,
+                items: sec2Items,
+              },
+            ]}
+            paletteStats={{
+              answered: answeredCount,
+              unanswered: unansweredCount,
+              marked: reviewCount,
+            }}
+            currentIndex={currentIdx}
+            onJumpToQuestion={(idx) => setCurrentIdx(idx)}
+            onPrevious={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+            canPrevious={currentIdx > 0}
+            onClearAnswer={() =>
+              setAnswers((prev) => {
+                const next = { ...prev };
+                delete next[currentIdx];
+                return next;
+              })
+            }
+            canClearAnswer={answers[currentIdx] !== undefined}
+            isMarkedForReview={Boolean(markedForReview[currentIdx])}
+            onToggleMarkForReview={() =>
+              setMarkedForReview((prev) => ({
+                ...prev,
+                [currentIdx]: !prev[currentIdx],
+              }))
+            }
+            onNext={() => setCurrentIdx((i) => Math.min(74, i + 1))}
+            nextLabel="Save & Next"
+            onSubmitTest={() => setShowSubmitConfirmModal(true)}
+            submitLabel={`Submit Paper ${activePaperNum}`}
+            onBackToDashboard={() => {
+              // Keep ACTIVE_SESSION_STORAGE_KEY intact so student can resume where they left off
+              setShowSubmitConfirmModal(false);
+              setFlowState('browse');
+              void requestReturnToDashboard();
+            }}
+            progressSavedMessage="Your answers and remaining 90-minute exam timer are saved automatically. You can resume later from where you left off."
+            externalModals={
+              showSubmitConfirmModal ? (
+                <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
+                  <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 border-2 border-amber-300 shadow-2xl space-y-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-display font-black text-lg text-slate-900">
+                          Confirm Paper {activePaperNum} Submission?
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          {selectedStd} • Mock Test {String(activeTestNum).padStart(2, '0')} • {effectiveMedium} Medium
+                        </p>
+                      </div>
+                    </div>
 
-              <div className="flex items-center gap-2">
-                {currentIdx < 74 ? (
-                  <button
-                    type="button"
-                    onClick={() => setCurrentIdx((i) => Math.min(74, i + 1))}
-                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                  >
-                    <span>Save &amp; Next</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowSubmitConfirmModal(true)}
-                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Submit Paper {activePaperNum}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                        <span className="block text-lg font-black text-emerald-800">{answeredCount}</span>
+                        <span className="font-bold text-slate-600">Answered</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-100 border border-slate-200">
+                        <span className="block text-lg font-black text-slate-800">{unansweredCount}</span>
+                        <span className="font-bold text-slate-600">Unanswered</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-purple-50 border border-purple-200">
+                        <span className="block text-lg font-black text-purple-800">{reviewCount}</span>
+                        <span className="font-bold text-slate-600">Marked Review</span>
+                      </div>
+                    </div>
 
-          {/* Right 4 Columns: 75-Question Navigation Palette */}
-          <div className="lg:col-span-4 bg-white rounded-3xl p-5 sm:p-6 border-2 border-amber-300 shadow-md space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="font-display font-black text-sm text-slate-900">
-                Question Palette (1 to 75)
-              </h4>
-              <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                150 Marks
-              </span>
-            </div>
-
-            {/* Answered / Unanswered / Review Legend */}
-            <div className="grid grid-cols-3 gap-2 text-[11px] font-bold pb-3 border-b border-slate-100">
-              <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-center">
-                <span className="block text-sm font-black">{answeredCount}</span>
-                <span>Answered</span>
-              </div>
-              <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-center">
-                <span className="block text-sm font-black">{unansweredCount}</span>
-                <span>Unanswered</span>
-              </div>
-              <div className="p-2 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-center">
-                <span className="block text-sm font-black">{reviewCount}</span>
-                <span>For Review</span>
-              </div>
-            </div>
-
-            {/* 75 Question Buttons */}
-            <div className="max-h-96 overflow-y-auto pr-1 space-y-3">
-              <div>
-                <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5">
-                  Section 1: Language (Q1 – Q25)
-                </p>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {paperQuestions.slice(0, 25).map((q, idx) => {
-                    const isAns = answers[idx] !== undefined;
-                    const isRev = markedForReview[idx];
-                    const isCurr = currentIdx === idx;
-                    let cls = 'bg-slate-100 text-slate-700 hover:bg-slate-200';
-                    if (isAns) cls = 'bg-emerald-600 text-white';
-                    if (isRev) cls = 'bg-purple-600 text-white';
-                    return (
+                    <div className="flex items-center justify-end gap-2.5">
                       <button
-                        key={q.id}
                         type="button"
-                        onClick={() => setCurrentIdx(idx)}
-                        className={`h-8 rounded-lg text-xs font-black transition-all cursor-pointer ${cls} ${
-                          isCurr ? 'ring-2 ring-amber-500 ring-offset-1' : ''
-                        }`}
+                        onClick={() => setShowSubmitConfirmModal(false)}
+                        className="min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
                       >
-                        {q.questionNumber}
+                        Continue Answering
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-black uppercase text-slate-400 mb-1.5">
-                  Section 2: {activePaperNum === 1 ? 'Mathematics' : 'Intelligence Test'} (Q26 – Q75)
-                </p>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {paperQuestions.slice(25, 75).map((q, sIdx) => {
-                    const idx = 25 + sIdx;
-                    const isAns = answers[idx] !== undefined;
-                    const isRev = markedForReview[idx];
-                    const isCurr = currentIdx === idx;
-                    let cls = 'bg-slate-100 text-slate-700 hover:bg-slate-200';
-                    if (isAns) cls = 'bg-emerald-600 text-white';
-                    if (isRev) cls = 'bg-purple-600 text-white';
-                    return (
                       <button
-                        key={q.id}
                         type="button"
-                        onClick={() => setCurrentIdx(idx)}
-                        className={`h-8 rounded-lg text-xs font-black transition-all cursor-pointer ${cls} ${
-                          isCurr ? 'ring-2 ring-amber-500 ring-offset-1' : ''
-                        }`}
+                        onClick={() => void evaluateAndSubmitPaper()}
+                        className="min-h-[42px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer shadow-md"
                       >
-                        {q.questionNumber}
+                        Yes, Submit Now
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowSubmitConfirmModal(true)}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-display font-black text-xs shadow-md cursor-pointer"
-            >
-              Finish &amp; Submit Paper {activePaperNum} (75 Qs)
-            </button>
-          </div>
-
-          {/* Submit Confirmation Modal */}
-          {showSubmitConfirmModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 border-2 border-amber-300 shadow-2xl space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                    <AlertTriangle className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-display font-black text-lg text-slate-900">
-                      Confirm Paper {activePaperNum} Submission?
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      {selectedStd} • Mock Test {String(activeTestNum).padStart(2, '0')} • {effectiveMedium} Medium
-                    </p>
+                    </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                    <span className="block text-lg font-black text-emerald-800">{answeredCount}</span>
-                    <span className="font-bold text-slate-600">Answered</span>
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-100 border border-slate-200">
-                    <span className="block text-lg font-black text-slate-800">{unansweredCount}</span>
-                    <span className="font-bold text-slate-600">Unanswered</span>
-                  </div>
-                  <div className="p-3 rounded-xl bg-purple-50 border border-purple-200">
-                    <span className="block text-lg font-black text-purple-800">{reviewCount}</span>
-                    <span className="font-bold text-slate-600">Marked Review</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowSubmitConfirmModal(false)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
-                  >
-                    Continue Answering
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void evaluateAndSubmitPaper()}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer shadow-md"
-                  >
-                    Yes, Submit Now
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+              ) : null
+            }
+          />
+        );
+      })()}
 
       {/* RESULT & PERFORMANCE ANALYSIS SCREEN */}
       {flowState === 'result' && latestAttemptRecord && (
@@ -1587,6 +1441,11 @@ export const MsceFullMockExamsSection: React.FC = () => {
                             <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold text-[10px]">
                               {q.topic}
                             </span>
+                            {q.verification?.greenVerified && (
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-[10px]">
+                                🟢 GREEN VERIFIED
+                              </span>
+                            )}
                           </div>
                           <p className="font-bold text-slate-900 text-sm whitespace-pre-line">
                             {q.question}
@@ -1859,9 +1718,20 @@ export const MsceFullMockExamsSection: React.FC = () => {
                           </span>
                         </div>
 
-                        <h4 className="font-display font-black text-base text-slate-900">
-                          MSCE Pune Full Mock Examination #{String(testNum).padStart(2, '0')}
-                        </h4>
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-display font-black text-base text-slate-900">
+                            MSCE Pune Full Mock Examination #{String(testNum).padStart(2, '0')}
+                          </h4>
+                          {verifiedTestStatusMap[testNum]?.isVerifiedMockTest ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-[10px] shrink-0">
+                              🟢 VERIFIED MOCK TEST
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[10px] shrink-0">
+                              ⏳ Review Needed
+                            </span>
+                          )}
+                        </div>
 
                         {/* Paper 1 & Paper 2 Details */}
                         <div className="space-y-2 pt-1 text-xs">

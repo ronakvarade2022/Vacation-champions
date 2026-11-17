@@ -53,13 +53,15 @@ export const ReportQuestionModal: React.FC<ReportQuestionModalProps> = ({
   const [details, setDetails] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reportSuccess, setReportSuccess] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     if (!details.trim()) {
-      alert('Please explain what appears incorrect in this question.');
+      setErrorMsg('Please explain what appears incorrect in this question.');
       return;
     }
 
@@ -83,17 +85,22 @@ export const ReportQuestionModal: React.FC<ReportQuestionModalProps> = ({
       setReportSuccess(rep.reportNumber);
     } catch (err) {
       console.error('Failed to submit question report:', err);
-      alert('Failed to submit report. Please retry.');
+      setErrorMsg('Failed to submit report. Please retry.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
       <div className="fixed inset-0 -z-10" onClick={onClose} />
 
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border-2 border-amber-300 overflow-hidden m-auto animate-in zoom-in-95 duration-150">
+        {errorMsg && (
+          <div className="bg-rose-50 border-b border-rose-200 px-4 py-2 text-xs font-bold text-rose-800">
+            {errorMsg}
+          </div>
+        )}
         {/* Header */}
         <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-4 sm:p-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">

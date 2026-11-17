@@ -478,17 +478,29 @@ export const AdminScholarshipSection: React.FC<AdminScholarshipSectionProps> = R
             </div>
 
             {/* Paper Validation Status Banner */}
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div
+              className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+                paperValidation.valid
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-amber-50 border-amber-300'
+              }`}
+            >
               <div className="flex items-center gap-2 font-bold text-emerald-950">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
                   Paper Validation ({mockStdFilter} Mock Test {String(mockTestNumberFilter).padStart(2, '0')} Paper {mockPaperFilter}):{' '}
-                  {paperValidation.totalQuestions}/75 Questions • {paperValidation.totalMarks}/150 Marks •{' '}
-                  {paperValidation.duplicateCount} Duplicates • {paperValidation.missingOptionsCount} Missing Options
+                  {paperValidation.totalQuestions}/75 Questions • {paperValidation.verifiedCount}/75 Green Verified • {paperValidation.totalMarks}/150 Marks •{' '}
+                  {paperValidation.duplicateCount} Duplicates • {paperValidation.missingOptionsCount} Option Issues
                 </span>
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white font-black text-[10px] uppercase">
-                {paperValidation.valid ? 'Verified Ready' : 'Needs Review'}
+              <span
+                className={`px-2.5 py-1 rounded-full font-black text-[10px] uppercase ${
+                  paperValidation.valid
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-amber-500 text-slate-950'
+                }`}
+              >
+                {paperValidation.valid ? '🟢 VERIFIED PAPER READY' : '⏳ Needs Review'}
               </span>
             </div>
 
@@ -523,10 +535,19 @@ export const AdminScholarshipSection: React.FC<AdminScholarshipSectionProps> = R
                     className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-black text-[10px]">
                           Q{q.questionNumber}
                         </span>
+                        {q.verification?.greenVerified ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-[10px]">
+                            🟢 GREEN VERIFIED
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[10px]">
+                            ⏳ Review
+                          </span>
+                        )}
                         <span className="font-bold text-amber-900">{q.subjectLabel}</span>
                         <span className="text-slate-500">• {q.topic}</span>
                       </div>
@@ -585,7 +606,9 @@ export const AdminScholarshipSection: React.FC<AdminScholarshipSectionProps> = R
               </div>
               <button
                 type="button"
-                onClick={() => setAuditReport(runCompleteMsceDuplicateAndSyllabusAudit())}
+                onClick={() =>
+                  setAuditReport(runCompleteMsceDuplicateAndSyllabusAudit(customMsceMockQuestions))
+                }
                 className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shrink-0 shadow-md"
               >
                 Run Full 70-Test Audit Now
@@ -593,38 +616,106 @@ export const AdminScholarshipSection: React.FC<AdminScholarshipSectionProps> = R
             </div>
 
             {auditReport && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
-                  <span className="text-[10px] font-bold uppercase text-emerald-800 block">
-                    Total Accessible Tests
-                  </span>
-                  <span className="text-2xl font-black text-emerald-900">
-                    {auditReport.totalAccessibleTests} (20 + 50)
-                  </span>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                    <span className="text-[10px] font-bold uppercase text-emerald-800 block">
+                      Total Accessible Tests
+                    </span>
+                    <span className="text-2xl font-black text-emerald-900">
+                      {auditReport.totalAccessibleTests} (20 + 50)
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200">
+                    <span className="text-[10px] font-bold uppercase text-indigo-800 block">
+                      Mock Question Positions
+                    </span>
+                    <span className="text-2xl font-black text-indigo-900">
+                      {auditReport.totalMockQuestionPositions}
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200">
+                    <span className="text-[10px] font-bold uppercase text-amber-800 block">
+                      Duplicate Questions
+                    </span>
+                    <span className="text-2xl font-black text-amber-900">
+                      {auditReport.duplicateQuestionsDetected + auditReport.crossTestDuplicatesDetected}
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200">
+                    <span className="text-[10px] font-bold uppercase text-teal-800 block">
+                      Existing Test Collisions
+                    </span>
+                    <span className="text-2xl font-black text-teal-900">
+                      {auditReport.existingTestCollisionsDetected}
+                    </span>
+                  </div>
                 </div>
-                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200">
-                  <span className="text-[10px] font-bold uppercase text-indigo-800 block">
-                    Mock Question Positions
-                  </span>
-                  <span className="text-2xl font-black text-indigo-900">
-                    {auditReport.totalMockQuestionPositions}
-                  </span>
+
+                {/* Separate Academic Audit Reports: Std 4th (PSE) vs Std 7th (UPS) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {[auditReport.std4Report, auditReport.std7Report]
+                    .filter((rep): rep is NonNullable<typeof rep> => Boolean(rep))
+                    .map((rep) => (
+                      <div
+                        key={rep.stdLevel}
+                        className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-display font-black text-sm text-slate-900">
+                            {rep.stdLevel === 'Std 4th'
+                              ? '🎓 Std. 4th (PSE) – 25 Mock Tests Audit'
+                              : '🎓 Std. 7th (UPS) – 25 Mock Tests Audit'}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-black text-[10px] ${
+                              rep.verifiedMockTestsCount === 25
+                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-900'
+                            }`}
+                          >
+                            {rep.verifiedMockTestsCount === 25
+                              ? '🟢 25/25 VERIFIED MOCK TESTS'
+                              : `${rep.verifiedMockTestsCount}/25 Verified`}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="p-2 rounded-lg bg-white border border-slate-200">
+                            English Medium:{' '}
+                            <strong>
+                              {rep.mediumBreakdown.English.greenVerifiedCount}/
+                              {rep.mediumBreakdown.English.totalQuestions}
+                            </strong>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white border border-slate-200">
+                            Marathi Medium:{' '}
+                            <strong>
+                              {rep.mediumBreakdown.Marathi.greenVerifiedCount}/
+                              {rep.mediumBreakdown.Marathi.totalQuestions}
+                            </strong>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white border border-slate-200">
+                            Hindi Medium:{' '}
+                            <strong>
+                              {rep.mediumBreakdown.Hindi.greenVerifiedCount}/
+                              {rep.mediumBreakdown.Hindi.totalQuestions}
+                            </strong>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white border border-slate-200">
+                            Syllabus / Tag / Opt Failures:{' '}
+                            <strong>
+                              {rep.syllabusBoundaryViolations +
+                                rep.fakeTagViolations +
+                                rep.optionAndKeyFailures}
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                 </div>
-                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200">
-                  <span className="text-[10px] font-bold uppercase text-amber-800 block">
-                    Duplicate Questions
-                  </span>
-                  <span className="text-2xl font-black text-amber-900">
-                    {auditReport.duplicateQuestionsDetected}
-                  </span>
-                </div>
-                <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200">
-                  <span className="text-[10px] font-bold uppercase text-teal-800 block">
-                    Existing Test Collisions
-                  </span>
-                  <span className="text-2xl font-black text-teal-900">
-                    {auditReport.existingTestCollisionsDetected}
-                  </span>
+
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 font-medium">
+                  <strong>Official MSCE Pune Circular Notice:</strong> Internal question banks, zero-repetition checks, answer keys, and syllabus alignment are verified above. Official exam circulars (merit list cutoffs, qualifying minimum %, age limits, exam dates, and application fees) require manual confirmation against official MSCE Pune notifications.
                 </div>
               </div>
             )}

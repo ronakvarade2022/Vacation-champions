@@ -6,23 +6,19 @@ import { randomizeQuizQuestions } from '../services/answerRandomizerService';
 import { canAccessFeature } from '../utils/subscriptionAccess';
 import confetti from 'canvas-confetti';
 import { 
-  Trophy, 
-  Flame, 
-  Sparkles, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
   RotateCcw, 
   ChevronRight, 
-  Award, 
-  ShieldCheck, 
   Calendar,
-  AlertCircle,
-  HelpCircle,
   ArrowRight,
   Lock,
   Crown
 } from 'lucide-react';
+import { UniversalExamShell, ExamPaletteItem } from './exam/UniversalExamShell';
+import {
+  enterElementFullscreen,
+  exitElementFullscreen,
+  requestReturnToDashboard,
+} from '../hooks/useExamFullscreen';
 
 interface CricketChampionsViewProps {
   onOpenAuth?: () => void;
@@ -135,6 +131,7 @@ export const CricketChampionsView: React.FC<CricketChampionsViewProps> = ({
     setScore(0);
     setAnswersLog([]);
     setGameState('playing');
+    void enterElementFullscreen();
   };
 
   const handleSelectOption = (idx: number) => {
@@ -170,6 +167,42 @@ export const CricketChampionsView: React.FC<CricketChampionsViewProps> = ({
     setIsAnswerChecked(true);
   };
 
+  const finalizeCricketQuiz = () => {
+    void exitElementFullscreen();
+    setGameState('completed');
+
+    if (score >= 7) {
+      try {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      } catch {}
+    }
+
+    const totalQs = Math.max(1, questions.length);
+    if (currentStudent) {
+      submitQuizAttempt({
+        studentId: currentStudent.id,
+        studentName: currentStudent.name,
+        classLevel: currentStudent.classLevel,
+        subject: 'General Knowledge',
+        level: selectedLevel,
+        totalQuestions: totalQs,
+        correctCount: score,
+        incorrectCount: Math.max(0, totalQs - score),
+        unansweredCount: Math.max(0, questions.length - answersLog.length),
+        scorePercent: Math.round((score / totalQs) * 100),
+        timeTakenSeconds: 300,
+        pointsEarned: score * 10,
+        passed: score >= Math.ceil(totalQs * 0.6),
+        questionIds: questions.map((q) => q.id),
+        answers: answersLog,
+      });
+    }
+  };
+
   const handleNextQuestion = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(prev => prev + 1);
@@ -177,39 +210,7 @@ export const CricketChampionsView: React.FC<CricketChampionsViewProps> = ({
       setIsAnswerChecked(false);
       setTimeLeft(30);
     } else {
-      // Completed all 10 questions!
-      setGameState('completed');
-
-      // Confetti celebration if scored 7 or higher
-      if (score >= 7) {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-      }
-
-      // Record attempt in platform state
-      const totalQs = Math.max(1, questions.length);
-      if (currentStudent) {
-        submitQuizAttempt({
-          studentId: currentStudent.id,
-          studentName: currentStudent.name,
-          classLevel: currentStudent.classLevel,
-          subject: 'General Knowledge',
-          level: selectedLevel,
-          totalQuestions: totalQs,
-          correctCount: score,
-          incorrectCount: totalQs - score,
-          unansweredCount: 0,
-          scorePercent: Math.round((score / totalQs) * 100),
-          timeTakenSeconds: 300,
-          pointsEarned: score * 10,
-          passed: score >= Math.ceil(totalQs * 0.6),
-          questionIds: questions.map(q => q.id),
-          answers: answersLog
-        });
-      }
+      finalizeCricketQuiz();
     }
   };
 
@@ -295,104 +296,86 @@ export const CricketChampionsView: React.FC<CricketChampionsViewProps> = ({
         </div>
       )}
 
-      {/* QUIZ ARENA */}
-      {gameState === 'playing' && questions.length > 0 && (
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-200 shadow-sm space-y-6">
-          {/* Header row: progress & thinking timer */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full">
-                Level {selectedLevel} • Q{currentIndex + 1} of {questions.length}
-              </span>
-              <span className="text-xs font-semibold text-slate-500">
-                Category: {questions[currentIndex].category}
-              </span>
-            </div>
+      {/* QUIZ ARENA (Universal Full-Screen Examination Shell) */}
+      {gameState === 'playing' && questions.length > 0 && (() => {
+        const currentQ = questions[currentIndex];
+        const paletteItems: ExamPaletteItem[] = questions.map((_q, idx) => {
+          const logged = answersLog[idx];
+          if (logged) {
+            return {
+              index: idx,
+              label: idx + 1,
+              status: logged.selectedIndex === -1 ? 'not-answered' : 'answered',
+            };
+          }
+          return {
+            index: idx,
+            label: idx + 1,
+            status: idx === currentIndex ? 'not-answered' : 'not-visited',
+          };
+        });
 
-            {/* Thinking Timer */}
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
-              timeLeft <= 5 ? 'bg-red-50 text-red-600 border-red-300 animate-pulse' : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-            }`}>
-              <Clock className="w-3.5 h-3.5" />
-              <span>{timeLeft}s remaining</span>
-            </div>
+        const feedbackNode = isAnswerChecked ? (
+          <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs sm:text-sm text-slate-700 space-y-1">
+            <strong className="text-emerald-900 block">
+              {selectedOption === currentQ.correctIndex ? '✅ Correct!' : '❌ Incorrect'}
+            </strong>
+            <span>{currentQ.explanation}</span>
           </div>
+        ) : undefined;
 
-          {/* Question Text */}
-          <h2 className="text-lg sm:text-xl font-display font-extrabold text-slate-900 leading-snug">
-            {questions[currentIndex].question}
-          </h2>
-
-          {/* 4 Options Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {questions[currentIndex].options.map((optionText, optIdx) => {
-              const isSelected = selectedOption === optIdx;
-              const isCorrect = optIdx === questions[currentIndex].correctIndex;
-
-              let style = 'bg-slate-50 border-slate-200 text-slate-800 hover:border-emerald-400 hover:bg-emerald-50/50';
-              if (isAnswerChecked) {
-                if (isCorrect) {
-                  style = 'bg-emerald-100 border-emerald-500 text-emerald-950 font-bold';
-                } else if (isSelected && !isCorrect) {
-                  style = 'bg-red-100 border-red-400 text-red-950 font-bold';
-                } else {
-                  style = 'bg-slate-50 border-slate-200 text-slate-400';
-                }
-              } else if (isSelected) {
-                style = 'bg-emerald-600 border-emerald-600 text-white font-bold shadow-xs';
-              }
-
-              return (
-                <button
-                  key={optIdx}
-                  disabled={isAnswerChecked}
-                  onClick={() => handleSelectOption(optIdx)}
-                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between text-xs sm:text-sm ${style}`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="font-extrabold w-5">{String.fromCharCode(65 + optIdx)}.</span>
-                    <span>{optionText}</span>
-                  </span>
-                  {isAnswerChecked && isCorrect && <CheckCircle className="w-4 h-4 text-emerald-700" />}
-                  {isAnswerChecked && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-red-700" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Answer Check / Next CTA */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            {!isAnswerChecked ? (
-              <button
-                onClick={() => handleCheckAnswer(false)}
-                disabled={selectedOption === null}
-                className="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer"
-              >
-                Confirm Answer
-              </button>
-            ) : (
-              <div className="w-full space-y-4">
-                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-slate-700">
-                  <strong className="text-emerald-900 block mb-1">
-                    {selectedOption === questions[currentIndex].correctIndex ? '✅ Correct!' : '❌ Incorrect'}
-                  </strong>
-                  <span>{questions[currentIndex].explanation}</span>
-                </div>
-
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleNextQuestion}
-                    className="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span>{currentIndex < questions.length - 1 ? 'Next Question' : 'Complete Daily Quiz'}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+        return (
+          <UniversalExamShell
+            examTitle={`Cricket Champions • Level ${selectedLevel}`}
+            subjectName={currentQ.category}
+            subtitle={todayFormatted}
+            questionNumber={currentIndex + 1}
+            totalQuestions={questions.length}
+            topicLabel={currentQ.category}
+            remainingSeconds={timeLeft}
+            timerFormat="ss"
+            urgentThresholdSeconds={5}
+            warningThresholdSeconds={10}
+            questionText={currentQ.question}
+            options={currentQ.options}
+            selectedOptionIndex={selectedOption}
+            optionBadgeType="alpha"
+            optionsLayout="grid-2"
+            isAnswerLocked={isAnswerChecked}
+            correctOptionIndex={currentQ.correctIndex}
+            onSelectOption={handleSelectOption}
+            instantFeedbackSlot={feedbackNode}
+            paletteItems={paletteItems}
+            currentIndex={currentIndex}
+            onJumpToQuestion={() => {}}
+            primaryActionOverride={
+              !isAnswerChecked
+                ? {
+                    label: 'Confirm Answer',
+                    onClick: () => handleCheckAnswer(false),
+                    disabled: selectedOption === null,
+                    tone: 'emerald',
+                  }
+                : {
+                    label:
+                      currentIndex < questions.length - 1
+                        ? 'Next Question'
+                        : 'Complete Daily Quiz',
+                    onClick: handleNextQuestion,
+                    tone: 'emerald',
+                  }
+            }
+            showNextButton={false}
+            onSubmitTest={finalizeCricketQuiz}
+            submitLabel="Finish Quiz"
+            onBackToDashboard={() => {
+              setGameState('idle');
+              void requestReturnToDashboard();
+            }}
+            progressSavedMessage="You will exit the Cricket Champions quiz without recording an incomplete score."
+          />
+        );
+      })()}
 
       {/* COMPLETED REVIEW SCREEN */}
       {gameState === 'completed' && (

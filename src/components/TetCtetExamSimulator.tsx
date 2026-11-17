@@ -3,27 +3,22 @@ import {
   AlertTriangle,
   ArrowLeft,
   BarChart3,
-  BookOpen,
-  Bookmark,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Eraser,
-  Eye,
-  Flag,
-  HelpCircle,
-  Lightbulb,
   Play,
-  RotateCcw,
-  Send,
   ShieldCheck,
-  Sparkles,
   Target,
   Trophy,
-  XCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import {
+  UniversalExamShell,
+  ExamPaletteItem,
+  ExamPaletteStatus,
+} from './exam/UniversalExamShell';
+import {
+  enterElementFullscreen,
+  exitElementFullscreen,
+  requestReturnToDashboard,
+} from '../hooks/useExamFullscreen';
 import {
   TetCtetAttemptRecord,
   TetCtetExamType,
@@ -150,7 +145,6 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
   const [timeWarningBanner, setTimeWarningBanner] = useState<string | null>(null);
   const [alertsShown, setAlertsShown] = useState<number[]>([]);
   const [showSubmitModal, setShowSubmitModal] = useState<boolean>(false);
-  const [showMobilePalette, setShowMobilePalette] = useState<boolean>(false);
 
   // Result states (open Question Review automatically after test submission)
   const [submittedAttempt, setSubmittedAttempt] = useState<TetCtetAttemptRecord | null>(null);
@@ -251,6 +245,7 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
 
   const handleFinalSubmit = useCallback(async () => {
     setShowSubmitModal(false);
+    void exitElementFullscreen();
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
@@ -415,13 +410,13 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
     setAlertsShown([]);
     setTimeWarningBanner(null);
     setPhase('taking');
+    void enterElementFullscreen();
   };
 
   const navigateToQuestion = (idx: number) => {
     if (idx < 0 || idx >= questions.length) return;
     setCurrentIdx(idx);
     setVisited((prev) => ({ ...prev, [idx]: true }));
-    setShowMobilePalette(false);
   };
 
   const handleSelectOption = (optionIdx: number) => {
@@ -643,351 +638,168 @@ export const TetCtetExamSimulator: React.FC<TetCtetExamSimulatorProps> = ({
   }
 
   // =========================================================================
-  // VIEW 2: LIVE COMPETITIVE EXAM SIMULATOR
+  // VIEW 2: LIVE COMPETITIVE EXAM SIMULATOR (UNIVERSAL FULL-SCREEN SHELL)
   // =========================================================================
   if (phase === 'taking' && currentQuestion) {
-    const isUrgent = remainingSeconds <= 300;
-    const isWarning = remainingSeconds <= 600 && remainingSeconds > 300;
-    const isAmber = remainingSeconds <= 1800 && remainingSeconds > 600;
     const selectedOpt = answers[currentIdx];
     const isMarked = Boolean(marked[currentIdx]);
 
-    return (
-      <div className="space-y-4 max-w-7xl mx-auto">
-        {/* Top Competitive Exam Status Header */}
-        <header className="sticky top-2 z-30 rounded-2xl bg-slate-900 text-white p-3.5 sm:p-4 shadow-lg border border-slate-700">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                <span>EXAMINATION: {modMeta.examTitle}</span>
-                <span>•</span>
-                <span>PAPER NUMBER: Paper {paper}</span>
-                <span>•</span>
-                <span>TOTAL QUESTIONS: {questions.length}</span>
-                <span>•</span>
-                <span>TOTAL MARKS: {questions.length}</span>
-              </div>
-              <p className="text-xs sm:text-sm font-display font-extrabold text-amber-300 mt-0.5 truncate">
-                {mode === 'MOCK'
-                  ? `Mock Test ${String(mockTestNumber || 1).padStart(2, '0')} · L1: ${language1} · L2: ${language2} · Medium: ${medium}`
-                  : `${practiceTitle || 'Practice Set'} · L1: ${language1} · L2: ${language2}`}
-              </p>
+    const paletteItems: ExamPaletteItem[] = questions.map((q, idx) => {
+      const isVis = Boolean(visited[idx]);
+      const hasAns = answers[idx] !== undefined;
+      const isMk = Boolean(marked[idx]);
+      let status: ExamPaletteStatus = 'not-visited';
+      if (!isVis && !hasAns && !isMk) status = 'not-visited';
+      else if (hasAns && isMk) status = 'answered-marked';
+      else if (!hasAns && isMk) status = 'marked';
+      else if (hasAns) status = 'answered';
+      else status = 'not-answered';
+
+      return {
+        index: idx,
+        label: q.questionNumber,
+        status,
+      };
+    });
+
+    const examSubtitle =
+      mode === 'MOCK'
+        ? `Mock Test ${String(mockTestNumber || 1).padStart(2, '0')} · Paper ${paper} · L1: ${language1} · L2: ${language2} · ${medium}`
+        : `${practiceTitle || 'Practice Set'} · Paper ${paper} · L1: ${language1} · L2: ${language2}`;
+
+    const alertBannerNode = timeWarningBanner ? (
+      <div className="rounded-xl bg-amber-50 border-2 border-amber-400 px-3.5 py-2 flex items-center justify-between gap-3 text-xs font-bold text-amber-950">
+        <div className="flex items-center gap-2 min-w-0">
+          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+          <span className="truncate">{timeWarningBanner}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setTimeWarningBanner(null)}
+          className="px-2.5 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-950 text-[11px] font-extrabold cursor-pointer shrink-0"
+        >
+          Dismiss
+        </button>
+      </div>
+    ) : undefined;
+
+    const sectionTabsNode = (
+      <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+        {subjectSectionJumps.map((sec) => {
+          const isCurrentSec = currentQuestion.subjectId === sec.subjectId;
+          return (
+            <button
+              key={sec.subjectId}
+              type="button"
+              onClick={() => navigateToQuestion(sec.firstIdx)}
+              className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-display font-black whitespace-nowrap cursor-pointer transition-all shrink-0 border ${
+                isCurrentSec
+                  ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {sec.label} ({sec.count})
+            </button>
+          );
+        })}
+      </div>
+    );
+
+    const submitModalNode = showSubmitModal ? (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Submit Examination Confirmation"
+        className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs"
+      >
+        <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <h3 className="text-lg font-display font-black text-slate-900">
+            Submit Examination Now?
+          </h3>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Please verify your response summary before final submission. Remember, there is zero negative marking.
+          </p>
+          <div className="grid grid-cols-2 gap-2.5 text-xs font-bold">
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900">
+              Answered: {paletteCounts.answered + paletteCounts.answeredAndMarked}
             </div>
-
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div
-                aria-live="polite"
-                className={`px-3.5 py-2 rounded-xl border font-mono tabular-nums font-black text-sm sm:text-base flex items-center gap-2 ${
-                  isUrgent
-                    ? 'bg-rose-600 text-white border-rose-400'
-                    : isWarning
-                    ? 'bg-orange-500 text-white border-orange-300'
-                    : isAmber
-                    ? 'bg-amber-400 text-slate-950 border-amber-300'
-                    : 'bg-slate-800 text-emerald-300 border-slate-600'
-                }`}
-              >
-                <Clock className="w-4 h-4 shrink-0" />
-                <span>TIME REMAINING: {formatHhMmSs(remainingSeconds)}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowMobilePalette((prev) => !prev)}
-                className="lg:hidden min-h-[42px] px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs cursor-pointer"
-              >
-                Palette ({paletteCounts.answered}/{questions.length})
-              </button>
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
+              Not Answered: {paletteCounts.notAnswered}
+            </div>
+            <div className="p-2.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900">
+              Marked Review: {paletteCounts.markedOnly + paletteCounts.answeredAndMarked}
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800">
+              Not Visited: {paletteCounts.notVisited}
             </div>
           </div>
-        </header>
-
-        {/* 30m / 10m / 5m Alert Banner */}
-        {timeWarningBanner && (
-          <div className="rounded-2xl bg-amber-50 border-2 border-amber-400 px-4 py-3 flex items-center justify-between gap-3 text-xs sm:text-sm font-bold text-amber-950 shadow-sm">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-              <span>{timeWarningBanner}</span>
-            </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
-              onClick={() => setTimeWarningBanner(null)}
-              className="px-2.5 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-950 text-xs font-extrabold cursor-pointer"
+              onClick={() => setShowSubmitModal(false)}
+              className="min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer"
             >
-              Dismiss
+              Resume Exam
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleFinalSubmit()}
+              className="min-h-[42px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-display font-black text-xs cursor-pointer"
+            >
+              Confirm Final Submit
             </button>
           </div>
-        )}
-
-        {/* Section Subject Quick Jump Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {subjectSectionJumps.map((sec) => {
-            const isCurrentSec = currentQuestion.subjectId === sec.subjectId;
-            return (
-              <button
-                key={sec.subjectId}
-                type="button"
-                onClick={() => navigateToQuestion(sec.firstIdx)}
-                className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-display font-black whitespace-nowrap cursor-pointer transition-all shrink-0 border ${
-                  isCurrentSec
-                    ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {sec.label} ({sec.count})
-              </button>
-            );
-          })}
         </div>
-
-        {/* Main 2-Column Simulator Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Question Card (Left 8 cols) */}
-          <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200 shadow-md p-5 sm:p-7 space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-lg bg-slate-900 text-white font-mono font-black text-xs">
-                  Question {currentQuestion.questionNumber} of {questions.length}
-                </span>
-                <span className="text-xs font-bold text-indigo-800">
-                  {currentQuestion.subjectLabel} · {currentQuestion.topic}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
-                <span className="hidden sm:inline">+1 Mark · 0 Negative</span>
-                {isMarked && (
-                  <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 font-extrabold">
-                    Marked for Review
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Question Stem */}
-            <div className="text-sm sm:text-base font-semibold text-slate-900 leading-relaxed whitespace-pre-line">
-              {currentQuestion.question}
-            </div>
-
-            {/* 4 Options */}
-            <div className="space-y-3">
-              {currentQuestion.options.map((optText, oIdx) => {
-                const isSelected = selectedOpt === oIdx;
-                const letter = String.fromCharCode(65 + oIdx);
-                return (
-                  <button
-                    key={oIdx}
-                    type="button"
-                    onClick={() => handleSelectOption(oIdx)}
-                    className={`w-full min-h-[52px] p-3.5 sm:p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-start gap-3 ${
-                      isSelected
-                        ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-200 shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50/70'
-                    }`}
-                  >
-                    <span
-                      className={`w-7 h-7 rounded-lg font-display font-black text-xs flex items-center justify-center shrink-0 mt-0.5 ${
-                        isSelected
-                          ? 'bg-indigo-700 text-white'
-                          : 'bg-slate-100 text-slate-700 border border-slate-300'
-                      }`}
-                    >
-                      {letter}
-                    </span>
-                    <span className="text-xs sm:text-sm font-semibold text-slate-900 leading-snug">
-                      {optText}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Control Buttons Bar */}
-            <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={currentIdx === 0}
-                  onClick={() => navigateToQuestion(currentIdx - 1)}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-45 text-slate-800 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Previous</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleClearResponse}
-                  disabled={selectedOpt === undefined}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-45 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <Eraser className="w-4 h-4" />
-                  <span>Clear Response</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleMarkForReview}
-                  className={`min-h-[44px] px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border ${
-                    isMarked
-                      ? 'bg-violet-700 text-white border-violet-700'
-                      : 'bg-violet-50 hover:bg-violet-100 text-violet-900 border-violet-200'
-                  }`}
-                >
-                  <Bookmark className="w-4 h-4" />
-                  <span>{isMarked ? 'Unmark Review' : 'Mark for Review'}</span>
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveAndNext}
-                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-display font-black text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <span>Save &amp; Next</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSubmitModal(true)}
-                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Submit Test</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Question Palette (Right 4 cols on desktop, toggleable drawer on mobile) */}
-          <aside
-            className={`lg:col-span-4 bg-white rounded-3xl border border-slate-200 shadow-md p-4 sm:p-5 space-y-4 ${
-              showMobilePalette ? 'block' : 'hidden lg:block'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
-              <h3 className="text-sm font-display font-black text-slate-900">
-                Question Palette ({questions.length})
-              </h3>
-              <span className="text-[11px] font-bold text-emerald-700">Auto-Saved</span>
-            </div>
-
-            {/* 5 Status Counters */}
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-bold">
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="w-5 h-5 rounded bg-white border border-slate-400 text-slate-800 flex items-center justify-center font-mono text-[10px]">
-                  {paletteCounts.notVisited}
-                </span>
-                <span>Not Visited</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-rose-50 border border-rose-200">
-                <span className="w-5 h-5 rounded bg-rose-600 text-white flex items-center justify-center font-mono text-[10px]">
-                  {paletteCounts.notAnswered}
-                </span>
-                <span>Not Answered</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50 border border-emerald-200">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center font-mono text-[10px]">
-                  {paletteCounts.answered}
-                </span>
-                <span>Answered</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-violet-50 border border-violet-200">
-                <span className="w-5 h-5 rounded bg-violet-600 text-white flex items-center justify-center font-mono text-[10px]">
-                  {paletteCounts.markedOnly}
-                </span>
-                <span>Marked Review</span>
-              </div>
-              <div className="col-span-2 flex items-center gap-2 p-2 rounded-xl bg-indigo-50 border border-indigo-200">
-                <span className="w-5 h-5 rounded bg-indigo-700 text-white flex items-center justify-center font-mono text-[10px]">
-                  {paletteCounts.answeredAndMarked}
-                </span>
-                <span>Answered and Marked for Review</span>
-              </div>
-            </div>
-
-            {/* Palette Grid */}
-            <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 max-h-[340px] overflow-y-auto pr-1">
-              {questions.map((q, idx) => {
-                const isVis = Boolean(visited[idx]);
-                const hasAns = answers[idx] !== undefined;
-                const isMk = Boolean(marked[idx]);
-                const isCurr = idx === currentIdx;
-
-                let statusClass = 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100';
-                if (hasAns && isMk) statusClass = 'bg-indigo-700 border-indigo-800 text-white';
-                else if (!hasAns && isMk) statusClass = 'bg-violet-600 border-violet-700 text-white';
-                else if (hasAns) statusClass = 'bg-emerald-600 border-emerald-700 text-white';
-                else if (isVis) statusClass = 'bg-rose-600 border-rose-700 text-white';
-
-                return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => navigateToQuestion(idx)}
-                    aria-label={`Jump to Question ${q.questionNumber}`}
-                    className={`relative h-9 rounded-lg border font-mono font-bold text-xs cursor-pointer transition-all ${statusClass} ${
-                      isCurr ? 'ring-2 ring-offset-1 ring-amber-500 scale-105' : ''
-                    }`}
-                  >
-                    {q.questionNumber}
-                    {hasAns && isMk && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 text-slate-950 text-[8px] font-black flex items-center justify-center">
-                        ✓
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
-        </div>
-
-        {/* Submit Confirmation Modal */}
-        {showSubmitModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-              <h3 className="text-lg font-display font-black text-slate-900">
-                Submit Examination Now?
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Please verify your response summary before final submission. Remember, there is zero negative marking.
-              </p>
-              <div className="grid grid-cols-2 gap-2.5 text-xs font-bold">
-                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900">
-                  Answered: {paletteCounts.answered + paletteCounts.answeredAndMarked}
-                </div>
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
-                  Not Answered: {paletteCounts.notAnswered}
-                </div>
-                <div className="p-2.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900">
-                  Marked Review: {paletteCounts.markedOnly + paletteCounts.answeredAndMarked}
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800">
-                  Not Visited: {paletteCounts.notVisited}
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSubmitModal(false)}
-                  className="min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer"
-                >
-                  Resume Exam
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleFinalSubmit()}
-                  className="min-h-[42px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-display font-black text-xs cursor-pointer"
-                >
-                  Confirm Final Submit
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+    ) : null;
+
+    return (
+      <UniversalExamShell
+        examTitle={`${modMeta.examTitle} · Paper ${paper}`}
+        subjectName={currentQuestion.subjectLabel}
+        subtitle={examSubtitle}
+        questionNumber={currentQuestion.questionNumber}
+        totalQuestions={questions.length}
+        marksLabel="+1 Mark · 0 Negative"
+        topicLabel={currentQuestion.topic}
+        remainingSeconds={remainingSeconds}
+        timerFormat="hhmmss"
+        urgentThresholdSeconds={300}
+        warningThresholdSeconds={600}
+        alertBanner={alertBannerNode}
+        sectionTabsSlot={sectionTabsNode}
+        questionText={currentQuestion.question}
+        options={currentQuestion.options}
+        selectedOptionIndex={selectedOpt}
+        optionBadgeType="alpha"
+        optionsLayout="stack"
+        onSelectOption={handleSelectOption}
+        paletteItems={paletteItems}
+        paletteStats={{
+          answered: paletteCounts.answered + paletteCounts.answeredAndMarked,
+          unanswered: paletteCounts.notAnswered,
+          marked: paletteCounts.markedOnly + paletteCounts.answeredAndMarked,
+          notVisited: paletteCounts.notVisited,
+        }}
+        currentIndex={currentIdx}
+        onJumpToQuestion={navigateToQuestion}
+        onPrevious={() => navigateToQuestion(currentIdx - 1)}
+        canPrevious={currentIdx > 0}
+        onClearAnswer={handleClearResponse}
+        canClearAnswer={selectedOpt !== undefined}
+        isMarkedForReview={isMarked}
+        onToggleMarkForReview={handleMarkForReview}
+        onNext={handleSaveAndNext}
+        nextLabel="Save & Next"
+        onSubmitTest={() => setShowSubmitModal(true)}
+        submitLabel="Submit Test"
+        onBackToDashboard={() => {
+          onExit();
+          void requestReturnToDashboard();
+        }}
+        progressSavedMessage="Your TET/CTET answers and countdown progress remain auto-saved in this browser. You can safely return to Dashboard without submitting."
+        externalModals={submitModalNode}
+      />
     );
   }
 

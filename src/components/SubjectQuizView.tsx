@@ -4,26 +4,28 @@ import { ClassLevel, EducationBoard, SubjectName, QuizQuestion, QuestionType, Qu
 import { randomizeQuizQuestions } from '../services/answerRandomizerService';
 import confetti from 'canvas-confetti';
 import { 
-  Timer, 
   CheckCircle, 
   XCircle, 
-  ArrowRight, 
   Sparkles, 
   RotateCcw, 
-  HelpCircle,
-  ShieldCheck,
-  AlertTriangle,
-  Loader2,
-  Lock,
-  Layers,
-  BookOpen,
-  Award,
-  Play,
-  Check,
-  Trophy,
-  ChevronRight,
+  ShieldCheck, 
+  AlertTriangle, 
+  Loader2, 
+  Lock, 
+  Layers, 
+  Award, 
+  Play, 
+  Check, 
+  Trophy, 
+  ChevronRight, 
   Flame
 } from 'lucide-react';
+import { UniversalExamShell, ExamPaletteItem } from './exam/UniversalExamShell';
+import {
+  enterElementFullscreen,
+  exitElementFullscreen,
+  requestReturnToDashboard,
+} from '../hooks/useExamFullscreen';
 
 import {
   ALL_BOARDS,
@@ -286,6 +288,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         setStartTime(Date.now());
         setIsLoadingSubject(false);
         setQuizState('playing');
+        void enterElementFullscreen();
       }
     } catch (e) {
       if (requestId === activeRequestIdRef.current) {
@@ -371,6 +374,7 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
   };
 
   const finalizeQuiz = () => {
+    void exitElementFullscreen();
     const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
     const correctCount = answersLog.filter(a => a.isCorrect).length;
     const incorrectCount = answersLog.filter(a => !a.isCorrect && a.selectedIndex !== -1).length;
@@ -786,174 +790,141 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         </div>
       )}
 
-      {/* QUIZ PLAYING VIEW: One Question at a Time */}
-      {!isLoadingSubject && !loadError && quizState === 'playing' && currentQ && (
-        <div className="space-y-4">
-          {/* Header Bar: Question index, level badge, progress bar, timer */}
-          <div className="bg-white rounded-2xl p-4 border border-amber-200/80 shadow-xs flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 font-bold text-slate-700 text-xs sm:text-sm">
-              <span className="bg-amber-100 text-amber-900 px-2.5 py-1 rounded-lg">
-                Question {currentIndex + 1} of {questions.length}
-              </span>
-              <span className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 font-extrabold text-xs">
-                Level {selectedLevel}
-              </span>
-              <span className="text-slate-400 hidden sm:inline">•</span>
-              <span className="text-slate-600 hidden sm:inline">{selectedSubject} ({currentStudent.classLevel})</span>
-            </div>
+      {/* QUIZ PLAYING VIEW: Universal Full-Screen Examination Shell */}
+      {!isLoadingSubject && !loadError && quizState === 'playing' && currentQ && (() => {
+        const paletteItems: ExamPaletteItem[] = questions.map((q, idx) => {
+          const logged = answersLog[idx];
+          if (logged) {
+            return {
+              index: idx,
+              label: idx + 1,
+              status: logged.selectedIndex === -1 ? 'not-answered' : 'answered',
+            };
+          }
+          return {
+            index: idx,
+            label: idx + 1,
+            status: idx === currentIndex ? 'not-answered' : 'not-visited',
+          };
+        });
 
-            {/* Countdown Timer with Warning Colors */}
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono font-extrabold text-sm border ${
-              timeLeft <= 5 
-                ? 'bg-red-50 text-red-600 border-red-300 animate-pulse' 
-                : 'bg-amber-50 text-amber-900 border-amber-200'
-            }`}>
-              <Timer className="w-4 h-4" />
-              <span>{timeLeft}s</span>
+        const progressBarSlot = (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+              <span>Quiz Progress: Question {currentIndex + 1} of {questions.length}</span>
+              <span className="font-mono">{Math.round(((currentIndex + 1) / questions.length) * 100)}%</span>
+            </div>
+            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-amber-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+              />
             </div>
           </div>
+        );
 
-          {/* Live Progress Bar */}
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-            <div 
-              className="bg-amber-500 h-full rounded-full transition-all duration-300"
-              style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
-            />
+        const headerRightNode = (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-slate-400">ID: {currentQ.id}</span>
+            <button
+              type="button"
+              onClick={() => setReportingQuestion(currentQ)}
+              className="text-[11px] font-bold text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+              title="Report question or answer inaccuracy"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <span>Report Issue</span>
+            </button>
           </div>
+        );
 
-          {/* Question Card */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-amber-200/80 shadow-md space-y-6">
-            <div className="space-y-3">
-              {/* Question Format Badge & Topic Tag */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full border ${qFormat.badgeColor}`}>
-                  {qFormat.label}
-                </span>
-                {currentQ.topic && (
-                  <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 flex items-center gap-1">
-                    <BookOpen className="w-3 h-3 text-slate-500" />
-                    <span>{currentQ.topic}</span>
-                  </span>
-                )}
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-slate-400">
-                    ID: {currentQ.id}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setReportingQuestion(currentQ)}
-                    className="text-[10px] font-bold text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                    title="Report question or answer inaccuracy"
-                  >
-                    <AlertTriangle className="w-3 h-3 text-amber-600" />
-                    <span>Report Issue</span>
-                  </button>
-                </div>
-              </div>
+        const mediaNode = currentQ.diagramEmoji ? (
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-3xl shadow-xs">
+            {currentQ.diagramEmoji}
+          </div>
+        ) : undefined;
 
-              {/* Diagram / Emoji Visual Presentation */}
-              {currentQ.diagramEmoji && (
-                <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-3xl shadow-xs">
-                  {currentQ.diagramEmoji}
-                </div>
+        const feedbackNode = isAnswerChecked ? (
+          <div
+            className={`p-4 rounded-2xl border text-xs sm:text-sm animate-in fade-in space-y-1.5 ${
+              selectedOption === currentQ.correctIndex
+                ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
+                : 'bg-rose-50/80 border-rose-300 text-rose-950'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-bold">
+              {selectedOption === currentQ.correctIndex ? (
+                <>
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Brilliant! That is correct.</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>
+                    {selectedOption === -1 ? 'Time Expired!' : 'Not quite right.'} Correct answer:{' '}
+                    {currentQ.options[currentQ.correctIndex]}
+                  </span>
+                </>
               )}
-
-              {/* Question Text */}
-              <h2 className="text-base sm:text-xl font-bold text-slate-900 leading-relaxed whitespace-pre-line">
-                {currentQ.questionText}
-              </h2>
             </div>
-
-            {/* 4 Interactive Options */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              {currentQ.options.map((optText, idx) => {
-                const isSelected = selectedOption === idx;
-                const isCorrect = idx === currentQ.correctIndex;
-
-                let btnStyle = 'bg-slate-50 hover:bg-amber-50/60 border-slate-200 text-slate-800';
-
-                if (isAnswerChecked) {
-                  if (isCorrect) {
-                    btnStyle = 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-400 font-extrabold';
-                  } else if (isSelected && !isCorrect) {
-                    btnStyle = 'bg-rose-50 border-rose-500 text-rose-950 ring-2 ring-rose-400 font-extrabold';
-                  } else {
-                    btnStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-50';
-                  }
-                }
-
-                return (
-                  <button
-                    key={idx}
-                    disabled={isAnswerChecked}
-                    onClick={() => handleSelectOption(idx)}
-                    className={`p-4 rounded-2xl border text-left text-sm font-medium transition-all flex items-start gap-3 cursor-pointer ${btnStyle}`}
-                  >
-                    <span className="w-6 h-6 rounded-lg bg-black/5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
-                      {String.fromCharCode(65 + idx)}
-                    </span>
-                    <span className="flex-1">{optText}</span>
-                    {isAnswerChecked && isCorrect && (
-                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                    )}
-                    {isAnswerChecked && isSelected && !isCorrect && (
-                      <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Instant Educational Explanation Card */}
-            {isAnswerChecked && (
-              <div className={`p-4 rounded-2xl border text-xs sm:text-sm animate-in fade-in space-y-1.5 ${
-                selectedOption === currentQ.correctIndex 
-                  ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950' 
-                  : 'bg-rose-50/70 border-rose-300 text-rose-950'
-              }`}>
-                <div className="flex items-center gap-2 font-bold">
-                  {selectedOption === currentQ.correctIndex ? (
-                    <>
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      <span>Brilliant! That is correct.</span>
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="w-4 h-4 text-rose-600" />
-                      <span>{selectedOption === -1 ? 'Time Expired!' : 'Not quite right.'} Correct answer: {currentQ.options[currentQ.correctIndex]}</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-slate-700 leading-relaxed">
-                  <strong>Explanation:</strong> {currentQ.explanation}
-                </p>
-              </div>
-            )}
-
-            {/* Next Question / Finish Button & Report Option */}
-            {isAnswerChecked && (
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setReportingQuestion(currentQ)}
-                  className="text-xs font-bold text-slate-500 hover:text-amber-800 flex items-center gap-1.5 cursor-pointer transition-colors"
-                  title="Report mistake or ambiguity in this question"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Report Question / Answer</span>
-                </button>
-                <button
-                  onClick={handleNextQuestion}
-                  className="px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <span>{currentIndex + 1 === questions.length ? 'See Final Results' : 'Next Question'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <p className="text-slate-700 leading-relaxed">
+              <strong>Explanation:</strong> {currentQ.explanation}
+            </p>
           </div>
-        </div>
-      )}
+        ) : undefined;
+
+        return (
+          <UniversalExamShell
+            examTitle={`${selectedSubject} Quiz • Level ${selectedLevel}`}
+            subjectName={currentQ.topic || selectedSubject}
+            subtitle={`${getBoardShortLabel(activeBoard)} • ${currentStudent.classLevel}`}
+            questionNumber={currentIndex + 1}
+            totalQuestions={questions.length}
+            topicLabel={currentQ.topic}
+            formatBadge={{ label: qFormat.label, className: qFormat.badgeColor }}
+            remainingSeconds={timeLeft}
+            timerFormat="ss"
+            urgentThresholdSeconds={5}
+            warningThresholdSeconds={10}
+            sectionTabsSlot={progressBarSlot}
+            headerRightExtra={headerRightNode}
+            questionMediaSlot={mediaNode}
+            questionText={currentQ.questionText}
+            options={currentQ.options}
+            selectedOptionIndex={selectedOption}
+            optionBadgeType="alpha"
+            optionsLayout="grid-2"
+            isAnswerLocked={isAnswerChecked}
+            correctOptionIndex={currentQ.correctIndex}
+            onSelectOption={handleSelectOption}
+            instantFeedbackSlot={feedbackNode}
+            paletteItems={paletteItems}
+            currentIndex={currentIndex}
+            onJumpToQuestion={() => {}}
+            primaryActionOverride={
+              isAnswerChecked
+                ? {
+                    label:
+                      currentIndex + 1 === questions.length
+                        ? 'See Final Results'
+                        : 'Next Question',
+                    onClick: handleNextQuestion,
+                    tone: 'amber',
+                  }
+                : undefined
+            }
+            showNextButton={false}
+            onSubmitTest={finalizeQuiz}
+            submitLabel="Finish Quiz"
+            onBackToDashboard={() => {
+              setQuizState('idle');
+              void requestReturnToDashboard();
+            }}
+            progressSavedMessage="You will exit this practice quiz without submitting a score. You can restart any level from your dashboard."
+          />
+        );
+      })()}
 
       {/* QUIZ COMPLETED RESULTS VIEW */}
       {!isLoadingSubject && quizState === 'completed' && (() => {
