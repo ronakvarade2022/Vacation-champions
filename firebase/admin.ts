@@ -44,13 +44,28 @@ try {
 const ADMIN_APP_NAME = 'mystudyzone-admin';
 const AUTHORIZED_ADMIN_EMAIL = 'ronakvarade2022@gmail.com';
 
-const firebaseConfig = JSON.parse(
-  fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')
-) as {
+function loadFirebaseConfig(): {
   projectId: string;
   firestoreDatabaseId: string;
   [key: string]: unknown;
-};
+} {
+  const candidates: (string | URL)[] = [
+    path.resolve(process.cwd(), 'firebase-applet-config.json'),
+    new URL('./firebase-applet-config.json', import.meta.url),
+    new URL('../firebase-applet-config.json', import.meta.url)
+  ];
+  for (const candidate of candidates) {
+    try {
+      const raw = fs.readFileSync(candidate, 'utf8');
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error('Unable to locate or read firebase-applet-config.json');
+}
+
+const firebaseConfig = loadFirebaseConfig();
 
 export type FirebaseAdminCredentialSource =
   | 'service_account_json'

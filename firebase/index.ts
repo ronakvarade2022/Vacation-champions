@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import Razorpay from 'razorpay';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, setLogLevel } from 'firebase/firestore';
@@ -22,9 +23,28 @@ try {
   // Ignore if unsupported
 }
 
-const firebaseConfig = JSON.parse(
-  fs.readFileSync(new URL('../firebase-applet-config.json', import.meta.url), 'utf8')
-);
+function loadFirebaseConfig(): {
+  projectId: string;
+  firestoreDatabaseId: string;
+  [key: string]: unknown;
+} {
+  const candidates: (string | URL)[] = [
+    path.resolve(process.cwd(), 'firebase-applet-config.json'),
+    new URL('./firebase-applet-config.json', import.meta.url),
+    new URL('../firebase-applet-config.json', import.meta.url)
+  ];
+  for (const candidate of candidates) {
+    try {
+      const raw = fs.readFileSync(candidate, 'utf8');
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error('Unable to locate or read firebase-applet-config.json');
+}
+
+const firebaseConfig = loadFirebaseConfig();
 
 // Client-fallback Firestore handle (used only by legacy callers when Admin SDK creds are absent locally)
 const firebaseServerApp =
