@@ -3478,9 +3478,21 @@ async function startServer() {
     console.log('[Production Mode] Compressed static dist served with immutable asset caching.');
   }
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Champion Learning Server running on http://0.0.0.0:${PORT}`);
-  });
+  const rawPort = process.env.PORT;
+  if (rawPort === 'passenger') {
+    httpServer.listen('passenger', () => {
+      console.log('🚀 Champion Learning Server running via Phusion Passenger');
+    });
+  } else if (rawPort && (rawPort.startsWith('/') || rawPort.endsWith('.sock'))) {
+    httpServer.listen(rawPort, () => {
+      console.log(`🚀 Champion Learning Server running on Unix socket: ${rawPort}`);
+    });
+  } else {
+    const listenPort = parseInt(rawPort || '3000', 10) || 3000;
+    httpServer.listen(listenPort, '0.0.0.0', () => {
+      console.log(`🚀 Champion Learning Server running on http://0.0.0.0:${listenPort}`);
+    });
+  }
 }
 
 startServer().catch((err) => {
