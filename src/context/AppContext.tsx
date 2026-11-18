@@ -2513,7 +2513,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentStudent(null);
     setCurrentUser(null);
     setActiveRole('student');
-    setIsAuthModalOpen(false);
+    setIsAuthModalOpen(true);
 
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });

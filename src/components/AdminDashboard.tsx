@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
   Layers,
   X,
+  LogOut,
 } from 'lucide-react';
 import { LogoutConfirmModal } from './LogoutConfirmModal';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
@@ -290,15 +291,26 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Button */}
-        <button
-          type="button"
-          onClick={handleOpenAddQuestionModal}
-          className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 self-start md:self-auto cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Vetted Question</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={handleOpenAddQuestionModal}
+            className="px-4 sm:px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Vetted Question</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer border border-rose-500/50"
+            title="Sign out of supervisor session"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
 
       {/* Independent Board & Class Dashboard Workspace Switcher */}
@@ -567,6 +579,15 @@ export const AdminDashboard: React.FC = () => {
         >
           <User className="w-4 h-4" />
           <span>Supervisor Profile</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowLogoutConfirm(true)}
+          className="px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 shadow-2xs"
+          title="Sign out of supervisor session"
+        >
+          <LogOut className="w-4 h-4 text-rose-600" />
+          <span>Logout (लॉग आउट)</span>
         </button>
       </div>
 

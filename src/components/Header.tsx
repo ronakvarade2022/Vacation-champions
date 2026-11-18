@@ -50,6 +50,7 @@ import {
   getStudentPlanInfo,
 } from '../utils/subscriptionAccess';
 import { BrandBookCapLogo } from './DashboardIllustrations';
+import { LogoutConfirmModal } from './LogoutConfirmModal';
 
 interface HeaderProps {
   currentTab: string;
@@ -703,6 +704,21 @@ export const Header: React.FC<HeaderProps> = ({
                         );
                       })}
                     </div>
+
+                    {/* Fixed Bottom Logout in Profile Dropdown (Always visible on mobile & desktop) */}
+                    <div className="p-3 bg-slate-50 border-t border-slate-200 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowProfileDropdown(false);
+                          setShowLogoutConfirm(true);
+                        }}
+                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 active:bg-red-800 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all border border-rose-500/40"
+                      >
+                        <LogOut className="w-4 h-4 shrink-0" />
+                        <span>Sign Out / Logout (लॉग आउट)</span>
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -734,49 +750,11 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
                 aria-label="Logout"
                 aria-expanded={showLogoutConfirm}
-                className="min-h-[38px] sm:min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40"
+                className="min-h-[36px] sm:min-h-[42px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-black shadow-xs hover:shadow-md flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40"
               >
                 <LogOut className="w-4 h-4 shrink-0" />
                 <span>Logout</span>
               </button>
-
-              {showLogoutConfirm && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowLogoutConfirm(false)}
-                  />
-                  <div className="fixed sm:absolute right-3.5 sm:right-0 top-16 sm:top-full sm:mt-2 w-72 max-w-[calc(100vw-1.75rem)] bg-white rounded-2xl shadow-2xl border-2 border-red-200 p-4 z-50">
-                    <h4 className="font-extrabold text-sm text-slate-900">
-                      Confirm Log Out?
-                    </h4>
-                    <p className="text-[11px] text-slate-600 mt-1 mb-3">
-                      {currentStudent
-                        ? `Sign out of ${currentStudent.name}? Your saved progress remains safe.`
-                        : 'End your current session?'}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowLogoutConfirm(false)}
-                        className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setShowLogoutConfirm(false);
-                          await logout();
-                        }}
-                        className="py-2 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs cursor-pointer"
-                      >
-                        Yes, Log Out
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           ) : (
             <button
@@ -912,24 +890,67 @@ export const Header: React.FC<HeaderProps> = ({
             })}
           </div>
 
-          {/* Account Bottom Row (Profile Shortcut Only when Signed In — No Duplicate Login/Logout) */}
+          {/* Account Bottom Row (Profile & Logout Shortcuts in Mobile Menu) */}
           {currentStudent && (
-            <div className="pt-2 border-t border-slate-200">
+            <div className="pt-2 border-t border-slate-200 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setCurrentTab('profile');
                   setMobileMenuOpen(false);
                 }}
-                className="w-full min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <User className="w-4 h-4" />
                 <span>My Profile</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowLogoutConfirm(true);
+                }}
+                className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-rose-500/40"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
+          {currentUser && !currentStudent && (
+            <div className="pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowLogoutConfirm(true);
+                }}
+                className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-rose-500/40"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Supervisor Logout</span>
               </button>
             </div>
           )}
         </div>
       )}
+
+      {/* Global Header Logout Confirmation Modal */}
+      <LogoutConfirmModal
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={async () => {
+          await logout();
+        }}
+        accountName={currentStudent?.name || currentUser?.displayName || 'User'}
+        roleTitle={
+          activeRole === 'admin'
+            ? 'Administrator'
+            : currentStudent?.accountRole === 'teacher'
+            ? 'Teacher'
+            : 'Student'
+        }
+      />
     </header>
   );
 };
