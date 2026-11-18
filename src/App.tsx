@@ -151,6 +151,7 @@ import {
   getPremiumActivatedBannerMessage,
   hasCategoryAccess,
 } from './utils/subscriptionAccess';
+import { sanitizeReferralCode } from './utils/referralCoding';
 import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift, Lock, CheckCircle2 } from 'lucide-react';
 import './firebase';
 
@@ -189,6 +190,28 @@ const AppContent: React.FC = () => {
   const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>('login');
   const [authInitialRegisterRole, setAuthInitialRegisterRole] = useState<'student' | 'teacher'>('student');
   const [authInitialEmail, setAuthInitialEmail] = useState<string>('');
+  const [capturedReferralCode, setCapturedReferralCode] = useState<string>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlRef = params.get('ref') || params.get('referral');
+        if (urlRef) {
+          const clean = sanitizeReferralCode(urlRef);
+          if (clean) {
+            localStorage.setItem('vc_pending_ref_code', clean);
+            localStorage.setItem('msz_ref_code', clean);
+            return clean;
+          }
+        }
+        return (
+          localStorage.getItem('vc_pending_ref_code') ||
+          localStorage.getItem('msz_ref_code') ||
+          ''
+        );
+      }
+    } catch {}
+    return '';
+  });
   const [resetOobCode, setResetOobCode] = useState<string>('');
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState<boolean>(false);
@@ -323,17 +346,25 @@ const AppContent: React.FC = () => {
     };
   }, []);
 
-  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...)
+  // Detect Firebase Authentication password reset link (?mode=resetPassword&oobCode=...) and referral links (?ref=...)
   useEffect(() => {
     try {
-      localStorage.removeItem('vc_pending_ref_code');
       const params = new URLSearchParams(window.location.search);
       const mode = params.get('mode');
       const oobCode = params.get('oobCode');
       const emailParam = params.get('email');
       const pathname = window.location.pathname.toLowerCase();
+      const rawRef = params.get('ref') || params.get('referral');
 
-      if (params.has('ref') || params.has('referral')) {
+      if (rawRef) {
+        const cleanRef = sanitizeReferralCode(rawRef);
+        if (cleanRef) {
+          setCapturedReferralCode(cleanRef);
+          try {
+            localStorage.setItem('vc_pending_ref_code', cleanRef);
+            localStorage.setItem('msz_ref_code', cleanRef);
+          } catch {}
+        }
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('ref');
         cleanUrl.searchParams.delete('referral');
@@ -343,7 +374,7 @@ const AppContent: React.FC = () => {
       if (mode === 'resetPassword' && oobCode) {
         setResetOobCode(oobCode);
         setIsResetModalOpen(true);
-      } else if (pathname.startsWith('/register')) {
+      } else if (pathname.startsWith('/register') || rawRef) {
         setAuthDefaultTab('register');
         setIsAuthOpen(true);
         setIsAuthModalOpen(true);
@@ -1626,6 +1657,7 @@ const AppContent: React.FC = () => {
             initialEmail={authInitialEmail}
             initialBoard={publicBoard}
             initialClass={publicClass}
+            initialReferralCode={capturedReferralCode}
             onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
               openMembershipWithPlan('premium', targetClass, targetBoard);
             }}

@@ -1185,6 +1185,23 @@ async function processReferralPurchase(params) {
     }
   }
   if (!referrerUserId) {
+    try {
+      const refMatch = await serverQueryEqualsLimit1("referrals", "referralCode", cleanCode);
+      if (refMatch) {
+        referrerUserId = String(refMatch.data.userId || refMatch.id);
+        referralCodeIndex.set(cleanCode, referrerUserId);
+      } else {
+        const stuMatch = await serverQueryEqualsLimit1("students", "referralCode", cleanCode);
+        if (stuMatch) {
+          referrerUserId = String(stuMatch.data.id || stuMatch.id);
+          referralCodeIndex.set(cleanCode, referrerUserId);
+        }
+      }
+    } catch (err) {
+      console.warn("[Referral Store] Firestore query fallback error during purchase processing:", err);
+    }
+  }
+  if (!referrerUserId) {
     return { credited: false, reason: "Invalid or unrecognized referral code." };
   }
   const referrer = await getOrCreateReferralAccount(referrerUserId);

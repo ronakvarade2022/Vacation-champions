@@ -134,9 +134,12 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
       setReferralCreditedNotice('');
       clearQrTimers();
 
-      setReferralCodeInput(
-        currentStudent?.referredByCode ? currentStudent.referredByCode.toUpperCase() : ''
-      );
+      const resolvedRef =
+        (currentStudent?.referredByCode ? currentStudent.referredByCode.toUpperCase() : '') ||
+        (typeof window !== 'undefined'
+          ? (localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || '').toUpperCase()
+          : '');
+      setReferralCodeInput(resolvedRef);
 
       // Preload Razorpay Checkout script immediately when modal opens so button click is fast
       loadRazorpayScript().catch((err) => {
@@ -266,8 +269,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     }
 
     isCheckoutBusyRef.current = true;
-    setIsCreatingOrder(true);
-    const activeRefCode = referralCodeInput.trim().toUpperCase();
+    const activeRefCode = (
+      referralCodeInput.trim() ||
+      currentStudent?.referredByCode ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+        : '')
+    ).toUpperCase();
 
     try {
       const [scriptReady, orderData] = await Promise.all([
@@ -377,7 +385,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     isCheckoutBusyRef.current = true;
     setIsCreatingOrder(true);
     setQrStatusNotice('Contacting Razorpay Live QR Code API...');
-    const activeRefCode = referralCodeInput.trim().toUpperCase();
+    const activeRefCode = (
+      referralCodeInput.trim() ||
+      currentStudent?.referredByCode ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+        : '')
+    ).toUpperCase();
 
     try {
       const data = await createRazorpayQrCode(

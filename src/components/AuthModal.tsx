@@ -28,6 +28,7 @@ interface AuthModalProps {
   initialEmail?: string;
   initialBoard?: EducationBoard;
   initialClass?: ClassLevel;
+  initialReferralCode?: string;
   onSuccess?: () => void;
   onExistingAccountProceedToSubscription?: (targetClass: ClassLevel, targetBoard?: EducationBoard) => void;
 }
@@ -106,6 +107,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialEmail = '',
   initialBoard,
   initialClass,
+  initialReferralCode,
   onSuccess,
   onExistingAccountProceedToSubscription,
 }) => {
@@ -212,15 +214,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (initialClass) {
       setRegClass(initialClass);
     }
-    setRegReferralCode('');
-    setReferralValidationInfo({ checked: false, valid: false });
+    const pendingCode = sanitizeReferralCode(
+      initialReferralCode ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+        : '')
+    );
+    setRegReferralCode(pendingCode);
+    if (!pendingCode) {
+      setReferralValidationInfo({ checked: false, valid: false });
+    }
     setError(sessionSecurityNotice || '');
     setSuccessMsg('');
     setExistingAccountMatch(null);
     setExistingAccountPassword('');
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
-  }, [defaultTab, initialRegisterRole, initialEmail, initialBoard, initialClass, isOpen, sessionSecurityNotice]);
+  }, [defaultTab, initialRegisterRole, initialEmail, initialBoard, initialClass, initialReferralCode, isOpen, sessionSecurityNotice]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {
@@ -732,6 +742,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           });
         }
         localStorage.removeItem('vc_pending_ref_code');
+        localStorage.removeItem('msz_ref_code');
       } catch {
         // Non-blocking referral registration
       }

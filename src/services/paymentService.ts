@@ -363,7 +363,12 @@ export async function createRazorpayOrder(
     mobile: student.mobile,
     selectedBoard: targetBoard,
     selectedClass: targetClass,
-    referralCode: referralCode || student.referredByCode || ''
+    referralCode:
+      referralCode ||
+      student.referredByCode ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+        : '')
   };
 
   console.info(
@@ -390,6 +395,11 @@ export async function createRazorpayOrder(
     if (res.status === 404) {
       throw new Error(
         `Payment backend endpoint (${urlUsed}) returned HTTP 404. Please ensure the latest deployment with netlify.toml and netlify/functions/api.mjs is published on mystudyzone.in.`
+      );
+    }
+    if (res.status === 503) {
+      throw new Error(
+        `Payment server is temporarily unavailable (HTTP 503 Service Unavailable). The Node.js application process on your hosting server is currently stopped or restarting. Please verify your Node.js application status in cPanel -> Setup Node.js App.`
       );
     }
     throw new Error(
@@ -446,7 +456,12 @@ export async function createRazorpayQrCode(
     mobile: student.mobile,
     selectedBoard: targetBoard,
     selectedClass: targetClass,
-    referralCode: referralCode || student.referredByCode || ''
+    referralCode:
+      referralCode ||
+      student.referredByCode ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+        : '')
   };
 
   console.info(`[Razorpay QR] Generating dynamic UPI QR code for ${resolvedSku} (${targetBoard} • ${targetClass} • ₹${catalogItem.amountInr})...`);
@@ -828,7 +843,12 @@ export async function launchRazorpayCheckout(options: {
       unlockedCategories: catalogItem.unlockedCategories.join(','),
       subscriptionTier: 'premium',
       validityDays: '365',
-      referralCode: referralCode || student.referredByCode || ''
+      referralCode:
+        referralCode ||
+        student.referredByCode ||
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+          : '')
     },
     retry: {
       enabled: true,
@@ -905,7 +925,12 @@ export async function launchRazorpayCheckout(options: {
           email: student.email,
           mobile: student.mobile,
           currentExpiresAt: targetClassExistingExpiry,
-          referralCode: referralCode || student.referredByCode
+          referralCode:
+            referralCode ||
+            student.referredByCode ||
+            (typeof window !== 'undefined'
+              ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
+              : '')
         });
 
         if (verifyRes.success) {
