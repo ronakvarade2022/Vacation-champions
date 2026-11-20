@@ -7,13 +7,21 @@ export type CategoryId =
   | 'all_classes';
 
 export type PlanSkuId =
+  // Active Purchase Plans
   | 'BOARD_CLASS'
+  | 'TET_6M'
+  | 'CTET_6M'
+  | 'TET_CTET_COMBO_6M'
+  | 'TET_1Y'
+  | 'CTET_1Y'
+  | 'TET_CTET_COMBO_1Y'
+  | 'SCHOLARSHIP_COMBO'
+  // Legacy aliases for historical database records & backward compatibility
   | 'SCHOLARSHIP_4TH'
   | 'SCHOLARSHIP_7TH'
   | 'MAHA_TET'
   | 'CTET_PAPER_1'
   | 'CTET_PAPER_2'
-  | 'SCHOLARSHIP_COMBO'
   | 'CTET_COMBO'
   | 'TET_CTET_COMBO'
   | 'TEACHER_ALL_ACCESS';
@@ -36,9 +44,14 @@ export interface PlanCatalogItem {
   title: string;
   shortTitle: string;
   subtitle: string;
+  originalAmountInr: number;
   amountInr: number;
   amountPaise: number;
+  discountPercent: number;
+  discountBadge: string;
   validityDays: number;
+  validityMonths: number;
+  validityLabel: string;
   unlockedCategories: CategoryId[];
   isCombo: boolean;
   requiresBoardClass: boolean;
@@ -56,17 +69,33 @@ export const ALL_CATEGORY_IDS: CategoryId[] = [
   'all_classes',
 ];
 
-export const VALID_PLAN_AMOUNTS_INR: number[] = [99, 149, 229, 299, 499];
+export const VALID_PLAN_AMOUNTS_INR: number[] = [99, 199, 299, 349, 499];
 
-export const PLAN_CATALOG: Record<PlanSkuId, PlanCatalogItem> = {
+export const PLAN_CATALOG: Record<
+  | 'BOARD_CLASS'
+  | 'TET_6M'
+  | 'CTET_6M'
+  | 'TET_CTET_COMBO_6M'
+  | 'TET_1Y'
+  | 'CTET_1Y'
+  | 'TET_CTET_COMBO_1Y'
+  | 'SCHOLARSHIP_COMBO',
+  PlanCatalogItem
+> = {
+  // CLASS PLANS (CLASSES 1 TO 10) - Rs. 99
   BOARD_CLASS: {
     sku: 'BOARD_CLASS',
     title: 'Board & Class Annual Plan (Classes 1–10)',
     shortTitle: 'Class Annual Plan',
     subtitle: 'Full access for 1 selected Education Board & Class (All Subjects, Worksheets, Quizzes)',
+    originalAmountInr: 199,
     amountInr: 99,
     amountPaise: 9900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
     validityDays: 365,
+    validityMonths: 12,
+    validityLabel: '12 Months (1 Year)',
     unlockedCategories: [],
     isCombo: false,
     requiresBoardClass: true,
@@ -75,185 +104,201 @@ export const PLAN_CATALOG: Record<PlanSkuId, PlanCatalogItem> = {
     highlights: [
       'Unlocks all subjects, chapter notes & printable worksheets for 1 Board + Class',
       '4-Level Adaptive Quizzes, Brain Puzzles, Stories & Drawing Studio',
+      'Automatic MSCE Scholarship Access for Class 4 & Class 7 at no extra charge',
       '365 Days Full Annual Validity',
     ],
   },
-  SCHOLARSHIP_4TH: {
-    sku: 'SCHOLARSHIP_4TH',
-    title: '4th Std MSCE Scholarship Plan (PSE)',
-    shortTitle: '4th Scholarship',
-    subtitle: '25 Full MSCE Mock Tests (Paper 1 & 2) + 10 Practice Sets (Marathi / English / Hindi)',
-    amountInr: 99,
-    amountPaise: 9900,
-    validityDays: 365,
-    unlockedCategories: ['scholarship_4th'],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: 'all',
-    badge: 'Std 4th PSE',
-    highlights: [
-      'All 25 Official Std. 4th MSCE Full Mock Exams (Paper 1 + Paper 2)',
-      'All 10 Std. 4th Practice Sets with step-by-step solutions',
-      'Marathi, English & Hindi Mediums · 365 Days Validity',
-    ],
-  },
-  SCHOLARSHIP_7TH: {
-    sku: 'SCHOLARSHIP_7TH',
-    title: '7th Std MSCE Scholarship Plan (UPS)',
-    shortTitle: '7th Scholarship',
-    subtitle: '25 Full MSCE Mock Tests (Paper 1 & 2) + 10 Practice Sets (Marathi / English / Hindi)',
-    amountInr: 99,
-    amountPaise: 9900,
-    validityDays: 365,
-    unlockedCategories: ['scholarship_7th'],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: 'all',
-    badge: 'Std 7th UPS',
-    highlights: [
-      'All 25 Official Std. 7th MSCE Full Mock Exams (Paper 1 + Paper 2)',
-      'All 10 Std. 7th Practice Sets with step-by-step solutions',
-      'Marathi, English & Hindi Mediums · 365 Days Validity',
-    ],
-  },
-  MAHA_TET: {
-    sku: 'MAHA_TET',
-    title: 'MAHA TET Complete Plan (Paper 1 & Paper 2)',
-    shortTitle: 'MAHA TET',
-    subtitle: '100 Full Mock Tests (50 P1 + 50 P2) + Subject Drills, Topic Tests, Revision & PYQs',
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
+
+  // 6 MONTH PLANS (180 DAYS)
+  // Plan 1: TET – 6 Months
+  TET_6M: {
+    sku: 'TET_6M',
+    title: 'TET – 6 Months',
+    shortTitle: 'TET (6 Months)',
+    subtitle: 'MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets',
+    originalAmountInr: 399,
+    amountInr: 199,
+    amountPaise: 19900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
+    validityDays: 180,
+    validityMonths: 6,
+    validityLabel: '6 Months',
     unlockedCategories: ['maha_tet'],
     isCombo: false,
     requiresBoardClass: false,
     audience: 'teacher',
-    badge: 'MSCE Pune',
+    badge: '6 Months Plan',
     highlights: [
       '50 Paper 1 (Classes 1–5) + 50 Paper 2 (Classes 6–8) Full Mock Exams',
-      'Subject Practice Sets, Topic Mastery Drills, Revision & PYQ Patterns',
-      'Marathi, English, Hindi & Urdu Languages · 365 Days Validity',
+      'Subject Practice Sets, Topic Mastery Drills & Revision Sprints',
+      'Marathi, English, Hindi & Urdu Mediums',
+      '180 Days (6 Months) Validity',
     ],
   },
-  CTET_PAPER_1: {
-    sku: 'CTET_PAPER_1',
-    title: 'CTET Paper 1 Complete Plan (Classes 1–5)',
-    shortTitle: 'CTET Paper 1',
-    subtitle: '50 Full CBT Mock Tests + Subject Drills, Topic Practice & PYQ Simulations',
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
-    unlockedCategories: ['ctet_paper_1'],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: 'teacher',
-    badge: 'Primary Teacher',
-    highlights: [
-      '50 Full-Length 150-Question CTET Paper 1 CBT Mock Examinations',
-      'NEP 2020 Competency, CDP & Bilingual Pedagogy Drills',
-      '365 Days Full Annual Access',
-    ],
-  },
-  CTET_PAPER_2: {
-    sku: 'CTET_PAPER_2',
-    title: 'CTET Paper 2 Complete Plan (Classes 6–8)',
-    shortTitle: 'CTET Paper 2',
-    subtitle: '50 Full CBT Mock Tests (Math/Science & Social Studies) + Topic Drills & PYQs',
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
-    unlockedCategories: ['ctet_paper_2'],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: 'teacher',
-    badge: 'Elementary Teacher',
-    highlights: [
-      '50 Full-Length CTET Paper 2 Mock Exams (Both Math/Science & Social Studies)',
-      'Subject Drills, Topic Practice, Weak-Area Revision & PYQ Pattern Tests',
-      '365 Days Full Annual Access',
-    ],
-  },
-  SCHOLARSHIP_COMBO: {
-    sku: 'SCHOLARSHIP_COMBO',
-    title: '4th + 7th Scholarship Combined Plan',
-    shortTitle: 'Scholarship Combo',
-    subtitle: 'Complete access to BOTH 4th Std PSE & 7th Std UPS MSCE Scholarship Exams',
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
-    unlockedCategories: ['scholarship_4th', 'scholarship_7th'],
-    isCombo: true,
-    requiresBoardClass: false,
-    audience: 'all',
-    badge: 'Save ₹49',
-    highlights: [
-      '50 Full Mock Tests (25 Std 4th + 25 Std 7th) + 20 Practice Sets',
-      'Ideal for Teachers coaching Scholarship batches & multi-child families',
-      '365 Days Combined Access',
-    ],
-  },
-  CTET_COMBO: {
-    sku: 'CTET_COMBO',
-    title: 'CTET Paper 1 + Paper 2 Combo Plan',
-    shortTitle: 'CTET Combo (P1+P2)',
-    subtitle: '100 Full CBT Mock Tests across both Primary & Elementary CTET Papers',
-    amountInr: 229,
-    amountPaise: 22900,
-    validityDays: 365,
+
+  // Plan 2: CTET – 6 Months
+  CTET_6M: {
+    sku: 'CTET_6M',
+    title: 'CTET – 6 Months',
+    shortTitle: 'CTET (6 Months)',
+    subtitle: 'CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)',
+    originalAmountInr: 399,
+    amountInr: 199,
+    amountPaise: 19900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
+    validityDays: 180,
+    validityMonths: 6,
+    validityLabel: '6 Months',
     unlockedCategories: ['ctet_paper_1', 'ctet_paper_2'],
-    isCombo: true,
+    isCombo: false,
     requiresBoardClass: false,
     audience: 'teacher',
-    badge: 'Save ₹69',
+    badge: '6 Months Plan',
     highlights: [
-      '50 CTET Paper 1 Mock Tests + 50 CTET Paper 2 Mock Tests (15,000 Qs)',
-      'Complete Subject Practice, Topic Drills & Revision Sprints',
-      '365 Days Combined Access',
+      '50 Paper 1 + 50 Paper 2 CBT Mock Examinations (15,000 Questions)',
+      'NEP 2020 Pedagogical Framework & Bilingual CDPs',
+      'Both Math/Science and Social Studies Streams Included',
+      '180 Days (6 Months) Validity',
     ],
   },
-  TET_CTET_COMBO: {
-    sku: 'TET_CTET_COMBO',
-    title: 'All TET + CTET Master Combo (MAHA TET + CTET P1 & P2)',
-    shortTitle: 'TET + CTET Combo',
-    subtitle: 'All 200 Teacher Eligibility Mock Tests across MAHA TET & CTET Papers 1 & 2',
-    amountInr: 299,
-    amountPaise: 29900,
-    validityDays: 365,
+
+  // Plan 3: TET + CTET COMBO – 6 Months
+  TET_CTET_COMBO_6M: {
+    sku: 'TET_CTET_COMBO_6M',
+    title: 'TET + CTET COMBO – 6 Months',
+    shortTitle: 'TET + CTET (6M)',
+    subtitle: 'Combined access to MAHA TET (P1+P2) and CTET (P1+P2) – 200 Mock Tests',
+    originalAmountInr: 699,
+    amountInr: 349,
+    amountPaise: 34900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
+    validityDays: 180,
+    validityMonths: 6,
+    validityLabel: '6 Months',
     unlockedCategories: ['maha_tet', 'ctet_paper_1', 'ctet_paper_2'],
     isCombo: true,
     requiresBoardClass: false,
     audience: 'teacher',
-    badge: 'Best Teacher Value',
+    badge: 'Best 6M Value',
     highlights: [
-      'MAHA TET Paper 1 & 2 (100 Mocks) + CTET Paper 1 (50 Mocks) + CTET Paper 2 (50 Mocks)',
-      'All Subject Drills, Topic Tests, Revision Sprints & PYQ Simulators',
-      'Save ₹148 vs individual plans · 365 Days Access',
+      'All 200 Mock Exams: 100 MAHA TET + 100 CTET Papers',
+      'Full Subject Drills, Topic Revision & PYQ Simulators',
+      'Save ₹350 vs original price',
+      '180 Days (6 Months) Combined Validity',
     ],
   },
-  TEACHER_ALL_ACCESS: {
-    sku: 'TEACHER_ALL_ACCESS',
-    title: 'All-in-One Educator & Academy Bundle',
-    shortTitle: 'All-Access Bundle',
-    subtitle: 'Classes 1–10 (All Boards) + 4th & 7th Scholarship + MAHA TET + CTET P1 & P2',
+
+  // 1 YEAR PLANS (365 DAYS / 12 MONTHS)
+  // Plan 4: TET – 1 Year
+  TET_1Y: {
+    sku: 'TET_1Y',
+    title: 'TET – 1 Year',
+    shortTitle: 'TET (1 Year)',
+    subtitle: 'MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets',
+    originalAmountInr: 599,
+    amountInr: 299,
+    amountPaise: 29900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
+    validityDays: 365,
+    validityMonths: 12,
+    validityLabel: '12 Months',
+    unlockedCategories: ['maha_tet'],
+    isCombo: false,
+    requiresBoardClass: false,
+    audience: 'teacher',
+    badge: '12 Months (1 Year)',
+    highlights: [
+      '50 Paper 1 + 50 Paper 2 Full Mock Exams (15,000 Questions)',
+      'MSCE Pune Syllabus, Topic Drills & PYQ Simulators',
+      'Marathi, English, Hindi & Urdu Mediums',
+      '365 Days (12 Months) Full Validity',
+    ],
+  },
+
+  // Plan 5: CTET – 1 Year
+  CTET_1Y: {
+    sku: 'CTET_1Y',
+    title: 'CTET – 1 Year',
+    shortTitle: 'CTET (1 Year)',
+    subtitle: 'CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)',
+    originalAmountInr: 599,
+    amountInr: 299,
+    amountPaise: 29900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
+    validityDays: 365,
+    validityMonths: 12,
+    validityLabel: '12 Months',
+    unlockedCategories: ['ctet_paper_1', 'ctet_paper_2'],
+    isCombo: false,
+    requiresBoardClass: false,
+    audience: 'teacher',
+    badge: '12 Months (1 Year)',
+    highlights: [
+      '50 Paper 1 + 50 Paper 2 CBT Mock Examinations (15,000 Questions)',
+      'CBSE Competency Patterns, Pedagogy Drills & Weak-Area Revision',
+      'Both Math/Science & Social Studies Streams Included',
+      '365 Days (12 Months) Full Validity',
+    ],
+  },
+
+  // Plan 6: TET + CTET COMBO – 1 Year
+  TET_CTET_COMBO_1Y: {
+    sku: 'TET_CTET_COMBO_1Y',
+    title: 'TET + CTET COMBO – 1 Year',
+    shortTitle: 'TET + CTET (1 Year)',
+    subtitle: 'All 200 Teacher Eligibility Mock Tests across MAHA TET & CTET Papers 1 & 2',
+    originalAmountInr: 999,
     amountInr: 499,
     amountPaise: 49900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
     validityDays: 365,
-    unlockedCategories: [
-      'all_classes',
-      'scholarship_4th',
-      'scholarship_7th',
-      'maha_tet',
-      'ctet_paper_1',
-      'ctet_paper_2',
-    ],
+    validityMonths: 12,
+    validityLabel: '12 Months',
+    unlockedCategories: ['maha_tet', 'ctet_paper_1', 'ctet_paper_2'],
     isCombo: true,
     requiresBoardClass: false,
     audience: 'teacher',
-    badge: 'Complete Unlock',
+    badge: 'Best Annual Value',
     highlights: [
-      'All Boards (Maharashtra, CBSE, ICSE) across Classes 1 to 10',
-      'Both 4th Std & 7th Std MSCE Scholarship (50 Mocks + 20 Practice Sets)',
-      'MAHA TET (P1 & P2) + CTET Paper 1 + CTET Paper 2 (200 Full Mocks)',
+      'MAHA TET Paper 1 & 2 (100 Mocks) + CTET Paper 1 & 2 (100 Mocks)',
+      'All 200 Mock Tests with Detailed Step-by-Step Solutions',
+      'Save ₹500 vs original price',
+      '365 Days (12 Months) Full Annual Access',
+    ],
+  },
+
+  // SCHOLARSHIP PLAN
+  // Plan 7: Scholarship Combo – Class 4 + Class 7
+  SCHOLARSHIP_COMBO: {
+    sku: 'SCHOLARSHIP_COMBO',
+    title: 'Scholarship Combo – Class 4 + Class 7',
+    shortTitle: 'Scholarship Combo (4th + 7th)',
+    subtitle: 'Complete access to BOTH 4th Std PSE & 7th Std UPS MSCE Scholarship Exams',
+    originalAmountInr: 199,
+    amountInr: 99,
+    amountPaise: 9900,
+    discountPercent: 50,
+    discountBadge: 'SAVE 50%',
+    validityDays: 365,
+    validityMonths: 12,
+    validityLabel: '12 Months',
+    unlockedCategories: ['scholarship_4th', 'scholarship_7th'],
+    isCombo: true,
+    requiresBoardClass: false,
+    audience: 'all',
+    badge: 'Std 4th + 7th Combo',
+    highlights: [
+      '50 Full MSCE Mock Exams (25 Std 4th + 25 Std 7th) with Paper 1 & Paper 2',
+      '20 Full Practice Sets with Step-by-Step Solutions',
+      'Marathi, English & Hindi Mediums',
+      'Ideal for Teachers, Coaching Institutes & Multi-Child Families',
+      '365 Days (12 Months) Full Validity',
     ],
   },
 };
@@ -263,15 +308,26 @@ export const PLAN_CATALOG_LIST: PlanCatalogItem[] = Object.values(PLAN_CATALOG);
 const VALID_SKU_SET = new Set<string>(Object.keys(PLAN_CATALOG));
 
 export function isValidPlanSku(val?: string | null): val is PlanSkuId {
-  return Boolean(val && VALID_SKU_SET.has(String(val).trim().toUpperCase()));
+  const norm = String(val || '').trim().toUpperCase();
+  return Boolean(norm && (VALID_SKU_SET.has(norm) || isLegacySku(norm)));
+}
+
+function isLegacySku(val: string): boolean {
+  return [
+    'SCHOLARSHIP_4TH',
+    'SCHOLARSHIP_7TH',
+    'MAHA_TET',
+    'CTET_PAPER_1',
+    'CTET_PAPER_2',
+    'CTET_COMBO',
+    'TET_CTET_COMBO',
+    'TEACHER_ALL_ACCESS',
+  ].includes(val);
 }
 
 export function getPlanCatalogItem(sku?: string | null): PlanCatalogItem {
-  const normalized = String(sku || 'BOARD_CLASS').trim().toUpperCase();
-  if (VALID_SKU_SET.has(normalized)) {
-    return PLAN_CATALOG[normalized as PlanSkuId];
-  }
-  return PLAN_CATALOG.BOARD_CLASS;
+  const resolved = resolvePlanSku(sku);
+  return (PLAN_CATALOG as Record<string, PlanCatalogItem>)[resolved] || PLAN_CATALOG.BOARD_CLASS;
 }
 
 export function resolvePlanSku(
@@ -283,17 +339,33 @@ export function resolvePlanSku(
   if (VALID_SKU_SET.has(candidate)) {
     return candidate as PlanSkuId;
   }
+
+  // Gracefully map legacy SKUs to the new plans
+  if (candidate === 'MAHA_TET') return 'TET_1Y';
+  if (candidate === 'CTET_PAPER_1' || candidate === 'CTET_PAPER_2' || candidate === 'CTET_COMBO') return 'CTET_1Y';
+  if (candidate === 'TET_CTET_COMBO') return 'TET_CTET_COMBO_1Y';
+  if (candidate === 'TEACHER_ALL_ACCESS') return 'TET_CTET_COMBO_1Y';
+  if (candidate === 'SCHOLARSHIP_4TH' || candidate === 'SCHOLARSHIP_7TH') return 'SCHOLARSHIP_COMBO';
+
   const planCandidate = String(rawPlanId || '').trim().toUpperCase();
   if (VALID_SKU_SET.has(planCandidate)) {
     return planCandidate as PlanSkuId;
   }
+  if (planCandidate === 'MAHA_TET') return 'TET_1Y';
+  if (planCandidate === 'CTET_PAPER_1' || planCandidate === 'CTET_PAPER_2' || planCandidate === 'CTET_COMBO') return 'CTET_1Y';
+  if (planCandidate === 'TET_CTET_COMBO') return 'TET_CTET_COMBO_1Y';
+  if (planCandidate === 'TEACHER_ALL_ACCESS') return 'TET_CTET_COMBO_1Y';
+  if (planCandidate === 'SCHOLARSHIP_4TH' || planCandidate === 'SCHOLARSHIP_7TH') return 'SCHOLARSHIP_COMBO';
+
   if (typeof amountPaiseOrInr === 'number' && amountPaiseOrInr > 0) {
     const inr = amountPaiseOrInr >= 5000 ? Math.round(amountPaiseOrInr / 100) : Math.round(amountPaiseOrInr);
-    if (inr === 499) return 'TEACHER_ALL_ACCESS';
-    if (inr === 299) return 'TET_CTET_COMBO';
-    if (inr === 229) return 'CTET_COMBO';
-    // Note: ₹99 and ₹149 exist across multiple SKUs; always prefer explicit planSku from order notes!
+    if (inr === 499) return 'TET_CTET_COMBO_1Y';
+    if (inr === 349) return 'TET_CTET_COMBO_6M';
+    if (inr === 299) return 'TET_1Y';
+    if (inr === 199) return 'TET_6M';
+    if (inr === 99) return 'BOARD_CLASS';
   }
+
   return 'BOARD_CLASS';
 }
 
@@ -307,18 +379,16 @@ export function getModuleRequiredCategoryId(moduleId: string): CategoryId {
 export function getDefaultPlanSkuForCategory(cat: CategoryId): PlanSkuId {
   switch (cat) {
     case 'scholarship_4th':
-      return 'SCHOLARSHIP_4TH';
     case 'scholarship_7th':
-      return 'SCHOLARSHIP_7TH';
+      return 'SCHOLARSHIP_COMBO';
     case 'maha_tet':
-      return 'MAHA_TET';
+      return 'TET_1Y';
     case 'ctet_paper_1':
-      return 'CTET_PAPER_1';
     case 'ctet_paper_2':
-      return 'CTET_PAPER_2';
+      return 'CTET_1Y';
     case 'all_classes':
     default:
-      return 'TEACHER_ALL_ACCESS';
+      return 'TET_CTET_COMBO_1Y';
   }
 }
 

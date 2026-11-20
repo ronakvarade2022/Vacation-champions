@@ -39,6 +39,7 @@ import {
   Lock,
   Crown
 } from 'lucide-react';
+import { DemoExamSimulator } from './demo/DemoExamSimulator';
 import { MsceFullMockExamsSection } from './MsceFullMockExamsSection';
 import {
   UniversalExamShell,
@@ -65,6 +66,7 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
   const { currentStudent, recordScholarshipAttempt, customScholarshipQuestions } = useApp();
   const visibleCats = getVisibleExamCategoriesForStudent(currentStudent);
   const [lockedSetNotice, setLockedSetNotice] = useState<string | null>(null);
+  const [activeDemoTestId, setActiveDemoTestId] = useState<'demo_scholarship_4' | 'demo_scholarship_7' | null>(null);
 
   // Active configurations (role-scoped default)
   const [selectedClass, setSelectedClass] = useState<ScholarshipClass>(() => {
@@ -86,8 +88,7 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
   }, [currentStudent?.id, currentStudent?.accountRole, visibleCats.showScholarship4th, visibleCats.showScholarship7th]);
 
   const selectedCategoryId = selectedClass === 'Std 4th (PSE)' ? 'scholarship_4th' : 'scholarship_7th';
-  const selectedPlanSku: PlanSkuId =
-    selectedClass === 'Std 4th (PSE)' ? 'SCHOLARSHIP_4TH' : 'SCHOLARSHIP_7TH';
+  const selectedPlanSku: PlanSkuId = 'SCHOLARSHIP_COMBO';
   const hasFullAccess = hasCategoryAccess(currentStudent, selectedCategoryId);
   const categorySubInfo = getCategorySubscriptionInfo(currentStudent, selectedCategoryId);
 
@@ -377,6 +378,19 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
 
   const activeQ = questions[currentQIndex];
 
+  if (activeDemoTestId) {
+    return (
+      <DemoExamSimulator
+        testId={activeDemoTestId}
+        studentId={currentStudent?.id || 'demo_scholarship_guest'}
+        studentName={currentStudent?.name || 'Guest Student/Parent'}
+        studentRole={currentStudent?.accountRole || 'student'}
+        onExit={() => setActiveDemoTestId(null)}
+        onOpenMembership={(planSku) => onOpenMembership?.(planSku)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-16">
       {/* MSCE Header Banner */}
@@ -448,20 +462,20 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
             <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => onOpenMembership(selectedPlanSku)}
-                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-950 font-black text-xs cursor-pointer transition-colors"
+                onClick={() => onOpenMembership('SCHOLARSHIP_COMBO')}
+                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-950 font-black text-xs cursor-pointer transition-colors shadow-xs"
               >
-                Unlock {selectedClass.split(' ')[1]} (₹99)
+                Unlock Scholarship Combo (₹99)
               </button>
-              {(visibleCats.isTeacher || (!currentStudent)) && (
+              {currentStudent?.classLevel === 'Class 4' || currentStudent?.classLevel === 'Class 7' ? (
                 <button
                   type="button"
-                  onClick={() => onOpenMembership('SCHOLARSHIP_COMBO')}
+                  onClick={() => onOpenMembership('BOARD_CLASS')}
                   className="px-3.5 py-1.5 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 font-black text-xs cursor-pointer transition-colors"
                 >
-                  4th + 7th Combo (₹149)
+                  Included with Class Plan (₹99)
                 </button>
-              )}
+              ) : null}
             </div>
           )}
         </div>
@@ -509,6 +523,45 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
           </a>
         </div>
       </div>
+
+      {/* 100% FREE SCHOLARSHIP DEMO MOCK EXAMINATIONS (150 MARKS) */}
+      {examState === 'idle' && (
+        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-3xl p-6 sm:p-7 border-2 border-amber-300 shadow-sm text-slate-950 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-wider">
+                100% Free Demo · 150 Marks
+              </span>
+              <span className="text-xs font-bold text-amber-950">Official MSCE Pune Examination Pattern</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-display font-black text-slate-950">
+              Take a Free Full-Length Scholarship Demo Mock Test (150 Marks)
+            </h2>
+            <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-relaxed">
+              Experience the authentic MSCE Pune Scholarship 75-question (150 Marks) paper with a real 90-minute examination timer, question palette, reload-protection, and step-by-step mathematical reasoning.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap sm:flex-col gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveDemoTestId('demo_scholarship_4')}
+              className="px-5 py-3 rounded-2xl bg-amber-950 hover:bg-black text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center justify-center gap-2"
+            >
+              <span>Start Std 4th Demo (150M · 90m)</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveDemoTestId('demo_scholarship_7')}
+              className="px-5 py-3 rounded-2xl bg-indigo-900 hover:bg-indigo-950 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center justify-center gap-2"
+            >
+              <span>Start Std 7th Demo (150M · 90m)</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ACTIVE EXAMINATION INTERFACE (FULL-SCREEN UNIVERSAL SHELL) */}
       {examState === 'taking' && activeQ && (() => {

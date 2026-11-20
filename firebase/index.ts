@@ -373,9 +373,9 @@ export async function createRazorpayQrCodeBackend(params: {
   const planTitle =
     resolvedSku === 'BOARD_CLASS'
       ? normalizedClass
-        ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹${amountInRupees} – 365 Days`
-        : `PREMIUM PLAN (${normalizedBoard}) – ₹${amountInRupees} – 365 Days (1 Year)`
-      : `${planItem.title} – ₹${amountInRupees} – 365 Days (1 Year)`;
+        ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹${amountInRupees} – ${planItem.validityDays} Days`
+        : `PREMIUM PLAN (${normalizedBoard}) – ₹${amountInRupees} – ${planItem.validityDays} Days`
+      : `${planItem.title} – ₹${amountInRupees} – ${planItem.validityLabel}`;
   const creds = getResolvedRazorpayCredentials();
 
   if (!creds.isConfigured || !creds.keySecret) {
@@ -751,7 +751,7 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
 
   const isCategoryPlan = planItem.unlockedCategories.length > 0;
   const planLabel = isCategoryPlan
-    ? `${planItem.title} – ₹${verifiedAmount} – 365 Days (1 Year)`
+    ? `${planItem.title} – ₹${verifiedAmount} – ${planItem.validityLabel}`
     : `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹${verifiedAmount} – 365 Days (1 Year)`;
 
   // Reconstruct existing multi-board & multi-class subscriptions map keyed cleanly by `Board__Class`
@@ -906,7 +906,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
       const catAct = computeSubscriptionActivationDates({
         verificationTimestamp: now,
         existingPlan: prevCat ? 'premium' : 'free',
-        existingExpiresAt: prevCat?.expiresAt
+        existingExpiresAt: prevCat?.expiresAt,
+        validityDays: planItem.validityDays
       });
       if (!startDateIso) {
         startDateIso = catAct.purchasedDateIst;
@@ -932,7 +933,8 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
     const activation = computeSubscriptionActivationDates({
       verificationTimestamp: now,
       existingPlan: targetExistingEntry?.plan || 'free',
-      existingExpiresAt: targetExistingEntry?.expiresAt || undefined
+      existingExpiresAt: targetExistingEntry?.expiresAt || undefined,
+      validityDays: planItem.validityDays
     });
     startDateIso = activation.purchasedDateIst;
     expiryDateIso = activation.expiryDateIst;
@@ -951,10 +953,39 @@ export async function updateStudentSubscriptionInFirestoreBackend(params: {
         paymentId: String(paymentId),
         orderId: String(orderId),
         amountInr: verifiedAmount,
-        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+        validityDays: planItem.validityDays,
         updatedAt: verifiedAtUtcIso
       }
     };
+
+    // Option A: Included with Class Purchase (Class 4 -> Class 4 Scholarship; Class 7 -> Class 7 Scholarship)
+    if (resolvedClass === 'Class 4') {
+      updatedCategorySubscriptions['scholarship_4th'] = {
+        categoryId: 'scholarship_4th',
+        planSku: 'BOARD_CLASS',
+        status: 'ACTIVE',
+        purchasedAt: startDateIso,
+        expiresAt: expiryDateIso,
+        paymentId: String(paymentId),
+        orderId: String(orderId),
+        amountInr: verifiedAmount,
+        validityDays: planItem.validityDays,
+        updatedAt: verifiedAtUtcIso
+      };
+    } else if (resolvedClass === 'Class 7') {
+      updatedCategorySubscriptions['scholarship_7th'] = {
+        categoryId: 'scholarship_7th',
+        planSku: 'BOARD_CLASS',
+        status: 'ACTIVE',
+        purchasedAt: startDateIso,
+        expiresAt: expiryDateIso,
+        paymentId: String(paymentId),
+        orderId: String(orderId),
+        amountInr: verifiedAmount,
+        validityDays: planItem.validityDays,
+        updatedAt: verifiedAtUtcIso
+      };
+    }
   }
 
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;

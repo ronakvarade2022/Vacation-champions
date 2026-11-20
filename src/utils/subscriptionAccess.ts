@@ -308,8 +308,6 @@ export function getRawBoardClassSubscriptionsMap(
   return map;
 }
 
-export const LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO = '2026-11-16';
-
 export function getRawCategorySubscriptionsMap(
   student: StudentProfile | null | undefined
 ): Partial<Record<CategoryId, CategorySubscriptionRecord>> {
@@ -326,69 +324,98 @@ export function getRawCategorySubscriptionsMap(
     }
   }
 
-  // Backward compatibility: non-teacher Class 4 or Class 7 paid students purchased prior to category SKU launch
-  if (student.accountRole !== 'teacher' && student.plan && student.plan !== 'free') {
-    const purchaseRef = String(student.planPurchasedAt || '');
-    const isLegacyPurchase = !purchaseRef || purchaseRef < LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO;
-    const mhMap = getRawBoardClassSubscriptionsMap(student);
-    const rec4 = mhMap[buildBoardClassKey('Maharashtra', 'Class 4')];
-    const rec7 = mhMap[buildBoardClassKey('Maharashtra', 'Class 7')];
-    if (
-      rec4 &&
-      (rec4.plan === 'premium' || rec4.plan === 'basic') &&
-      (!rec4.purchasedAt || rec4.purchasedAt < LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO) &&
-      !map.scholarship_4th
-    ) {
-      map.scholarship_4th = {
-        categoryId: 'scholarship_4th',
-        planSku: 'SCHOLARSHIP_4TH',
-        status: rec4.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE',
-        purchasedAt: rec4.purchasedAt || student.planPurchasedAt || '2026-01-01',
-        expiresAt: rec4.expiresAt || student.planExpiresAt || '2027-01-01',
-        paymentId: rec4.paymentId,
-        orderId: rec4.orderId,
-        amountInr: rec4.amountInr || 99,
-        validityDays: rec4.validityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      };
-    } else if (isLegacyPurchase && student.classLevel === 'Class 4' && !map.scholarship_4th && (!student.categorySubscriptions && !student.activatedCategoryKeys?.length)) {
-      map.scholarship_4th = {
-        categoryId: 'scholarship_4th',
-        planSku: 'SCHOLARSHIP_4TH',
-        status: 'ACTIVE',
-        purchasedAt: student.planPurchasedAt || '2026-01-01',
-        expiresAt: student.planExpiresAt || '2027-01-01',
-        amountInr: 99,
-        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      };
-    }
-    if (
-      rec7 &&
-      (rec7.plan === 'premium' || rec7.plan === 'basic') &&
-      (!rec7.purchasedAt || rec7.purchasedAt < LEGACY_SCHOLARSHIP_CATEGORY_CUTOFF_ISO) &&
-      !map.scholarship_7th
-    ) {
-      map.scholarship_7th = {
-        categoryId: 'scholarship_7th',
-        planSku: 'SCHOLARSHIP_7TH',
-        status: rec7.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE',
-        purchasedAt: rec7.purchasedAt || student.planPurchasedAt || '2026-01-01',
-        expiresAt: rec7.expiresAt || student.planExpiresAt || '2027-01-01',
-        paymentId: rec7.paymentId,
-        orderId: rec7.orderId,
-        amountInr: rec7.amountInr || 99,
-        validityDays: rec7.validityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      };
-    } else if (isLegacyPurchase && student.classLevel === 'Class 7' && !map.scholarship_7th && (!student.categorySubscriptions && !student.activatedCategoryKeys?.length)) {
-      map.scholarship_7th = {
-        categoryId: 'scholarship_7th',
-        planSku: 'SCHOLARSHIP_7TH',
-        status: 'ACTIVE',
-        purchasedAt: student.planPurchasedAt || '2026-01-01',
-        expiresAt: student.planExpiresAt || '2027-01-01',
-        amountInr: 99,
-        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
-      };
-    }
+  // Option A: Included with Class Purchase
+  // Class 4 students who purchase the Class 4 plan (Rs. 99) automatically receive access to Class 4 Scholarship content.
+  // Class 7 students who purchase the Class 7 plan (Rs. 99) automatically receive access to Class 7 Scholarship content.
+  // Class 4 purchase gives access ONLY to Class 4 Scholarship, and Class 7 purchase gives access ONLY to Class 7 Scholarship.
+  const boardClassMap = getRawBoardClassSubscriptionsMap(student);
+
+  // Check for any active Class 4 paid subscription (Maharashtra, CBSE, ICSE)
+  const class4Record = Object.values(boardClassMap).find(
+    (rec) =>
+      rec &&
+      rec.classLevel === 'Class 4' &&
+      (rec.plan === 'premium' || rec.plan === 'basic') &&
+      rec.status !== 'EXPIRED' &&
+      !evaluateSubscriptionValidity('premium', rec.purchasedAt, rec.expiresAt).isExpired
+  );
+
+  const hasLegacyClass4 =
+    !class4Record &&
+    student.accountRole !== 'teacher' &&
+    student.plan &&
+    student.plan !== 'free' &&
+    student.classLevel === 'Class 4' &&
+    !evaluateSubscriptionValidity(student.plan, student.planPurchasedAt, student.planExpiresAt).isExpired;
+
+  if (class4Record && (!map.scholarship_4th || map.scholarship_4th.status === 'EXPIRED')) {
+    map.scholarship_4th = {
+      categoryId: 'scholarship_4th',
+      planSku: 'BOARD_CLASS',
+      status: 'ACTIVE',
+      purchasedAt: class4Record.purchasedAt || student.planPurchasedAt || '2026-01-01',
+      expiresAt: class4Record.expiresAt || student.planExpiresAt || '2027-01-01',
+      paymentId: class4Record.paymentId,
+      orderId: class4Record.orderId,
+      amountInr: class4Record.amountInr || 99,
+      validityDays: class4Record.validityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS,
+    };
+  } else if (hasLegacyClass4 && (!map.scholarship_4th || map.scholarship_4th.status === 'EXPIRED')) {
+    map.scholarship_4th = {
+      categoryId: 'scholarship_4th',
+      planSku: 'BOARD_CLASS',
+      status: 'ACTIVE',
+      purchasedAt: student.planPurchasedAt || '2026-01-01',
+      expiresAt: student.planExpiresAt || '2027-01-01',
+      paymentId: student.lastPaymentId,
+      orderId: student.lastOrderId,
+      amountInr: 99,
+      validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+    };
+  }
+
+  // Check for any active Class 7 paid subscription (Maharashtra, CBSE, ICSE)
+  const class7Record = Object.values(boardClassMap).find(
+    (rec) =>
+      rec &&
+      rec.classLevel === 'Class 7' &&
+      (rec.plan === 'premium' || rec.plan === 'basic') &&
+      rec.status !== 'EXPIRED' &&
+      !evaluateSubscriptionValidity('premium', rec.purchasedAt, rec.expiresAt).isExpired
+  );
+
+  const hasLegacyClass7 =
+    !class7Record &&
+    student.accountRole !== 'teacher' &&
+    student.plan &&
+    student.plan !== 'free' &&
+    student.classLevel === 'Class 7' &&
+    !evaluateSubscriptionValidity(student.plan, student.planPurchasedAt, student.planExpiresAt).isExpired;
+
+  if (class7Record && (!map.scholarship_7th || map.scholarship_7th.status === 'EXPIRED')) {
+    map.scholarship_7th = {
+      categoryId: 'scholarship_7th',
+      planSku: 'BOARD_CLASS',
+      status: 'ACTIVE',
+      purchasedAt: class7Record.purchasedAt || student.planPurchasedAt || '2026-01-01',
+      expiresAt: class7Record.expiresAt || student.planExpiresAt || '2027-01-01',
+      paymentId: class7Record.paymentId,
+      orderId: class7Record.orderId,
+      amountInr: class7Record.amountInr || 99,
+      validityDays: class7Record.validityDays || PAID_SUBSCRIPTION_VALIDITY_DAYS,
+    };
+  } else if (hasLegacyClass7 && (!map.scholarship_7th || map.scholarship_7th.status === 'EXPIRED')) {
+    map.scholarship_7th = {
+      categoryId: 'scholarship_7th',
+      planSku: 'BOARD_CLASS',
+      status: 'ACTIVE',
+      purchasedAt: student.planPurchasedAt || '2026-01-01',
+      expiresAt: student.planExpiresAt || '2027-01-01',
+      paymentId: student.lastPaymentId,
+      orderId: student.lastOrderId,
+      amountInr: 99,
+      validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+    };
   }
 
   return map;
@@ -500,7 +527,7 @@ export function getCategorySubscriptionInfo(
     expiresAt: record.expiresAt,
     expiryDisplay: validity.expiryDateIst
       ? `${validity.expiryDateDisplay} (${validity.expiryDateIst})`
-      : 'Active (365 Days)',
+      : `Active (${record.validityDays || 365} Days)`,
     daysRemaining: daysRem,
     daysRemainingDisplay: validity.isExpiringToday
       ? 'Expires Today (11:59 PM IST)'

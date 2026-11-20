@@ -2315,6 +2315,7 @@ function computeSubscriptionActivationDates(params) {
   const verifiedAtUtc = safeNow.toISOString();
   const purchasedAt = toIstDateString(safeNow);
   const purchasedAtDisplay = formatDateIstDisplay(purchasedAt);
+  const daysSpan = typeof params?.validityDays === "number" && params.validityDays > 0 ? params.validityDays : SUBSCRIPTION_VALIDITY_DAYS;
   let baseDateForExtension = purchasedAt;
   let isRenewalExtension = false;
   if (params?.existingExpiresAt && params?.existingPlanStatus !== "expired") {
@@ -2327,10 +2328,10 @@ function computeSubscriptionActivationDates(params) {
       }
     }
   }
-  const expiresAt = addCalendarDaysIst(baseDateForExtension, SUBSCRIPTION_VALIDITY_DAYS);
+  const expiresAt = addCalendarDaysIst(baseDateForExtension, daysSpan);
   const expiresAtDisplay = formatDateIstDisplay(expiresAt);
   const expiresAtUtc = istExpiryDateToUtcEndTimestamp(expiresAt);
-  const daysRemaining = Math.max(0, diffCalendarDaysIst(purchasedAt, expiresAt) ?? SUBSCRIPTION_VALIDITY_DAYS);
+  const daysRemaining = Math.max(0, diffCalendarDaysIst(purchasedAt, expiresAt) ?? daysSpan);
   return {
     verifiedAtUtc,
     verifiedAtUtcIso: verifiedAtUtc,
@@ -2342,8 +2343,8 @@ function computeSubscriptionActivationDates(params) {
     expiryDateIst: expiresAt,
     expiresAtDisplay,
     expiresAtUtc,
-    validityDaysAdded: SUBSCRIPTION_VALIDITY_DAYS,
-    validityDays: SUBSCRIPTION_VALIDITY_DAYS,
+    validityDaysAdded: daysSpan,
+    validityDays: daysSpan,
     daysRemaining,
     isRenewalExtension,
     isRenewalBeforeExpiry: isRenewalExtension
@@ -2360,14 +2361,20 @@ var ALL_CATEGORY_IDS = [
   "all_classes"
 ];
 var PLAN_CATALOG = {
+  // CLASS PLANS (CLASSES 1 TO 10) - Rs. 99
   BOARD_CLASS: {
     sku: "BOARD_CLASS",
     title: "Board & Class Annual Plan (Classes 1\u201310)",
     shortTitle: "Class Annual Plan",
     subtitle: "Full access for 1 selected Education Board & Class (All Subjects, Worksheets, Quizzes)",
+    originalAmountInr: 199,
     amountInr: 99,
     amountPaise: 9900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
     validityDays: 365,
+    validityMonths: 12,
+    validityLabel: "12 Months (1 Year)",
     unlockedCategories: [],
     isCombo: false,
     requiresBoardClass: true,
@@ -2376,214 +2383,245 @@ var PLAN_CATALOG = {
     highlights: [
       "Unlocks all subjects, chapter notes & printable worksheets for 1 Board + Class",
       "4-Level Adaptive Quizzes, Brain Puzzles, Stories & Drawing Studio",
+      "Automatic MSCE Scholarship Access for Class 4 & Class 7 at no extra charge",
       "365 Days Full Annual Validity"
     ]
   },
-  SCHOLARSHIP_4TH: {
-    sku: "SCHOLARSHIP_4TH",
-    title: "4th Std MSCE Scholarship Plan (PSE)",
-    shortTitle: "4th Scholarship",
-    subtitle: "25 Full MSCE Mock Tests (Paper 1 & 2) + 10 Practice Sets (Marathi / English / Hindi)",
-    amountInr: 99,
-    amountPaise: 9900,
-    validityDays: 365,
-    unlockedCategories: ["scholarship_4th"],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: "all",
-    badge: "Std 4th PSE",
-    highlights: [
-      "All 25 Official Std. 4th MSCE Full Mock Exams (Paper 1 + Paper 2)",
-      "All 10 Std. 4th Practice Sets with step-by-step solutions",
-      "Marathi, English & Hindi Mediums \xB7 365 Days Validity"
-    ]
-  },
-  SCHOLARSHIP_7TH: {
-    sku: "SCHOLARSHIP_7TH",
-    title: "7th Std MSCE Scholarship Plan (UPS)",
-    shortTitle: "7th Scholarship",
-    subtitle: "25 Full MSCE Mock Tests (Paper 1 & 2) + 10 Practice Sets (Marathi / English / Hindi)",
-    amountInr: 99,
-    amountPaise: 9900,
-    validityDays: 365,
-    unlockedCategories: ["scholarship_7th"],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: "all",
-    badge: "Std 7th UPS",
-    highlights: [
-      "All 25 Official Std. 7th MSCE Full Mock Exams (Paper 1 + Paper 2)",
-      "All 10 Std. 7th Practice Sets with step-by-step solutions",
-      "Marathi, English & Hindi Mediums \xB7 365 Days Validity"
-    ]
-  },
-  MAHA_TET: {
-    sku: "MAHA_TET",
-    title: "MAHA TET Complete Plan (Paper 1 & Paper 2)",
-    shortTitle: "MAHA TET",
-    subtitle: "100 Full Mock Tests (50 P1 + 50 P2) + Subject Drills, Topic Tests, Revision & PYQs",
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
+  // 6 MONTH PLANS (180 DAYS)
+  // Plan 1: TET – 6 Months
+  TET_6M: {
+    sku: "TET_6M",
+    title: "TET \u2013 6 Months",
+    shortTitle: "TET (6 Months)",
+    subtitle: "MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets",
+    originalAmountInr: 399,
+    amountInr: 199,
+    amountPaise: 19900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
+    validityDays: 180,
+    validityMonths: 6,
+    validityLabel: "6 Months",
     unlockedCategories: ["maha_tet"],
     isCombo: false,
     requiresBoardClass: false,
     audience: "teacher",
-    badge: "MSCE Pune",
+    badge: "6 Months Plan",
     highlights: [
       "50 Paper 1 (Classes 1\u20135) + 50 Paper 2 (Classes 6\u20138) Full Mock Exams",
-      "Subject Practice Sets, Topic Mastery Drills, Revision & PYQ Patterns",
-      "Marathi, English, Hindi & Urdu Languages \xB7 365 Days Validity"
+      "Subject Practice Sets, Topic Mastery Drills & Revision Sprints",
+      "Marathi, English, Hindi & Urdu Mediums",
+      "180 Days (6 Months) Validity"
     ]
   },
-  CTET_PAPER_1: {
-    sku: "CTET_PAPER_1",
-    title: "CTET Paper 1 Complete Plan (Classes 1\u20135)",
-    shortTitle: "CTET Paper 1",
-    subtitle: "50 Full CBT Mock Tests + Subject Drills, Topic Practice & PYQ Simulations",
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
-    unlockedCategories: ["ctet_paper_1"],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: "teacher",
-    badge: "Primary Teacher",
-    highlights: [
-      "50 Full-Length 150-Question CTET Paper 1 CBT Mock Examinations",
-      "NEP 2020 Competency, CDP & Bilingual Pedagogy Drills",
-      "365 Days Full Annual Access"
-    ]
-  },
-  CTET_PAPER_2: {
-    sku: "CTET_PAPER_2",
-    title: "CTET Paper 2 Complete Plan (Classes 6\u20138)",
-    shortTitle: "CTET Paper 2",
-    subtitle: "50 Full CBT Mock Tests (Math/Science & Social Studies) + Topic Drills & PYQs",
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
-    unlockedCategories: ["ctet_paper_2"],
-    isCombo: false,
-    requiresBoardClass: false,
-    audience: "teacher",
-    badge: "Elementary Teacher",
-    highlights: [
-      "50 Full-Length CTET Paper 2 Mock Exams (Both Math/Science & Social Studies)",
-      "Subject Drills, Topic Practice, Weak-Area Revision & PYQ Pattern Tests",
-      "365 Days Full Annual Access"
-    ]
-  },
-  SCHOLARSHIP_COMBO: {
-    sku: "SCHOLARSHIP_COMBO",
-    title: "4th + 7th Scholarship Combined Plan",
-    shortTitle: "Scholarship Combo",
-    subtitle: "Complete access to BOTH 4th Std PSE & 7th Std UPS MSCE Scholarship Exams",
-    amountInr: 149,
-    amountPaise: 14900,
-    validityDays: 365,
-    unlockedCategories: ["scholarship_4th", "scholarship_7th"],
-    isCombo: true,
-    requiresBoardClass: false,
-    audience: "all",
-    badge: "Save \u20B949",
-    highlights: [
-      "50 Full Mock Tests (25 Std 4th + 25 Std 7th) + 20 Practice Sets",
-      "Ideal for Teachers coaching Scholarship batches & multi-child families",
-      "365 Days Combined Access"
-    ]
-  },
-  CTET_COMBO: {
-    sku: "CTET_COMBO",
-    title: "CTET Paper 1 + Paper 2 Combo Plan",
-    shortTitle: "CTET Combo (P1+P2)",
-    subtitle: "100 Full CBT Mock Tests across both Primary & Elementary CTET Papers",
-    amountInr: 229,
-    amountPaise: 22900,
-    validityDays: 365,
+  // Plan 2: CTET – 6 Months
+  CTET_6M: {
+    sku: "CTET_6M",
+    title: "CTET \u2013 6 Months",
+    shortTitle: "CTET (6 Months)",
+    subtitle: "CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)",
+    originalAmountInr: 399,
+    amountInr: 199,
+    amountPaise: 19900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
+    validityDays: 180,
+    validityMonths: 6,
+    validityLabel: "6 Months",
     unlockedCategories: ["ctet_paper_1", "ctet_paper_2"],
-    isCombo: true,
+    isCombo: false,
     requiresBoardClass: false,
     audience: "teacher",
-    badge: "Save \u20B969",
+    badge: "6 Months Plan",
     highlights: [
-      "50 CTET Paper 1 Mock Tests + 50 CTET Paper 2 Mock Tests (15,000 Qs)",
-      "Complete Subject Practice, Topic Drills & Revision Sprints",
-      "365 Days Combined Access"
+      "50 Paper 1 + 50 Paper 2 CBT Mock Examinations (15,000 Questions)",
+      "NEP 2020 Pedagogical Framework & Bilingual CDPs",
+      "Both Math/Science and Social Studies Streams Included",
+      "180 Days (6 Months) Validity"
     ]
   },
-  TET_CTET_COMBO: {
-    sku: "TET_CTET_COMBO",
-    title: "All TET + CTET Master Combo (MAHA TET + CTET P1 & P2)",
-    shortTitle: "TET + CTET Combo",
-    subtitle: "All 200 Teacher Eligibility Mock Tests across MAHA TET & CTET Papers 1 & 2",
-    amountInr: 299,
-    amountPaise: 29900,
-    validityDays: 365,
+  // Plan 3: TET + CTET COMBO – 6 Months
+  TET_CTET_COMBO_6M: {
+    sku: "TET_CTET_COMBO_6M",
+    title: "TET + CTET COMBO \u2013 6 Months",
+    shortTitle: "TET + CTET (6M)",
+    subtitle: "Combined access to MAHA TET (P1+P2) and CTET (P1+P2) \u2013 200 Mock Tests",
+    originalAmountInr: 699,
+    amountInr: 349,
+    amountPaise: 34900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
+    validityDays: 180,
+    validityMonths: 6,
+    validityLabel: "6 Months",
     unlockedCategories: ["maha_tet", "ctet_paper_1", "ctet_paper_2"],
     isCombo: true,
     requiresBoardClass: false,
     audience: "teacher",
-    badge: "Best Teacher Value",
+    badge: "Best 6M Value",
     highlights: [
-      "MAHA TET Paper 1 & 2 (100 Mocks) + CTET Paper 1 (50 Mocks) + CTET Paper 2 (50 Mocks)",
-      "All Subject Drills, Topic Tests, Revision Sprints & PYQ Simulators",
-      "Save \u20B9148 vs individual plans \xB7 365 Days Access"
+      "All 200 Mock Exams: 100 MAHA TET + 100 CTET Papers",
+      "Full Subject Drills, Topic Revision & PYQ Simulators",
+      "Save \u20B9350 vs original price",
+      "180 Days (6 Months) Combined Validity"
     ]
   },
-  TEACHER_ALL_ACCESS: {
-    sku: "TEACHER_ALL_ACCESS",
-    title: "All-in-One Educator & Academy Bundle",
-    shortTitle: "All-Access Bundle",
-    subtitle: "Classes 1\u201310 (All Boards) + 4th & 7th Scholarship + MAHA TET + CTET P1 & P2",
+  // 1 YEAR PLANS (365 DAYS / 12 MONTHS)
+  // Plan 4: TET – 1 Year
+  TET_1Y: {
+    sku: "TET_1Y",
+    title: "TET \u2013 1 Year",
+    shortTitle: "TET (1 Year)",
+    subtitle: "MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets",
+    originalAmountInr: 599,
+    amountInr: 299,
+    amountPaise: 29900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
+    validityDays: 365,
+    validityMonths: 12,
+    validityLabel: "12 Months",
+    unlockedCategories: ["maha_tet"],
+    isCombo: false,
+    requiresBoardClass: false,
+    audience: "teacher",
+    badge: "12 Months (1 Year)",
+    highlights: [
+      "50 Paper 1 + 50 Paper 2 Full Mock Exams (15,000 Questions)",
+      "MSCE Pune Syllabus, Topic Drills & PYQ Simulators",
+      "Marathi, English, Hindi & Urdu Mediums",
+      "365 Days (12 Months) Full Validity"
+    ]
+  },
+  // Plan 5: CTET – 1 Year
+  CTET_1Y: {
+    sku: "CTET_1Y",
+    title: "CTET \u2013 1 Year",
+    shortTitle: "CTET (1 Year)",
+    subtitle: "CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)",
+    originalAmountInr: 599,
+    amountInr: 299,
+    amountPaise: 29900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
+    validityDays: 365,
+    validityMonths: 12,
+    validityLabel: "12 Months",
+    unlockedCategories: ["ctet_paper_1", "ctet_paper_2"],
+    isCombo: false,
+    requiresBoardClass: false,
+    audience: "teacher",
+    badge: "12 Months (1 Year)",
+    highlights: [
+      "50 Paper 1 + 50 Paper 2 CBT Mock Examinations (15,000 Questions)",
+      "CBSE Competency Patterns, Pedagogy Drills & Weak-Area Revision",
+      "Both Math/Science & Social Studies Streams Included",
+      "365 Days (12 Months) Full Validity"
+    ]
+  },
+  // Plan 6: TET + CTET COMBO – 1 Year
+  TET_CTET_COMBO_1Y: {
+    sku: "TET_CTET_COMBO_1Y",
+    title: "TET + CTET COMBO \u2013 1 Year",
+    shortTitle: "TET + CTET (1 Year)",
+    subtitle: "All 200 Teacher Eligibility Mock Tests across MAHA TET & CTET Papers 1 & 2",
+    originalAmountInr: 999,
     amountInr: 499,
     amountPaise: 49900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
     validityDays: 365,
-    unlockedCategories: [
-      "all_classes",
-      "scholarship_4th",
-      "scholarship_7th",
-      "maha_tet",
-      "ctet_paper_1",
-      "ctet_paper_2"
-    ],
+    validityMonths: 12,
+    validityLabel: "12 Months",
+    unlockedCategories: ["maha_tet", "ctet_paper_1", "ctet_paper_2"],
     isCombo: true,
     requiresBoardClass: false,
     audience: "teacher",
-    badge: "Complete Unlock",
+    badge: "Best Annual Value",
     highlights: [
-      "All Boards (Maharashtra, CBSE, ICSE) across Classes 1 to 10",
-      "Both 4th Std & 7th Std MSCE Scholarship (50 Mocks + 20 Practice Sets)",
-      "MAHA TET (P1 & P2) + CTET Paper 1 + CTET Paper 2 (200 Full Mocks)"
+      "MAHA TET Paper 1 & 2 (100 Mocks) + CTET Paper 1 & 2 (100 Mocks)",
+      "All 200 Mock Tests with Detailed Step-by-Step Solutions",
+      "Save \u20B9500 vs original price",
+      "365 Days (12 Months) Full Annual Access"
+    ]
+  },
+  // SCHOLARSHIP PLAN
+  // Plan 7: Scholarship Combo – Class 4 + Class 7
+  SCHOLARSHIP_COMBO: {
+    sku: "SCHOLARSHIP_COMBO",
+    title: "Scholarship Combo \u2013 Class 4 + Class 7",
+    shortTitle: "Scholarship Combo (4th + 7th)",
+    subtitle: "Complete access to BOTH 4th Std PSE & 7th Std UPS MSCE Scholarship Exams",
+    originalAmountInr: 199,
+    amountInr: 99,
+    amountPaise: 9900,
+    discountPercent: 50,
+    discountBadge: "SAVE 50%",
+    validityDays: 365,
+    validityMonths: 12,
+    validityLabel: "12 Months",
+    unlockedCategories: ["scholarship_4th", "scholarship_7th"],
+    isCombo: true,
+    requiresBoardClass: false,
+    audience: "all",
+    badge: "Std 4th + 7th Combo",
+    highlights: [
+      "50 Full MSCE Mock Exams (25 Std 4th + 25 Std 7th) with Paper 1 & Paper 2",
+      "20 Full Practice Sets with Step-by-Step Solutions",
+      "Marathi, English & Hindi Mediums",
+      "Ideal for Teachers, Coaching Institutes & Multi-Child Families",
+      "365 Days (12 Months) Full Validity"
     ]
   }
 };
 var PLAN_CATALOG_LIST = Object.values(PLAN_CATALOG);
 var VALID_SKU_SET = new Set(Object.keys(PLAN_CATALOG));
 function isValidPlanSku(val) {
-  return Boolean(val && VALID_SKU_SET.has(String(val).trim().toUpperCase()));
+  const norm = String(val || "").trim().toUpperCase();
+  return Boolean(norm && (VALID_SKU_SET.has(norm) || isLegacySku(norm)));
+}
+function isLegacySku(val) {
+  return [
+    "SCHOLARSHIP_4TH",
+    "SCHOLARSHIP_7TH",
+    "MAHA_TET",
+    "CTET_PAPER_1",
+    "CTET_PAPER_2",
+    "CTET_COMBO",
+    "TET_CTET_COMBO",
+    "TEACHER_ALL_ACCESS"
+  ].includes(val);
 }
 function getPlanCatalogItem(sku) {
-  const normalized = String(sku || "BOARD_CLASS").trim().toUpperCase();
-  if (VALID_SKU_SET.has(normalized)) {
-    return PLAN_CATALOG[normalized];
-  }
-  return PLAN_CATALOG.BOARD_CLASS;
+  const resolved = resolvePlanSku(sku);
+  return PLAN_CATALOG[resolved] || PLAN_CATALOG.BOARD_CLASS;
 }
 function resolvePlanSku(rawSku, rawPlanId, amountPaiseOrInr) {
   const candidate = String(rawSku || "").trim().toUpperCase();
   if (VALID_SKU_SET.has(candidate)) {
     return candidate;
   }
+  if (candidate === "MAHA_TET") return "TET_1Y";
+  if (candidate === "CTET_PAPER_1" || candidate === "CTET_PAPER_2" || candidate === "CTET_COMBO") return "CTET_1Y";
+  if (candidate === "TET_CTET_COMBO") return "TET_CTET_COMBO_1Y";
+  if (candidate === "TEACHER_ALL_ACCESS") return "TET_CTET_COMBO_1Y";
+  if (candidate === "SCHOLARSHIP_4TH" || candidate === "SCHOLARSHIP_7TH") return "SCHOLARSHIP_COMBO";
   const planCandidate = String(rawPlanId || "").trim().toUpperCase();
   if (VALID_SKU_SET.has(planCandidate)) {
     return planCandidate;
   }
+  if (planCandidate === "MAHA_TET") return "TET_1Y";
+  if (planCandidate === "CTET_PAPER_1" || planCandidate === "CTET_PAPER_2" || planCandidate === "CTET_COMBO") return "CTET_1Y";
+  if (planCandidate === "TET_CTET_COMBO") return "TET_CTET_COMBO_1Y";
+  if (planCandidate === "TEACHER_ALL_ACCESS") return "TET_CTET_COMBO_1Y";
+  if (planCandidate === "SCHOLARSHIP_4TH" || planCandidate === "SCHOLARSHIP_7TH") return "SCHOLARSHIP_COMBO";
   if (typeof amountPaiseOrInr === "number" && amountPaiseOrInr > 0) {
     const inr = amountPaiseOrInr >= 5e3 ? Math.round(amountPaiseOrInr / 100) : Math.round(amountPaiseOrInr);
-    if (inr === 499) return "TEACHER_ALL_ACCESS";
-    if (inr === 299) return "TET_CTET_COMBO";
-    if (inr === 229) return "CTET_COMBO";
+    if (inr === 499) return "TET_CTET_COMBO_1Y";
+    if (inr === 349) return "TET_CTET_COMBO_6M";
+    if (inr === 299) return "TET_1Y";
+    if (inr === 199) return "TET_6M";
+    if (inr === 99) return "BOARD_CLASS";
   }
   return "BOARD_CLASS";
 }
@@ -2816,7 +2854,7 @@ async function createRazorpayQrCodeBackend(params) {
   const planId = "premium";
   const amountInPaise = planItem.amountPaise;
   const amountInRupees = planItem.amountInr;
-  const planTitle = resolvedSku === "BOARD_CLASS" ? normalizedClass ? `PREMIUM PLAN (${normalizedBoard} \u2022 ${normalizedClass}) \u2013 \u20B9${amountInRupees} \u2013 365 Days` : `PREMIUM PLAN (${normalizedBoard}) \u2013 \u20B9${amountInRupees} \u2013 365 Days (1 Year)` : `${planItem.title} \u2013 \u20B9${amountInRupees} \u2013 365 Days (1 Year)`;
+  const planTitle = resolvedSku === "BOARD_CLASS" ? normalizedClass ? `PREMIUM PLAN (${normalizedBoard} \u2022 ${normalizedClass}) \u2013 \u20B9${amountInRupees} \u2013 ${planItem.validityDays} Days` : `PREMIUM PLAN (${normalizedBoard}) \u2013 \u20B9${amountInRupees} \u2013 ${planItem.validityDays} Days` : `${planItem.title} \u2013 \u20B9${amountInRupees} \u2013 ${planItem.validityLabel}`;
   const creds = getResolvedRazorpayCredentials();
   if (!creds.isConfigured || !creds.keySecret) {
     throw new Error("Razorpay LIVE API credentials are not configured on the server.");
@@ -3054,7 +3092,7 @@ async function updateStudentSubscriptionInFirestoreBackend(params) {
   const resolvedClass = normalizeBackendClassLevel(selectedClass) || normalizeBackendClassLevel(existingData?.classLevel) || normalizeBackendClassLevel(existingData?.activatedClassLevel) || "Class 1";
   const targetCompositeKey = buildBackendBoardClassKey(resolvedBoard, resolvedClass);
   const isCategoryPlan = planItem.unlockedCategories.length > 0;
-  const planLabel = isCategoryPlan ? `${planItem.title} \u2013 \u20B9${verifiedAmount} \u2013 365 Days (1 Year)` : `PREMIUM PLAN (${resolvedBoard} \u2022 ${resolvedClass}) \u2013 \u20B9${verifiedAmount} \u2013 365 Days (1 Year)`;
+  const planLabel = isCategoryPlan ? `${planItem.title} \u2013 \u20B9${verifiedAmount} \u2013 ${planItem.validityLabel}` : `PREMIUM PLAN (${resolvedBoard} \u2022 ${resolvedClass}) \u2013 \u20B9${verifiedAmount} \u2013 365 Days (1 Year)`;
   const existingMap = {};
   if (existingData?.classSubscriptions && typeof existingData.classSubscriptions === "object") {
     for (const [rawKey, rawRec] of Object.entries(existingData.classSubscriptions)) {
@@ -3181,7 +3219,8 @@ async function updateStudentSubscriptionInFirestoreBackend(params) {
       const catAct = computeSubscriptionActivationDates({
         verificationTimestamp: now,
         existingPlan: prevCat ? "premium" : "free",
-        existingExpiresAt: prevCat?.expiresAt
+        existingExpiresAt: prevCat?.expiresAt,
+        validityDays: planItem.validityDays
       });
       if (!startDateIso) {
         startDateIso = catAct.purchasedDateIst;
@@ -3207,7 +3246,8 @@ async function updateStudentSubscriptionInFirestoreBackend(params) {
     const activation = computeSubscriptionActivationDates({
       verificationTimestamp: now,
       existingPlan: targetExistingEntry?.plan || "free",
-      existingExpiresAt: targetExistingEntry?.expiresAt || void 0
+      existingExpiresAt: targetExistingEntry?.expiresAt || void 0,
+      validityDays: planItem.validityDays
     });
     startDateIso = activation.purchasedDateIst;
     expiryDateIso = activation.expiryDateIst;
@@ -3225,10 +3265,37 @@ async function updateStudentSubscriptionInFirestoreBackend(params) {
         paymentId: String(paymentId),
         orderId: String(orderId),
         amountInr: verifiedAmount,
-        validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS,
+        validityDays: planItem.validityDays,
         updatedAt: verifiedAtUtcIso
       }
     };
+    if (resolvedClass === "Class 4") {
+      updatedCategorySubscriptions["scholarship_4th"] = {
+        categoryId: "scholarship_4th",
+        planSku: "BOARD_CLASS",
+        status: "ACTIVE",
+        purchasedAt: startDateIso,
+        expiresAt: expiryDateIso,
+        paymentId: String(paymentId),
+        orderId: String(orderId),
+        amountInr: verifiedAmount,
+        validityDays: planItem.validityDays,
+        updatedAt: verifiedAtUtcIso
+      };
+    } else if (resolvedClass === "Class 7") {
+      updatedCategorySubscriptions["scholarship_7th"] = {
+        categoryId: "scholarship_7th",
+        planSku: "BOARD_CLASS",
+        status: "ACTIVE",
+        purchasedAt: startDateIso,
+        expiresAt: expiryDateIso,
+        paymentId: String(paymentId),
+        orderId: String(orderId),
+        amountInr: verifiedAmount,
+        validityDays: planItem.validityDays,
+        updatedAt: verifiedAtUtcIso
+      };
+    }
   }
   const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
   const { activatedClasses, activatedClassKeys } = collectActiveKeys(updatedClassSubscriptions);

@@ -45,12 +45,12 @@ interface MembershipModalProps {
   onSwitchActiveClass?: (cls: ClassLevel, board?: EducationBoard) => void;
 }
 
-type ModalPlanGroupTab = 'classes' | 'exams' | 'bundles';
+type ModalPlanGroupTab = 'classes' | 'tet_ctet' | 'scholarship';
 
 function resolveGroupTabForSku(sku: PlanSkuId): ModalPlanGroupTab {
   if (sku === 'BOARD_CLASS') return 'classes';
-  const item = getPlanCatalogItem(sku);
-  return item.isCombo ? 'bundles' : 'exams';
+  if (sku === 'SCHOLARSHIP_COMBO' || sku === 'SCHOLARSHIP_4TH' || sku === 'SCHOLARSHIP_7TH') return 'scholarship';
+  return 'tet_ctet';
 }
 
 export const MembershipModal: React.FC<MembershipModalProps> = ({
@@ -68,6 +68,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
   const [planGroupTab, setPlanGroupTab] = useState<ModalPlanGroupTab>(() =>
     resolveGroupTabForSku(initialPlanSku || 'BOARD_CLASS')
   );
+  const [tetCtetDuration, setTetCtetDuration] = useState<'6m' | '1y'>('6m');
 
   const [targetBoard, setTargetBoard] = useState<EducationBoard>(
     initialSelectedBoard || currentStudent?.board || 'Maharashtra'
@@ -119,6 +120,18 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
       const nextSku: PlanSkuId = initialPlanSku || 'BOARD_CLASS';
       setSelectedPlanSku(nextSku);
       setPlanGroupTab(resolveGroupTabForSku(nextSku));
+      if (
+        nextSku === 'TET_1Y' ||
+        nextSku === 'CTET_1Y' ||
+        nextSku === 'TET_CTET_COMBO_1Y' ||
+        nextSku === 'MAHA_TET' ||
+        nextSku === 'CTET_COMBO' ||
+        nextSku === 'TEACHER_ALL_ACCESS'
+      ) {
+        setTetCtetDuration('1y');
+      } else {
+        setTetCtetDuration('6m');
+      }
       setTargetBoard(initialSelectedBoard || currentStudent?.board || 'Maharashtra');
       setTargetClass(initialSelectedClass || currentStudent?.classLevel || 'Class 5');
       setStep('select');
@@ -548,7 +561,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
-          {/* Plan Category Group Switcher (Classes 1-10 | Individual Exams | Combined & Teacher Bundles) */}
+          {/* Plan Category Group Switcher (Classes 1-10 | TET & CTET Plans | Scholarship Plans) */}
           {step === 'select' && (
             <div className="mb-5 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
               <button
@@ -569,38 +582,36 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setPlanGroupTab('exams');
-                  if (selectedPlanSku === 'BOARD_CLASS' || getPlanCatalogItem(selectedPlanSku).isCombo) {
-                    setSelectedPlanSku(currentStudent?.classLevel === 'Class 7' ? 'SCHOLARSHIP_7TH' : 'SCHOLARSHIP_4TH');
+                  setPlanGroupTab('tet_ctet');
+                  if (tetCtetDuration === '6m') {
+                    setSelectedPlanSku('TET_6M');
+                  } else {
+                    setSelectedPlanSku('TET_1Y');
                   }
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  planGroupTab === 'exams'
+                  planGroupTab === 'tet_ctet'
                     ? 'bg-indigo-700 text-white shadow-xs'
                     : 'text-slate-700 hover:bg-white'
                 }`}
               >
                 <Award className="w-4 h-4 text-amber-400" />
-                <span>Scholarship, TET &amp; CTET</span>
+                <span>TET &amp; CTET Plans (6M / 1Y)</span>
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setPlanGroupTab('bundles');
-                  if (!getPlanCatalogItem(selectedPlanSku).isCombo) {
-                    setSelectedPlanSku(
-                      currentStudent?.accountRole === 'teacher' ? 'TET_CTET_COMBO' : 'SCHOLARSHIP_COMBO'
-                    );
-                  }
+                  setPlanGroupTab('scholarship');
+                  setSelectedPlanSku('SCHOLARSHIP_COMBO');
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  planGroupTab === 'bundles'
+                  planGroupTab === 'scholarship'
                     ? 'bg-emerald-700 text-white shadow-xs'
                     : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                <Layers className="w-4 h-4 text-amber-300" />
-                <span>Combined &amp; Teacher Bundles</span>
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Scholarship (Std 4 &amp; 7)</span>
               </button>
             </div>
           )}
@@ -829,18 +840,16 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 </div>
               )}
 
-              {/* INDIVIDUAL EXAMS OR COMBINED BUNDLES GRID */}
-              {planGroupTab !== 'classes' ? (
+              {/* TET & CTET PLANS (6 MONTHS & 1 YEAR) */}
+              {planGroupTab === 'tet_ctet' && (
                 <div className="space-y-4">
                   <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div>
                       <p className="font-black text-indigo-950">
-                        {planGroupTab === 'exams'
-                          ? 'Individual Exam Plans (Scholarship, MAHA TET & CTET)'
-                          : 'Combined & Teacher All-Access Plans'}
+                        Teacher Eligibility Test Plans: MAHA TET &amp; CTET
                       </p>
                       <p className="text-slate-600 font-medium">
-                        Add any category plan directly onto your existing Student or Teacher account — existing active plans remain intact.
+                        Choose 6 Months or 1 Year validity. All plans include official CBT mock test simulators, detailed explanations &amp; bilingual questions.
                       </p>
                     </div>
                     {currentStudent && (
@@ -850,10 +859,57 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Duration Toggle: 6 Months vs 1 Year */}
+                  <div className="flex items-center justify-center gap-2 p-1 rounded-2xl bg-slate-100 border border-slate-200 max-w-md mx-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTetCtetDuration('6m');
+                        if (selectedPlanSku === 'TET_1Y') setSelectedPlanSku('TET_6M');
+                        else if (selectedPlanSku === 'CTET_1Y') setSelectedPlanSku('CTET_6M');
+                        else if (selectedPlanSku === 'TET_CTET_COMBO_1Y') setSelectedPlanSku('TET_CTET_COMBO_6M');
+                        else setSelectedPlanSku('TET_6M');
+                      }}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        tetCtetDuration === '6m'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>6 MONTH PLANS</span>
+                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950">
+                        SAVE 50%
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTetCtetDuration('1y');
+                        if (selectedPlanSku === 'TET_6M') setSelectedPlanSku('TET_1Y');
+                        else if (selectedPlanSku === 'CTET_6M') setSelectedPlanSku('CTET_1Y');
+                        else if (selectedPlanSku === 'TET_CTET_COMBO_6M') setSelectedPlanSku('TET_CTET_COMBO_1Y');
+                        else setSelectedPlanSku('TET_1Y');
+                      }}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        tetCtetDuration === '1y'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>1 YEAR PLANS</span>
+                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950">
+                        SAVE 50%
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* 3 Cards Grid for 6M or 1Y */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {PLAN_CATALOG_LIST.filter((item) => {
-                      if (item.sku === 'BOARD_CLASS') return false;
-                      return planGroupTab === 'bundles' ? item.isCombo : !item.isCombo;
+                      if (tetCtetDuration === '6m') {
+                        return item.sku === 'TET_6M' || item.sku === 'CTET_6M' || item.sku === 'TET_CTET_COMBO_6M';
+                      }
+                      return item.sku === 'TET_1Y' || item.sku === 'CTET_1Y' || item.sku === 'TET_CTET_COMBO_1Y';
                     }).map((item) => {
                       const isSelected = selectedPlanSku === item.sku;
                       const unlockedAlready =
@@ -878,34 +934,38 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                               : 'border-slate-200 bg-white hover:border-indigo-300'
                           }`}
                         >
-                          {item.badge && (
-                            <span
-                              className={`absolute -top-3 right-4 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs ${
-                                unlockedAlready
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-slate-900 text-amber-300'
-                              }`}
-                            >
-                              {unlockedAlready ? '✓ Active on Account' : item.badge}
-                            </span>
-                          )}
-
                           <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <h3 className="text-base font-black text-slate-900">
-                                  {item.title}
-                                </h3>
-                                <p className="text-xs text-slate-600 mt-0.5">{item.subtitle}</p>
-                              </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700">
+                                {item.validityLabel}
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-xs">
+                                {item.discountBadge}
+                              </span>
                             </div>
 
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-3xl font-black text-amber-600">
-                                ₹{item.amountInr}
-                              </span>
-                              <span className="text-xs font-bold text-slate-500">
-                                / {item.validityDays} Days (1 Year)
+                            <div>
+                              <h3 className="text-base font-black text-slate-900">{item.title}</h3>
+                              <p className="text-xs text-slate-600 mt-0.5">{item.subtitle}</p>
+                            </div>
+
+                            {/* Prominent Original vs Discounted Price Display */}
+                            <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-400 line-through">
+                                    ₹{item.originalAmountInr}
+                                  </span>
+                                  <span className="text-2xl sm:text-3xl font-black text-amber-600">
+                                    ₹{item.amountInr}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-500 block">
+                                  Validity: {item.validityLabel} ({item.validityDays} Days)
+                                </span>
+                              </div>
+                              <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                                50% OFF
                               </span>
                             </div>
 
@@ -925,26 +985,34 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                             )}
                           </div>
 
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-bold text-slate-500">
-                              {item.unlockedCategories.length} Categor{item.unlockedCategories.length === 1 ? 'y' : 'ies'} Unlocked
-                            </span>
+                          <div className="pt-3 border-t border-slate-100 space-y-2">
                             {currentStudent ? (
-                              <button
-                                type="button"
-                                disabled={isCreatingOrder}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleInitiateCheckout(item.sku);
-                                }}
-                                className={`px-4 py-2 rounded-xl font-black text-xs cursor-pointer transition-all ${
-                                  isSelected
-                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 shadow-sm'
-                                    : 'bg-slate-900 hover:bg-slate-800 text-white'
-                                }`}
-                              >
-                                {unlockedAlready ? `Extend +365d (₹${item.amountInr})` : `Select & Pay ₹${item.amountInr}`}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isCreatingOrder}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleInitiateCheckout(item.sku);
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs shadow-sm cursor-pointer flex items-center justify-center gap-1.5 transition-all"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span>BUY NOW (₹{item.amountInr})</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isCreatingOrder}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleInitiateQrPayment(item.sku);
+                                  }}
+                                  className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-[11px] border border-amber-200 cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <QrCode className="w-3 h-3 text-amber-700" />
+                                  <span>Pay via UPI QR (₹{item.amountInr})</span>
+                                </button>
+                              </>
                             ) : (
                               <button
                                 type="button"
@@ -953,7 +1021,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                                   resetModal();
                                   onRequestAuth?.('login');
                                 }}
-                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
                               >
                                 Sign In to Unlock
                               </button>
@@ -964,8 +1032,212 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     })}
                   </div>
                 </div>
-              ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              )}
+
+              {/* SCHOLARSHIP PLANS (CLASS 4 & CLASS 7) */}
+              {planGroupTab === 'scholarship' && (
+                <div className="space-y-4">
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div>
+                      <p className="font-black text-amber-950">
+                        MSCE Pune Scholarship Examination (Std 4th PSE &amp; Std 7th UPS)
+                      </p>
+                      <p className="text-slate-600 font-medium">
+                        Two options available: included free with Class purchase, or get the complete 4th + 7th Combined Plan.
+                      </p>
+                    </div>
+                    {currentStudent && (
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200">
+                        Account: {currentStudent.name} ({currentStudent.accountRole === 'teacher' ? 'Teacher' : currentStudent.classLevel})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* OPTION A: INCLUDED WITH CLASS PURCHASE */}
+                    <div className="p-5 sm:p-6 rounded-3xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/60 via-white to-blue-50/40 flex flex-col justify-between gap-4">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900">
+                            Option A
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-xs">
+                            INCLUDED FREE
+                          </span>
+                        </div>
+
+                        <h3 className="text-base sm:text-lg font-black text-slate-900">
+                          Included with Class 4 or Class 7 Plan
+                        </h3>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Class 4 or Class 7 students receive full respective Scholarship access at ₹0 extra fee when purchasing their Class Plan.
+                        </p>
+
+                        <div className="my-4 p-3 rounded-2xl bg-white border border-indigo-200">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-400 line-through">₹199</span>
+                            <span className="text-2xl font-black text-indigo-900">₹99</span>
+                            <span className="text-xs font-bold text-slate-500">/ 12 Months (Per Class)</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-emerald-700 block mt-0.5">
+                            ✓ Scholarship Access is 100% Included in the ₹99 Class Fee!
+                          </span>
+                        </div>
+
+                        <ul className="space-y-2 text-xs text-slate-700 font-semibold">
+                          <li className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span><strong>Class 4 Students:</strong> Automatic access to all 25 4th Std MSCE Full Mocks + 10 Practice Sets (PSE).</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span><strong>Class 7 Students:</strong> Automatic access to all 25 7th Std MSCE Full Mocks + 10 Practice Sets (UPS).</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>Marathi, English &amp; Hindi Mediums supported.</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>Full curriculum access for your class (All Subjects, Notes, Worksheets &amp; Quizzes) also unlocked!</span>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlanGroupTab('classes');
+                          if (currentStudent?.classLevel === 'Class 7') {
+                            setTargetClass('Class 7');
+                          } else {
+                            setTargetClass('Class 4');
+                          }
+                          setSelectedPlanSku('BOARD_CLASS');
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer shadow-sm transition-all"
+                      >
+                        Select Class 4 or 7 in Classes Tab (₹99) →
+                      </button>
+                    </div>
+
+                    {/* OPTION B: PLAN 7 - SCHOLARSHIP COMBO (CLASS 4 + CLASS 7) */}
+                    {(() => {
+                      const item = PLAN_CATALOG.SCHOLARSHIP_COMBO;
+                      const isSelected = selectedPlanSku === item.sku;
+                      const unlockedAlready =
+                        hasCategoryAccess(currentStudent, 'scholarship_4th') &&
+                        hasCategoryAccess(currentStudent, 'scholarship_7th');
+
+                      return (
+                        <div
+                          onClick={() => setSelectedPlanSku(item.sku)}
+                          className={`p-5 sm:p-6 rounded-3xl border-2 flex flex-col justify-between gap-4 transition-all cursor-pointer relative ${
+                            isSelected
+                              ? 'border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 shadow-lg ring-2 ring-amber-300'
+                              : unlockedAlready
+                              ? 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400'
+                              : 'border-slate-200 bg-white hover:border-amber-300'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-900 text-amber-300">
+                                Option B • Plan 7
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-xs">
+                                {item.discountBadge}
+                              </span>
+                            </div>
+
+                            <h3 className="text-base sm:text-lg font-black text-slate-900">
+                              {item.title}
+                            </h3>
+                            <p className="text-xs text-slate-600 mt-1">
+                              {item.subtitle}
+                            </p>
+
+                            {/* Pricing Block with Strikethrough & Highlight */}
+                            <div className="my-4 p-3 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-400 line-through">
+                                    ₹{item.originalAmountInr}
+                                  </span>
+                                  <span className="text-2xl sm:text-3xl font-black text-amber-600">
+                                    ₹{item.amountInr}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-500 block">
+                                  Validity: {item.validityLabel} ({item.validityDays} Days)
+                                </span>
+                              </div>
+                              <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                                50% OFF
+                              </span>
+                            </div>
+
+                            <ul className="space-y-1.5 text-xs text-slate-700 font-semibold mb-4">
+                              {item.highlights.map((hl) => (
+                                <li key={hl} className="flex items-start gap-2">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <span>{hl}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 space-y-2">
+                            {currentStudent ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isCreatingOrder}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleInitiateCheckout(item.sku);
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span>BUY NOW (₹{item.amountInr})</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isCreatingOrder}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleInitiateQrPayment(item.sku);
+                                  }}
+                                  className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-[11px] border border-amber-200 cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <QrCode className="w-3 h-3 text-amber-700" />
+                                  <span>Pay via UPI QR (₹{item.amountInr})</span>
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  resetModal();
+                                  onRequestAuth?.('login');
+                                }}
+                                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                              >
+                                Sign In to Unlock
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {planGroupTab === 'classes' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* PLAN 1: FREE PLAN – ₹0 – Lifetime */}
                 <div
                   className={`p-6 rounded-3xl border-2 flex flex-col justify-between transition-all ${
@@ -1041,17 +1313,41 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900">
-                        BOARD &amp; CLASS PREMIUM PLAN
+                        BOARD &amp; CLASS ANNUAL PLAN
                       </span>
-                      <span className="text-xs font-bold text-amber-800">1 Year (365 Days) Validity</span>
+                      <span className="text-xs font-bold text-amber-800">12 Months (365 Days) Validity</span>
                     </div>
+
                     <h3 className="text-lg font-black text-slate-900">
-                      PREMIUM PLAN – ₹99 ({getBoardShortLabel(targetBoard)} • Std {formatStandardOrdinal(targetClass)})
+                      Class Annual Plan ({getBoardShortLabel(targetBoard)} • Std {formatStandardOrdinal(targetClass)})
                     </h3>
-                    <div className="mt-2 mb-4 flex items-baseline gap-1">
-                      <span className="text-4xl font-black text-amber-600">₹99</span>
-                      <span className="text-xs text-slate-500 font-bold">/ 1 Year (365 Days) • {getBoardShortLabel(targetBoard)} {targetClass}</span>
+
+                    {/* Prominent Original vs Discounted Price Display */}
+                    <div className="my-3.5 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-bold text-slate-400 line-through">₹199</span>
+                          <span className="text-3xl font-black text-amber-600">₹99</span>
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">
+                          Validity: 12 Months (365 Days) • {getBoardShortLabel(targetBoard)} {targetClass}
+                        </span>
+                      </div>
+                      <span className="px-3 py-1 rounded-xl bg-emerald-600 text-white text-xs font-black uppercase tracking-wider shadow-xs">
+                        SAVE 50%
+                      </span>
                     </div>
+
+                    {(targetClass === 'Class 4' || targetClass === 'Class 7') && (
+                      <div className="mb-3.5 p-3 rounded-xl bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-300 text-amber-950 text-xs font-black flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>
+                          {targetClass === 'Class 4'
+                            ? '✓ 4th Std MSCE Scholarship Exam (PSE) Included Free (₹0 Extra Fee)!'
+                            : '✓ 7th Std MSCE Scholarship Exam (UPS) Included Free (₹0 Extra Fee)!'}
+                        </span>
+                      </div>
+                    )}
 
                     <p className="text-xs font-bold text-amber-900 mb-3">
                       Unlock all worksheets, study materials &amp; subjects for {getBoardShortLabel(targetBoard)} Standard {formatStandardOrdinal(targetClass)}:
@@ -1094,7 +1390,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                         className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         <CreditCard className="w-3.5 h-3.5" />
-                        <span>Pay Online (₹99)</span>
+                        <span>BUY NOW (₹99)</span>
                       </button>
                       <button
                         type="button"

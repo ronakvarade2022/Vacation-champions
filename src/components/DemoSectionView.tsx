@@ -3,8 +3,9 @@ import {
   Sparkles, BookOpen, Brain, Shield, TrendingUp,
   CheckCircle2, Lock, Crown, Play, Pause, RotateCcw, Volume2, Palette,
   Trophy, HelpCircle, Check, X, RefreshCw, Eraser,
-  GraduationCap, FileText, BarChart3, UserPlus, LogIn
+  GraduationCap, FileText, BarChart3, UserPlus, LogIn, Award, ArrowRight
 } from 'lucide-react';
+import { DemoMockTestsHub } from './demo/DemoMockTestsHub';
 import { speechService } from '../services/speechService';
 import { ClassLevel, EducationBoard } from '../types';
 import {
@@ -36,6 +37,7 @@ interface DemoSectionViewProps {
 
 type InteractiveDemoTab =
   | 'overview'
+  | 'demo-mock-tests'
   | 'live-curriculum'
   | 'live-quiz'
   | 'live-puzzles'
@@ -593,6 +595,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
         <div className="mt-5 pt-4 border-t border-white/15 flex flex-wrap gap-2 relative z-10">
           {[
             { id: 'overview', label: 'Demo Overview & Progress', icon: Sparkles },
+            { id: 'demo-mock-tests', label: 'FREE Demo Mock Tests (TET, CTET, Scholarship)', icon: Award },
             { id: 'live-curriculum', label: `${getBoardShortLabel(selectedDemoBoard)} Worksheets (${formatStandardOrdinal(selectedDemoClass)})`, icon: FileText },
             { id: 'live-quiz', label: 'Sample Subject Quiz', icon: BookOpen },
             { id: 'live-puzzles', label: 'Sudoku & Riddles', icon: Brain },
@@ -622,6 +625,17 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
           })}
         </div>
       </div>
+
+      {/* =====================================================================
+          INTERACTIVE TAB: FREE FULL-LENGTH DEMO MOCK TESTS (TET, CTET, SCHOLARSHIP)
+         ===================================================================== */}
+      {activeTab === 'demo-mock-tests' && (
+        <div className="mb-10 animate-in fade-in duration-200">
+          <DemoMockTestsHub
+            onOpenMembership={() => onUpgradeClick()}
+          />
+        </div>
+      )}
 
       {/* =====================================================================
           INTERACTIVE TAB 0: CLASSES 1ST TO 10TH SUBJECTS & SAMPLE WORKSHEETS
@@ -1592,6 +1606,33 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
           DEMO OVERVIEW MODULES & PERFORMANCE PREVIEW
          ===================================================================== */}
       <div className="space-y-8">
+        {/* FREE DEMO MOCK TESTS FEATURE CARD */}
+        <div className="rounded-3xl p-6 bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-emerald-950 text-[10px] font-black uppercase tracking-wider">
+                100% Free Demo Mock Tests
+              </span>
+              <span className="text-xs text-indigo-200 font-semibold">TET · CTET · Class 4 &amp; 7 Scholarship</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-display font-black text-white">
+              Official Examination Experience Demo
+            </h2>
+            <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl leading-relaxed">
+              Test your preparation with full-length demo tests featuring authentic examination timers (150 mins / 90 mins), reload protection, question palettes, and instant detailed solutions.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('demo-mock-tests')}
+            className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center gap-2 shrink-0 self-start md:self-auto"
+          >
+            <Award className="w-4 h-4" />
+            <span>Launch Free Demo Tests</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
         {/* 1. Student Dashboard & Performance Tracking Preview + 2. Demo Quizzes */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all">

@@ -284,7 +284,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   const handleLaunchMockTest = async (testNumber: number) => {
     if (testNumber > 1 && !hasPaidCategoryAccess) {
       promptLockedUpgrade(
-        `Mock Test 01 is open as a Free Preview. Mock Tests 02–50 require the ${categoryLabel} Plan (₹149 / 365 Days).`
+        `Mock Test 01 is open as a Free Preview. Mock Tests 02–50 require the ${categoryLabel} Plan (From ₹199).`
       );
       return;
     }
@@ -312,7 +312,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   const handleLaunchSubjectPractice = async (subjectId: TetCtetSubjectId, label: string, setIndex = 1) => {
     if (setIndex > 1 && !hasPaidCategoryAccess) {
       promptLockedUpgrade(
-        `Practice Set S1 is open as a Free Preview. Practice Sets S2–S5 require the ${categoryLabel} Plan (₹149 / 365 Days).`
+        `Practice Set S1 is open as a Free Preview. Practice Sets S2–S5 require the ${categoryLabel} Plan (From ₹199).`
       );
       return;
     }
@@ -341,7 +341,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   const handleLaunchTopicPractice = async (subjectId: TetCtetSubjectId, topic: string, topicIdx = 0) => {
     if (topicIdx > 0 && !hasPaidCategoryAccess) {
       promptLockedUpgrade(
-        `Topic 01 per subject is a Free Preview. All remaining Topic Mastery Drills unlock with ${categoryLabel} (₹149 / 365 Days).`
+        `Topic 01 per subject is a Free Preview. All remaining Topic Mastery Drills unlock with ${categoryLabel} (From ₹199).`
       );
       return;
     }
@@ -371,7 +371,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   const handleLaunchRevisionTest = async (revNum: number, focusSubjectId?: TetCtetSubjectId) => {
     if (revNum > 1 && !hasPaidCategoryAccess) {
       promptLockedUpgrade(
-        `Revision 01 is a Free Preview. Revision Sprints 02–10 require the ${categoryLabel} Plan (₹149 / 365 Days).`
+        `Revision 01 is a Free Preview. Revision Sprints 02–10 require the ${categoryLabel} Plan (From ₹199).`
       );
       return;
     }
@@ -402,7 +402,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
   const handleLaunchPyqTest = async (paperIdx: number, count: number, yearLabel: string) => {
     if (paperIdx > 1 && !hasPaidCategoryAccess) {
       promptLockedUpgrade(
-        `2024 Pattern Paper is open as a Free Preview. All 2018–2023 PYQ Simulations unlock with ${categoryLabel} (₹149 / 365 Days).`
+        `2024 Pattern Paper is open as a Free Preview. All 2018–2023 PYQ Simulations unlock with ${categoryLabel} (From ₹199).`
       );
       return;
     }
@@ -594,7 +594,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                 <Lock className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>
                   {lockedNotice ||
-                    `Free Preview Active (Mock Test 01, Subject Set S1, Topic #1, Revision #1 & 2024 PYQ). Unlock all 50 mocks & full drills with ${categoryLabel} (₹149 / 365 Days).`}
+                    `Free Preview Active (Mock Test 01, Subject Set S1, Topic #1, Revision #1 & 2024 PYQ). Unlock all 50 mocks & full drills with ${categoryLabel} (From ₹199).`}
                 </span>
               </>
             )}
@@ -618,14 +618,14 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                     className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer flex items-center gap-1"
                   >
                     <Crown className="w-3.5 h-3.5" />
-                    <span>Unlock {categoryLabel} (₹149)</span>
+                    <span>Unlock {categoryLabel} (From ₹199)</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => onOpenMembership('TET_CTET_COMBO')}
+                    onClick={() => onOpenMembership('TET_CTET_COMBO_6M')}
                     className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold cursor-pointer"
                   >
-                    TET + CTET Combo (₹299)
+                    TET + CTET Combo (₹349)
                   </button>
                 </>
               )}
@@ -904,7 +904,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                                   </span>
                                   {planLocked ? (
                                     <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                                      <Lock className="w-2.5 h-2.5" /> ₹149
+                                      <Lock className="w-2.5 h-2.5" /> From ₹199
                                     </span>
                                   ) : tNum === 1 && !hasPaidCategoryAccess ? (
                                     <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
@@ -954,7 +954,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                                   className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
                                 >
                                   <Lock className="w-3.5 h-3.5" />
-                                  <span>Unlock (₹149 Plan)</span>
+                                  <span>Unlock (From ₹199)</span>
                                 </button>
                               ) : (
                                 <button
@@ -1061,7 +1061,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                     {isSetLocked ? (
                       <>
                         <Lock className="w-4 h-4" />
-                        <span>Unlock Set {selectedSet} (₹149 Plan)</span>
+                        <span>Unlock Set {selectedSet} (From ₹199)</span>
                       </>
                     ) : (
                       <>
@@ -1271,7 +1271,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                       {isRevLocked ? (
                         <>
                           <Lock className="w-3.5 h-3.5" />
-                          <span>Unlock ₹149</span>
+                          <span>Unlock (From ₹199)</span>
                         </>
                       ) : (
                         <span>Launch Revision</span>
@@ -1340,7 +1340,7 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                       className="min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0"
                     >
                       <Lock className="w-3.5 h-3.5" />
-                      <span>Unlock ₹149</span>
+                      <span>Unlock (From ₹199)</span>
                     </button>
                   ) : (
                     <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">

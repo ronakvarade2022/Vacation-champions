@@ -435,16 +435,21 @@ const AppContent: React.FC = () => {
   };
 
   const openDemoWithTab = (
-    tab: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles' = 'overview'
+    tab: 'overview' | 'demo-mock-tests' | 'live-curriculum' | 'live-quiz' | 'live-puzzles' = 'overview'
   ) => {
-    setDemoInitialTab(tab);
+    setDemoInitialTab(tab as any);
     setCurrentTab('demo');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
+    if (tab === 'demo-mock-tests') {
+      openDemoWithTab('demo-mock-tests');
+      return;
+    }
+
     const alwaysOpenTabs = new Set([
-      'demo', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
+      'demo', 'demo-mock-tests', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material',
@@ -1059,7 +1064,7 @@ const AppContent: React.FC = () => {
             <TetCtetView
               onOpenAuth={() => openAuthModalWithTab('teacher', 'teacher')}
               onOpenMembership={(planSku) =>
-                openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'MAHA_TET')
+                openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'TET_1Y')
               }
             />
           ) : (['scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku', 'future-skills', 'ai-academy'] as const).includes(currentTab as 'scholarship') ? (
@@ -1100,7 +1105,7 @@ const AppContent: React.FC = () => {
                   <ScholarshipChampionsView
                     onOpenAuth={() => openAuthModalWithTab('login')}
                     onOpenMembership={(planSku) =>
-                      openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'SCHOLARSHIP_4TH')
+                      openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'SCHOLARSHIP_COMBO')
                     }
                   />
                 );
@@ -1247,11 +1252,11 @@ const AppContent: React.FC = () => {
                         {!hasCategoryAccess(currentStudent, 'all_classes') && (
                           <button
                             type="button"
-                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, 'TEACHER_ALL_ACCESS')}
+                            onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, 'TET_CTET_COMBO_1Y')}
                             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs shadow-md cursor-pointer transition-all"
                           >
                             <Award className="w-4 h-4" />
-                            <span>All-Access Educator Bundle (₹499)</span>
+                            <span>TET + CTET Combo 1 Year (₹499)</span>
                           </button>
                         )}
                       </div>
@@ -1273,7 +1278,7 @@ const AppContent: React.FC = () => {
                           label: '4th Scholarship',
                           unlocked: hasCategoryAccess(currentStudent, 'scholarship_4th'),
                           selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('scholarship_4th'),
-                          sku: 'SCHOLARSHIP_4TH' as PlanSkuId,
+                          sku: 'SCHOLARSHIP_COMBO' as PlanSkuId,
                           tab: 'scholarship',
                         },
                         {
@@ -1281,7 +1286,7 @@ const AppContent: React.FC = () => {
                           label: '7th Scholarship',
                           unlocked: hasCategoryAccess(currentStudent, 'scholarship_7th'),
                           selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('scholarship_7th'),
-                          sku: 'SCHOLARSHIP_7TH' as PlanSkuId,
+                          sku: 'SCHOLARSHIP_COMBO' as PlanSkuId,
                           tab: 'scholarship',
                         },
                         {
@@ -1289,7 +1294,7 @@ const AppContent: React.FC = () => {
                           label: 'Maharashtra TET',
                           unlocked: hasCategoryAccess(currentStudent, 'maha_tet'),
                           selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('maha_tet'),
-                          sku: 'MAHA_TET' as PlanSkuId,
+                          sku: 'TET_1Y' as PlanSkuId,
                           tab: 'tet-ctet',
                         },
                         {
@@ -1297,7 +1302,7 @@ const AppContent: React.FC = () => {
                           label: 'CTET Paper 1',
                           unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_1'),
                           selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('ctet_paper_1'),
-                          sku: 'CTET_PAPER_1' as PlanSkuId,
+                          sku: 'CTET_1Y' as PlanSkuId,
                           tab: 'tet-ctet',
                         },
                         {
@@ -1305,7 +1310,7 @@ const AppContent: React.FC = () => {
                           label: 'CTET Paper 2',
                           unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_2'),
                           selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('ctet_paper_2'),
-                          sku: 'CTET_PAPER_2' as PlanSkuId,
+                          sku: 'CTET_1Y' as PlanSkuId,
                           tab: 'tet-ctet',
                         },
                         {
@@ -1313,7 +1318,7 @@ const AppContent: React.FC = () => {
                           label: 'Both CTET Papers',
                           unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_1') && hasCategoryAccess(currentStudent, 'ctet_paper_2'),
                           selected: !currentStudent.selectedTeacherCategories?.length || (currentStudent.selectedTeacherCategories.includes('ctet_paper_1') && currentStudent.selectedTeacherCategories.includes('ctet_paper_2')),
-                          sku: 'CTET_COMBO' as PlanSkuId,
+                          sku: 'CTET_1Y' as PlanSkuId,
                           tab: 'tet-ctet',
                         },
                       ].map((cat) => (

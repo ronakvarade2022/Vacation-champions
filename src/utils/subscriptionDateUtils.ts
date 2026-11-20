@@ -443,6 +443,7 @@ export function computeSubscriptionActivationDates(params?: {
   existingPlanStatus?: string | null;
   verifiedAt?: Date | string | number;
   verificationTimestamp?: Date | string | number;
+  validityDays?: number;
 }): ComputedSubscriptionActivation {
   const rawTime = params?.verifiedAt ?? params?.verificationTimestamp;
   const nowDate =
@@ -456,6 +457,7 @@ export function computeSubscriptionActivationDates(params?: {
   const verifiedAtUtc = safeNow.toISOString();
   const purchasedAt = toIstDateString(safeNow);
   const purchasedAtDisplay = formatDateIstDisplay(purchasedAt);
+  const daysSpan = typeof params?.validityDays === 'number' && params.validityDays > 0 ? params.validityDays : SUBSCRIPTION_VALIDITY_DAYS;
 
   let baseDateForExtension = purchasedAt;
   let isRenewalExtension = false;
@@ -472,10 +474,10 @@ export function computeSubscriptionActivationDates(params?: {
     }
   }
 
-  const expiresAt = addCalendarDaysIst(baseDateForExtension, SUBSCRIPTION_VALIDITY_DAYS);
+  const expiresAt = addCalendarDaysIst(baseDateForExtension, daysSpan);
   const expiresAtDisplay = formatDateIstDisplay(expiresAt);
   const expiresAtUtc = istExpiryDateToUtcEndTimestamp(expiresAt);
-  const daysRemaining = Math.max(0, diffCalendarDaysIst(purchasedAt, expiresAt) ?? SUBSCRIPTION_VALIDITY_DAYS);
+  const daysRemaining = Math.max(0, diffCalendarDaysIst(purchasedAt, expiresAt) ?? daysSpan);
 
   return {
     verifiedAtUtc,
@@ -488,8 +490,8 @@ export function computeSubscriptionActivationDates(params?: {
     expiryDateIst: expiresAt,
     expiresAtDisplay,
     expiresAtUtc,
-    validityDaysAdded: SUBSCRIPTION_VALIDITY_DAYS,
-    validityDays: SUBSCRIPTION_VALIDITY_DAYS,
+    validityDaysAdded: daysSpan,
+    validityDays: daysSpan,
     daysRemaining,
     isRenewalExtension,
     isRenewalBeforeExpiry: isRenewalExtension,

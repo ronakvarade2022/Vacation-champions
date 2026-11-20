@@ -81,6 +81,9 @@ const AdminQuestionErrorReportsSection = lazy(() =>
     default: m.AdminQuestionErrorReportsSection,
   }))
 );
+const AdminDemoExamsSection = lazy(() =>
+  import('./admin/AdminDemoExamsSection').then((m) => ({ default: m.AdminDemoExamsSection }))
+);
 
 type AdminSectionId =
   | 'students'
@@ -96,6 +99,7 @@ type AdminSectionId =
   | 'cricket'
   | 'scholarship'
   | 'tet-ctet'
+  | 'demo-exams'
   | 'question-error-reports'
   | 'support'
   | 'profile';
@@ -534,6 +538,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('demo-exams')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'demo-exams'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-amber-50'
+          }`}
+        >
+          <span>🎯</span>
+          <span>Free Demo Mock Tests (4 Tests)</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('question-error-reports')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'question-error-reports'
@@ -688,6 +704,8 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {activeSection === 'tet-ctet' && <AdminTetCtetSection />}
+
+        {activeSection === 'demo-exams' && <AdminDemoExamsSection />}
 
         {activeSection === 'question-error-reports' && <AdminQuestionErrorReportsSection />}
 

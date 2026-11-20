@@ -450,8 +450,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: sch4Info.isPaidActive
                 ? `Unlocked (${sch4Info.daysRemainingDisplay})`
                 : 'Preview Set #1 Free • Locked',
-              priceLabel: '₹99 / 365d',
-              sku: 'SCHOLARSHIP_4TH',
+              priceLabel: '₹99 / 12m',
+              sku: 'SCHOLARSHIP_COMBO',
               targetTab: 'scholarship',
             },
             {
@@ -465,8 +465,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: sch7Info.isPaidActive
                 ? `Unlocked (${sch7Info.daysRemainingDisplay})`
                 : 'Preview Set #1 Free • Locked',
-              priceLabel: '₹99 / 365d',
-              sku: 'SCHOLARSHIP_7TH',
+              priceLabel: '₹99 / 12m',
+              sku: 'SCHOLARSHIP_COMBO',
               targetTab: 'scholarship',
             },
             {
@@ -480,8 +480,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: tetInfo.isPaidActive
                 ? `Unlocked (${tetInfo.daysRemainingDisplay})`
                 : 'Preview Mock 01 Free • Locked',
-              priceLabel: '₹149 / 365d',
-              sku: 'MAHA_TET',
+              priceLabel: '6M ₹199 | 1Y ₹299',
+              sku: 'TET_1Y',
               targetTab: 'tet-ctet',
             },
             {
@@ -495,8 +495,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: ctet1Info.isPaidActive
                 ? `Unlocked (${ctet1Info.daysRemainingDisplay})`
                 : 'Preview Mock 01 Free • Locked',
-              priceLabel: '₹149 / 365d',
-              sku: 'CTET_PAPER_1',
+              priceLabel: '6M ₹199 | 1Y ₹299',
+              sku: 'CTET_1Y',
               targetTab: 'tet-ctet',
             },
             {
@@ -510,8 +510,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: ctet2Info.isPaidActive
                 ? `Unlocked (${ctet2Info.daysRemainingDisplay})`
                 : 'Preview Mock 01 Free • Locked',
-              priceLabel: '₹149 / 365d',
-              sku: 'CTET_PAPER_2',
+              priceLabel: '6M ₹199 | 1Y ₹299',
+              sku: 'CTET_1Y',
               targetTab: 'tet-ctet',
             },
           ];
@@ -527,6 +527,34 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
           return (
             <div className="pt-4 border-t border-slate-100 space-y-3">
+              {/* FREE DEMO MOCK TESTS PROMINENT BANNER */}
+              <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 border border-amber-300 text-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full bg-slate-950 text-white text-[9px] font-black uppercase">
+                      100% Free Demo
+                    </span>
+                    <span className="text-[11px] font-bold text-amber-950">
+                      TET · CTET · Class 4 &amp; 7 Scholarship
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-display font-black text-slate-950">
+                    Experience Full-Length Demo Mock Examinations with Real Countdown Timers
+                  </h4>
+                  <p className="text-[11px] font-semibold text-slate-800">
+                    Try authentic 150-minute TET/CTET (150 Marks) or 90-minute Scholarship (150 Marks) exams with question palettes and full solutions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('demo-mock-tests')}
+                  className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-black text-xs cursor-pointer shadow-xs transition-colors shrink-0 flex items-center gap-1.5 self-start sm:self-auto"
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Launch Free Demo Tests</span>
+                </button>
+              </div>
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xs sm:text-sm font-display font-black text-slate-900 flex items-center gap-1.5">
@@ -543,23 +571,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 </div>
                 {visibleCats.isTeacher && (
                   <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
-                    {!bothCtetUnlocked && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onOpenMembership(
-                            'premium',
-                            currentStudent.classLevel,
-                            activeBoard,
-                            'CTET_COMBO'
-                          )
-                        }
-                        className="px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <Award className="w-3.5 h-3.5" />
-                        <span>Both CTET Papers (₹229)</span>
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -567,13 +578,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                           'premium',
                           currentStudent.classLevel,
                           activeBoard,
-                          'TEACHER_ALL_ACCESS'
+                          'TET_CTET_COMBO_6M'
+                        )
+                      }
+                      className="px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Award className="w-3.5 h-3.5" />
+                      <span>TET + CTET 6M (₹349)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenMembership(
+                          'premium',
+                          currentStudent.classLevel,
+                          activeBoard,
+                          'TET_CTET_COMBO_1Y'
                         )
                       }
                       className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Award className="w-3.5 h-3.5" />
-                      <span>All-Access Educator Bundle (₹499)</span>
+                      <span>TET + CTET 1 Year (₹499)</span>
                     </button>
                   </div>
                 )}

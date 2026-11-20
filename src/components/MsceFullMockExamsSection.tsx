@@ -118,7 +118,7 @@ export const MsceFullMockExamsSection: React.FC<MsceFullMockExamsSectionProps> =
   }, [currentStudent?.id, currentStudent?.accountRole, visibleCats.showScholarship4th, visibleCats.showScholarship7th]);
 
   const activeCategoryId = selectedStd === 'Std 7th' ? 'scholarship_7th' : 'scholarship_4th';
-  const activePlanSku: PlanSkuId = selectedStd === 'Std 7th' ? 'SCHOLARSHIP_7TH' : 'SCHOLARSHIP_4TH';
+  const activePlanSku: PlanSkuId = 'SCHOLARSHIP_COMBO';
   const hasPaidScholarshipAccess = hasCategoryAccess(currentStudent, activeCategoryId);
   const categorySubInfo = getCategorySubscriptionInfo(currentStudent, activeCategoryId);
 
@@ -314,10 +314,10 @@ export const MsceFullMockExamsSection: React.FC<MsceFullMockExamsSectionProps> =
     explicitMedium?: MsceMedium
   ) => {
     const reqCategory = stdLevel === 'Std 7th' ? 'scholarship_7th' : 'scholarship_4th';
-    const reqSku: PlanSkuId = stdLevel === 'Std 7th' ? 'SCHOLARSHIP_7TH' : 'SCHOLARSHIP_4TH';
+    const reqSku: PlanSkuId = 'SCHOLARSHIP_COMBO';
     if (mockTestNumber > 1 && !hasCategoryAccess(currentStudent, reqCategory)) {
       setLockedMockNotice(
-        `Mock Test 01 is open as a Free Preview for ${stdLevel}. Mock Tests 02 to 25 (Paper 1 & 2) unlock with the ${stdLevel} Scholarship Plan (₹99 / 365 Days).`
+        `Mock Test 01 is open as a Free Preview for ${stdLevel}. Mock Tests 02 to 25 unlock with the Scholarship Combo (₹99 / 12 Months) or are included free with your Class Plan.`
       );
       if (onOpenMembership) {
         onOpenMembership(reqSku);
