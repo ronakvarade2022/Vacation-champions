@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy, Component, type ErrorInfo, type ReactNode } from 'react';
+import React, { useState, useEffect, Suspense, Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
@@ -6,32 +6,9 @@ import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
 import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
+import { SectionLoadingFallback } from './components/SectionLoadingFallback';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
-
-function lazyWithRetry<T extends React.ComponentType<any>>(
-  importer: () => Promise<{ default: T }>
-): React.LazyExoticComponent<T> {
-  return lazy(async () => {
-    try {
-      return await importer();
-    } catch (firstError) {
-      await new Promise((r) => setTimeout(r, 350));
-      try {
-        return await importer();
-      } catch (secondError) {
-        if (typeof window !== 'undefined') {
-          const reloadKey = 'msz_chunk_retry_ts';
-          const lastRetry = Number(sessionStorage.getItem(reloadKey) || '0');
-          if (Date.now() - lastRetry > 15_000) {
-            sessionStorage.setItem(reloadKey, String(Date.now()));
-            window.location.reload();
-          }
-        }
-        throw secondError || firstError;
-      }
-    }
-  });
-}
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
 const SubjectQuizView = lazyWithRetry(() =>
   import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
@@ -128,16 +105,8 @@ const OtherProgramsView = lazyWithRetry(() =>
   import('./components/OtherProgramsView').then((m) => ({ default: m.OtherProgramsView }))
 );
 
-const PortalLoadingCard: React.FC = () => (
-  <div className="bg-white rounded-3xl p-8 border border-amber-200/80 shadow-xs space-y-4 animate-pulse">
-    <div className="h-6 w-56 bg-slate-200 rounded-xl" />
-    <div className="h-4 w-80 max-w-full bg-slate-100 rounded-lg" />
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-      <div className="h-24 bg-slate-100 rounded-2xl" />
-      <div className="h-24 bg-slate-100 rounded-2xl" />
-      <div className="h-24 bg-slate-100 rounded-2xl" />
-    </div>
-  </div>
+const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
+  <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
 );
 import { ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationConfig';
@@ -159,7 +128,7 @@ import {
   clearStoredBrowserReferralCodes,
   readActiveUrlReferralCode,
 } from './utils/referralCoding';
-import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift, Lock, CheckCircle2 } from 'lucide-react';
+import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift, Lock, CheckCircle2, RefreshCw, WifiOff } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -188,7 +157,18 @@ const AppContent: React.FC = () => {
     sessionSecurityNotice,
     clearSessionSecurityNotice,
     isSectionVisible,
+    firebaseConnectionStatus,
+    firebaseConnectionError,
+    isFirebaseReconnecting,
+    retryFirebaseConnection,
   } = useApp();
+  const [dismissedConnBanner, setDismissedConnBanner] = useState(false);
+
+  useEffect(() => {
+    if (firebaseConnectionStatus === 'connected') {
+      setDismissedConnBanner(false);
+    }
+  }, [firebaseConnectionStatus]);
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [quizInitialSubject, setQuizInitialSubject] = useState<SubjectName | undefined>(undefined);
@@ -1006,6 +986,67 @@ const AppContent: React.FC = () => {
             </div>
           </div>
         )}
+
+        {!dismissedConnBanner &&
+          (firebaseConnectionStatus === 'offline' ||
+            firebaseConnectionStatus === 'error' ||
+            firebaseConnectionStatus === 'reconnecting') && (
+            <div
+              role="status"
+              data-testid="firebase-connection-banner"
+              className={`mb-5 rounded-2xl border p-3.5 sm:p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                firebaseConnectionStatus === 'reconnecting'
+                  ? 'bg-sky-50 border-sky-200 text-sky-950'
+                  : 'bg-amber-50 border-amber-300 text-amber-950'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`p-2 rounded-xl shrink-0 ${
+                    firebaseConnectionStatus === 'reconnecting'
+                      ? 'bg-sky-100 text-sky-700'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {firebaseConnectionStatus === 'reconnecting' ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <WifiOff className="w-4 h-4" />
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-black uppercase tracking-wider">
+                    {firebaseConnectionStatus === 'reconnecting'
+                      ? 'Reconnecting to Cloud Sync...'
+                      : 'Cloud Connection Notice'}
+                  </p>
+                  <p className="text-xs sm:text-sm font-medium leading-snug">
+                    {firebaseConnectionError ||
+                      'Live cloud synchronization is temporarily unavailable. Saved study materials remain active and will sync automatically when online.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  type="button"
+                  disabled={isFirebaseReconnecting}
+                  onClick={() => void retryFirebaseConnection()}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-extrabold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isFirebaseReconnecting ? 'animate-spin' : ''}`} />
+                  <span>{isFirebaseReconnecting ? 'Connecting...' : 'Retry Sync'}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Dismiss connection notice"
+                  onClick={() => setDismissedConnBanner(true)}
+                  className="p-1.5 rounded-xl hover:bg-black/5 cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
         {/* Consistent Sub-Page Navigation Bar (Return to Main Dashboard + Active Class + Left Vertical Section List + Right Horizontal Icon Display) */}
         {isLearningPortal && currentTab !== 'public-home' && currentTab !== 'dashboard' && (

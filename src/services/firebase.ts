@@ -20,6 +20,12 @@ import {
 import {
   getFirestore,
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  memoryLocalCache,
+  disableNetwork,
+  enableNetwork,
+  getDocFromCache,
   setLogLevel,
   doc,
   getDoc,
@@ -34,6 +40,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+export { firebaseConfig };
 import {
   BoardClassKey,
   CategoryId,
@@ -81,11 +88,25 @@ function initFirestoreInstance() {
       app,
       {
         experimentalForceLongPolling: true,
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
       },
       firebaseConfig.firestoreDatabaseId
     );
   } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    try {
+      return initializeFirestore(
+        app,
+        {
+          experimentalForceLongPolling: true,
+          localCache: memoryLocalCache(),
+        },
+        firebaseConfig.firestoreDatabaseId
+      );
+    } catch {
+      return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    }
   }
 }
 
@@ -212,20 +233,308 @@ async function getCachedReferralDoc(studentId: string): Promise<Record<string, a
   return promise;
 }
 
-let connectionTestedOnce = false;
-// Connection test on boot (runs once per session in idle background)
-export async function testFirestoreConnection() {
-  if (connectionTestedOnce) return;
-  connectionTestedOnce = true;
+export type FirestoreConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'offline'
+  | 'error';
+
+export interface FirestoreConnectionState {
+  status: FirestoreConnectionStatus;
+  isOnline: boolean;
+  lastCheckedAt: number | null;
+  lastConnectedAt: number | null;
+  lastError: string | null;
+  configDocExists: boolean | null;
+  retryCount: number;
+}
+
+const initialOnline = typeof navigator !== 'undefined' ? navigator.onLine !== false : true;
+let firestoreConnectionState: FirestoreConnectionState = {
+  status: initialOnline ? 'connecting' : 'offline',
+  isOnline: initialOnline,
+  lastCheckedAt: null,
+  lastConnectedAt: null,
+  lastError: initialOnline
+    ? null
+    : 'You are currently offline. Saved configuration & offline study tools remain available.',
+  configDocExists: null,
+  retryCount: 0,
+};
+
+const connectionListeners = new Set<(state: FirestoreConnectionState) => void>();
+
+function notifyConnectionListeners() {
+  const snapshot = { ...firestoreConnectionState };
+  connectionListeners.forEach((listener) => {
+    try {
+      listener(snapshot);
+    } catch {
+      // Ignore subscriber errors
+    }
+  });
+}
+
+export function getFirestoreConnectionState(): FirestoreConnectionState {
+  return { ...firestoreConnectionState };
+}
+
+export function subscribeFirestoreConnection(
+  listener: (state: FirestoreConnectionState) => void
+): () => void {
+  connectionListeners.add(listener);
+  try {
+    listener({ ...firestoreConnectionState });
+  } catch {
+    // Ignore initial notification errors
+  }
+  return () => {
+    connectionListeners.delete(listener);
+  };
+}
+
+export function reportFirestoreConnectionStatus(
+  partial: Partial<FirestoreConnectionState>
+): void {
+  firestoreConnectionState = {
+    ...firestoreConnectionState,
+    ...partial,
+  };
+  notifyConnectionListeners();
+}
+
+export function isFirestoreOfflineError(error: unknown): boolean {
+  const code = String((error as any)?.code || '').toLowerCase();
+  const msg = String((error as any)?.message || error || '').toLowerCase();
+  return (
+    code === 'unavailable' ||
+    code === 'failed-precondition' ||
+    msg.includes('client is offline') ||
+    msg.includes('network-request-failed') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('backend') ||
+    msg.includes('unavailable')
+  );
+}
+
+export async function ensureFirestoreOnline(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return;
+    return false;
   }
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore connection notice: Client is operating in offline cache mode.');
+    await enableNetwork(db);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkPlatformConfigRestReachable(): Promise<{
+  reachable: boolean;
+  docExists: boolean | null;
+  error?: string;
+}> {
+  if (typeof fetch === 'undefined') {
+    return { reachable: false, docExists: null };
+  }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+      firebaseConfig.projectId
+    )}/databases/${encodeURIComponent(
+      firebaseConfig.firestoreDatabaseId
+    )}/documents/platform_config/main?key=${encodeURIComponent(firebaseConfig.apiKey)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller?.signal,
+    });
+    if (res.status === 200) {
+      return { reachable: true, docExists: true };
     }
+    if (res.status === 404) {
+      return { reachable: true, docExists: false };
+    }
+    if (res.status === 401 || res.status === 403) {
+      // Server responded over network even if restricted
+      return { reachable: true, docExists: null };
+    }
+    return { reachable: false, docExists: null, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return {
+      reachable: false,
+      docExists: null,
+      error: err instanceof Error ? err.message : 'Network error',
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+let inFlightConnectionTest: Promise<{
+  connected: boolean;
+  via: 'sdk' | 'rest' | 'offline';
+  configDocExists: boolean | null;
+  error?: string;
+}> | null = null;
+let connectionTestedOnce = false;
+
+// Verified Firestore connection check targeting public readable /platform_config/main (with auto-retry & REST verification)
+export async function testFirestoreConnection(options?: { force?: boolean }): Promise<{
+  connected: boolean;
+  via: 'sdk' | 'rest' | 'offline';
+  configDocExists: boolean | null;
+  error?: string;
+}> {
+  if (!options?.force && connectionTestedOnce && firestoreConnectionState.status === 'connected') {
+    return {
+      connected: true,
+      via: 'sdk',
+      configDocExists: firestoreConnectionState.configDocExists,
+    };
+  }
+  if (inFlightConnectionTest) {
+    return inFlightConnectionTest;
+  }
+
+  connectionTestedOnce = true;
+
+  inFlightConnectionTest = (async () => {
+    const nowOnline = typeof navigator !== 'undefined' ? navigator.onLine !== false : true;
+    if (!nowOnline) {
+      const offlineMsg =
+        'Your device is offline. Saved configuration will sync automatically once internet returns.';
+      reportFirestoreConnectionStatus({
+        status: 'offline',
+        isOnline: false,
+        lastCheckedAt: Date.now(),
+        lastError: offlineMsg,
+      });
+      return {
+        connected: false,
+        via: 'offline' as const,
+        configDocExists: null,
+        error: offlineMsg,
+      };
+    }
+
+    reportFirestoreConnectionStatus({
+      status: firestoreConnectionState.lastConnectedAt ? 'reconnecting' : 'connecting',
+      isOnline: true,
+    });
+
+    const configRef = doc(db, 'platform_config', 'main');
+    let lastErr: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await ensureFirestoreOnline();
+        const snap = await getDocFromServer(configRef);
+        reportFirestoreConnectionStatus({
+          status: 'connected',
+          isOnline: true,
+          lastCheckedAt: Date.now(),
+          lastConnectedAt: Date.now(),
+          lastError: null,
+          configDocExists: snap.exists(),
+          retryCount: 0,
+        });
+        return {
+          connected: true,
+          via: 'sdk' as const,
+          configDocExists: snap.exists(),
+        };
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+    }
+
+    // Fallback check via Firestore REST API to distinguish WebChannel blocking from true offline state
+    const restProbe = await checkPlatformConfigRestReachable();
+    if (restProbe.reachable) {
+      reportFirestoreConnectionStatus({
+        status: 'connected',
+        isOnline: true,
+        lastCheckedAt: Date.now(),
+        lastConnectedAt: Date.now(),
+        lastError: null,
+        configDocExists: restProbe.docExists,
+        retryCount: 0,
+      });
+      return {
+        connected: true,
+        via: 'rest' as const,
+        configDocExists: restProbe.docExists,
+      };
+    }
+
+    // Try local IndexedDB cache check so we know if offline cache is intact
+    let hasCachedConfig = false;
+    try {
+      const cachedSnap = await getDocFromCache(configRef);
+      hasCachedConfig = cachedSnap.exists();
+    } catch {
+      hasCachedConfig = false;
+    }
+
+    const friendlyErr =
+      hasCachedConfig
+        ? 'Live cloud sync is temporarily unavailable. Using saved configuration and retrying automatically.'
+        : 'Unable to connect to MyStudyZone cloud database right now. Please check your connection or retry.';
+
+    reportFirestoreConnectionStatus({
+      status: isFirestoreOfflineError(lastErr) ? 'offline' : 'error',
+      isOnline: typeof navigator !== 'undefined' ? navigator.onLine !== false : true,
+      lastCheckedAt: Date.now(),
+      lastError: friendlyErr,
+      retryCount: firestoreConnectionState.retryCount + 1,
+    });
+
+    return {
+      connected: false,
+      via: 'offline' as const,
+      configDocExists: hasCachedConfig ? true : null,
+      error: lastErr instanceof Error ? lastErr.message : friendlyErr,
+    };
+  })().finally(() => {
+    inFlightConnectionTest = null;
+  });
+
+  return inFlightConnectionTest;
+}
+
+export async function triggerFirestoreReconnect() {
+  await ensureFirestoreOnline();
+  return testFirestoreConnection({ force: true });
+}
+
+if (typeof window !== 'undefined') {
+  const win = window as unknown as Record<string, unknown>;
+  if (!win.__mszFirestoreNetworkListenersAttached) {
+    win.__mszFirestoreNetworkListenersAttached = true;
+    window.addEventListener('online', () => {
+      reportFirestoreConnectionStatus({
+        status: 'reconnecting',
+        isOnline: true,
+        lastError: null,
+      });
+      void triggerFirestoreReconnect();
+    });
+    window.addEventListener('offline', () => {
+      void disableNetwork(db).catch(() => {});
+      reportFirestoreConnectionStatus({
+        status: 'offline',
+        isOnline: false,
+        lastCheckedAt: Date.now(),
+        lastError:
+          'You are currently offline. Saved configuration & offline study tools remain available.',
+      });
+    });
   }
 }
 

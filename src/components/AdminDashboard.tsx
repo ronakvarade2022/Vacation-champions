@@ -1,5 +1,7 @@
-import React, { Suspense, lazy, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { SectionLoadingFallback } from './SectionLoadingFallback';
 import {
   ClassLevel,
   EducationBoard,
@@ -29,57 +31,57 @@ import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import { ALL_ADMIN_CLASSES, ALL_ADMIN_SUBJECTS } from '../utils/adminAnalytics';
 import { ALL_BOARDS, getBoardShortLabel } from '../utils/subscriptionAccess';
 
-const AdminQuestionsSection = lazy(() =>
+const AdminQuestionsSection = lazyWithRetry(() =>
   import('./admin/AdminQuestionsSection').then((m) => ({ default: m.AdminQuestionsSection }))
 );
-const AdminWorksheetsSection = lazy(() =>
+const AdminWorksheetsSection = lazyWithRetry(() =>
   import('./admin/AdminWorksheetsSection').then((m) => ({ default: m.AdminWorksheetsSection }))
 );
-const AdminDuplicatesSection = lazy(() =>
+const AdminDuplicatesSection = lazyWithRetry(() =>
   import('./admin/AdminDuplicatesSection').then((m) => ({ default: m.AdminDuplicatesSection }))
 );
-const AdminStudentsSection = lazy(() =>
+const AdminStudentsSection = lazyWithRetry(() =>
   import('./admin/AdminStudentsSection').then((m) => ({ default: m.AdminStudentsSection }))
 );
-const AdminProgressionSection = lazy(() =>
+const AdminProgressionSection = lazyWithRetry(() =>
   import('./admin/AdminProgressionSection').then((m) => ({ default: m.AdminProgressionSection }))
 );
-const AdminStoriesSection = lazy(() =>
+const AdminStoriesSection = lazyWithRetry(() =>
   import('./admin/AdminStoriesSection').then((m) => ({ default: m.AdminStoriesSection }))
 );
-const AdminDrawingsSection = lazy(() =>
+const AdminDrawingsSection = lazyWithRetry(() =>
   import('./admin/AdminDrawingsSection').then((m) => ({ default: m.AdminDrawingsSection }))
 );
-const AdminPaymentsSection = lazy(() =>
+const AdminPaymentsSection = lazyWithRetry(() =>
   import('./admin/AdminPaymentsSection').then((m) => ({ default: m.AdminPaymentsSection }))
 );
-const AdminCricketSection = lazy(() =>
+const AdminCricketSection = lazyWithRetry(() =>
   import('./admin/AdminCricketSection').then((m) => ({ default: m.AdminCricketSection }))
 );
-const AdminScholarshipSection = lazy(() =>
+const AdminScholarshipSection = lazyWithRetry(() =>
   import('./admin/AdminScholarshipSection').then((m) => ({ default: m.AdminScholarshipSection }))
 );
-const AdminTetCtetSection = lazy(() =>
+const AdminTetCtetSection = lazyWithRetry(() =>
   import('./admin/AdminTetCtetSection').then((m) => ({ default: m.AdminTetCtetSection }))
 );
-const AdminSettingsSection = lazy(() =>
+const AdminSettingsSection = lazyWithRetry(() =>
   import('./admin/AdminSettingsSection').then((m) => ({ default: m.AdminSettingsSection }))
 );
-const AdminProfileSection = lazy(() =>
+const AdminProfileSection = lazyWithRetry(() =>
   import('./admin/AdminProfileSection').then((m) => ({ default: m.AdminProfileSection }))
 );
-const AdminReferralPanel = lazy(() =>
+const AdminReferralPanel = lazyWithRetry(() =>
   import('./AdminReferralPanel').then((m) => ({ default: m.AdminReferralPanel }))
 );
-const AdminSupportPanel = lazy(() =>
+const AdminSupportPanel = lazyWithRetry(() =>
   import('./AdminSupportPanel').then((m) => ({ default: m.AdminSupportPanel }))
 );
-const AdminQuestionErrorReportsSection = lazy(() =>
+const AdminQuestionErrorReportsSection = lazyWithRetry(() =>
   import('./admin/AdminQuestionErrorReportsSection').then((m) => ({
     default: m.AdminQuestionErrorReportsSection,
   }))
 );
-const AdminDemoExamsSection = lazy(() =>
+const AdminDemoExamsSection = lazyWithRetry(() =>
   import('./admin/AdminDemoExamsSection').then((m) => ({ default: m.AdminDemoExamsSection }))
 );
 
@@ -103,17 +105,7 @@ type AdminSectionId =
   | 'profile';
 
 const AdminTabSkeleton: React.FC = () => (
-  <div className="bg-white rounded-3xl p-8 border border-amber-200/80 shadow-xs space-y-4 animate-pulse">
-    <div className="h-6 w-64 bg-slate-200 rounded-xl" />
-    <div className="h-4 w-96 max-w-full bg-slate-100 rounded-lg" />
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-      <div className="h-20 bg-slate-100 rounded-2xl" />
-      <div className="h-20 bg-slate-100 rounded-2xl" />
-      <div className="h-20 bg-slate-100 rounded-2xl" />
-      <div className="h-20 bg-slate-100 rounded-2xl" />
-    </div>
-    <div className="h-48 bg-slate-50 rounded-2xl border border-slate-100" />
-  </div>
+  <SectionLoadingFallback label="Loading Administrator panel..." />
 );
 
 export const AdminDashboard: React.FC = () => {

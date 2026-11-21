@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -55,8 +55,10 @@ import {
   subscribeToQuestionErrorReports,
 } from '../services/questionErrorReportService';
 import { getReportStatusBadgeStyle } from './TetCtetReportQuestionModal';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { SectionLoadingFallback } from './SectionLoadingFallback';
 
-const TetCtetExamSimulator = lazy(() =>
+const TetCtetExamSimulator = lazyWithRetry(() =>
   import('./TetCtetExamSimulator').then((m) => ({ default: m.TetCtetExamSimulator }))
 );
 
@@ -432,10 +434,10 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
     return (
       <Suspense
         fallback={
-          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xs space-y-4 animate-pulse">
-            <div className="h-7 w-64 bg-slate-200 rounded-xl" />
-            <div className="h-4 w-96 max-w-full bg-slate-100 rounded-lg" />
-          </div>
+          <SectionLoadingFallback
+            label="Loading Exam CBT Simulator..."
+            onReturnHome={() => setActiveSession(null)}
+          />
         }
       >
         <TetCtetExamSimulator

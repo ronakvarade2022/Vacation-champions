@@ -57,7 +57,12 @@ import {
 import type { ShivajiStory } from '../data/shivajiStoriesData';
 import { 
   auth,
+  FirestoreConnectionState,
+  FirestoreConnectionStatus,
+  getFirestoreConnectionState,
+  subscribeFirestoreConnection,
   testFirestoreConnection, 
+  triggerFirestoreReconnect,
   saveScholarshipAttemptToFirestore,
   loginFirebaseEmailUser,
   sendFirebasePasswordReset,
@@ -75,6 +80,8 @@ import {
 } from '../services/firebase';
 import {
   DEFAULT_SECTION_VISIBILITY,
+  ensureDefaultPlatformConfigIfAdmin,
+  loadPlatformConfigDetailed,
   loadPlatformConfigFromFirestore,
   savePlatformConfigToFirestore,
   loadPublishedSpecialContentFromFirestore,
@@ -238,6 +245,11 @@ interface AppContextType {
   ensureContentBankHydrated: (
     scope?: 'all' | 'questions' | 'stories' | 'shivaji' | 'drawings' | 'puzzles' | 'gk'
   ) => Promise<void>;
+  firebaseConnectionStatus: FirestoreConnectionStatus;
+  firebaseConnectionError: string | null;
+  isFirebaseReconnecting: boolean;
+  platformConfigLoaded: boolean;
+  retryFirebaseConnection: () => Promise<void>;
   
   // Student & Teacher Portal Authentication & Session Guarding
   switchRole: (targetRole: UserRole) => { allowed: boolean; message?: string };
@@ -593,6 +605,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeDeviceSession, setActiveDeviceSession] = useState<DeviceSessionRecord | null>(null);
   const [sessionSecurityNotice, setSessionSecurityNotice] = useState<string | null>(null);
   const isHandlingAuthFlowRef = React.useRef<boolean>(false);
+  const [firebaseConnection, setFirebaseConnection] = useState<FirestoreConnectionState>(() =>
+    getFirestoreConnectionState()
+  );
+  const [platformConfigLoaded, setPlatformConfigLoaded] = useState<boolean>(false);
+  const runHydrationRef = React.useRef<((forceRefresh?: boolean) => Promise<void>) | null>(null);
 
   // Authenticated user session with role and linked IDs (signed out by default until verified login)
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
@@ -1354,118 +1371,148 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Defer Firestore hydration to browser idle time so initial homepage and dashboard render in 0ms without network contention
+  // Background Firestore connectivity check, platform_config hydration & automatic reconnect sync
   useEffect(() => {
     let cancelledConfig = false;
     let idleHandle: any = null;
+    let prevStatus: FirestoreConnectionStatus = getFirestoreConnectionState().status;
+
+    const runHydration = async (forceRefresh = false) => {
+      if (cancelledConfig) return;
+      const [connProbe, cfgResult, remoteSpecialDocs] = await Promise.all([
+        testFirestoreConnection({ force: forceRefresh }).catch(() => null),
+        loadPlatformConfigDetailed({ forceRefresh }).catch(() => null),
+        loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin', { forceRefresh }).catch(() => []),
+      ]);
+      if (cancelledConfig) return;
+
+      const remoteCfg = cfgResult?.config || null;
+      if (remoteCfg) {
+        setPlatformSettings(prev => ({
+          ...prev,
+          timers: { ...prev.timers, ...(remoteCfg.timers || {}) },
+          sectionVisibility: {
+            ...DEFAULT_SECTION_VISIBILITY,
+            ...prev.sectionVisibility,
+            ...(remoteCfg.sectionVisibility || {}),
+          },
+        }));
+      }
+      if (cfgResult && cfgResult.status !== 'error') {
+        setPlatformConfigLoaded(true);
+      }
+
+      if (
+        currentUser?.role === 'admin' &&
+        (connProbe?.configDocExists === false || cfgResult?.docExists === false)
+      ) {
+        void ensureDefaultPlatformConfigIfAdmin({
+          timers: DEFAULT_SETTINGS.timers,
+          sectionVisibility: DEFAULT_SECTION_VISIBILITY,
+        });
+      }
+
+      if (remoteSpecialDocs.length > 0) {
+        const storyDocs = remoteSpecialDocs.filter(d => d.contentType === 'story');
+        if (storyDocs.length > 0) {
+          setAllStories(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            storyDocs.forEach(d => {
+              const p = d.payload as unknown as StoryItem;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const shivajiDocs = remoteSpecialDocs.filter(d => d.contentType === 'shivaji_story');
+        if (shivajiDocs.length > 0) {
+          setShivajiStories(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            shivajiDocs.forEach(d => {
+              const p = d.payload as unknown as ShivajiStory;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values()).sort((a, b) => a.order - b.order);
+          });
+        }
+
+        const schDocs = remoteSpecialDocs.filter(d => d.contentType === 'scholarship_question');
+        if (schDocs.length > 0) {
+          setCustomScholarshipQuestions(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            schDocs.forEach(d => {
+              const p = d.payload as unknown as CustomScholarshipQuestionRecord;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const drawDocs = remoteSpecialDocs.filter(d => d.contentType === 'drawing_template');
+        if (drawDocs.length > 0) {
+          setDrawingTemplates(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            drawDocs.forEach(d => {
+              const p = d.payload as unknown as DrawingTemplate;
+              if (p?.id) map.set(p.id, { ...p, published: d.published });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const gkDocs = remoteSpecialDocs.filter(d => d.contentType === 'gk_question');
+        if (gkDocs.length > 0) {
+          setGkQuestions(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            gkDocs.forEach(d => {
+              const p = d.payload as unknown as CustomGkQuestionItem;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const progDocs = remoteSpecialDocs.filter(d => d.contentType === 'learning_program');
+        if (progDocs.length > 0) {
+          setLearningPrograms(prev => {
+            const map = new Map(prev.map(i => [i.id, i]));
+            progDocs.forEach(d => {
+              const p = d.payload as unknown as SpecialLearningProgramItem;
+              if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
+            });
+            return Array.from(map.values());
+          });
+        }
+      }
+    };
+
+    runHydrationRef.current = runHydration;
+
+    const unsubscribeConn = subscribeFirestoreConnection((nextState) => {
+      if (cancelledConfig) return;
+      setFirebaseConnection(nextState);
+      const recoveredOnline =
+        nextState.status === 'connected' &&
+        (prevStatus === 'offline' || prevStatus === 'error' || prevStatus === 'reconnecting');
+      prevStatus = nextState.status;
+      if (recoveredOnline) {
+        void runHydration(true);
+      }
+    });
 
     const scheduleBackgroundHydration = () => {
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
         idleHandle = (window as any).requestIdleCallback(
           () => {
-            void runHydration();
+            void runHydration(false);
           },
-          { timeout: 4500 }
+          { timeout: 1200 }
         );
       } else {
         idleHandle = setTimeout(() => {
-          void runHydration();
-        }, 3500);
-      }
-    };
-
-    const runHydration = async () => {
-      if (cancelledConfig) return;
-      const [remoteCfg, remoteSpecialDocs] = await Promise.all([
-        loadPlatformConfigFromFirestore().catch(() => null),
-        loadPublishedSpecialContentFromFirestore(currentUser?.role === 'admin').catch(() => []),
-      ]);
-      if (cancelledConfig) return;
-
-        if (remoteCfg) {
-          setPlatformSettings(prev => ({
-            ...prev,
-            timers: { ...prev.timers, ...(remoteCfg.timers || {}) },
-            sectionVisibility: {
-              ...DEFAULT_SECTION_VISIBILITY,
-              ...prev.sectionVisibility,
-              ...(remoteCfg.sectionVisibility || {}),
-            },
-          }));
-        }
-
-        if (remoteSpecialDocs.length > 0) {
-          const storyDocs = remoteSpecialDocs.filter(d => d.contentType === 'story');
-          if (storyDocs.length > 0) {
-            setAllStories(prev => {
-              const map = new Map(prev.map(i => [i.id, i]));
-              storyDocs.forEach(d => {
-                const p = d.payload as unknown as StoryItem;
-                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
-              });
-              return Array.from(map.values());
-            });
-          }
-
-          const shivajiDocs = remoteSpecialDocs.filter(d => d.contentType === 'shivaji_story');
-          if (shivajiDocs.length > 0) {
-            setShivajiStories(prev => {
-              const map = new Map(prev.map(i => [i.id, i]));
-              shivajiDocs.forEach(d => {
-                const p = d.payload as unknown as ShivajiStory;
-                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
-              });
-              return Array.from(map.values()).sort((a, b) => a.order - b.order);
-            });
-          }
-
-          const schDocs = remoteSpecialDocs.filter(d => d.contentType === 'scholarship_question');
-          if (schDocs.length > 0) {
-            setCustomScholarshipQuestions(prev => {
-              const map = new Map(prev.map(i => [i.id, i]));
-              schDocs.forEach(d => {
-                const p = d.payload as unknown as CustomScholarshipQuestionRecord;
-                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
-              });
-              return Array.from(map.values());
-            });
-          }
-
-          const drawDocs = remoteSpecialDocs.filter(d => d.contentType === 'drawing_template');
-          if (drawDocs.length > 0) {
-            setDrawingTemplates(prev => {
-              const map = new Map(prev.map(i => [i.id, i]));
-              drawDocs.forEach(d => {
-                const p = d.payload as unknown as DrawingTemplate;
-                if (p?.id) map.set(p.id, { ...p, published: d.published });
-              });
-              return Array.from(map.values());
-            });
-          }
-
-          const gkDocs = remoteSpecialDocs.filter(d => d.contentType === 'gk_question');
-          if (gkDocs.length > 0) {
-            setGkQuestions(prev => {
-              const map = new Map(prev.map(i => [i.id, i]));
-              gkDocs.forEach(d => {
-                const p = d.payload as unknown as CustomGkQuestionItem;
-                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
-              });
-              return Array.from(map.values());
-            });
-          }
-
-          const progDocs = remoteSpecialDocs.filter(d => d.contentType === 'learning_program');
-          if (progDocs.length > 0) {
-            setLearningPrograms(prev => {
-              const map = new Map(prev.map(i => [i.id, i]));
-              progDocs.forEach(d => {
-                const p = d.payload as unknown as SpecialLearningProgramItem;
-                if (p?.id) map.set(p.id, { ...p, published: d.published, isCustom: true });
-              });
-              return Array.from(map.values());
-            });
-        }
+          void runHydration(false);
+        }, 600);
       }
     };
 
@@ -1536,6 +1583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (idleHandle) {
         clearTimeout(idleHandle);
       }
+      unsubscribeConn();
       unsubscribe();
     };
   }, []);
@@ -2397,6 +2445,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isVerified: Boolean(fbRes.user.emailVerified)
     });
     setActiveRole('admin');
+    void ensureDefaultPlatformConfigIfAdmin({
+      timers: platformSettings.timers,
+      sectionVisibility: platformSettings.sectionVisibility,
+    });
     return {
       success: true,
       message: 'Welcome, Administrator! Authenticated into Master Control Center.',
@@ -4487,6 +4539,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
   const activeBoardValue = normalizeBoardValue(currentStudent?.board || 'Maharashtra');
 
+  const retryFirebaseConnection = useCallback(async () => {
+    await triggerFirestoreReconnect();
+    if (runHydrationRef.current) {
+      await runHydrationRef.current(true);
+    }
+  }, []);
+
   const contextValue = useMemo<AppContextType>(
     () => ({
       activeRole,
@@ -4515,6 +4574,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isSectionVisible,
       updateSectionVisibility,
       ensureContentBankHydrated,
+      firebaseConnectionStatus: firebaseConnection.status,
+      firebaseConnectionError: firebaseConnection.lastError,
+      isFirebaseReconnecting: firebaseConnection.status === 'reconnecting',
+      platformConfigLoaded,
+      retryFirebaseConnection,
 
       switchRole,
       loginAsTeacher,
@@ -4656,6 +4720,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sectionVisibility,
       isSectionVisible,
       ensureContentBankHydrated,
+      firebaseConnection,
+      platformConfigLoaded,
+      retryFirebaseConnection,
       activeDeviceSession,
       sessionSecurityNotice,
       isAuthModalOpen,

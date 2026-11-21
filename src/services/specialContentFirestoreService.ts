@@ -3,13 +3,24 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromCache,
+  getDocFromServer,
   getDocs,
   limit,
   query,
   setDoc,
   where,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import {
+  auth,
+  db,
+  ensureFirestoreOnline,
+  firebaseConfig,
+  handleFirestoreError,
+  isFirestoreOfflineError,
+  OperationType,
+  reportFirestoreConnectionStatus,
+} from './firebase';
 import { SectionVisibilityConfig } from '../types';
 
 export type SpecialContentType =
@@ -28,6 +39,23 @@ export interface SpecialContentDocument<T = Record<string, unknown>> {
   payload: T;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface PlatformConfigData {
+  timers?: {
+    classes2to3?: number;
+    classes4to5?: number;
+    classes6to8?: number;
+  };
+  sectionVisibility?: Partial<SectionVisibilityConfig>;
+}
+
+export interface PlatformConfigLoadResult {
+  config: PlatformConfigData | null;
+  status: 'loaded' | 'missing_doc_using_defaults' | 'cached_offline' | 'error';
+  fromCache: boolean;
+  docExists: boolean | null;
+  errorMessage?: string;
 }
 
 export const DEFAULT_SECTION_VISIBILITY: SectionVisibilityConfig = {
@@ -52,20 +80,17 @@ function stripUndefinedDeep<T>(obj: T): T {
 }
 
 const PLATFORM_CFG_CACHE_KEY = 'vc_cache_platform_cfg_v1';
+const PLATFORM_CFG_PERSISTENT_KEY = 'vc_cache_platform_cfg_persistent_v1';
 const SPECIAL_CONTENT_CACHE_KEY = 'vc_cache_special_content_v1';
+const SPECIAL_CONTENT_PERSISTENT_KEY = 'vc_cache_special_content_persistent_v1';
 const CACHE_TTL_MS = 120_000; // 2 minutes safe cache TTL
 
 let memPlatformConfigCache: {
   ts: number;
-  data: {
-    timers?: { classes2to3?: number; classes4to5?: number; classes6to8?: number };
-    sectionVisibility?: Partial<SectionVisibilityConfig>;
-  } | null;
+  data: PlatformConfigData | null;
+  docExists?: boolean | null;
 } | null = null;
-let inFlightPlatformConfig: Promise<{
-  timers?: { classes2to3?: number; classes4to5?: number; classes6to8?: number };
-  sectionVisibility?: Partial<SectionVisibilityConfig>;
-} | null> | null = null;
+let inFlightPlatformConfig: Promise<PlatformConfigLoadResult> | null = null;
 
 let memSpecialContentCache: {
   ts: number;
@@ -73,6 +98,145 @@ let memSpecialContentCache: {
   data: SpecialContentDocument[];
 } | null = null;
 let inFlightSpecialContent: Promise<SpecialContentDocument[]> | null = null;
+
+function readCachedJson<T>(storage: Storage | undefined, key: string): T | null {
+  try {
+    if (!storage) return null;
+    const raw = storage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedJson(storage: Storage | undefined, key: string, value: unknown): void {
+  try {
+    if (!storage) return;
+    storage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore quota / restricted storage errors
+  }
+}
+
+function extractPlatformConfigFields(rawData: Record<string, any> | undefined): PlatformConfigData {
+  return {
+    timers:
+      rawData?.timers && typeof rawData.timers === 'object'
+        ? rawData.timers
+        : undefined,
+    sectionVisibility:
+      rawData?.sectionVisibility && typeof rawData.sectionVisibility === 'object'
+        ? (rawData.sectionVisibility as Partial<SectionVisibilityConfig>)
+        : undefined,
+  };
+}
+
+function decodeFirestoreRestValue(val: any): any {
+  if (!val || typeof val !== 'object') return undefined;
+  if ('stringValue' in val) return val.stringValue;
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return Number(val.doubleValue);
+  if ('booleanValue' in val) return Boolean(val.booleanValue);
+  if ('nullValue' in val) return null;
+  if ('timestampValue' in val) return val.timestampValue;
+  if ('arrayValue' in val) {
+    const arr = Array.isArray(val.arrayValue?.values) ? val.arrayValue.values : [];
+    return arr.map((item: any) => decodeFirestoreRestValue(item));
+  }
+  if ('mapValue' in val) {
+    const out: Record<string, any> = {};
+    const fields = val.mapValue?.fields || {};
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = decodeFirestoreRestValue(v);
+    }
+    return out;
+  }
+  return undefined;
+}
+
+async function fetchPlatformConfigViaRest(): Promise<{
+  ok: boolean;
+  docExists: boolean | null;
+  data: PlatformConfigData | null;
+  error?: string;
+}> {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, docExists: null, data: null };
+  }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+      firebaseConfig.projectId
+    )}/databases/${encodeURIComponent(
+      firebaseConfig.firestoreDatabaseId
+    )}/documents/platform_config/main?key=${encodeURIComponent(firebaseConfig.apiKey)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller?.signal,
+    });
+    if (res.status === 404) {
+      return { ok: true, docExists: false, data: null };
+    }
+    if (!res.ok) {
+      return { ok: false, docExists: null, data: null, error: `HTTP ${res.status}` };
+    }
+    const json = (await res.json()) as { fields?: Record<string, any> };
+    const decoded: Record<string, any> = {};
+    for (const [k, v] of Object.entries(json.fields || {})) {
+      decoded[k] = decodeFirestoreRestValue(v);
+    }
+    return {
+      ok: true,
+      docExists: true,
+      data: extractPlatformConfigFields(decoded),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      docExists: null,
+      data: null,
+      error: err instanceof Error ? err.message : 'REST fetch error',
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function getFallbackPlatformConfig(): PlatformConfigData | null {
+  if (memPlatformConfigCache?.data) return memPlatformConfigCache.data;
+  const sess = readCachedJson<{ data?: PlatformConfigData | null }>(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : undefined,
+    PLATFORM_CFG_CACHE_KEY
+  );
+  if (sess?.data) return sess.data;
+  const persistent = readCachedJson<{ data?: PlatformConfigData | null }>(
+    typeof localStorage !== 'undefined' ? localStorage : undefined,
+    PLATFORM_CFG_PERSISTENT_KEY
+  );
+  return persistent?.data || null;
+}
+
+function persistPlatformConfigCache(
+  data: PlatformConfigData | null,
+  docExists: boolean | null
+): void {
+  const entry = { ts: Date.now(), data, docExists };
+  memPlatformConfigCache = entry;
+  writeCachedJson(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : undefined,
+    PLATFORM_CFG_CACHE_KEY,
+    entry
+  );
+  if (data) {
+    writeCachedJson(
+      typeof localStorage !== 'undefined' ? localStorage : undefined,
+      PLATFORM_CFG_PERSISTENT_KEY,
+      entry
+    );
+  }
+}
 
 function invalidateSpecialContentCache(): void {
   memSpecialContentCache = null;
@@ -84,69 +248,229 @@ function invalidateSpecialContentCache(): void {
   }
 }
 
-export async function loadPlatformConfigFromFirestore(): Promise<{
-  timers?: {
-    classes2to3?: number;
-    classes4to5?: number;
-    classes6to8?: number;
-  };
-  sectionVisibility?: Partial<SectionVisibilityConfig>;
-} | null> {
+export async function loadPlatformConfigDetailed(options?: {
+  forceRefresh?: boolean;
+}): Promise<PlatformConfigLoadResult> {
   const now = Date.now();
-  if (memPlatformConfigCache && now - memPlatformConfigCache.ts < CACHE_TTL_MS) {
-    return memPlatformConfigCache.data;
+  const forceRefresh = Boolean(options?.forceRefresh);
+
+  if (!forceRefresh && memPlatformConfigCache && now - memPlatformConfigCache.ts < CACHE_TTL_MS) {
+    return {
+      config: memPlatformConfigCache.data,
+      status:
+        memPlatformConfigCache.docExists === false
+          ? 'missing_doc_using_defaults'
+          : 'loaded',
+      fromCache: true,
+      docExists: memPlatformConfigCache.docExists ?? null,
+    };
   }
 
-  try {
-    const raw = sessionStorage.getItem(PLATFORM_CFG_CACHE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.ts === 'number' && now - parsed.ts < CACHE_TTL_MS) {
-        memPlatformConfigCache = parsed;
-        return parsed.data;
-      }
+  if (!forceRefresh) {
+    const sess = readCachedJson<{
+      ts: number;
+      data: PlatformConfigData | null;
+      docExists?: boolean | null;
+    }>(
+      typeof sessionStorage !== 'undefined' ? sessionStorage : undefined,
+      PLATFORM_CFG_CACHE_KEY
+    );
+    if (sess && typeof sess.ts === 'number' && now - sess.ts < CACHE_TTL_MS) {
+      memPlatformConfigCache = sess;
+      return {
+        config: sess.data,
+        status: sess.docExists === false ? 'missing_doc_using_defaults' : 'loaded',
+        fromCache: true,
+        docExists: sess.docExists ?? null,
+      };
     }
-  } catch {
-    // ignore storage errors
   }
 
-  if (inFlightPlatformConfig) {
+  if (inFlightPlatformConfig && !forceRefresh) {
     return inFlightPlatformConfig;
   }
 
-  inFlightPlatformConfig = (async () => {
-    try {
-      const ref = doc(db, 'platform_config', 'main');
-      const snap = await getDoc(ref);
-      const result = !snap.exists()
-        ? null
-        : {
-            timers:
-              snap.data()?.timers && typeof snap.data()?.timers === 'object'
-                ? snap.data()?.timers
-                : undefined,
-            sectionVisibility:
-              snap.data()?.sectionVisibility && typeof snap.data()?.sectionVisibility === 'object'
-                ? (snap.data()?.sectionVisibility as Partial<SectionVisibilityConfig>)
-                : undefined,
+  inFlightPlatformConfig = (async (): Promise<PlatformConfigLoadResult> => {
+    const ref = doc(db, 'platform_config', 'main');
+    const browserOnline = typeof navigator !== 'undefined' ? navigator.onLine !== false : true;
+
+    if (browserOnline) {
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await ensureFirestoreOnline();
+          const snap = await (attempt === 0 && !forceRefresh ? getDoc(ref) : getDocFromServer(ref));
+          const exists = snap.exists();
+          const result = exists ? extractPlatformConfigFields(snap.data()) : null;
+          persistPlatformConfigCache(result, exists);
+          reportFirestoreConnectionStatus({
+            status: 'connected',
+            isOnline: true,
+            lastCheckedAt: Date.now(),
+            lastConnectedAt: Date.now(),
+            lastError: null,
+            configDocExists: exists,
+            retryCount: 0,
+          });
+          return {
+            config: result,
+            status: exists ? 'loaded' : 'missing_doc_using_defaults',
+            fromCache: false,
+            docExists: exists,
           };
-      const entry = { ts: Date.now(), data: result };
-      memPlatformConfigCache = entry;
-      try {
-        sessionStorage.setItem(PLATFORM_CFG_CACHE_KEY, JSON.stringify(entry));
-      } catch {
-        // ignore storage errors
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 0 && isFirestoreOfflineError(err)) {
+            await new Promise((r) => setTimeout(r, 450));
+          } else if (!isFirestoreOfflineError(err)) {
+            break;
+          }
+        }
       }
-      return result;
-    } catch (error) {
-      console.warn('Notice loading platform_config:', error);
-      return null;
-    } finally {
-      inFlightPlatformConfig = null;
+
+      // If WebChannel/long-polling hit an offline error while browser has internet, use REST API fallback cleanly
+      const restResult = await fetchPlatformConfigViaRest();
+      if (restResult.ok) {
+        persistPlatformConfigCache(restResult.data, restResult.docExists);
+        reportFirestoreConnectionStatus({
+          status: 'connected',
+          isOnline: true,
+          lastCheckedAt: Date.now(),
+          lastConnectedAt: Date.now(),
+          lastError: null,
+          configDocExists: restResult.docExists,
+          retryCount: 0,
+        });
+        return {
+          config: restResult.data,
+          status: restResult.docExists ? 'loaded' : 'missing_doc_using_defaults',
+          fromCache: false,
+          docExists: restResult.docExists,
+        };
+      }
+
+      // Genuine connectivity loss — recover gracefully from Firestore IndexedDB or localStorage cache
+      let idbData: PlatformConfigData | null = null;
+      try {
+        const cachedSnap = await getDocFromCache(ref);
+        if (cachedSnap.exists()) {
+          idbData = extractPlatformConfigFields(cachedSnap.data());
+        }
+      } catch {
+        idbData = null;
+      }
+
+      const fallbackData = idbData || getFallbackPlatformConfig();
+      const friendlyMessage =
+        'Unable to reach cloud platform settings right now. Using saved configuration and retrying automatically when online.';
+      reportFirestoreConnectionStatus({
+        status: isFirestoreOfflineError(lastErr) ? 'offline' : 'error',
+        isOnline: typeof navigator !== 'undefined' ? navigator.onLine !== false : true,
+        lastCheckedAt: Date.now(),
+        lastError: friendlyMessage,
+      });
+
+      return {
+        config: fallbackData,
+        status: fallbackData ? 'cached_offline' : 'error',
+        fromCache: true,
+        docExists: fallbackData ? true : null,
+        errorMessage: friendlyMessage,
+      };
     }
-  })();
+
+    // Browser is offline: read from IndexedDB or persistent cache cleanly without throwing
+    let offlineData: PlatformConfigData | null = null;
+    try {
+      const cachedSnap = await getDocFromCache(ref);
+      if (cachedSnap.exists()) {
+        offlineData = extractPlatformConfigFields(cachedSnap.data());
+      }
+    } catch {
+      offlineData = null;
+    }
+    const backup = offlineData || getFallbackPlatformConfig();
+    reportFirestoreConnectionStatus({
+      status: 'offline',
+      isOnline: false,
+      lastCheckedAt: Date.now(),
+      lastError:
+        'You are offline. Saved configuration & offline study tools remain active and will sync upon reconnection.',
+    });
+
+    return {
+      config: backup,
+      status: 'cached_offline',
+      fromCache: true,
+      docExists: backup ? true : null,
+      errorMessage: 'Offline mode active — will automatically load latest platform_config when reconnected.',
+    };
+  })().finally(() => {
+    inFlightPlatformConfig = null;
+  });
 
   return inFlightPlatformConfig;
+}
+
+export async function loadPlatformConfigFromFirestore(options?: {
+  forceRefresh?: boolean;
+}): Promise<PlatformConfigData | null> {
+  const result = await loadPlatformConfigDetailed(options);
+  return result.config;
+}
+
+export async function ensureDefaultPlatformConfigIfAdmin(defaultConfig: {
+  timers: {
+    classes2to3: number;
+    classes4to5: number;
+    classes6to8: number;
+  };
+  sectionVisibility: SectionVisibilityConfig;
+}): Promise<{ seeded: boolean; alreadyExists: boolean }> {
+  const fbUser = auth.currentUser;
+  const email = (fbUser?.email || '').trim().toLowerCase();
+  if (!fbUser || email !== 'ronakvarade2022@gmail.com' || !fbUser.emailVerified) {
+    return { seeded: false, alreadyExists: false };
+  }
+
+  try {
+    await ensureFirestoreOnline();
+    const ref = doc(db, 'platform_config', 'main');
+    const existing = await getDocFromServer(ref);
+    if (existing.exists()) {
+      reportFirestoreConnectionStatus({
+        status: 'connected',
+        isOnline: true,
+        lastCheckedAt: Date.now(),
+        lastConnectedAt: Date.now(),
+        lastError: null,
+        configDocExists: true,
+      });
+      return { seeded: false, alreadyExists: true };
+    }
+    const payload = stripUndefinedDeep({
+      id: 'main',
+      timers: defaultConfig.timers,
+      sectionVisibility: defaultConfig.sectionVisibility,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(ref, payload, { merge: true });
+    persistPlatformConfigCache(
+      { timers: defaultConfig.timers, sectionVisibility: defaultConfig.sectionVisibility },
+      true
+    );
+    reportFirestoreConnectionStatus({
+      status: 'connected',
+      isOnline: true,
+      lastCheckedAt: Date.now(),
+      lastConnectedAt: Date.now(),
+      lastError: null,
+      configDocExists: true,
+    });
+    return { seeded: true, alreadyExists: false };
+  } catch {
+    return { seeded: false, alreadyExists: false };
+  }
 }
 
 export async function savePlatformConfigToFirestore(config: {
@@ -159,6 +483,7 @@ export async function savePlatformConfigToFirestore(config: {
 }): Promise<{ success: boolean }> {
   const path = 'platform_config/main';
   try {
+    await ensureFirestoreOnline();
     const ref = doc(db, 'platform_config', 'main');
     const payload = stripUndefinedDeep({
       id: 'main',
@@ -167,16 +492,18 @@ export async function savePlatformConfigToFirestore(config: {
       updatedAt: new Date().toISOString(),
     });
     await setDoc(ref, payload, { merge: true });
-    const entry = {
-      ts: Date.now(),
-      data: { timers: config.timers, sectionVisibility: config.sectionVisibility },
-    };
-    memPlatformConfigCache = entry;
-    try {
-      sessionStorage.setItem(PLATFORM_CFG_CACHE_KEY, JSON.stringify(entry));
-    } catch {
-      // ignore
-    }
+    persistPlatformConfigCache(
+      { timers: config.timers, sectionVisibility: config.sectionVisibility },
+      true
+    );
+    reportFirestoreConnectionStatus({
+      status: 'connected',
+      isOnline: true,
+      lastCheckedAt: Date.now(),
+      lastConnectedAt: Date.now(),
+      lastError: null,
+      configDocExists: true,
+    });
     return { success: true };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -185,10 +512,14 @@ export async function savePlatformConfigToFirestore(config: {
 }
 
 export async function loadPublishedSpecialContentFromFirestore(
-  includeDraftsForAdmin = false
+  includeDraftsForAdmin = false,
+  options?: { forceRefresh?: boolean }
 ): Promise<SpecialContentDocument[]> {
   const now = Date.now();
+  const forceRefresh = Boolean(options?.forceRefresh);
+
   if (
+    !forceRefresh &&
     memSpecialContentCache &&
     memSpecialContentCache.includeDrafts === includeDraftsForAdmin &&
     now - memSpecialContentCache.ts < CACHE_TTL_MS
@@ -196,67 +527,84 @@ export async function loadPublishedSpecialContentFromFirestore(
     return memSpecialContentCache.data;
   }
 
-  if (!includeDraftsForAdmin) {
-    try {
-      const raw = sessionStorage.getItem(SPECIAL_CONTENT_CACHE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (
-          parsed &&
-          typeof parsed.ts === 'number' &&
-          now - parsed.ts < CACHE_TTL_MS &&
-          Array.isArray(parsed.data)
-        ) {
-          memSpecialContentCache = { ts: parsed.ts, includeDrafts: false, data: parsed.data };
-          return parsed.data;
-        }
-      }
-    } catch {
-      // ignore
+  if (!forceRefresh && !includeDraftsForAdmin) {
+    const parsed = readCachedJson<{ ts: number; data: SpecialContentDocument[] }>(
+      typeof sessionStorage !== 'undefined' ? sessionStorage : undefined,
+      SPECIAL_CONTENT_CACHE_KEY
+    );
+    if (parsed && typeof parsed.ts === 'number' && now - parsed.ts < CACHE_TTL_MS && Array.isArray(parsed.data)) {
+      memSpecialContentCache = { ts: parsed.ts, includeDrafts: false, data: parsed.data };
+      return parsed.data;
     }
   }
 
-  if (inFlightSpecialContent) {
+  if (inFlightSpecialContent && !forceRefresh) {
     return inFlightSpecialContent;
   }
 
   inFlightSpecialContent = (async () => {
-    try {
-      const colRef = collection(db, 'special_content');
-      const q = includeDraftsForAdmin
-        ? query(colRef, limit(500))
-        : query(colRef, where('published', '==', true), limit(500));
-      const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => {
-        const data = d.data() as SpecialContentDocument;
-        return {
-          ...data,
-          id: data.id || d.id,
+    const persistentBackup =
+      memSpecialContentCache?.data ||
+      readCachedJson<{ data?: SpecialContentDocument[] }>(
+        typeof localStorage !== 'undefined' ? localStorage : undefined,
+        SPECIAL_CONTENT_PERSISTENT_KEY
+      )?.data ||
+      [];
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return persistentBackup;
+    }
+
+    const colRef = collection(db, 'special_content');
+    const q = includeDraftsForAdmin
+      ? query(colRef, limit(500))
+      : query(colRef, where('published', '==', true), limit(500));
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await ensureFirestoreOnline();
+        const snap = await getDocs(q);
+        const docs = snap.docs.map((d) => {
+          const data = d.data() as SpecialContentDocument;
+          return {
+            ...data,
+            id: data.id || d.id,
+          };
+        });
+        memSpecialContentCache = {
+          ts: Date.now(),
+          includeDrafts: includeDraftsForAdmin,
+          data: docs,
         };
-      });
-      memSpecialContentCache = {
-        ts: Date.now(),
-        includeDrafts: includeDraftsForAdmin,
-        data: docs,
-      };
-      if (!includeDraftsForAdmin) {
-        try {
-          sessionStorage.setItem(
+        if (!includeDraftsForAdmin) {
+          const entry = { ts: Date.now(), data: docs };
+          writeCachedJson(
+            typeof sessionStorage !== 'undefined' ? sessionStorage : undefined,
             SPECIAL_CONTENT_CACHE_KEY,
-            JSON.stringify({ ts: Date.now(), data: docs })
+            entry
           );
-        } catch {
-          // ignore
+          if (docs.length > 0) {
+            writeCachedJson(
+              typeof localStorage !== 'undefined' ? localStorage : undefined,
+              SPECIAL_CONTENT_PERSISTENT_KEY,
+              entry
+            );
+          }
+        }
+        return docs;
+      } catch (err) {
+        if (attempt === 0 && isFirestoreOfflineError(err)) {
+          await new Promise((r) => setTimeout(r, 450));
+        } else {
+          break;
         }
       }
-      return docs;
-    } catch (error) {
-      console.warn('Notice loading special_content:', error);
-      return [];
-    } finally {
-      inFlightSpecialContent = null;
     }
-  })();
+
+    return persistentBackup;
+  })().finally(() => {
+    inFlightSpecialContent = null;
+  });
 
   return inFlightSpecialContent;
 }
@@ -272,6 +620,7 @@ export async function saveSpecialContentItemToFirestore<T extends Record<string,
   const safeId = sanitizeFirestoreId(params.id);
   const path = `special_content/${safeId}`;
   try {
+    await ensureFirestoreOnline();
     const ref = doc(db, 'special_content', safeId);
     const nowIso = new Date().toISOString();
     const cleanDoc = stripUndefinedDeep({
@@ -296,6 +645,7 @@ export async function deleteSpecialContentItemFromFirestore(id: string): Promise
   const safeId = sanitizeFirestoreId(id);
   const path = `special_content/${safeId}`;
   try {
+    await ensureFirestoreOnline();
     const ref = doc(db, 'special_content', safeId);
     await deleteDoc(ref);
     invalidateSpecialContentCache();

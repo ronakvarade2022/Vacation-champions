@@ -42,6 +42,7 @@ import {
   getStudentPlanInfo,
 } from '../utils/subscriptionAccess';
 import { BrandBookCapLogo } from './DashboardIllustrations';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentTab: string;
@@ -660,6 +661,9 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
           )}
+
+          {/* Always-visible App Install Button in Top Sticky Header (Mobile & Desktop) */}
+          <PWAInstallButton variant="header" />
 
           {/* Mobile Hamburger Menu Button */}
           {isLearningRole && (

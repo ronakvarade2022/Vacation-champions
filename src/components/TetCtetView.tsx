@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Award,
@@ -27,8 +27,10 @@ import { getCategorySubscriptionInfo, hasCategoryAccess } from '../utils/subscri
 import { getDefaultPlanSkuForCategory, getModuleRequiredCategoryId } from '../data/planCatalog';
 import type { TetCtetModuleSubTab } from './TetCtetModuleView';
 import { DemoExamSimulator } from './demo/DemoExamSimulator';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { SectionLoadingFallback } from './SectionLoadingFallback';
 
-const TetCtetModuleView = lazy(() =>
+const TetCtetModuleView = lazyWithRetry(() =>
   import('./TetCtetModuleView').then((m) => ({ default: m.TetCtetModuleView }))
 );
 
@@ -109,10 +111,10 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
     return (
       <Suspense
         fallback={
-          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xs space-y-4 animate-pulse max-w-7xl mx-auto">
-            <div className="h-7 w-64 bg-slate-200 rounded-xl" />
-            <div className="h-4 w-96 max-w-full bg-slate-100 rounded-lg" />
-          </div>
+          <SectionLoadingFallback
+            label="Loading TET & CTET practice module..."
+            onReturnHome={() => setSelectedModule(null)}
+          />
         }
       >
         <TetCtetModuleView
