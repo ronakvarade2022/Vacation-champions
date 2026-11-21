@@ -104,3 +104,58 @@ export function buildStudentReferralDisplayLink(referralCode: string): string {
   }
   return `mystudyzone.in/register?ref=${encodeURIComponent(cleanCode)}`;
 }
+
+const STALE_BROWSER_REFERRAL_KEYS = [
+  'vc_pending_ref_code',
+  'msz_ref_code',
+  'pending_referral_code',
+  'referral_code',
+  'referralCode',
+  'ref',
+  'vc_referral_code',
+  'msz_pending_ref',
+];
+
+/**
+ * Purges any unwanted or previously stored referral codes from browser localStorage,
+ * sessionStorage, and cookies without touching valid referral records in the database.
+ */
+export function clearStoredBrowserReferralCodes(): void {
+  if (typeof window === 'undefined') return;
+  for (const key of STALE_BROWSER_REFERRAL_KEYS) {
+    try {
+      window.localStorage?.removeItem(key);
+    } catch {
+      // Ignore storage access errors
+    }
+    try {
+      window.sessionStorage?.removeItem(key);
+    } catch {
+      // Ignore storage access errors
+    }
+    try {
+      if (typeof document !== 'undefined') {
+        document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+        document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      }
+    } catch {
+      // Ignore cookie errors
+    }
+  }
+}
+
+/**
+ * Reads a referral code strictly from the current URL query string (?ref=...) if the user
+ * arrived via a referral link during this visit. Never reads from localStorage, sessionStorage, or cookies.
+ */
+export function readActiveUrlReferralCode(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const rawRef = params.get('ref') || params.get('referral') || '';
+    return sanitizeReferralCode(rawRef);
+  } catch {
+    return '';
+  }
+}
+

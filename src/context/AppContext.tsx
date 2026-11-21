@@ -88,7 +88,8 @@ import {
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
-  sanitizeReferralCode
+  sanitizeReferralCode,
+  clearStoredBrowserReferralCodes
 } from '../utils/referralCoding';
 import type { 
   ScholarshipClass, 
@@ -2506,6 +2507,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Firebase signOut notice:', e);
     }
     clearLocalActiveSessionState();
+    clearStoredBrowserReferralCodes();
     localStorage.removeItem('vc_current_student');
     localStorage.removeItem('vc_current_user');
     localStorage.setItem('vc_is_logged_out', 'true');

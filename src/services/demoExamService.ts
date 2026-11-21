@@ -1,26 +1,32 @@
 import {
   buildDefaultDemoExamQuestions,
+  buildExpandedDemoQuestionPool,
   DemoExamAttemptRecord,
   DemoExamConfig,
   DemoExamQuestion,
   DemoExamTypeId,
-  OFFICIAL_DEMO_EXAM_CONFIGS
+  DemoPaper2Stream,
+  getDemoExamConfigForStream,
 } from '../data/demoExamEngine';
+import { seededPermuteOptions } from '../data/tetCtetLanguageBanks';
 
-const CONFIG_STORAGE_KEY = 'vc_demo_exam_custom_configs_v2';
-const QUESTIONS_STORAGE_KEY = 'vc_demo_exam_custom_questions_v2';
-const ATTEMPTS_STORAGE_KEY = 'vc_demo_exam_attempts_v2';
-const ACTIVE_SESSION_PREFIX = 'vc_demo_exam_active_session_';
+const CONFIG_STORAGE_KEY = 'vc_demo_exam_custom_configs_v3';
+const QUESTIONS_STORAGE_KEY = 'vc_demo_exam_custom_questions_v3';
+const ATTEMPTS_STORAGE_KEY = 'vc_demo_exam_attempts_v3';
+const ACTIVE_SESSION_PREFIX = 'vc_demo_exam_active_session_v3_';
+const STUDENT_HISTORY_PREFIX = 'vc_demo_student_question_history_v3_';
 
 export interface ActiveDemoSessionState {
   testId: DemoExamTypeId;
+  paper2Stream?: DemoPaper2Stream;
   startedAtMs: number;
   durationSeconds: number;
   deadlineMs: number;
-  answers: Record<number, number>; // questionNumber (1..N) or index -> selectedOption (0..3)
+  answers: Record<number, number>; // questionIndex -> selectedOption (0..3)
   markedForReview: Record<number, boolean>;
   currentIndex: number;
   lastUpdatedMs: number;
+  questionsSnapshot?: DemoExamQuestion[];
 }
 
 export interface DemoExamStats {
@@ -87,22 +93,40 @@ function loadLocalAttempts(): DemoExamAttemptRecord[] {
   return attemptsCache!;
 }
 
+function deterministicShuffle<T>(items: T[], seedStr: string): T[] {
+  const arr = [...items];
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  for (let i = arr.length - 1; i > 0; i--) {
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    const j = Math.abs(h) % (i + 1);
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
 export const demoExamService = {
   /**
-   * Retrieves the effective exam configuration (default merged with any admin modifications)
+   * Retrieves the effective exam configuration (default merged with any admin modifications and Paper 2 stream)
    */
-  getConfig(testId: DemoExamTypeId): DemoExamConfig {
-    const base = OFFICIAL_DEMO_EXAM_CONFIGS[testId];
+  getConfig(testId: DemoExamTypeId, stream: DemoPaper2Stream = 'MATH_SCIENCE'): DemoExamConfig {
+    const base = getDemoExamConfigForStream(testId, stream);
     const customMap = loadLocalConfigs();
     const patch = customMap[testId] || {};
 
     const merged: DemoExamConfig = {
       ...base,
       ...patch,
-      sections: patch.sections || base.sections
+      sections: patch.sections || base.sections,
     };
 
-    // Keep durationSeconds and totalMarks consistent
     if (patch.durationMinutes !== undefined && patch.durationSeconds === undefined) {
       merged.durationSeconds = patch.durationMinutes * 60;
     }
@@ -139,18 +163,130 @@ export const demoExamService = {
   },
 
   /**
-   * Retrieves all questions for a demo test (defaults + custom edits/additions)
+   * Retrieves default or admin-customized questions for a demo test
    */
-  getQuestions(testId: DemoExamTypeId): DemoExamQuestion[] {
+  getQuestions(
+    testId: DemoExamTypeId,
+    stream: DemoPaper2Stream = 'MATH_SCIENCE'
+  ): DemoExamQuestion[] {
     const customMap = loadLocalQuestions();
-    const customList = customMap[testId];
+    const storageKey = stream === 'SOCIAL_STUDIES' ? `${testId}__SOCIAL_STUDIES` : testId;
+    const customList = customMap[storageKey] || customMap[testId];
 
     if (customList && customList.length > 0) {
       return customList;
     }
 
-    const defaultList = buildDefaultDemoExamQuestions(testId);
-    return defaultList;
+    return buildDefaultDemoExamQuestions(testId, { stream, testSetNumber: 1 });
+  },
+
+  /**
+   * Retrieves per-student question history (previously attempted question signatures/IDs)
+   */
+  getStudentAttemptHistory(studentId: string, testId: DemoExamTypeId): {
+    attemptCount: number;
+    seenSignatures: string[];
+  } {
+    const key = `${STUDENT_HISTORY_PREFIX}${studentId || 'guest'}_${testId}`;
+    const raw = getSafeStorageItem(key);
+    if (!raw) {
+      return { attemptCount: 0, seenSignatures: [] };
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        attemptCount: Number(parsed.attemptCount || 0),
+        seenSignatures: Array.isArray(parsed.seenSignatures) ? parsed.seenSignatures : [],
+      };
+    } catch {
+      return { attemptCount: 0, seenSignatures: [] };
+    }
+  },
+
+  /**
+   * Records attempted question signatures for a student so future attempts prioritize unseen questions
+   */
+  recordStudentQuestionHistory(
+    studentId: string,
+    testId: DemoExamTypeId,
+    questions: DemoExamQuestion[]
+  ): void {
+    const key = `${STUDENT_HISTORY_PREFIX}${studentId || 'guest'}_${testId}`;
+    const current = this.getStudentAttemptHistory(studentId, testId);
+    const sigSet = new Set<string>(current.seenSignatures);
+    for (const q of questions) {
+      sigSet.add(q.conceptSignature || q.id);
+    }
+    const maxSigs = 600;
+    const arr = Array.from(sigSet).slice(-maxSigs);
+    setSafeStorageItem(
+      key,
+      JSON.stringify({
+        attemptCount: current.attemptCount + 1,
+        seenSignatures: arr,
+      })
+    );
+  },
+
+  /**
+   * Generates a student-specific attempt paper that:
+   * 1. Prioritizes unseen questions from the deep validated pool based on the student's attempt history,
+   * 2. Randomizes question order within each syllabus section on repeat attempts,
+   * 3. Randomizes answer options for each question while updating correctAnswer accurately,
+   * 4. Guarantees 0 duplicate questions and balanced syllabus coverage.
+   */
+  getQuestionsForStudentAttempt(
+    testId: DemoExamTypeId,
+    studentId = 'guest',
+    stream: DemoPaper2Stream = 'MATH_SCIENCE'
+  ): DemoExamQuestion[] {
+    const customMap = loadLocalQuestions();
+    const storageKey = stream === 'SOCIAL_STUDIES' ? `${testId}__SOCIAL_STUDIES` : testId;
+    const customList = customMap[storageKey] || customMap[testId];
+    if (customList && customList.length > 0) {
+      return customList;
+    }
+
+    const history = this.getStudentAttemptHistory(studentId, testId);
+    const attemptNumber = history.attemptCount + 1;
+    const config = this.getConfig(testId, stream);
+
+    // First attempt gets Set 1 directly; subsequent attempts draw unseen questions from the expanded pool
+    // and shuffle question order within each section + permute options with an attempt-specific seed.
+    if (attemptNumber === 1) {
+      return buildDefaultDemoExamQuestions(testId, { stream, testSetNumber: 1 });
+    }
+
+    const seenSet = new Set(history.seenSignatures);
+    const expandedPool = buildExpandedDemoQuestionPool(testId, stream);
+    const finalPaper: DemoExamQuestion[] = [];
+    const seedBase = `${studentId}_${testId}_${stream}_attempt_${attemptNumber}`;
+
+    for (const sec of config.sections) {
+      const sectionCandidates = expandedPool.filter((q) => q.section === sec.name);
+      const unseen = sectionCandidates.filter((q) => !seenSet.has(q.conceptSignature || q.id));
+      const seen = sectionCandidates.filter((q) => seenSet.has(q.conceptSignature || q.id));
+
+      const shuffledUnseen = deterministicShuffle(unseen, `${seedBase}_${sec.name}_unseen`);
+      const shuffledSeen = deterministicShuffle(seen, `${seedBase}_${sec.name}_seen`);
+      const chosenForSection = [...shuffledUnseen, ...shuffledSeen].slice(0, sec.questionCount);
+
+      chosenForSection.forEach((q, idxInSec) => {
+        const qNum = sec.startQuestionNumber + idxInSec;
+        const permSeed = `${seedBase}_Q${qNum}`;
+        const permuted = seededPermuteOptions(q.options, q.correctAnswer, permSeed);
+        finalPaper.push({
+          ...q,
+          id: `${testId}_att${attemptNumber}_q_${qNum}`,
+          questionNumber: qNum,
+          section: sec.name,
+          options: permuted.options,
+          correctAnswer: permuted.correctAnswer,
+        });
+      });
+    }
+
+    return finalPaper;
   },
 
   /**
@@ -166,7 +302,6 @@ export const demoExamService = {
       list.push({ ...updatedQ, testId, isCustomAdminQuestion: true });
     }
 
-    // Sort by question number
     list.sort((a, b) => a.questionNumber - b.questionNumber);
 
     const map = loadLocalQuestions();
@@ -174,7 +309,6 @@ export const demoExamService = {
     customQuestionsCache = map;
     setSafeStorageItem(QUESTIONS_STORAGE_KEY, JSON.stringify(map));
 
-    // Sync question count with config
     await this.updateConfig(testId, { totalQuestions: list.length });
   },
 
@@ -192,7 +326,7 @@ export const demoExamService = {
       id: `${testId}_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       testId,
       questionNumber: nextQNum,
-      isCustomAdminQuestion: true
+      isCustomAdminQuestion: true,
     };
 
     list.push(newQ);
@@ -210,7 +344,6 @@ export const demoExamService = {
    */
   async deleteQuestion(testId: DemoExamTypeId, questionId: string): Promise<void> {
     let list = this.getQuestions(testId).filter((q) => q.id !== questionId);
-    // Renumber remaining questions sequentially
     list = list.map((q, i) => ({ ...q, questionNumber: i + 1 }));
 
     const map = loadLocalQuestions();
@@ -227,6 +360,7 @@ export const demoExamService = {
   async resetToDefaults(testId: DemoExamTypeId): Promise<void> {
     const qMap = loadLocalQuestions();
     delete qMap[testId];
+    delete qMap[`${testId}__SOCIAL_STUDIES`];
     customQuestionsCache = qMap;
     setSafeStorageItem(QUESTIONS_STORAGE_KEY, JSON.stringify(qMap));
 
@@ -240,9 +374,6 @@ export const demoExamService = {
   // RELOAD-SAFE ACTIVE EXAM SESSION (Timer & Answers Persistence)
   // =========================================================================
 
-  /**
-   * Loads an in-progress demo examination session if one exists and hasn't expired
-   */
   loadActiveSession(testId: DemoExamTypeId): {
     session: ActiveDemoSessionState;
     remainingSeconds: number;
@@ -265,9 +396,6 @@ export const demoExamService = {
     }
   },
 
-  /**
-   * Saves or updates an active examination session with its immutable deadline
-   */
   saveActiveSession(session: ActiveDemoSessionState): void {
     setSafeStorageItem(
       `${ACTIVE_SESSION_PREFIX}${session.testId}`,
@@ -275,9 +403,6 @@ export const demoExamService = {
     );
   },
 
-  /**
-   * Clears the active session for a test when completed or abandoned
-   */
   clearActiveSession(testId: DemoExamTypeId): void {
     removeSafeStorageItem(`${ACTIVE_SESSION_PREFIX}${testId}`);
   },
@@ -286,33 +411,29 @@ export const demoExamService = {
   // ATTEMPT RECORDING & ADMIN PARTICIPATION STATISTICS
   // =========================================================================
 
-  /**
-   * Records a completed demo exam attempt in localStorage and attempts sync
-   */
-  async recordAttempt(attempt: DemoExamAttemptRecord): Promise<void> {
+  async recordAttempt(
+    attempt: DemoExamAttemptRecord,
+    attemptedQuestions?: DemoExamQuestion[]
+  ): Promise<void> {
     const list = loadLocalAttempts();
     list.unshift(attempt);
-    // Keep top 200 attempts locally
     const trimmed = list.slice(0, 200);
     attemptsCache = trimmed;
     setSafeStorageItem(ATTEMPTS_STORAGE_KEY, JSON.stringify(trimmed));
 
-    // Clear active session for this test
+    if (attemptedQuestions && attemptedQuestions.length > 0) {
+      this.recordStudentQuestionHistory(attempt.studentId, attempt.testId, attemptedQuestions);
+    }
+
     this.clearActiveSession(attempt.testId);
   },
 
-  /**
-   * Gets attempts list for admin view (filtered optionally by testId)
-   */
   getAttempts(testId?: DemoExamTypeId): DemoExamAttemptRecord[] {
     const list = loadLocalAttempts();
     if (!testId) return list;
     return list.filter((a) => a.testId === testId);
   },
 
-  /**
-   * Computes participation and performance metrics for admin analytics
-   */
   getStats(testId: DemoExamTypeId): DemoExamStats {
     const attempts = this.getAttempts(testId);
     if (attempts.length === 0) {
@@ -324,7 +445,7 @@ export const demoExamService = {
         passCount: 0,
         failCount: 0,
         passRatePercentage: 0,
-        recentAttempts: []
+        recentAttempts: [],
       };
     }
 
@@ -349,7 +470,7 @@ export const demoExamService = {
       passCount,
       failCount: n - passCount,
       passRatePercentage: Math.round((passCount / n) * 100),
-      recentAttempts: attempts.slice(0, 25)
+      recentAttempts: attempts.slice(0, 25),
     };
-  }
+  },
 };

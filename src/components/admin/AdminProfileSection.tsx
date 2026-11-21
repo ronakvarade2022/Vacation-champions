@@ -1,14 +1,13 @@
 import React from 'react';
-import { ShieldCheck, LogOut } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 interface AdminProfileSectionProps {
   studentsCount: number;
   questionsCount: number;
-  onRequestLogout: () => void;
 }
 
 export const AdminProfileSection: React.FC<AdminProfileSectionProps> = React.memo(
-  ({ studentsCount, questionsCount, onRequestLogout }) => {
+  ({ studentsCount, questionsCount }) => {
     return (
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-purple-500/30">
@@ -103,28 +102,6 @@ export const AdminProfileSection: React.FC<AdminProfileSectionProps> = React.mem
                 Std 4th &amp; Std 7th in 7 Languages
               </p>
             </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-red-200 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="text-xs text-slate-600 space-y-1">
-              <h3 className="text-base font-display font-bold text-slate-900">
-                Supervisor Session &amp; Sign Out
-              </h3>
-              <p className="text-slate-500 leading-relaxed text-[11px]">
-                Signing out will terminate your administrative session on this device. You will be redirected to the Student &amp; Guardian Login screen.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onRequestLogout}
-              className="w-full sm:w-auto min-h-[52px] px-8 py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-extrabold text-sm tracking-wider uppercase shadow-lg shadow-red-600/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer shrink-0"
-            >
-              <LogOut className="w-5 h-5 text-white" />
-              <span>SIGN OUT</span>
-            </button>
           </div>
         </div>
       </div>

@@ -22,6 +22,11 @@ import {
   computeBijectiveSlotIndex,
   composeVariedTrilingualStem,
 } from './tetCtetUnifiedSyllabusBanks';
+import {
+  PAPER2_CURATED_MATH_60,
+  PAPER2_CURATED_SCIENCE_60,
+  ALL_PAPER2_CURATED_SST_120,
+} from './demoPaper2CuratedBanks';
 
 interface TrilingualMcqCore {
   topic: string;
@@ -1156,16 +1161,49 @@ function buildMathQuestion(params: {
   const moduleId = getModuleId(exam, paper);
   const qId = `TETCTET-${exam}-P${paper}-${poolType === 'MOCK' ? `T${String(testNumber).padStart(2, '0')}` : poolType}-MATH-Q${String(questionNumber).padStart(3, '0')}`;
 
-  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 30) {
-    const curated =
-      testNumber <= 10
-        ? getMahaTetP1B1MathQuestion(testNumber, slotIndex)
-        : testNumber <= 20
-        ? getMahaTetP1B2MathQuestion(testNumber, slotIndex)
-        : getMahaTetP1B3MathQuestion(testNumber, slotIndex);
-    if (curated) {
-      const loc = medium === 'Marathi' ? curated.mr : medium === 'Hindi' ? curated.hi : curated.en;
-      const permuted = seededPermuteOptions(loc.opts, 0, qId);
+  if (poolType === 'MOCK' && testNumber >= 1 && testNumber <= 30) {
+    if (paper === 1) {
+      const effectiveMathTestNum =
+        ((testNumber - 1 + (exam === 'CTET' ? 10 : 0)) % 30) + 1;
+      const curated =
+        effectiveMathTestNum <= 10
+          ? getMahaTetP1B1MathQuestion(effectiveMathTestNum, slotIndex)
+          : effectiveMathTestNum <= 20
+          ? getMahaTetP1B2MathQuestion(effectiveMathTestNum, slotIndex)
+          : getMahaTetP1B3MathQuestion(effectiveMathTestNum, slotIndex);
+      if (curated) {
+        const loc = medium === 'Marathi' ? curated.mr : medium === 'Hindi' ? curated.hi : curated.en;
+        const permuted = seededPermuteOptions(loc.opts, 0, qId);
+        return {
+          id: qId,
+          exam,
+          paper,
+          moduleId,
+          poolType,
+          testNumber,
+          batchNumber: Math.ceil(testNumber / 5),
+          questionNumber,
+          subjectId: 'MATHEMATICS',
+          subjectLabel: 'Mathematics',
+          topic: curated.topic,
+          mediumRendered: medium,
+          difficulty: curated.difficulty,
+          questionPattern: curated.pattern,
+          question: loc.q,
+          options: permuted.options,
+          correctAnswer: permuted.correctAnswer,
+          explanation: loc.exp,
+          marks: 1,
+          conceptSignature: `${exam}|P1|MOCK|T${testNumber}|MATH|${curated.topic}|Q${questionNumber}`,
+          normalizedHash: normalizeTetText(loc.q),
+          approvalStatus: 'approved',
+        };
+      }
+    } else if (paper === 2 && medium === 'English' && PAPER2_CURATED_MATH_60.length >= 60) {
+      const baseOffset = exam === 'CTET' ? 30 : 0;
+      const idx = (baseOffset + (testNumber - 1) * 30 + slotIndex) % PAPER2_CURATED_MATH_60.length;
+      const item = PAPER2_CURATED_MATH_60[idx];
+      const permuted = seededPermuteOptions(item.options, item.correctAnswer, qId);
       return {
         id: qId,
         exam,
@@ -1176,18 +1214,25 @@ function buildMathQuestion(params: {
         batchNumber: Math.ceil(testNumber / 5),
         questionNumber,
         subjectId: 'MATHEMATICS',
-        subjectLabel: 'Mathematics',
-        topic: curated.topic,
+        subjectLabel: 'Mathematics (Paper 2)',
+        topic: item.topic,
         mediumRendered: medium,
-        difficulty: curated.difficulty,
-        questionPattern: curated.pattern,
-        question: loc.q,
+        difficulty: item.difficulty === 'Easy' ? 'Easy' : item.difficulty === 'Difficult' ? 'Difficult' : 'Moderate',
+        questionPattern:
+          item.questionType === 'Classroom-Situation'
+            ? 'Classroom Scenario'
+            : item.questionType === 'Conceptual'
+            ? 'Conceptual'
+            : item.questionType === 'Assertion-Reasoning'
+            ? 'Assertion-Reasoning'
+            : 'Problem Solving',
+        question: item.question,
         options: permuted.options,
         correctAnswer: permuted.correctAnswer,
-        explanation: loc.exp,
+        explanation: item.explanation,
         marks: 1,
-        conceptSignature: `${exam}|P1|MOCK|T${testNumber}|MATH|${curated.topic}|Q${questionNumber}`,
-        normalizedHash: normalizeTetText(loc.q),
+        conceptSignature: `${exam}|P2|MOCK|T${testNumber}|MATH|${item.topic}|Q${questionNumber}`,
+        normalizedHash: normalizeTetText(item.question),
         approvalStatus: 'approved',
       };
     }
@@ -1590,25 +1635,31 @@ export function generateTetCtetNonLangSubjectQuestion(params: {
   }
 
   if (
-    exam === 'MAHA_TET' &&
-    paper === 1 &&
     poolType === 'MOCK' &&
     testNumber >= 1 &&
     testNumber <= 30 &&
-    (subjectId === 'CDP' || subjectId === 'EVS')
+    (subjectId === 'CDP' || (subjectId === 'EVS' && paper === 1))
   ) {
+    const examPaperOffset =
+      subjectId === 'CDP'
+        ? (exam === 'CTET' ? 10 : 0) + (paper === 2 ? 15 : 0)
+        : exam === 'CTET'
+        ? 10
+        : 0;
+    const effectiveTestNum = ((testNumber - 1 + examPaperOffset) % 30) + 1;
+
     const curated =
       subjectId === 'CDP'
-        ? testNumber <= 10
-          ? getMahaTetP1B1CdpQuestion(testNumber, slotIndex)
-          : testNumber <= 20
-          ? getMahaTetP1B2CdpQuestion(testNumber, slotIndex)
-          : getMahaTetP1B3CdpQuestion(testNumber, slotIndex)
-        : testNumber <= 10
-        ? getMahaTetP1B1EvsQuestion(testNumber, slotIndex)
-        : testNumber <= 20
-        ? getMahaTetP1B2EvsQuestion(testNumber, slotIndex)
-        : getMahaTetP1B3EvsQuestion(testNumber, slotIndex);
+        ? effectiveTestNum <= 10
+          ? getMahaTetP1B1CdpQuestion(effectiveTestNum, slotIndex)
+          : effectiveTestNum <= 20
+          ? getMahaTetP1B2CdpQuestion(effectiveTestNum, slotIndex)
+          : getMahaTetP1B3CdpQuestion(effectiveTestNum, slotIndex)
+        : effectiveTestNum <= 10
+        ? getMahaTetP1B1EvsQuestion(effectiveTestNum, slotIndex)
+        : effectiveTestNum <= 20
+        ? getMahaTetP1B2EvsQuestion(effectiveTestNum, slotIndex)
+        : getMahaTetP1B3EvsQuestion(effectiveTestNum, slotIndex);
     if (curated) {
       const moduleIdCurated = getModuleId(exam, paper);
       const qIdCurated = `TETCTET-${exam}-P${paper}-T${String(testNumber).padStart(2, '0')}-${subjectId}-Q${String(questionNumber).padStart(3, '0')}`;
@@ -1619,6 +1670,7 @@ export function generateTetCtetNonLangSubjectQuestion(params: {
         exam,
         paper,
         moduleId: moduleIdCurated,
+        stream: paper === 2 ? stream : undefined,
         poolType,
         testNumber,
         batchNumber: Math.ceil(testNumber / 5),
@@ -1634,8 +1686,94 @@ export function generateTetCtetNonLangSubjectQuestion(params: {
         correctAnswer: permuted.correctAnswer,
         explanation: loc.exp,
         marks: 1,
-        conceptSignature: `${exam}|P1|MOCK|T${testNumber}|${subjectId}|${curated.topic}|Q${questionNumber}`,
+        conceptSignature: `${exam}|P${paper}|MOCK|T${testNumber}|${subjectId}|${curated.topic}|Q${questionNumber}`,
         normalizedHash: normalizeTetText(loc.q),
+        approvalStatus: 'approved',
+      };
+    }
+  }
+
+  if (
+    paper === 2 &&
+    poolType === 'MOCK' &&
+    medium === 'English' &&
+    (subjectId === 'SCIENCE' || subjectId === 'SOCIAL_STUDIES')
+  ) {
+    const moduleIdCurated = getModuleId(exam, paper);
+    const qIdCurated = `TETCTET-${exam}-P2-T${String(testNumber).padStart(2, '0')}-${subjectId}-Q${String(questionNumber).padStart(3, '0')}`;
+    if (subjectId === 'SCIENCE' && PAPER2_CURATED_SCIENCE_60.length >= 60) {
+      const baseOffset = exam === 'CTET' ? 30 : 0;
+      const idx = (baseOffset + (testNumber - 1) * 30 + slotIndex) % PAPER2_CURATED_SCIENCE_60.length;
+      const item = PAPER2_CURATED_SCIENCE_60[idx];
+      const permuted = seededPermuteOptions(item.options, item.correctAnswer, qIdCurated);
+      return {
+        id: qIdCurated,
+        exam,
+        paper,
+        moduleId: moduleIdCurated,
+        stream,
+        poolType,
+        testNumber,
+        batchNumber: Math.ceil(testNumber / 5),
+        questionNumber,
+        subjectId: 'SCIENCE',
+        subjectLabel: 'Science (Paper 2)',
+        topic: item.topic,
+        mediumRendered: medium,
+        difficulty: item.difficulty === 'Easy' ? 'Easy' : item.difficulty === 'Difficult' ? 'Difficult' : 'Moderate',
+        questionPattern:
+          item.questionType === 'Classroom-Situation'
+            ? 'Classroom Scenario'
+            : item.questionType === 'Conceptual'
+            ? 'Conceptual'
+            : item.questionType === 'Assertion-Reasoning'
+            ? 'Assertion-Reasoning'
+            : 'Problem Solving',
+        question: item.question,
+        options: permuted.options,
+        correctAnswer: permuted.correctAnswer,
+        explanation: item.explanation,
+        marks: 1,
+        conceptSignature: `${exam}|P2|MOCK|T${testNumber}|SCIENCE|${item.topic}|Q${questionNumber}`,
+        normalizedHash: normalizeTetText(item.question),
+        approvalStatus: 'approved',
+      };
+    }
+    if (subjectId === 'SOCIAL_STUDIES' && ALL_PAPER2_CURATED_SST_120.length >= 120) {
+      const baseOffset = exam === 'CTET' ? 60 : 0;
+      const idx = (baseOffset + (testNumber - 1) * 60 + slotIndex) % ALL_PAPER2_CURATED_SST_120.length;
+      const item = ALL_PAPER2_CURATED_SST_120[idx];
+      const permuted = seededPermuteOptions(item.options, item.correctAnswer, qIdCurated);
+      return {
+        id: qIdCurated,
+        exam,
+        paper,
+        moduleId: moduleIdCurated,
+        stream,
+        poolType,
+        testNumber,
+        batchNumber: Math.ceil(testNumber / 5),
+        questionNumber,
+        subjectId: 'SOCIAL_STUDIES',
+        subjectLabel: 'Social Studies / Social Science',
+        topic: item.topic,
+        mediumRendered: medium,
+        difficulty: item.difficulty === 'Easy' ? 'Easy' : item.difficulty === 'Difficult' ? 'Difficult' : 'Moderate',
+        questionPattern:
+          item.questionType === 'Classroom-Situation'
+            ? 'Classroom Scenario'
+            : item.questionType === 'Conceptual'
+            ? 'Conceptual'
+            : item.questionType === 'Assertion-Reasoning'
+            ? 'Assertion-Reasoning'
+            : 'Pedagogical',
+        question: item.question,
+        options: permuted.options,
+        correctAnswer: permuted.correctAnswer,
+        explanation: item.explanation,
+        marks: 1,
+        conceptSignature: `${exam}|P2|MOCK|T${testNumber}|SST|${item.topic}|Q${questionNumber}`,
+        normalizedHash: normalizeTetText(item.question),
         approvalStatus: 'approved',
       };
     }

@@ -363,12 +363,7 @@ export async function createRazorpayOrder(
     mobile: student.mobile,
     selectedBoard: targetBoard,
     selectedClass: targetClass,
-    referralCode:
-      referralCode ||
-      student.referredByCode ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-        : '')
+    referralCode: referralCode || student.referredByCode || ''
   };
 
   console.info(
@@ -456,12 +451,7 @@ export async function createRazorpayQrCode(
     mobile: student.mobile,
     selectedBoard: targetBoard,
     selectedClass: targetClass,
-    referralCode:
-      referralCode ||
-      student.referredByCode ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-        : '')
+    referralCode: referralCode || student.referredByCode || ''
   };
 
   console.info(`[Razorpay QR] Generating dynamic UPI QR code for ${resolvedSku} (${targetBoard} • ${targetClass} • ₹${catalogItem.amountInr})...`);
@@ -843,12 +833,7 @@ export async function launchRazorpayCheckout(options: {
       unlockedCategories: catalogItem.unlockedCategories.join(','),
       subscriptionTier: 'premium',
       validityDays: '365',
-      referralCode:
-        referralCode ||
-        student.referredByCode ||
-        (typeof window !== 'undefined'
-          ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-          : '')
+      referralCode: referralCode || student.referredByCode || ''
     },
     retry: {
       enabled: true,
@@ -925,12 +910,7 @@ export async function launchRazorpayCheckout(options: {
           email: student.email,
           mobile: student.mobile,
           currentExpiresAt: targetClassExistingExpiry,
-          referralCode:
-            referralCode ||
-            student.referredByCode ||
-            (typeof window !== 'undefined'
-              ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-              : '')
+          referralCode: referralCode || student.referredByCode || ''
         });
 
         if (verifyRes.success) {

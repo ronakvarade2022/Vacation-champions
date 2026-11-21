@@ -151,7 +151,11 @@ import {
   getPremiumActivatedBannerMessage,
   hasCategoryAccess,
 } from './utils/subscriptionAccess';
-import { sanitizeReferralCode } from './utils/referralCoding';
+import {
+  sanitizeReferralCode,
+  clearStoredBrowserReferralCodes,
+  readActiveUrlReferralCode,
+} from './utils/referralCoding';
 import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, User, Headphones, Gift, Lock, CheckCircle2 } from 'lucide-react';
 import './firebase';
 
@@ -191,26 +195,8 @@ const AppContent: React.FC = () => {
   const [authInitialRegisterRole, setAuthInitialRegisterRole] = useState<'student' | 'teacher'>('student');
   const [authInitialEmail, setAuthInitialEmail] = useState<string>('');
   const [capturedReferralCode, setCapturedReferralCode] = useState<string>(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        const urlRef = params.get('ref') || params.get('referral');
-        if (urlRef) {
-          const clean = sanitizeReferralCode(urlRef);
-          if (clean) {
-            localStorage.setItem('vc_pending_ref_code', clean);
-            localStorage.setItem('msz_ref_code', clean);
-            return clean;
-          }
-        }
-        return (
-          localStorage.getItem('vc_pending_ref_code') ||
-          localStorage.getItem('msz_ref_code') ||
-          ''
-        );
-      }
-    } catch {}
-    return '';
+    clearStoredBrowserReferralCodes();
+    return readActiveUrlReferralCode();
   });
   const [resetOobCode, setResetOobCode] = useState<string>('');
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
@@ -238,18 +224,12 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Desktop Site / Mobile View preference (persisted in localStorage)
-  const [viewMode, setViewMode] = useState<'auto' | 'desktop'>(() => {
-    try {
-      return localStorage.getItem('mystudyzone_view_mode') === 'desktop' ? 'desktop' : 'auto';
-    } catch {
-      return 'auto';
-    }
-  });
+  // Desktop Site / Mobile View preference
+  const [viewMode, setViewMode] = useState<'auto' | 'desktop'>('auto');
 
   useEffect(() => {
     try {
-      localStorage.setItem('mystudyzone_view_mode', viewMode);
+      localStorage.removeItem('mystudyzone_view_mode');
     } catch {
       // Ignore storage errors
     }
@@ -258,17 +238,9 @@ const AppContent: React.FC = () => {
       document.documentElement.classList.toggle('desktop-site-active', viewMode === 'desktop');
       const metaViewport = document.querySelector('meta[name="viewport"]');
       if (metaViewport) {
-        const isSmallHardware =
-          typeof window !== 'undefined' &&
-          window.screen?.width > 0 &&
-          window.screen.width < 1024;
         metaViewport.setAttribute(
           'content',
-          viewMode === 'desktop'
-            ? isSmallHardware
-              ? 'width=1280, user-scalable=yes, viewport-fit=cover'
-              : 'width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover'
-            : 'width=device-width, initial-scale=1.0, viewport-fit=cover'
+          'width=device-width, initial-scale=1.0, viewport-fit=cover'
         );
       }
     }
@@ -356,14 +328,12 @@ const AppContent: React.FC = () => {
       const pathname = window.location.pathname.toLowerCase();
       const rawRef = params.get('ref') || params.get('referral');
 
+      clearStoredBrowserReferralCodes();
+
       if (rawRef) {
         const cleanRef = sanitizeReferralCode(rawRef);
         if (cleanRef) {
           setCapturedReferralCode(cleanRef);
-          try {
-            localStorage.setItem('vc_pending_ref_code', cleanRef);
-            localStorage.setItem('msz_ref_code', cleanRef);
-          } catch {}
         }
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('ref');
@@ -1663,6 +1633,7 @@ const AppContent: React.FC = () => {
             initialBoard={publicBoard}
             initialClass={publicClass}
             initialReferralCode={capturedReferralCode}
+            onClearReferralCode={() => setCapturedReferralCode('')}
             onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
               openMembershipWithPlan('premium', targetClass, targetBoard);
             }}

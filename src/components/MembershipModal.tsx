@@ -147,11 +147,9 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
       setReferralCreditedNotice('');
       clearQrTimers();
 
-      const resolvedRef =
-        (currentStudent?.referredByCode ? currentStudent.referredByCode.toUpperCase() : '') ||
-        (typeof window !== 'undefined'
-          ? (localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || '').toUpperCase()
-          : '');
+      const resolvedRef = currentStudent?.referredByCode
+        ? currentStudent.referredByCode.toUpperCase()
+        : '';
       setReferralCodeInput(resolvedRef);
 
       // Preload Razorpay Checkout script immediately when modal opens so button click is fast
@@ -285,9 +283,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = (
       referralCodeInput.trim() ||
       currentStudent?.referredByCode ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-        : '')
+      ''
     ).toUpperCase();
 
     try {
@@ -401,9 +397,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     const activeRefCode = (
       referralCodeInput.trim() ||
       currentStudent?.referredByCode ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-        : '')
+      ''
     ).toUpperCase();
 
     try {

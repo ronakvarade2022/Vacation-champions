@@ -7,7 +7,6 @@ import {
   NavSubActionId,
 } from '../data/navigationConfig';
 import {
-  Trophy,
   Bell,
   Crown,
   User,
@@ -17,15 +16,9 @@ import {
   ShieldCheck,
   Lock,
   Info,
-  Medal,
   GraduationCap,
-  Bot,
-  Grid3X3,
   FileText,
-  Activity,
   BookOpen,
-  Puzzle,
-  Palette,
   LogOut,
   LogIn,
   ChevronRight,
@@ -35,7 +28,6 @@ import {
   AlertTriangle,
   Mail,
   ChevronDown,
-  ChevronUp,
   Monitor,
   Smartphone,
   Users,
@@ -50,7 +42,6 @@ import {
   getStudentPlanInfo,
 } from '../utils/subscriptionAccess';
 import { BrandBookCapLogo } from './DashboardIllustrations';
-import { LogoutConfirmModal } from './LogoutConfirmModal';
 
 interface HeaderProps {
   currentTab: string;
@@ -91,10 +82,8 @@ export const Header: React.FC<HeaderProps> = ({
   } = useApp();
 
   const [openDropdownMenu, setOpenDropdownMenu] = useState<MainMenuId | null>(null);
-  const [expandedMobileMenu, setExpandedMobileMenu] = useState<MainMenuId | null>('home');
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClassSwitcher, setShowClassSwitcher] = useState(false);
   const [switcherBoard, setSwitcherBoard] = useState<EducationBoard>(activeBoard);
@@ -113,7 +102,6 @@ export const Header: React.FC<HeaderProps> = ({
         setShowProfileDropdown(false);
         setShowNotifications(false);
         setShowClassSwitcher(false);
-        setShowLogoutConfirm(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
@@ -170,6 +158,18 @@ export const Header: React.FC<HeaderProps> = ({
   const isTeacherAccount = currentStudent?.accountRole === 'teacher' || activeRole === 'teacher';
   const isStudentAccount = Boolean(currentStudent && currentStudent.accountRole !== 'teacher' && activeRole === 'student');
   const isAdminActive = Boolean(currentUser?.role === 'admin' && activeRole === 'admin');
+  const isUserLoggedIn = Boolean(currentStudent || currentUser);
+
+  const handleTopLogoutClick = async () => {
+    setOpenDropdownMenu(null);
+    setShowProfileDropdown(false);
+    setShowNotifications(false);
+    setShowClassSwitcher(false);
+    setMobileMenuOpen(false);
+    await logout();
+    setCurrentTab('public-home');
+    onOpenAuth('login');
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs w-full">
@@ -241,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Header Row */}
-      <div className={`${containerWidthClass} px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 min-h-[60px] sm:min-h-[68px] flex items-center justify-between gap-2 sm:gap-3`}>
+      <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-2 sm:py-2.5 min-h-[56px] sm:min-h-[64px] flex items-center justify-between gap-1.5 sm:gap-3`}>
         {/* Brand Logo (Reference-matched Orange Cap-Book Icon + Two-Tone MyStudyZone + Learn • Practice • Grow) */}
         <button
           type="button"
@@ -251,78 +251,29 @@ export const Header: React.FC<HeaderProps> = ({
             if (activeRole === 'admin') handleRoleChange('student');
             onMenuAction('home-overview');
           }}
-          className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0 min-w-0 text-left"
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink min-w-0 text-left"
         >
-          <BrandBookCapLogo className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
+          <BrandBookCapLogo className="w-8 h-8 sm:w-11 sm:h-11 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
           <div className="leading-none min-w-0">
-            <span className="font-display font-black text-base sm:text-2xl tracking-tight block truncate">
+            <span className="font-display font-black text-sm sm:text-2xl tracking-tight block truncate">
               <span className="text-slate-900">MyStudy</span>
               <span className="text-orange-600">Zone</span>
             </span>
-            <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-700 tracking-wide block mt-0.5 truncate">
+            <span className="text-[9px] sm:text-[11px] font-extrabold text-slate-700 tracking-wide block mt-0.5 truncate">
               Learn • Practice • Grow
             </span>
           </div>
         </button>
 
-        {/* Desktop Navigation Bar (Direct Main Section Tabs) */}
-        {isLearningRole && (
-          <nav
-            ref={navContainerRef}
-            aria-label="Primary Navigation"
-            className="hidden xl:flex items-center gap-1 overflow-visible"
-          >
-            {MAIN_NAV_MENUS.map((menu) => {
-              const visibleItems = menu.items.filter(
-                (sub) => !sub.sectionVisibilityKey || isSectionVisible(sub.sectionVisibilityKey)
-              );
-              if (visibleItems.length === 0) return null;
-
-              const isActive = activeMenuId === menu.id;
-              const isSpecialTab = menu.id === 'special-learning';
-              return (
-                <button
-                  key={menu.id}
-                  type="button"
-                  onClick={() => {
-                    setOpenDropdownMenu(null);
-                    if (menu.id !== 'account' && onSelectMainSection) {
-                      onSelectMainSection(menu.id);
-                      return;
-                    }
-                    const secEl = document.getElementById(`main-sec-${menu.id}`);
-                    if (secEl) {
-                      secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    } else {
-                      handleTriggerSubAction(menu.defaultActionId);
-                    }
-                  }}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
-                    isSpecialTab
-                      ? isActive
-                        ? 'bg-amber-500 text-slate-950 shadow-xs'
-                        : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200 border border-amber-300'
-                      : isActive
-                      ? 'text-amber-800 bg-amber-50 border border-amber-200'
-                      : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100/70'
-                  }`}
-                >
-                  <span>{menu.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        )}
-
-        {/* Right Actions Area */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* Signed-in Active Board & Class Switcher Pill (Visible on Mobile, Tablet & Desktop) */}
+        {/* Right Actions Area (Always keeps Login/Logout button visible in mobile & desktop preview frames) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Signed-in Active Board & Class Switcher Pill (Visible on Tablet & Desktop) */}
           {isLearningRole &&
             currentStudent &&
             (() => {
               const accessiblePairs = getAccessibleBoardClassesList(currentStudent);
               return (
-                <div className="relative block">
+                <div className="relative hidden sm:block">
                   <button
                     type="button"
                     onClick={() => {
@@ -704,21 +655,6 @@ export const Header: React.FC<HeaderProps> = ({
                         );
                       })}
                     </div>
-
-                    {/* Fixed Bottom Logout in Profile Dropdown (Always visible on mobile & desktop) */}
-                    <div className="p-3 bg-slate-50 border-t border-slate-200 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowProfileDropdown(false);
-                          setShowLogoutConfirm(true);
-                        }}
-                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 active:bg-red-800 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all border border-rose-500/40"
-                      >
-                        <LogOut className="w-4 h-4 shrink-0" />
-                        <span>Sign Out / Logout (लॉग आउट)</span>
-                      </button>
-                    </div>
                   </div>
                 </>
               )}
@@ -730,7 +666,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="xl:hidden p-2 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors shrink-0"
+              className="lg:hidden p-2 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors shrink-0"
               aria-label="Toggle Navigation Menu"
               aria-expanded={mobileMenuOpen}
             >
@@ -738,24 +674,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* SINGLE LOGIN / LOGOUT BUTTON IN TOP-RIGHT CORNER */}
-          {currentUser || currentStudent ? (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLogoutConfirm(!showLogoutConfirm);
-                  setShowProfileDropdown(false);
-                  setShowNotifications(false);
-                }}
-                aria-label="Logout"
-                aria-expanded={showLogoutConfirm}
-                className="min-h-[36px] sm:min-h-[42px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-black shadow-xs hover:shadow-md flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40"
-              >
-                <LogOut className="w-4 h-4 shrink-0" />
-                <span>Logout</span>
-              </button>
-            </div>
+          {/* SINGLE LOGIN / LOGOUT BUTTON IN EXACT SAME TOP-RIGHT POSITION */}
+          {isUserLoggedIn ? (
+            <button
+              type="button"
+              onClick={handleTopLogoutClick}
+              aria-label="Logout"
+              className="min-h-[36px] sm:min-h-[40px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40 whitespace-nowrap"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Logout</span>
+            </button>
           ) : (
             <button
               type="button"
@@ -764,7 +693,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenAuth('login');
               }}
               aria-label="Login"
-              className="min-h-[38px] sm:min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40"
+              className="min-h-[36px] sm:min-h-[40px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40 whitespace-nowrap"
             >
               <LogIn className="w-4 h-4 shrink-0" />
               <span>Login</span>
@@ -773,9 +702,60 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
+      {/* Desktop Navigation Bar (Direct Main Section Tabs — Clean Sub-Row so top-right Login/Logout never overflows in any preview frame) */}
+      {isLearningRole && (
+        <div className="hidden lg:block border-t border-slate-100 bg-slate-50/80">
+          <nav
+            ref={navContainerRef}
+            aria-label="Primary Navigation"
+            className={`${containerWidthClass} px-4 sm:px-6 lg:px-8 py-1.5 flex items-center gap-1.5 flex-wrap`}
+          >
+            {MAIN_NAV_MENUS.map((menu) => {
+              const visibleItems = menu.items.filter(
+                (sub) => !sub.sectionVisibilityKey || isSectionVisible(sub.sectionVisibilityKey)
+              );
+              if (visibleItems.length === 0) return null;
+
+              const isActive = activeMenuId === menu.id;
+              const isSpecialTab = menu.id === 'special-learning';
+              return (
+                <button
+                  key={menu.id}
+                  type="button"
+                  onClick={() => {
+                    setOpenDropdownMenu(null);
+                    if (menu.id !== 'account' && onSelectMainSection) {
+                      onSelectMainSection(menu.id);
+                      return;
+                    }
+                    const secEl = document.getElementById(`main-sec-${menu.id}`);
+                    if (secEl) {
+                      secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                      handleTriggerSubAction(menu.defaultActionId);
+                    }
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+                    isSpecialTab
+                      ? isActive
+                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                        : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200 border border-amber-300'
+                      : isActive
+                      ? 'text-amber-800 bg-amber-50 border border-amber-200'
+                      : 'text-slate-700 hover:text-slate-950 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <span>{menu.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      )}
+
       {/* Mobile Hamburger Drawer with Expandable Sub-Menus */}
       {isLearningRole && mobileMenuOpen && (
-        <div className="xl:hidden bg-white border-t border-slate-200 px-4 py-4 space-y-3 max-h-[82vh] overflow-y-auto shadow-lg">
+        <div className="lg:hidden bg-white border-t border-slate-200 px-4 py-4 space-y-3 max-h-[82vh] overflow-y-auto shadow-lg">
           {/* Quick Priority Mobile Actions */}
           <div className="grid grid-cols-3 gap-2">
             <button
@@ -890,9 +870,9 @@ export const Header: React.FC<HeaderProps> = ({
             })}
           </div>
 
-          {/* Account Bottom Row (Profile & Logout Shortcuts in Mobile Menu) */}
+          {/* Account Bottom Row (Profile Shortcut in Mobile Menu) */}
           {currentStudent && (
-            <div className="pt-2 border-t border-slate-200 grid grid-cols-2 gap-2">
+            <div className="pt-2 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => {
@@ -904,53 +884,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <User className="w-4 h-4" />
                 <span>My Profile</span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setShowLogoutConfirm(true);
-                }}
-                className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-rose-500/40"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
-            </div>
-          )}
-          {currentUser && !currentStudent && (
-            <div className="pt-2 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setShowLogoutConfirm(true);
-                }}
-                className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-rose-500/40"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Supervisor Logout</span>
-              </button>
             </div>
           )}
         </div>
       )}
-
-      {/* Global Header Logout Confirmation Modal */}
-      <LogoutConfirmModal
-        isOpen={showLogoutConfirm}
-        onClose={() => setShowLogoutConfirm(false)}
-        onConfirm={async () => {
-          await logout();
-        }}
-        accountName={currentStudent?.name || currentUser?.displayName || 'User'}
-        roleTitle={
-          activeRole === 'admin'
-            ? 'Administrator'
-            : currentStudent?.accountRole === 'teacher'
-            ? 'Teacher'
-            : 'Student'
-        }
-      />
     </header>
   );
 };

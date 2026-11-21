@@ -12,7 +12,6 @@ import {
   Award,
   CheckCircle2,
   Layers,
-  LogOut,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -32,7 +31,6 @@ import {
 } from '../data/classCurriculumConfig';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
-import { LogoutConfirmModal } from './LogoutConfirmModal';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
@@ -67,10 +65,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     getSubjectLevelProgress,
     switchActiveBoardAndClass,
     updateTeacherSelectedCategories,
-    logout,
   } = useApp();
   const [selectedCurriculumBoard, setSelectedCurriculumBoard] = useState<EducationBoard>(activeBoard);
-  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
 
   useEffect(() => {
     setSelectedCurriculumBoard(activeBoard);
@@ -212,15 +208,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             >
               <Crown className="w-3.5 h-3.5 text-amber-300" />
               <span>Unlock Board / Class (₹99)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowLogoutModal(true)}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
-              title="Sign out of your active session"
-            >
-              <LogOut className="w-3.5 h-3.5 text-rose-600" />
-              <span>Logout</span>
             </button>
           </div>
         </div>
@@ -726,17 +713,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           );
         })()}
       </div>
-
-      {/* Student / Teacher Dashboard Sign Out Confirmation Modal */}
-      <LogoutConfirmModal
-        isOpen={showLogoutModal}
-        onClose={() => setShowLogoutModal(false)}
-        onConfirm={async () => {
-          await logout();
-        }}
-        accountName={currentStudent.name}
-        roleTitle={currentStudent.accountRole === 'teacher' ? 'Teacher' : 'Student'}
-      />
     </div>
   );
 };

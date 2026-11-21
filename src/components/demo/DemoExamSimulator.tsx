@@ -1,41 +1,34 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DemoExamAttemptRecord,
-  DemoExamConfig,
   DemoExamQuestion,
-  DemoExamTypeId
+  DemoExamTypeId,
+  DemoPaper2Stream,
 } from '../../data/demoExamEngine';
 import { demoExamService } from '../../services/demoExamService';
 import {
   UniversalExamShell,
   ExamPaletteItem,
-  ExamPaletteSection,
   ExamPaletteStats,
-  ExamPaletteStatus
+  ExamPaletteStatus,
 } from '../exam/UniversalExamShell';
 import {
-  Trophy,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
   Clock,
   RotateCcw,
   ArrowRight,
   ShieldCheck,
-  ChevronRight,
-  Check,
   AlertTriangle,
   FileText,
   Sparkles,
-  Lock,
   Crown,
-  Share2
+  Layers,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PlanSkuId } from '../../types';
 
 interface DemoExamSimulatorProps {
   testId: DemoExamTypeId;
+  initialStream?: DemoPaper2Stream;
   studentId?: string;
   studentName?: string;
   studentRole?: string;
@@ -45,17 +38,37 @@ interface DemoExamSimulatorProps {
 
 export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
   testId,
+  initialStream = 'MATH_SCIENCE',
   studentId = 'demo_guest_user',
-  studentName = 'Guest Teacher/Student',
+  studentName = 'Guest Candidate',
   studentRole = 'guest',
   onExit,
-  onOpenMembership
+  onOpenMembership,
 }) => {
-  const config = useMemo(() => demoExamService.getConfig(testId), [testId]);
-  const questions = useMemo(() => demoExamService.getQuestions(testId), [testId]);
+  const [selectedStream, setSelectedStream] = useState<DemoPaper2Stream>(initialStream);
+  const config = useMemo(
+    () => demoExamService.getConfig(testId, selectedStream),
+    [testId, selectedStream]
+  );
 
   // Stage: 'instructions' | 'taking' | 'submitted'
   const [stage, setStage] = useState<'instructions' | 'taking' | 'submitted'>('instructions');
+
+  // Active attempt question paper (randomized per student attempt on start/retake)
+  const [activeQuestions, setActiveQuestions] = useState<DemoExamQuestion[]>(() =>
+    demoExamService.getQuestionsForStudentAttempt(testId, studentId, initialStream)
+  );
+
+  // Refresh preview questions when stream changes on instructions screen
+  useEffect(() => {
+    if (stage === 'instructions') {
+      setActiveQuestions(
+        demoExamService.getQuestionsForStudentAttempt(testId, studentId, selectedStream)
+      );
+    }
+  }, [testId, studentId, selectedStream, stage]);
+
+  const questions = activeQuestions;
 
   // Exam session states
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -78,15 +91,24 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
   useEffect(() => {
     const existing = demoExamService.loadActiveSession(testId);
     if (existing) {
+      if (existing.session.paper2Stream) {
+        setSelectedStream(existing.session.paper2Stream);
+      }
+      if (existing.session.questionsSnapshot && existing.session.questionsSnapshot.length > 0) {
+        setActiveQuestions(existing.session.questionsSnapshot);
+      }
       if (existing.isExpired) {
-        // Expired while user was away: auto-submit immediately with restored answers
         setAnswers(existing.session.answers || {});
         setMarkedForReview(existing.session.markedForReview || {});
         setCurrentIndex(existing.session.currentIndex || 0);
         setIsAutoSubmitted(true);
-        finalizeSubmission(existing.session.answers || {}, existing.session.markedForReview || {}, true);
+        finalizeSubmission(
+          existing.session.answers || {},
+          existing.session.markedForReview || {},
+          true,
+          existing.session.questionsSnapshot
+        );
       } else {
-        // Resume in-progress exam
         setAnswers(existing.session.answers || {});
         setMarkedForReview(existing.session.markedForReview || {});
         setCurrentIndex(existing.session.currentIndex || 0);
@@ -139,19 +161,39 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
     if (stage === 'taking' && !hasSubmittedRef.current) {
       demoExamService.saveActiveSession({
         testId,
+        paper2Stream: selectedStream,
         startedAtMs,
         durationSeconds: config.durationSeconds,
         deadlineMs,
         answers,
         markedForReview,
         currentIndex,
-        lastUpdatedMs: Date.now()
+        lastUpdatedMs: Date.now(),
+        questionsSnapshot: questions,
       });
     }
-  }, [stage, testId, startedAtMs, config.durationSeconds, deadlineMs, answers, markedForReview, currentIndex]);
+  }, [
+    stage,
+    testId,
+    selectedStream,
+    startedAtMs,
+    config.durationSeconds,
+    deadlineMs,
+    answers,
+    markedForReview,
+    currentIndex,
+    questions,
+  ]);
 
   // Start Exam Handler
   const handleStartExam = () => {
+    const freshQuestions = demoExamService.getQuestionsForStudentAttempt(
+      testId,
+      studentId,
+      selectedStream
+    );
+    setActiveQuestions(freshQuestions);
+
     const now = Date.now();
     const deadline = now + config.durationSeconds * 1000;
     setStartedAtMs(now);
@@ -166,13 +208,15 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
 
     demoExamService.saveActiveSession({
       testId,
+      paper2Stream: selectedStream,
       startedAtMs: now,
       durationSeconds: config.durationSeconds,
       deadlineMs: deadline,
       answers: {},
       markedForReview: {},
       currentIndex: 0,
-      lastUpdatedMs: now
+      lastUpdatedMs: now,
+      questionsSnapshot: freshQuestions,
     });
   };
 
@@ -180,7 +224,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
   const handleSelectOption = (optionIndex: number) => {
     setAnswers((prev) => ({
       ...prev,
-      [currentIndex]: optionIndex
+      [currentIndex]: optionIndex,
     }));
   };
 
@@ -197,7 +241,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
   const handleToggleMarkForReview = () => {
     setMarkedForReview((prev) => ({
       ...prev,
-      [currentIndex]: !prev[currentIndex]
+      [currentIndex]: !prev[currentIndex],
     }));
   };
 
@@ -225,7 +269,8 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
     async (
       currentAnswers: Record<number, number>,
       currentMarked: Record<number, boolean>,
-      isAuto = false
+      _isAuto = false,
+      overrideQuestions?: DemoExamQuestion[]
     ) => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
@@ -233,7 +278,8 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
       }
       hasSubmittedRef.current = true;
 
-      // Calculate score & section breakdowns
+      const paperQuestions = overrideQuestions || questions;
+
       let correctCount = 0;
       let incorrectCount = 0;
       let unattemptedCount = 0;
@@ -244,7 +290,6 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         { correct: number; incorrect: number; unattempted: number; total: number; score: number; maxScore: number }
       > = {};
 
-      // Initialize sections
       for (const s of config.sections) {
         sectionScores[s.name] = {
           correct: 0,
@@ -252,11 +297,11 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
           unattempted: 0,
           total: s.questionCount,
           score: 0,
-          maxScore: s.maxMarks
+          maxScore: s.maxMarks,
         };
       }
 
-      questions.forEach((q, idx) => {
+      paperQuestions.forEach((q, idx) => {
         const userChoice = currentAnswers[idx];
         const secName = q.section || config.sections[0].name;
         if (!sectionScores[secName]) {
@@ -266,13 +311,11 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
             unattempted: 0,
             total: 0,
             score: 0,
-            maxScore: 0
+            maxScore: 0,
           };
         }
 
         const qMarks = q.marks || config.marksPerQuestion;
-        sectionScores[secName].maxScore = (sectionScores[secName].maxScore || 0) + qMarks;
-        sectionScores[secName].total = (sectionScores[secName].total || 0) + 1;
 
         if (userChoice === undefined || userChoice === null) {
           unattemptedCount++;
@@ -296,10 +339,11 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         id: `demo_attempt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         testId,
         testTitle: config.title,
+        paper2Stream: config.supportsStreamSelection ? selectedStream : undefined,
         studentId,
         studentName,
         studentRole,
-        totalQuestions: questions.length,
+        totalQuestions: paperQuestions.length,
         maxMarks: config.totalMarks,
         marksObtained,
         correctCount,
@@ -312,10 +356,10 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         completedAt: new Date().toISOString(),
         answers: currentAnswers,
         markedForReview: currentMarked,
-        sectionScores
+        sectionScores,
       };
 
-      await demoExamService.recordAttempt(attempt);
+      await demoExamService.recordAttempt(attempt, paperQuestions);
       setCompletedAttempt(attempt);
       setStage('submitted');
 
@@ -324,12 +368,12 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
           confetti({
             particleCount: 100,
             spread: 70,
-            origin: { y: 0.6 }
+            origin: { y: 0.6 },
           });
         } catch {}
       }
     },
-    [config, questions, startedAtMs, testId, studentId, studentName, studentRole]
+    [config, questions, startedAtMs, testId, selectedStream, studentId, studentName, studentRole]
   );
 
   const handleSubmitManual = () => {
@@ -356,7 +400,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
       return {
         index: idx,
         label: idx + 1,
-        status
+        status,
       };
     });
   }, [questions, answers, markedForReview, currentIndex]);
@@ -377,7 +421,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
     return {
       answered,
       unanswered,
-      marked
+      marked,
     };
   }, [questions, answers, markedForReview]);
 
@@ -415,6 +459,8 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
   // VIEW 1: PRE-EXAM INSTRUCTIONS & LAUNCH SCREEN
   // =========================================================================
   if (stage === 'instructions') {
+    const historyInfo = demoExamService.getStudentAttemptHistory(studentId, testId);
+
     return (
       <div className="max-w-4xl mx-auto my-6 p-4 sm:p-6 space-y-6">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -422,7 +468,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
           <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-6 sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-black tracking-wide uppercase">
-                100% Free Demo Mock Test
+                100% Free · English-Medium Demo Mock Test
               </span>
               <span className="text-xs text-indigo-200 font-mono">
                 Pattern: {config.patternName}
@@ -474,10 +520,64 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
 
           {/* Body instructions */}
           <div className="p-6 sm:p-8 space-y-6">
+            {/* Paper II Stream Selection (Mathematics & Science OR Social Studies/Social Science) */}
+            {config.supportsStreamSelection && (
+              <div className="p-5 rounded-2xl bg-indigo-50/80 border border-indigo-200 space-y-3">
+                <div className="flex items-center gap-2 text-indigo-950 font-display font-black text-sm">
+                  <Layers className="w-4 h-4 text-indigo-700" />
+                  <span>Select Your Paper II Elective Subject Stream (Section 4 – 60 Questions / 60 Marks)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStream('MATH_SCIENCE')}
+                    className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      selectedStream === 'MATH_SCIENCE'
+                        ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
+                        : 'bg-white text-slate-800 border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="text-xs font-black uppercase tracking-wider">Option A</div>
+                    <div className="text-sm font-display font-black mt-0.5">
+                      Mathematics and Science (60 Qs)
+                    </div>
+                    <div
+                      className={`text-[11px] mt-1 ${
+                        selectedStream === 'MATH_SCIENCE' ? 'text-indigo-100' : 'text-slate-500'
+                      }`}
+                    >
+                      30 Mathematics &amp; Pedagogy + 30 Science &amp; Inquiry Pedagogy
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStream('SOCIAL_STUDIES')}
+                    className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      selectedStream === 'SOCIAL_STUDIES'
+                        ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
+                        : 'bg-white text-slate-800 border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="text-xs font-black uppercase tracking-wider">Option B</div>
+                    <div className="text-sm font-display font-black mt-0.5">
+                      Social Studies / Social Science (60 Qs)
+                    </div>
+                    <div
+                      className={`text-[11px] mt-1 ${
+                        selectedStream === 'SOCIAL_STUDIES' ? 'text-indigo-100' : 'text-slate-500'
+                      }`}
+                    >
+                      History, Geography, Social &amp; Political Life (Civics), Economics &amp; Pedagogy
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <h3 className="text-base font-display font-black text-slate-900 mb-3 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-700" />
-                Examination Instructions & Rules
+                Examination Instructions &amp; Rules
               </h3>
               <ul className="space-y-2.5 text-sm text-slate-700">
                 {config.instructions.map((inst, idx) => (
@@ -494,13 +594,14 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
             {/* Section Breakdown preview */}
             <div>
               <h3 className="text-base font-display font-black text-slate-900 mb-3">
-                Subject & Section Distribution
+                Subject &amp; Section Distribution
               </h3>
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="w-full text-left text-xs sm:text-sm">
                   <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-3 px-4">Section / Subject</th>
+                      <th className="py-3 px-4 text-center">Question Range</th>
                       <th className="py-3 px-4 text-center">Questions</th>
                       <th className="py-3 px-4 text-center">Marks per Q</th>
                       <th className="py-3 px-4 text-right">Total Marks</th>
@@ -510,6 +611,9 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
                     {config.sections.map((sec) => (
                       <tr key={sec.name} className="hover:bg-slate-50/50">
                         <td className="py-2.5 px-4 font-bold text-slate-900">{sec.name}</td>
+                        <td className="py-2.5 px-4 text-center font-mono text-xs text-slate-600">
+                          Q{sec.startQuestionNumber}–Q{sec.endQuestionNumber}
+                        </td>
                         <td className="py-2.5 px-4 text-center font-mono">{sec.questionCount}</td>
                         <td className="py-2.5 px-4 text-center font-mono">+{sec.marksPerQuestion}</td>
                         <td className="py-2.5 px-4 text-right font-mono font-bold">{sec.maxMarks}</td>
@@ -517,6 +621,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
                     ))}
                     <tr className="bg-indigo-50/60 font-black text-indigo-950">
                       <td className="py-3 px-4">Grand Total</td>
+                      <td className="py-3 px-4 text-center font-mono">Q1–Q{questions.length}</td>
                       <td className="py-3 px-4 text-center font-mono">{questions.length}</td>
                       <td className="py-3 px-4 text-center font-mono">—</td>
                       <td className="py-3 px-4 text-right font-mono text-base text-indigo-900">
@@ -528,14 +633,21 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
               </div>
             </div>
 
-            {/* Reload Protection Guarantee Callout */}
+            {/* Anti-Repetition & Reload Protection Callout */}
             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
-              <div className="text-xs sm:text-sm text-emerald-950">
-                <strong className="font-bold">Real Exam Reload Protection:</strong> Your test
-                timer and answers are continuously backed up. If your connection drops or you
-                accidentally refresh, your timer will keep counting down accurately from where you
-                left off.
+              <div className="text-xs sm:text-sm text-emerald-950 space-y-1">
+                <div>
+                  <strong className="font-bold">Zero-Duplicate Syllabus Engine &amp; Reload Protection:</strong>{' '}
+                  Every attempt is verified for 100% syllabus balance, zero duplicate questions, and
+                  automatic timer backup.
+                </div>
+                {historyInfo.attemptCount > 0 && (
+                  <div className="text-xs font-semibold text-emerald-800">
+                    Previous attempts detected ({historyInfo.attemptCount}) — your next test will
+                    automatically prioritize fresh, unseen questions and randomized option orders!
+                  </div>
+                )}
               </div>
             </div>
 
@@ -546,7 +658,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
                 onClick={onExit}
                 className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm cursor-pointer transition-colors"
               >
-                Cancel & Return
+                Cancel &amp; Return
               </button>
               <button
                 type="button"
@@ -633,6 +745,14 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
       </div>
     ) : null;
 
+    const topicDisplay = [
+      currentQ.topic || currentQ.section,
+      currentQ.difficulty ? `${currentQ.difficulty}` : null,
+      currentQ.questionType ? `${currentQ.questionType}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
     return (
       <UniversalExamShell
         examTitle={config.shortTitle}
@@ -642,11 +762,11 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         questionNumber={currentIndex + 1}
         totalQuestions={questions.length}
         marksLabel={`+${currentQ.marks || config.marksPerQuestion} Marks`}
-        topicLabel={currentQ.topic || currentQ.section}
+        topicLabel={topicDisplay}
         remainingSeconds={remainingSeconds}
         timerFormat="hhmmss"
-        urgentThresholdSeconds={300} // 5 mins
-        warningThresholdSeconds={900} // 15 mins
+        urgentThresholdSeconds={300}
+        warningThresholdSeconds={900}
         sectionTabsSlot={sectionTabsSlot}
         questionText={currentQ.question}
         options={currentQ.options}
@@ -792,7 +912,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         {/* Section-Wise Breakdown Table */}
         <div className="p-6 sm:p-8 space-y-4">
           <h3 className="text-base font-display font-black text-slate-900">
-            Subject & Section-Wise Performance Breakdown
+            Subject &amp; Section-Wise Performance Breakdown
           </h3>
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full text-left text-xs sm:text-sm">
@@ -829,9 +949,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         </div>
       </div>
 
-      {/* =====================================================================
-          2. USER-REQUESTED CALL-TO-ACTION (BUY NOW PROMO BANNER)
-          ===================================================================== */}
+      {/* 2. CALL-TO-ACTION (BUY NOW PROMO BANNER) */}
       <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 border-2 border-amber-300 shadow-lg text-slate-950 relative overflow-hidden">
         <div className="max-w-2xl space-y-3 relative z-10">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-950 bg-white/40 backdrop-blur-xs px-3 py-1 rounded-full w-fit">
@@ -861,7 +979,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
               className="px-5 py-3.5 rounded-2xl bg-white/80 hover:bg-white text-slate-900 font-bold text-sm cursor-pointer transition-colors flex items-center gap-1.5"
             >
               <RotateCcw className="w-4 h-4" />
-              Retake Demo Test
+              Retake with Fresh Question Set
             </button>
             <button
               type="button"
@@ -874,21 +992,19 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
         </div>
       </div>
 
-      {/* =====================================================================
-          3. QUESTION-BY-QUESTION SOLUTIONS & DETAILED EXPLANATIONS
-          ===================================================================== */}
+      {/* 3. QUESTION-BY-QUESTION SOLUTIONS & DETAILED EXPLANATIONS */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
             <h3 className="text-lg font-display font-black text-slate-900">
-              Detailed Question Analysis & Explanations
+              Detailed Question Analysis &amp; Explanations
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
               Review every question with official answer keys and step-by-step solutions.
             </p>
           </div>
 
-          {/* Filter Pills */}
+          {/* Filter Buttons */}
           <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold">
             <button
               type="button"
@@ -957,14 +1073,23 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
               >
                 {/* Header */}
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono font-black text-sm text-slate-900">
                       Q{idx + 1}.
                     </span>
-                    <span className="text-xs text-slate-500 font-semibold">
+                    <span className="text-xs text-slate-600 font-semibold">
                       {q.section || q.subjectLabel}
                     </span>
-                    <span className="text-xs text-slate-400">·</span>
+                    {q.topic && (
+                      <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] font-semibold text-indigo-800">
+                        {q.topic}
+                      </span>
+                    )}
+                    {q.difficulty && (
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700">
+                        {q.difficulty}
+                      </span>
+                    )}
                     <span className="text-xs font-mono font-bold text-slate-600">
                       +{q.marks || config.marksPerQuestion} Marks
                     </span>
@@ -1037,7 +1162,7 @@ export const DemoExamSimulator: React.FC<DemoExamSimulatorProps> = ({
                 <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 text-xs sm:text-sm text-slate-700 space-y-1">
                   <span className="font-bold text-indigo-900 block flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    Explanation / स्पष्टीकरण:
+                    Explanation:
                   </span>
                   <p className="leading-relaxed">{q.explanation}</p>
                 </div>

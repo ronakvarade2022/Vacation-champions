@@ -11,7 +11,10 @@ import {
   saveStudentProfileToFirestore,
 } from '../services/firebase';
 import { referralService } from '../services/referralService';
-import { sanitizeReferralCode } from '../utils/referralCoding';
+import {
+  sanitizeReferralCode,
+  clearStoredBrowserReferralCodes,
+} from '../utils/referralCoding';
 import {
   buildBoardClassKey,
   formatStandardOrdinal,
@@ -29,6 +32,7 @@ interface AuthModalProps {
   initialBoard?: EducationBoard;
   initialClass?: ClassLevel;
   initialReferralCode?: string;
+  onClearReferralCode?: () => void;
   onSuccess?: () => void;
   onExistingAccountProceedToSubscription?: (targetClass: ClassLevel, targetBoard?: EducationBoard) => void;
 }
@@ -108,6 +112,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialBoard,
   initialClass,
   initialReferralCode,
+  onClearReferralCode,
   onSuccess,
   onExistingAccountProceedToSubscription,
 }) => {
@@ -214,23 +219,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (initialClass) {
       setRegClass(initialClass);
     }
-    const pendingCode = sanitizeReferralCode(
-      initialReferralCode ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('vc_pending_ref_code') || localStorage.getItem('msz_ref_code') || ''
-        : '')
-    );
-    setRegReferralCode(pendingCode);
-    if (!pendingCode) {
-      setReferralValidationInfo({ checked: false, valid: false });
-    }
+    clearStoredBrowserReferralCodes();
+    // Always keep the referral code input field completely empty by default
+    setRegReferralCode('');
+    setReferralValidationInfo({ checked: false, valid: false });
     setError(sessionSecurityNotice || '');
     setSuccessMsg('');
     setExistingAccountMatch(null);
     setExistingAccountPassword('');
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
-  }, [defaultTab, initialRegisterRole, initialEmail, initialBoard, initialClass, initialReferralCode, isOpen, sessionSecurityNotice]);
+  }, [defaultTab, initialRegisterRole, initialEmail, initialBoard, initialClass, isOpen, sessionSecurityNotice]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {
@@ -393,7 +392,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (normalizedRefCode && res.student && !res.student.referredByCode) {
+    // Never overwrite an existing user's referral information.
+    // Only apply if user explicitly typed a manual code AND user has no prior referral record.
+    if (
+      normalizedRefCode &&
+      res.student &&
+      !res.student.referredByCode &&
+      !res.student.referredByStudentId
+    ) {
       const ownCode = sanitizeReferralCode(res.student.referralCode);
       if (ownCode !== normalizedRefCode && res.student.id !== verifiedReferrerUserId) {
         res.student.referredByCode = normalizedRefCode;
@@ -415,6 +421,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     }
 
+    clearStoredBrowserReferralCodes();
+    setRegReferralCode('');
+    onClearReferralCode?.();
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
     onSuccess?.();
@@ -625,37 +634,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     // NOTE: School Name is strictly OPTIONAL for both Students and Teachers!
     setIsLoading(true);
 
-    // Validate optional referral code before creating account (prevents invalid referrals and self-referrals)
-    const normalizedRefCode = sanitizeReferralCode(regReferralCode);
+    // Validate optional manual referral code or automatically process active referral link code
+    const manualRefCode = sanitizeReferralCode(regReferralCode);
+    const linkRefCode = sanitizeReferralCode(initialReferralCode);
+    let normalizedRefCode = manualRefCode || linkRefCode;
     let verifiedReferrerUserId: string | undefined;
 
     if (normalizedRefCode) {
       const refCheck = await referralService.validateCode(normalizedRefCode);
       if (!refCheck?.valid) {
-        setIsLoading(false);
-        setError(
-          refCheck?.message ||
-            refCheck?.error ||
-            `Invalid referral code "${normalizedRefCode}". Please enter a valid referral code or leave the field blank.`
-        );
-        return;
-      }
-      verifiedReferrerUserId = refCheck.referrerUserId;
+        if (manualRefCode) {
+          setIsLoading(false);
+          setError(
+            refCheck?.message ||
+              refCheck?.error ||
+              `Invalid referral code "${manualRefCode}". Please enter a valid referral code or leave the field blank.`
+          );
+          return;
+        }
+        // If an automatic URL code was invalid, ignore it silently without blocking registration
+        normalizedRefCode = '';
+      } else {
+        verifiedReferrerUserId = refCheck.referrerUserId;
 
-      // Prevent self-referral by matching email or mobile against referrer
-      const referrerStudent = studentsList.find(
-        (s) =>
-          s.id === verifiedReferrerUserId ||
-          sanitizeReferralCode(s.referralCode) === normalizedRefCode
-      );
-      if (
-        referrerStudent &&
-        (referrerStudent.email.trim().toLowerCase() === cleanEmail ||
-          referrerStudent.mobile.replace(/\D/g, '').slice(-10) === cleanMobile)
-      ) {
-        setIsLoading(false);
-        setError('Self-referral is not allowed. You cannot use your own referral code.');
-        return;
+        // Prevent self-referral by matching email or mobile against referrer
+        const referrerStudent = studentsList.find(
+          (s) =>
+            s.id === verifiedReferrerUserId ||
+            sanitizeReferralCode(s.referralCode) === normalizedRefCode
+        );
+        if (
+          referrerStudent &&
+          (referrerStudent.email.trim().toLowerCase() === cleanEmail ||
+            referrerStudent.mobile.replace(/\D/g, '').slice(-10) === cleanMobile)
+        ) {
+          if (manualRefCode) {
+            setIsLoading(false);
+            setError('Self-referral is not allowed. You cannot use your own referral code.');
+            return;
+          }
+          normalizedRefCode = '';
+          verifiedReferrerUserId = undefined;
+        }
       }
     }
 
@@ -741,13 +761,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             referralCodeUsed: normalizedRefCode,
           });
         }
-        localStorage.removeItem('vc_pending_ref_code');
-        localStorage.removeItem('msz_ref_code');
+        clearStoredBrowserReferralCodes();
       } catch {
         // Non-blocking referral registration
       }
     }
 
+    clearStoredBrowserReferralCodes();
+    setRegReferralCode('');
+    onClearReferralCode?.();
     setIsLoading(false);
     onSuccess?.();
     onClose();
@@ -821,7 +843,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (normalizedRefCode && res.teacher && !res.teacher.referredByCode) {
+    // Never overwrite an existing user's referral information.
+    if (
+      normalizedRefCode &&
+      res.teacher &&
+      !res.teacher.referredByCode &&
+      !res.teacher.referredByStudentId
+    ) {
       const ownCode = sanitizeReferralCode(res.teacher.referralCode);
       if (ownCode !== normalizedRefCode && res.teacher.id !== verifiedReferrerUserId) {
         res.teacher.referredByCode = normalizedRefCode;
@@ -843,6 +871,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     }
 
+    clearStoredBrowserReferralCodes();
+    setRegReferralCode('');
+    onClearReferralCode?.();
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
     onSuccess?.();
@@ -1910,6 +1941,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={regReferralCode}
                       onChange={(e) => setRegReferralCode(e.target.value.toUpperCase())}
                       placeholder="Enter friend's referral code (optional)"
+                      autoComplete="off"
                       className="w-full pl-8 pr-3 py-2 rounded-lg border border-indigo-200 focus:border-indigo-600 focus:outline-none text-xs font-mono font-bold uppercase bg-white"
                     />
                   </div>

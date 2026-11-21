@@ -25,10 +25,12 @@ import {
 } from 'lucide-react';
 
 const TEST_LIST: { id: DemoExamTypeId; label: string; tag: string }[] = [
-  { id: 'demo_tet', label: 'TET Demo Mock Test', tag: 'Teachers (MAHA TET)' },
-  { id: 'demo_ctet', label: 'CTET Demo Mock Test', tag: 'Teachers (CBSE CTET)' },
-  { id: 'demo_scholarship_4', label: 'Class 4 Scholarship Demo', tag: 'Std 4th (150 Marks)' },
-  { id: 'demo_scholarship_7', label: 'Class 7 Scholarship Demo', tag: 'Std 7th (150 Marks)' }
+  { id: 'demo_ctet', label: 'CTET Paper I Demo (Classes I–V)', tag: 'Teachers (CBSE CTET P1)' },
+  { id: 'demo_ctet_p2', label: 'CTET Paper II Demo (Classes VI–VIII)', tag: 'Teachers (CBSE CTET P2)' },
+  { id: 'demo_tet', label: 'TET Paper I Demo (English Medium)', tag: 'Teachers (MAHA TET P1)' },
+  { id: 'demo_tet_p2', label: 'TET Paper II Demo (English Medium)', tag: 'Teachers (MAHA TET P2)' },
+  { id: 'demo_scholarship_4', label: 'Class 4 Scholarship Demo', tag: 'Std 4th (150 Marks · English)' },
+  { id: 'demo_scholarship_7', label: 'Class 7 Scholarship Demo', tag: 'Std 7th (150 Marks · English)' }
 ];
 
 export const AdminDemoExamsSection: React.FC = () => {

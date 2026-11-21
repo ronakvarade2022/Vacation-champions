@@ -579,34 +579,44 @@ export const referralService = {
       );
       if (referrerLookup.valid && referrerLookup.referrerUserId) {
         try {
-          await Promise.all([
-            setDoc(
-              doc(db, 'students', cleanNewUserId),
-              {
-                id: cleanNewUserId,
-                referralCode: ensuredNewStudent.referralCode,
-                referralLink: ensuredNewStudent.referralLink,
-                referredByCode: cleanCodeUsed,
-                referredByStudentId: referrerLookup.referrerUserId,
-              },
-              { merge: true }
-            ),
-            setDoc(
-              doc(db, 'referrals', cleanNewUserId),
-              {
-                userId: cleanNewUserId,
-                userName: params.newUserName,
-                userRole: params.newUserRole || 'student',
-                className: params.newUserClass || 'Class 5',
-                referralCode: ensuredNewStudent.referralCode,
-                referralLink: ensuredNewStudent.referralLink,
-                referredByCode: cleanCodeUsed,
-                referredByUserId: referrerLookup.referrerUserId,
-                updatedAt: new Date().toISOString(),
-              },
-              { merge: true }
-            ),
+          const [existingStuSnap, existingRefSnap] = await Promise.all([
+            getDoc(doc(db, 'students', cleanNewUserId)).catch(() => null),
+            getDoc(doc(db, 'referrals', cleanNewUserId)).catch(() => null),
           ]);
+          const existingStuRef = sanitizeReferralCode(existingStuSnap?.data()?.referredByCode);
+          const existingRefDocRef = sanitizeReferralCode(existingRefSnap?.data()?.referredByCode);
+
+          // Never overwrite an existing user's referral information
+          if (!existingStuRef && !existingRefDocRef) {
+            await Promise.all([
+              setDoc(
+                doc(db, 'students', cleanNewUserId),
+                {
+                  id: cleanNewUserId,
+                  referralCode: ensuredNewStudent.referralCode,
+                  referralLink: ensuredNewStudent.referralLink,
+                  referredByCode: cleanCodeUsed,
+                  referredByStudentId: referrerLookup.referrerUserId,
+                },
+                { merge: true }
+              ),
+              setDoc(
+                doc(db, 'referrals', cleanNewUserId),
+                {
+                  userId: cleanNewUserId,
+                  userName: params.newUserName,
+                  userRole: params.newUserRole || 'student',
+                  className: params.newUserClass || 'Class 5',
+                  referralCode: ensuredNewStudent.referralCode,
+                  referralLink: ensuredNewStudent.referralLink,
+                  referredByCode: cleanCodeUsed,
+                  referredByUserId: referrerLookup.referrerUserId,
+                  updatedAt: new Date().toISOString(),
+                },
+                { merge: true }
+              ),
+            ]);
+          }
         } catch {
           // Non-fatal
         }

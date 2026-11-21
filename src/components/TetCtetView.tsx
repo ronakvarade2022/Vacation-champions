@@ -67,7 +67,9 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
   const { currentStudent, tetCtetAttempts, tetCtetBatches } = useApp();
   const [selectedModule, setSelectedModule] = useState<TetCtetModuleId | null>(null);
   const [initialSubTab, setInitialSubTab] = useState<TetCtetModuleSubTab>('mock-tests');
-  const [activeDemoTestId, setActiveDemoTestId] = useState<'demo_tet' | 'demo_ctet' | null>(null);
+  const [activeDemoTestId, setActiveDemoTestId] = useState<
+    'demo_tet' | 'demo_tet_p2' | 'demo_ctet' | 'demo_ctet_p2' | null
+  >(null);
 
   const mahaTetInfo = getCategorySubscriptionInfo(currentStudent, 'maha_tet');
   const ctetP1Info = getCategorySubscriptionInfo(currentStudent, 'ctet_paper_1');
@@ -180,39 +182,57 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
         </div>
       </section>
 
-      {/* 100% FREE DEMO MOCK EXAMS (TEACHERS) */}
-      <section className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-3xl p-6 sm:p-7 border-2 border-amber-300 shadow-sm text-slate-950 flex flex-col md:flex-row md:items-center justify-between gap-5">
+      {/* 100% FREE DEMO MOCK EXAMS (TEACHERS - PAPER I & PAPER II) */}
+      <section className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-3xl p-6 sm:p-7 border-2 border-amber-300 shadow-sm text-slate-950 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div className="space-y-1.5 max-w-2xl">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-wider">
-              100% Free · No Plan Required
+              100% Free · English-Medium Demos
             </span>
-            <span className="text-xs font-bold text-amber-950">Teachers Demo Exam Experience</span>
+            <span className="text-xs font-bold text-amber-950">
+              Complete Paper I (Classes I–V) &amp; Paper II (Classes VI–VIII)
+            </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-display font-black text-slate-950">
-            Take a Free Full-Length Demo Mock Test (TET &amp; CTET)
+            Take a Free Full-Length Demo Mock Test (CTET &amp; TET – Paper I &amp; II)
           </h2>
           <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-relaxed">
-            Experience the real examination countdown timer (150 Mins), question palette, subject distribution, reload-protection, and immediate detailed solutions before purchasing.
+            Experience the real 150-minute examination countdown timer, 20-topic balanced Child Development &amp; Pedagogy, Language I &amp; II, Mathematics, EVS, Science, and Social Studies with immediate step-by-step solutions.
           </p>
         </div>
 
-        <div className="flex flex-wrap sm:flex-col gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveDemoTestId('demo_tet')}
-            className="px-5 py-3 rounded-2xl bg-blue-900 hover:bg-blue-950 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center justify-center gap-2"
-          >
-            <span>Start TET Demo Test (150 Qs)</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 shrink-0">
           <button
             type="button"
             onClick={() => setActiveDemoTestId('demo_ctet')}
-            className="px-5 py-3 rounded-2xl bg-purple-900 hover:bg-purple-950 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center justify-center gap-2"
+            className="px-4 py-2.5 rounded-2xl bg-purple-900 hover:bg-purple-950 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
           >
-            <span>Start CTET Demo Test (150 Qs)</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>CTET Paper I Demo (Classes I–V)</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDemoTestId('demo_ctet_p2')}
+            className="px-4 py-2.5 rounded-2xl bg-violet-900 hover:bg-violet-950 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
+          >
+            <span>CTET Paper II Demo (Classes VI–VIII)</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDemoTestId('demo_tet')}
+            className="px-4 py-2.5 rounded-2xl bg-blue-900 hover:bg-blue-950 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
+          >
+            <span>TET Paper I Demo (English Medium)</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDemoTestId('demo_tet_p2')}
+            className="px-4 py-2.5 rounded-2xl bg-indigo-900 hover:bg-indigo-950 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
+          >
+            <span>TET Paper II Demo (English Medium)</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
           </button>
         </div>
       </section>

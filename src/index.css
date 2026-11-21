@@ -13,25 +13,13 @@
     overflow-x: clip;
   }
 
-  /* Full-Width Landscape Desktop Site Mode */
-  @media (max-width: 1023px) {
-    html.desktop-site-active,
-    html.desktop-site-active body,
-    html.desktop-site-active #root {
-      min-width: 1200px;
-      max-width: none;
-      overflow-x: auto;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    html.desktop-site-active,
-    html.desktop-site-active body,
-    html.desktop-site-active #root {
-      width: 100%;
-      max-width: 100%;
-      overflow-x: clip;
-    }
+  /* Responsive Desktop & Mobile Preview Safe Layout */
+  html.desktop-site-active,
+  html.desktop-site-active body,
+  html.desktop-site-active #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   body {

@@ -24,9 +24,7 @@ import {
   FileSpreadsheet,
   Layers,
   X,
-  LogOut,
 } from 'lucide-react';
-import { LogoutConfirmModal } from './LogoutConfirmModal';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import { ALL_ADMIN_CLASSES, ALL_ADMIN_SUBJECTS } from '../utils/adminAnalytics';
 import { ALL_BOARDS, getBoardShortLabel } from '../utils/subscriptionAccess';
@@ -155,14 +153,12 @@ export const AdminDashboard: React.FC = () => {
     adminPromoteOrCorrectClass,
     adminApplyApproved365DayMigration,
     ensureContentBankHydrated,
-    logout,
   } = useApp();
 
   useEffect(() => {
     void ensureContentBankHydrated('all');
   }, [ensureContentBankHydrated]);
 
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [activeSection, setActiveSection] = useState<AdminSectionId>('questions');
 
   // Independent Education Board & Class Dashboard Switcher
@@ -304,15 +300,6 @@ export const AdminDashboard: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
             <span>Add New Vetted Question</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLogoutConfirm(true)}
-            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer border border-rose-500/50"
-            title="Sign out of supervisor session"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Logout</span>
           </button>
         </div>
       </div>
@@ -596,15 +583,6 @@ export const AdminDashboard: React.FC = () => {
           <User className="w-4 h-4" />
           <span>Supervisor Profile</span>
         </button>
-        <button
-          type="button"
-          onClick={() => setShowLogoutConfirm(true)}
-          className="px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 shadow-2xs"
-          title="Sign out of supervisor session"
-        >
-          <LogOut className="w-4 h-4 text-rose-600" />
-          <span>Logout (लॉग आउट)</span>
-        </button>
       </div>
 
       {/* Lazily Mounted Active Section Only (Zero background rendering/heavy data loading for closed tabs) */}
@@ -729,7 +707,6 @@ export const AdminDashboard: React.FC = () => {
           <AdminProfileSection
             studentsCount={studentsList.length}
             questionsCount={allQuestions.length}
-            onRequestLogout={() => setShowLogoutConfirm(true)}
           />
         )}
       </Suspense>
@@ -941,15 +918,6 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Sign Out Confirmation Modal */}
-      <LogoutConfirmModal
-        isOpen={showLogoutConfirm}
-        onClose={() => setShowLogoutConfirm(false)}
-        onConfirm={logout}
-        accountName="Platform Supervisor"
-        roleTitle="Administrator"
-      />
     </div>
   );
 };

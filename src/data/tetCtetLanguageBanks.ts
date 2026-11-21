@@ -743,20 +743,26 @@ export function generateTetCtetLanguageQuestion(params: {
     questionNumber,
   } = params;
 
-  if (exam === 'MAHA_TET' && paper === 1 && poolType === 'MOCK' && testNumber >= 1 && testNumber <= 30) {
+  if (poolType === 'MOCK' && testNumber >= 1 && testNumber <= 30) {
+    const examPaperOffset =
+      (exam === 'CTET' ? 8 : 0) +
+      (paper === 2 ? 16 : 0) +
+      (isLanguage1 ? 0 : 4);
+    const effectiveLangTestNum = ((testNumber - 1 + examPaperOffset) % 30) + 1;
+
     const curatedLang =
-      isLanguage1 && language === 'Marathi'
-        ? testNumber <= 10
-          ? getMahaTetP1B1MarathiL1Question(testNumber, slotIndex)
-          : testNumber <= 20
-          ? getMahaTetP1B2MarathiL1Question(testNumber, slotIndex)
-          : getMahaTetP1B3MarathiL1Question(testNumber, slotIndex)
-        : !isLanguage1 && language === 'English'
-        ? testNumber <= 10
-          ? getMahaTetP1B1EnglishL2Question(testNumber, slotIndex)
-          : testNumber <= 20
-          ? getMahaTetP1B2EnglishL2Question(testNumber, slotIndex)
-          : getMahaTetP1B3EnglishL2Question(testNumber, slotIndex)
+      language === 'Marathi'
+        ? effectiveLangTestNum <= 10
+          ? getMahaTetP1B1MarathiL1Question(effectiveLangTestNum, slotIndex)
+          : effectiveLangTestNum <= 20
+          ? getMahaTetP1B2MarathiL1Question(effectiveLangTestNum, slotIndex)
+          : getMahaTetP1B3MarathiL1Question(effectiveLangTestNum, slotIndex)
+        : language === 'English'
+        ? effectiveLangTestNum <= 10
+          ? getMahaTetP1B1EnglishL2Question(effectiveLangTestNum, slotIndex)
+          : effectiveLangTestNum <= 20
+          ? getMahaTetP1B2EnglishL2Question(effectiveLangTestNum, slotIndex)
+          : getMahaTetP1B3EnglishL2Question(effectiveLangTestNum, slotIndex)
         : null;
 
     if (curatedLang) {
@@ -774,7 +780,7 @@ export function generateTetCtetLanguageQuestion(params: {
         batchNumber: Math.ceil(testNumber / 5),
         questionNumber,
         subjectId: subjectIdCurated,
-        subjectLabel: `${isLanguage1 ? 'Language 1' : 'Language 2'} (${language})`,
+        subjectLabel: `${isLanguage1 ? 'Language I' : 'Language II'} (${language})`,
         topic: curatedLang.topic,
         languageCode: language,
         mediumRendered: language,
@@ -785,7 +791,7 @@ export function generateTetCtetLanguageQuestion(params: {
         correctAnswer: permuted.correctAnswer,
         explanation: curatedLang.exp,
         marks: 1,
-        conceptSignature: `${exam}|P1|MOCK|T${testNumber}|${subjectIdCurated}|${language}|${curatedLang.topic}|Q${questionNumber}`,
+        conceptSignature: `${exam}|P${paper}|MOCK|T${testNumber}|${subjectIdCurated}|${language}|${curatedLang.topic}|Q${questionNumber}`,
         normalizedHash: normalizeTetText(curatedLang.q),
         approvalStatus: 'approved',
       };

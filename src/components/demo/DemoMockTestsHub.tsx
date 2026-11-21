@@ -1,23 +1,16 @@
 import React, { useState } from 'react';
 import {
-  OFFICIAL_DEMO_EXAM_CONFIGS,
-  DemoExamTypeId
+  DemoExamTypeId,
+  DemoPaper2Stream,
 } from '../../data/demoExamEngine';
 import { demoExamService } from '../../services/demoExamService';
 import { DemoExamSimulator } from './DemoExamSimulator';
 import { PlanSkuId } from '../../types';
 import {
-  Award,
-  BookOpen,
-  CheckCircle2,
   Clock,
-  Crown,
-  GraduationCap,
+  Layers,
   Play,
-  RotateCcw,
   ShieldCheck,
-  Sparkles,
-  Users
 } from 'lucide-react';
 
 interface DemoMockTestsHubProps {
@@ -36,24 +29,35 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
   studentName,
   studentRole,
   onOpenMembership,
-  onClose,
-  filterAudience = 'all'
+  filterAudience = 'all',
 }) => {
   const [activeTestId, setActiveTestId] = useState<DemoExamTypeId | null>(initialTestId);
+  const [activeStream, setActiveStream] = useState<DemoPaper2Stream>('MATH_SCIENCE');
+  const [cardStreams, setCardStreams] = useState<Record<string, DemoPaper2Stream>>({
+    demo_ctet_p2: 'MATH_SCIENCE',
+    demo_tet_p2: 'MATH_SCIENCE',
+  });
   const [activeTabFilter, setActiveTabFilter] = useState<'all' | 'teachers' | 'scholarship'>(
     filterAudience
   );
 
   const testList: DemoExamTypeId[] = [
-    'demo_tet',
     'demo_ctet',
+    'demo_ctet_p2',
+    'demo_tet',
+    'demo_tet_p2',
     'demo_scholarship_4',
-    'demo_scholarship_7'
+    'demo_scholarship_7',
   ];
 
   const filteredTests = testList.filter((tid) => {
     if (activeTabFilter === 'teachers') {
-      return tid === 'demo_tet' || tid === 'demo_ctet';
+      return (
+        tid === 'demo_tet' ||
+        tid === 'demo_tet_p2' ||
+        tid === 'demo_ctet' ||
+        tid === 'demo_ctet_p2'
+      );
     }
     if (activeTabFilter === 'scholarship') {
       return tid === 'demo_scholarship_4' || tid === 'demo_scholarship_7';
@@ -65,6 +69,7 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
     return (
       <DemoExamSimulator
         testId={activeTestId}
+        initialStream={activeStream}
         studentId={studentId}
         studentName={studentName}
         studentRole={studentRole}
@@ -80,21 +85,21 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
       <div className="rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-emerald-400 text-emerald-950 text-xs font-black uppercase tracking-wider">
-                100% Free · No Payment Required
+                100% Free · English-Medium Mock Tests
               </span>
               <span className="text-xs text-indigo-200 font-semibold">
-                Official Exam Experience
+                Official Syllabus · Zero Duplicate Questions
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-display font-black tracking-tight text-white">
               Free Full-Length Demo Mock Examinations
             </h1>
             <p className="text-xs sm:text-sm text-indigo-100 leading-relaxed">
-              Experience the authentic examination interface with real countdown timers, question
-              palettes, marking schemes, and immediate step-by-step solutions before purchasing a
-              premium plan.
+              Practise realistic, syllabus-balanced English-medium mock tests for CTET (Paper I &amp; Paper II),
+              MAHA TET (Paper I &amp; Paper II), and Class 4 &amp; Class 7 Scholarship with real countdown timers,
+              question palettes, and step-by-step explanations.
             </p>
           </div>
 
@@ -109,7 +114,7 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                   : 'text-white hover:bg-white/10'
               }`}
             >
-              All 4 Demo Tests
+              All 6 Demo Exams
             </button>
             <button
               type="button"
@@ -120,7 +125,7 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                   : 'text-white hover:bg-white/10'
               }`}
             >
-              Teachers (TET / CTET)
+              CTET &amp; TET (Papers I &amp; II)
             </button>
             <button
               type="button"
@@ -131,22 +136,24 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                   : 'text-white hover:bg-white/10'
               }`}
             >
-              Scholarship (Std 4 & 7)
+              Scholarship (Class 4 &amp; 7)
             </button>
           </div>
         </div>
       </div>
 
-      {/* Grid of 4 Demo Tests */}
+      {/* Grid of 6 Demo Tests */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {filteredTests.map((tid) => {
-          const cfg = demoExamService.getConfig(tid);
-          const qs = demoExamService.getQuestions(tid);
+          const currentCardStream = cardStreams[tid] || 'MATH_SCIENCE';
+          const cfg = demoExamService.getConfig(tid, currentCardStream);
+          const qs = demoExamService.getQuestions(tid, currentCardStream);
           const stats = demoExamService.getStats(tid);
           const activeSession = demoExamService.loadActiveSession(tid);
           const hasInProgress = Boolean(activeSession && !activeSession.isExpired);
 
-          const isTeacherExam = tid === 'demo_tet' || tid === 'demo_ctet';
+          const isCtet = tid === 'demo_ctet' || tid === 'demo_ctet_p2';
+          const isTet = tid === 'demo_tet' || tid === 'demo_tet_p2';
 
           return (
             <div
@@ -157,18 +164,24 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          isTeacherExam
+                          isCtet
                             ? 'bg-purple-100 text-purple-900'
+                            : isTet
+                            ? 'bg-blue-100 text-blue-900'
                             : 'bg-emerald-100 text-emerald-900'
                         }`}
                       >
-                        {isTeacherExam ? 'Teachers Exam' : 'Scholarship Exam'}
+                        {isCtet
+                          ? `CBSE CTET · Paper ${cfg.paperNumber === 2 ? 'II' : 'I'}`
+                          : isTet
+                          ? `MAHA TET (English) · Paper ${cfg.paperNumber === 2 ? 'II' : 'I'}`
+                          : 'MSCE Scholarship (English)'}
                       </span>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black uppercase">
-                        Free Demo
+                        English Medium
                       </span>
                       {hasInProgress && (
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black animate-pulse">
@@ -183,9 +196,45 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
-                  {cfg.description}
-                </p>
+                <p className="text-xs text-slate-600 leading-relaxed">{cfg.description}</p>
+
+                {/* Paper II Stream Switcher right on the card */}
+                {cfg.supportsStreamSelection && (
+                  <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/70 space-y-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-indigo-700" />
+                      Select Paper II Elective Stream (60 Qs):
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCardStreams((prev) => ({ ...prev, [tid]: 'MATH_SCIENCE' }))
+                        }
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-colors ${
+                          currentCardStream === 'MATH_SCIENCE'
+                            ? 'bg-indigo-700 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        Mathematics &amp; Science
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCardStreams((prev) => ({ ...prev, [tid]: 'SOCIAL_STUDIES' }))
+                        }
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-colors ${
+                          currentCardStream === 'SOCIAL_STUDIES'
+                            ? 'bg-indigo-700 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        Social Studies / Science
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Key Spec Badges */}
                 <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
@@ -218,7 +267,7 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                 {/* Sections list snippet */}
                 <div className="space-y-1.5 pt-1">
                   <span className="text-[11px] font-bold text-slate-700 block">
-                    Subjects & Sections Covered:
+                    Examination Sections Covered:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {cfg.sections.map((s) => (
@@ -233,9 +282,15 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                 </div>
 
                 {/* Reload Safe callout */}
-                <div className="text-[11px] text-slate-500 flex items-center gap-1.5 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span>Real exam timer · Reload protected · Detailed solutions</span>
+                <div className="text-[11px] text-slate-500 flex items-center gap-3 font-medium">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Real timer &amp; reload protection</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>Balanced syllabus · 0% duplicates</span>
+                  </span>
                 </div>
               </div>
 
@@ -248,13 +303,16 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                       {stats.averagePercentage}%)
                     </span>
                   ) : (
-                    <span>Be the first to take this demo!</span>
+                    <span>100% Verified Question Bank</span>
                   )}
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setActiveTestId(tid)}
+                  onClick={() => {
+                    setActiveStream(currentCardStream);
+                    setActiveTestId(tid);
+                  }}
                   className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />

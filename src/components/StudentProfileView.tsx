@@ -19,7 +19,6 @@ import {
   BookOpen,
   FileText,
   Sparkles, 
-  LogOut,
   ArrowRight,
   Crown,
   RefreshCw,
@@ -43,7 +42,6 @@ import {
   getPrimaryBaseClass,
   getBoardShortLabel,
 } from '../utils/subscriptionAccess';
-import { LogoutConfirmModal } from './LogoutConfirmModal';
 import {
   generateUniqueStudentReferralCode,
   buildStudentReferralLink,
@@ -68,7 +66,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     studentsList, 
     quickSwitchStudent, 
     openAuthModal, 
-    logout,
     allAttempts,
     savedDrawings,
     activeBoard,
@@ -80,7 +77,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [promotionBannerMsg, setPromotionBannerMsg] = useState<string | null>(null);
   const [mediumSavedMsg, setMediumSavedMsg] = useState<string | null>(null);
   const [ledgerBoard, setLedgerBoard] = useState<EducationBoard>(activeBoard);
-  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
 
   if (!currentStudent) return null;
 
@@ -259,15 +255,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 self-start sm:self-center shrink-0 w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setShowLogoutModal(true)}
-              className="px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-rose-500/50"
-              title="Sign out of current account"
-            >
-              <LogOut className="w-4 h-4 text-white" />
-              <span>Logout</span>
-            </button>
             <button
               onClick={() => onOpenMembership('premium', currentStudent.classLevel, activeBoard)}
               className="px-4 py-2.5 rounded-2xl bg-white text-amber-900 font-extrabold text-xs shadow-md hover:bg-amber-50 transition-all cursor-pointer text-center"
@@ -876,22 +863,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               <p className="text-[11px] text-emerald-800 truncate">Earn ₹5 per referral &amp; withdraw</p>
             </div>
           </button>
-
-          {/* 13. Logout */}
-          <button
-            type="button"
-            onClick={() => setShowLogoutModal(true)}
-            className="p-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all text-left flex items-start gap-3 cursor-pointer group shadow-2xs"
-          >
-            <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
-              <LogOut className="w-4 h-4 text-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-[10px] font-bold text-red-500 uppercase block">Section 13</span>
-              <p className="font-extrabold text-xs text-red-700 truncate">13. Sign Out (लॉग आउट)</p>
-              <p className="text-[11px] text-red-500 truncate">Securely end current session</p>
-            </div>
-          </button>
         </div>
       </div>
 
@@ -1444,41 +1415,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </div>
         )}
       </div>
-
-      {/* 4. VERY BOTTOM OF PROFILE PAGE: EXCLUSIVE RED SIGN OUT BUTTON */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-red-200 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="text-xs text-slate-600 space-y-1">
-            <h3 className="text-base font-display font-bold text-slate-900">
-              Session & Account Sign Out
-            </h3>
-            <p className="text-slate-500 leading-relaxed text-[11px]">
-              Signing out will securely terminate your Firebase authentication session for <strong>{currentStudent.name}</strong> ({currentStudent.classLevel}). All progress is securely saved.
-            </p>
-          </div>
-
-          {/* PROMINENT RED "SIGN OUT" BUTTON */}
-          <button
-            type="button"
-            onClick={() => setShowLogoutModal(true)}
-            className="w-full sm:w-auto min-h-[52px] px-8 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-sm tracking-wider uppercase shadow-lg shadow-rose-600/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer shrink-0 border border-rose-500/50"
-          >
-            <LogOut className="w-5 h-5 text-white" />
-            <span>SIGN OUT</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Profile Page Sign Out Confirmation Modal */}
-      <LogoutConfirmModal
-        isOpen={showLogoutModal}
-        onClose={() => setShowLogoutModal(false)}
-        onConfirm={async () => {
-          await logout();
-        }}
-        accountName={currentStudent.name}
-        roleTitle={currentStudent.accountRole === 'teacher' ? 'Teacher' : 'Student'}
-      />
     </div>
   );
 };
