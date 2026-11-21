@@ -10,11 +10,13 @@ import {
 } from '../data/demoExamEngine';
 import { seededPermuteOptions } from '../data/tetCtetLanguageBanks';
 
-const CONFIG_STORAGE_KEY = 'vc_demo_exam_custom_configs_v3';
-const QUESTIONS_STORAGE_KEY = 'vc_demo_exam_custom_questions_v3';
-const ATTEMPTS_STORAGE_KEY = 'vc_demo_exam_attempts_v3';
-const ACTIVE_SESSION_PREFIX = 'vc_demo_exam_active_session_v3_';
-const STUDENT_HISTORY_PREFIX = 'vc_demo_student_question_history_v3_';
+const CONFIG_STORAGE_KEY = 'vc_demo_exam_custom_configs_v4';
+const QUESTIONS_STORAGE_KEY = 'vc_demo_exam_custom_questions_v4';
+const ATTEMPTS_STORAGE_KEY = 'vc_demo_exam_attempts_v4';
+const ACTIVE_SESSION_PREFIX = 'vc_demo_exam_active_session_v4_';
+const STUDENT_HISTORY_PREFIX = 'vc_demo_student_question_history_v4_';
+
+const LEGACY_SCHOLARSHIP_PURGE_FLAG = 'vc_scholarship_demo_v4_purged';
 
 export interface ActiveDemoSessionState {
   testId: DemoExamTypeId;
@@ -48,6 +50,39 @@ let attemptsCache: DemoExamAttemptRecord[] | null = null;
 function isStorageAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }
+
+function purgeLegacyScholarshipDemoStorage(): void {
+  if (!isStorageAvailable()) return;
+  try {
+    if (window.localStorage.getItem(LEGACY_SCHOLARSHIP_PURGE_FLAG) === '1') {
+      return;
+    }
+    const keysToRemove: string[] = [
+      'vc_demo_exam_custom_configs_v3',
+      'vc_demo_exam_custom_questions_v3',
+      'vc_demo_exam_attempts_v3',
+      'vc_demo_exam_active_session_v3_demo_scholarship_4',
+      'vc_demo_exam_active_session_v3_demo_scholarship_7',
+    ];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (
+        k &&
+        (k.includes('demo_scholarship_4') || k.includes('demo_scholarship_7')) &&
+        !k.includes('_p1') &&
+        !k.includes('_p2')
+      ) {
+        keysToRemove.push(k);
+      }
+    }
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
+    }
+    window.localStorage.setItem(LEGACY_SCHOLARSHIP_PURGE_FLAG, '1');
+  } catch {}
+}
+
+purgeLegacyScholarshipDemoStorage();
 
 function getSafeStorageItem(key: string): string | null {
   if (!isStorageAvailable()) return null;
@@ -89,7 +124,12 @@ function loadLocalQuestions(): Record<string, DemoExamQuestion[]> {
 function loadLocalAttempts(): DemoExamAttemptRecord[] {
   if (attemptsCache) return attemptsCache;
   const raw = getSafeStorageItem(ATTEMPTS_STORAGE_KEY);
-  attemptsCache = raw ? JSON.parse(raw) : [];
+  const parsed: DemoExamAttemptRecord[] = raw ? JSON.parse(raw) : [];
+  attemptsCache = parsed.filter(
+    (a) =>
+      (a.testId as string) !== 'demo_scholarship_4' &&
+      (a.testId as string) !== 'demo_scholarship_7'
+  );
   return attemptsCache!;
 }
 
@@ -245,6 +285,16 @@ export const demoExamService = {
     const customList = customMap[storageKey] || customMap[testId];
     if (customList && customList.length > 0) {
       return customList;
+    }
+
+    const isScholarshipPaper =
+      testId === 'demo_scholarship_4_p1' ||
+      testId === 'demo_scholarship_4_p2' ||
+      testId === 'demo_scholarship_7_p1' ||
+      testId === 'demo_scholarship_7_p2';
+
+    if (isScholarshipPaper) {
+      return buildDefaultDemoExamQuestions(testId, { stream, testSetNumber: 1 });
     }
 
     const history = this.getStudentAttemptHistory(studentId, testId);

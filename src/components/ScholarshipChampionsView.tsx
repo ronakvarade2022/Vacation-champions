@@ -66,7 +66,13 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
   const { currentStudent, recordScholarshipAttempt, customScholarshipQuestions } = useApp();
   const visibleCats = getVisibleExamCategoriesForStudent(currentStudent);
   const [lockedSetNotice, setLockedSetNotice] = useState<string | null>(null);
-  const [activeDemoTestId, setActiveDemoTestId] = useState<'demo_scholarship_4' | 'demo_scholarship_7' | null>(null);
+  const [activeDemoTestId, setActiveDemoTestId] = useState<
+    | 'demo_scholarship_4_p1'
+    | 'demo_scholarship_4_p2'
+    | 'demo_scholarship_7_p1'
+    | 'demo_scholarship_7_p2'
+    | null
+  >(null);
 
   // Active configurations (role-scoped default)
   const [selectedClass, setSelectedClass] = useState<ScholarshipClass>(() => {
@@ -524,40 +530,58 @@ export const ScholarshipChampionsView: React.FC<ScholarshipChampionsViewProps> =
         </div>
       </div>
 
-      {/* 100% FREE SCHOLARSHIP DEMO MOCK EXAMINATIONS (150 MARKS) */}
+      {/* 100% FREE SCHOLARSHIP DEMO MOCK EXAMINATIONS (150 MARKS EACH) */}
       {examState === 'idle' && (
-        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-3xl p-6 sm:p-7 border-2 border-amber-300 shadow-sm text-slate-950 flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-3xl p-6 sm:p-7 border-2 border-amber-300 shadow-sm text-slate-950 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="space-y-1.5 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-slate-950 text-white text-[10px] font-black uppercase tracking-wider">
-                100% Free Demo · 150 Marks
+                FULL-LENGTH DEMO MOCK TESTS · 90 Mins Each
               </span>
-              <span className="text-xs font-bold text-amber-950">Official MSCE Pune Examination Pattern</span>
+              <span className="text-xs font-bold text-amber-950">
+                Official MSCE Pune Syllabus &amp; Examination Pattern
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-display font-black text-slate-950">
-              Take a Free Full-Length Scholarship Demo Mock Test (150 Marks)
+              Free Full-Length MSCE Pune Scholarship Demo Mock Tests (Std 4th &amp; Std 7th)
             </h2>
             <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-relaxed">
-              Experience the authentic MSCE Pune Scholarship 75-question (150 Marks) paper with a real 90-minute examination timer, question palette, reload-protection, and step-by-step mathematical reasoning.
+              Paper 1: English (First Language, 25 Qs) + Mathematics (50 Qs) · 90 Minutes (150 Marks) | Paper 2: Marathi (Second Language, 25 Qs) + Intelligence Test (50 Qs) · 90 Minutes (150 Marks).
             </p>
           </div>
 
-          <div className="flex flex-wrap sm:flex-col gap-2.5 shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={() => setActiveDemoTestId('demo_scholarship_4')}
-              className="px-5 py-3 rounded-2xl bg-amber-950 hover:bg-black text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center justify-center gap-2"
+              onClick={() => setActiveDemoTestId('demo_scholarship_4_p1')}
+              className="px-4 py-2.5 rounded-2xl bg-amber-950 hover:bg-black text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
             >
-              <span>Start Std 4th Demo (150M · 90m)</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>Std 4th · Paper 1 (Eng + Math · 90m)</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
             </button>
             <button
               type="button"
-              onClick={() => setActiveDemoTestId('demo_scholarship_7')}
-              className="px-5 py-3 rounded-2xl bg-indigo-900 hover:bg-indigo-950 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-md transition-all flex items-center justify-center gap-2"
+              onClick={() => setActiveDemoTestId('demo_scholarship_4_p2')}
+              className="px-4 py-2.5 rounded-2xl bg-amber-900 hover:bg-amber-950 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
             >
-              <span>Start Std 7th Demo (150M · 90m)</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>Std 4th · Paper 2 (Mar + Intel · 90m)</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveDemoTestId('demo_scholarship_7_p1')}
+              className="px-4 py-2.5 rounded-2xl bg-indigo-900 hover:bg-indigo-950 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
+            >
+              <span>Std 7th · Paper 1 (Eng + Math · 90m)</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveDemoTestId('demo_scholarship_7_p2')}
+              className="px-4 py-2.5 rounded-2xl bg-indigo-800 hover:bg-indigo-900 text-white font-display font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-between gap-2"
+            >
+              <span>Std 7th · Paper 2 (Mar + Intel · 90m)</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
             </button>
           </div>
         </div>

@@ -6,12 +6,15 @@ import {
   seededPermuteOptions,
 } from './tetCtetLanguageBanks';
 import {
-  SCHOLARSHIP_C4_LANGUAGE_POOL,
-  SCHOLARSHIP_C4_MATH_POOL,
-  SCHOLARSHIP_C4_INTELLIGENCE_POOL,
-  SCHOLARSHIP_C7_LANGUAGE_POOL,
-  SCHOLARSHIP_C7_MATH_POOL,
-  SCHOLARSHIP_C7_INTELLIGENCE_POOL,
+  CURATED_STD4_PAPER1_ENGLISH_25,
+  CURATED_STD4_PAPER1_MATH_50,
+  CURATED_STD4_PAPER2_MARATHI_25,
+  CURATED_STD4_PAPER2_INTELLIGENCE_50,
+  CURATED_STD7_PAPER1_ENGLISH_25,
+  CURATED_STD7_PAPER1_MATH_50,
+  CURATED_STD7_PAPER2_MARATHI_25,
+  CURATED_STD7_PAPER2_INTELLIGENCE_50,
+  type CuratedScholarshipMcq,
 } from './demoScholarshipCuratedBanks';
 
 export type DemoExamTypeId =
@@ -19,8 +22,10 @@ export type DemoExamTypeId =
   | 'demo_ctet_p2'
   | 'demo_tet'
   | 'demo_tet_p2'
-  | 'demo_scholarship_4'
-  | 'demo_scholarship_7';
+  | 'demo_scholarship_4_p1'
+  | 'demo_scholarship_4_p2'
+  | 'demo_scholarship_7_p1'
+  | 'demo_scholarship_7_p2';
 
 export type DemoPaper2Stream = 'MATH_SCIENCE' | 'SOCIAL_STUDIES';
 
@@ -374,12 +379,13 @@ export const OFFICIAL_DEMO_EXAM_CONFIGS: Record<DemoExamTypeId, DemoExamConfig> 
     ],
   },
 
-  demo_scholarship_4: {
-    id: 'demo_scholarship_4',
-    title: 'Class 4 Scholarship (PUP / MSCE Pattern) – Complete English-Medium Mock Test',
-    shortTitle: 'Class 4 Scholarship Demo',
+  demo_scholarship_4_p1: {
+    id: 'demo_scholarship_4_p1',
+    title: 'Standard 4th Scholarship Demo – Paper 1: English (First Language) & Mathematics',
+    shortTitle: 'Std 4th Scholarship – Paper 1 (English + Mathematics)',
     targetAudience: 'everyone',
-    patternName: 'MSCE Pune Primary Scholarship (Std 4th PUP) – Language, Mathematics & Intelligence Pattern',
+    patternName: 'MSCE Pune Primary Scholarship Examination (PSE – Standard 4th) · Paper 1',
+    paperNumber: 1,
     totalQuestions: 75,
     marksPerQuestion: 2,
     totalMarks: 150,
@@ -387,22 +393,22 @@ export const OFFICIAL_DEMO_EXAM_CONFIGS: Record<DemoExamTypeId, DemoExamConfig> 
     durationSeconds: 90 * 60,
     passingPercentage: 40,
     recommendedPlanSku: 'BOARD_CLASS',
-    recommendedPlanName: 'Class 4 Annual Plan (Scholarship Included Free)',
+    recommendedPlanName: 'Standard 4th Annual Plan (Scholarship Included Free)',
     recommendedPlanPrice: 99,
     description:
-      'Comprehensive MSCE Pune Class 4 (Pre-Upper Primary) Scholarship English-medium mock test with 75 syllabus-aligned questions (150 Marks) balanced across Language (English), Mathematics, and Intelligence & Reasoning.',
+      'Official MSCE Pune Primary Scholarship Examination (PSE) Standard 4th Paper 1 full-length mock test: Section A – English (First Language, 25 Questions, 50 Marks) and Section B – Mathematics (50 Questions, 100 Marks). Duration: 90 Minutes.',
     instructions: [
-      'The examination contains 75 multiple-choice questions carrying 2 marks each (Total 150 Marks).',
-      'Section 1: Language (English Comprehension, Grammar, Vocabulary, Synonyms/Antonyms & Sentence Formation) – 25 Questions (50 Marks).',
-      'Section 2: Mathematics (Arithmetic, Fractions, Decimals, Percentage, Profit & Loss, Geometry, Mensuration & Word Problems) – 25 Questions (50 Marks).',
-      'Section 3: Intelligence and Reasoning (Number/Alphabet Series, Analogy, Classification, Coding-Decoding, Directions, Blood Relations & Logical Reasoning) – 25 Questions (50 Marks).',
-      'Total duration is 90 minutes (1 Hour 30 Minutes). There is NO negative marking.',
-      'Questions are distributed across Easy, Moderate, and Difficult levels.',
-      'Step-by-step explanations and section analytics are displayed immediately after submission.'
+      'This is Paper 1 of the MSCE Pune Standard 4th Primary Scholarship Examination (PSE).',
+      'Total Questions: 75 Multiple-Choice Questions (MCQs) carrying 2 marks each (Total Marks: 150).',
+      'Total Duration: 90 Minutes (1 Hour 30 Minutes). The countdown timer starts immediately upon beginning the test.',
+      'Section A: English (First Language) – Questions 1 to 25 (25 Questions × 2 Marks = 50 Marks) covering Reading Comprehension, Vocabulary, Synonyms & Antonyms, Grammar, Sentence Formation, and Appropriate Word Selection.',
+      'Section B: Mathematics – Questions 26 to 75 (50 Questions × 2 Marks = 100 Marks) covering Number Work, Arithmetic Operations, Fractions, Measurement, Time & Calendar, Money, Geometry, Perimeter & Area, Patterns, and Applied Word Problems.',
+      'There is NO negative marking for wrong answers.',
+      'Complete answer key, step-by-step explanations, and subject-wise score breakdown are displayed immediately upon submission.'
     ],
     sections: [
       {
-        name: 'Section 1: Language (English)',
+        name: 'Section A: English (First Language)',
         startQuestionNumber: 1,
         endQuestionNumber: 25,
         questionCount: 25,
@@ -410,30 +416,23 @@ export const OFFICIAL_DEMO_EXAM_CONFIGS: Record<DemoExamTypeId, DemoExamConfig> 
         maxMarks: 50,
       },
       {
-        name: 'Section 2: Mathematics',
+        name: 'Section B: Mathematics',
         startQuestionNumber: 26,
-        endQuestionNumber: 50,
-        questionCount: 25,
-        marksPerQuestion: 2,
-        maxMarks: 50,
-      },
-      {
-        name: 'Section 3: Intelligence and Reasoning',
-        startQuestionNumber: 51,
         endQuestionNumber: 75,
-        questionCount: 25,
+        questionCount: 50,
         marksPerQuestion: 2,
-        maxMarks: 50,
+        maxMarks: 100,
       },
     ],
   },
 
-  demo_scholarship_7: {
-    id: 'demo_scholarship_7',
-    title: 'Class 7 Scholarship (UPS / MSCE Pattern) – Complete English-Medium Mock Test',
-    shortTitle: 'Class 7 Scholarship Demo',
+  demo_scholarship_4_p2: {
+    id: 'demo_scholarship_4_p2',
+    title: 'Standard 4th Scholarship Demo – Paper 2: Marathi (Second Language) & Intelligence Test',
+    shortTitle: 'Std 4th Scholarship – Paper 2 (Marathi + Intelligence Test)',
     targetAudience: 'everyone',
-    patternName: 'MSCE Pune Upper Primary Scholarship (Std 7th UPS) – Language, Mathematics & Intelligence Pattern',
+    patternName: 'MSCE Pune Primary Scholarship Examination (PSE – Standard 4th) · Paper 2',
+    paperNumber: 2,
     totalQuestions: 75,
     marksPerQuestion: 2,
     totalMarks: 150,
@@ -441,22 +440,22 @@ export const OFFICIAL_DEMO_EXAM_CONFIGS: Record<DemoExamTypeId, DemoExamConfig> 
     durationSeconds: 90 * 60,
     passingPercentage: 40,
     recommendedPlanSku: 'BOARD_CLASS',
-    recommendedPlanName: 'Class 7 Annual Plan (Scholarship Included Free)',
+    recommendedPlanName: 'Standard 4th Annual Plan (Scholarship Included Free)',
     recommendedPlanPrice: 99,
     description:
-      'Rigorous MSCE Pune Class 7 (Upper Primary) Scholarship English-medium mock test with 75 higher-order questions (150 Marks) balanced across Language (English), Mathematics, and Intelligence & Reasoning.',
+      'Official MSCE Pune Primary Scholarship Examination (PSE) Standard 4th Paper 2 full-length mock test: Section A – Marathi (Second Language, 25 Questions, 50 Marks) and Section B – Intelligence Test (50 Questions, 100 Marks). Duration: 90 Minutes.',
     instructions: [
-      'The examination contains 75 multiple-choice questions carrying 2 marks each (Total 150 Marks).',
-      'Section 1: Language (Reading Comprehension, Grammar, Vocabulary, Error Identification, Clauses & Word Usage) – 25 Questions (50 Marks).',
-      'Section 2: Mathematics (Number Systems, Fractions/Decimals, Ratio & Proportion, Percentage, Profit & Loss, Time & Work, Speed/Distance, Geometry & Mensuration) – 25 Questions (50 Marks).',
-      'Section 3: Intelligence and Reasoning (Number/Alphabet Series, Analogy, Classification, Coding-Decoding, Direction Sense, Blood Relations, Ranking, Missing Numbers & Figure Logic) – 25 Questions (50 Marks).',
-      'Total duration is 90 minutes (1 Hour 30 Minutes). There is NO negative marking.',
-      'Includes Easy, Moderate, and Difficult competitive scholarship questions.',
-      'Complete analytical solutions are displayed immediately after submission.'
+      'This is Paper 2 of the MSCE Pune Standard 4th Primary Scholarship Examination (PSE).',
+      'Total Questions: 75 Multiple-Choice Questions (MCQs) carrying 2 marks each (Total Marks: 150).',
+      'Total Duration: 90 Minutes (1 Hour 30 Minutes). The countdown timer starts immediately upon beginning the test.',
+      'Section A: Marathi (Second Language / तृतीय भाषा मराठी) – Questions 1 to 25 (25 Questions × 2 Marks = 50 Marks) in proper Marathi covering उतारा व कविता आकलन, शब्दसंपत्ती (समानार्थी, विरुद्धार्थी, जोडशब्द, पिल्लूदर्शक, घरदर्शक, समूहदर्शक शब्द), व्याकरण (नाम, सर्वनाम, विशेषण, क्रियापद, लिंग, वचन, काळ, विरामचिन्हे, शुद्धलेखन), वाक्प्रचार व म्हणी.',
+      'Section B: Intelligence Test (बुद्धिमत्ता चाचणी) – Questions 26 to 75 (50 Questions × 2 Marks = 100 Marks) covering Comprehension, Classification (Odd One Out), Analogy, Number & Alphabet Series, Coding-Decoding, Direction & Calendar Reasoning, Mirror/Water Images, Counting Figures, and Logical Reasoning.',
+      'There is NO negative marking for wrong answers.',
+      'Complete answer key, step-by-step explanations, and subject-wise score breakdown are displayed immediately upon submission.'
     ],
     sections: [
       {
-        name: 'Section 1: Language (English)',
+        name: 'Section A: Marathi (Second Language)',
         startQuestionNumber: 1,
         endQuestionNumber: 25,
         questionCount: 25,
@@ -464,20 +463,106 @@ export const OFFICIAL_DEMO_EXAM_CONFIGS: Record<DemoExamTypeId, DemoExamConfig> 
         maxMarks: 50,
       },
       {
-        name: 'Section 2: Mathematics',
+        name: 'Section B: Intelligence Test',
         startQuestionNumber: 26,
-        endQuestionNumber: 50,
+        endQuestionNumber: 75,
+        questionCount: 50,
+        marksPerQuestion: 2,
+        maxMarks: 100,
+      },
+    ],
+  },
+
+  demo_scholarship_7_p1: {
+    id: 'demo_scholarship_7_p1',
+    title: 'Standard 7th Scholarship Demo – Paper 1: English (First Language) & Mathematics',
+    shortTitle: 'Std 7th Scholarship – Paper 1 (English + Mathematics)',
+    targetAudience: 'everyone',
+    patternName: 'MSCE Pune Upper Primary Scholarship Examination (UPS – Standard 7th) · Paper 1',
+    paperNumber: 1,
+    totalQuestions: 75,
+    marksPerQuestion: 2,
+    totalMarks: 150,
+    durationMinutes: 90,
+    durationSeconds: 90 * 60,
+    passingPercentage: 40,
+    recommendedPlanSku: 'BOARD_CLASS',
+    recommendedPlanName: 'Standard 7th Annual Plan (Scholarship Included Free)',
+    recommendedPlanPrice: 99,
+    description:
+      'Official MSCE Pune Upper Primary Scholarship Examination (UPS) Standard 7th Paper 1 full-length mock test: Section A – English (First Language, 25 Questions, 50 Marks) and Section B – Mathematics (50 Questions, 100 Marks). Duration: 90 Minutes.',
+    instructions: [
+      'This is Paper 1 of the MSCE Pune Standard 7th Upper Primary Scholarship Examination (UPS).',
+      'Total Questions: 75 Multiple-Choice Questions (MCQs) carrying 2 marks each (Total Marks: 150).',
+      'Total Duration: 90 Minutes (1 Hour 30 Minutes). The countdown timer starts immediately upon beginning the test.',
+      'Section A: English (First Language) – Questions 1 to 25 (25 Questions × 2 Marks = 50 Marks) covering Reading Comprehension, Vocabulary, Synonyms & Antonyms, One-Word Substitution, Idioms & Proverbs, Grammar, Tenses, Active/Passive Voice, Direct/Indirect Speech, Degrees of Comparison, Clauses, and Sentence Correction.',
+      'Section B: Mathematics – Questions 26 to 75 (50 Questions × 2 Marks = 100 Marks) covering Number System, HCF & LCM, Square Roots & Indices, Fractions & Decimals, Ratio & Proportion, Direct/Inverse Variation, Percentage, Profit & Loss, Simple Interest, Algebra, Geometry, Mensuration, and Data Interpretation.',
+      'There is NO negative marking for wrong answers.',
+      'Complete answer key, step-by-step explanations, and subject-wise score breakdown are displayed immediately upon submission.'
+    ],
+    sections: [
+      {
+        name: 'Section A: English (First Language)',
+        startQuestionNumber: 1,
+        endQuestionNumber: 25,
         questionCount: 25,
         marksPerQuestion: 2,
         maxMarks: 50,
       },
       {
-        name: 'Section 3: Intelligence and Reasoning',
-        startQuestionNumber: 51,
+        name: 'Section B: Mathematics',
+        startQuestionNumber: 26,
         endQuestionNumber: 75,
+        questionCount: 50,
+        marksPerQuestion: 2,
+        maxMarks: 100,
+      },
+    ],
+  },
+
+  demo_scholarship_7_p2: {
+    id: 'demo_scholarship_7_p2',
+    title: 'Standard 7th Scholarship Demo – Paper 2: Marathi (Second Language) & Intelligence Test',
+    shortTitle: 'Std 7th Scholarship – Paper 2 (Marathi + Intelligence Test)',
+    targetAudience: 'everyone',
+    patternName: 'MSCE Pune Upper Primary Scholarship Examination (UPS – Standard 7th) · Paper 2',
+    paperNumber: 2,
+    totalQuestions: 75,
+    marksPerQuestion: 2,
+    totalMarks: 150,
+    durationMinutes: 90,
+    durationSeconds: 90 * 60,
+    passingPercentage: 40,
+    recommendedPlanSku: 'BOARD_CLASS',
+    recommendedPlanName: 'Standard 7th Annual Plan (Scholarship Included Free)',
+    recommendedPlanPrice: 99,
+    description:
+      'Official MSCE Pune Upper Primary Scholarship Examination (UPS) Standard 7th Paper 2 full-length mock test: Section A – Marathi (Second Language, 25 Questions, 50 Marks) and Section B – Intelligence Test (50 Questions, 100 Marks). Duration: 90 Minutes.',
+    instructions: [
+      'This is Paper 2 of the MSCE Pune Standard 7th Upper Primary Scholarship Examination (UPS).',
+      'Total Questions: 75 Multiple-Choice Questions (MCQs) carrying 2 marks each (Total Marks: 150).',
+      'Total Duration: 90 Minutes (1 Hour 30 Minutes). The countdown timer starts immediately upon beginning the test.',
+      'Section A: Marathi (Second Language / तृतीय भाषा मराठी) – Questions 1 to 25 (25 Questions × 2 Marks = 50 Marks) in proper Marathi covering उतारा व पद्य आकलन, शब्दसंपत्ती (समानार्थी, विरुद्धार्थी, अलंकारिक शब्द, शब्दसमूहाबद्दल एक शब्द, वाक्प्रचार व म्हणी), व्याकरण (शब्दांच्या जाती, विभक्ती, काळ, प्रयोग, समास, संधी, विरामचिन्हे, शुद्धलेखन) व मराठी साहित्य.',
+      'Section B: Intelligence Test (बुद्धिमत्ता चाचणी) – Questions 26 to 75 (50 Questions × 2 Marks = 100 Marks) covering Advanced Number & Alphanumeric Series, Classification, Analogy, Coding & Decoding, Mathematical Operations, Number Matrices, Direction & Pythagoras Distance, Blood Relations, Ranking & Sitting Arrangement, Clock & Calendar Reasoning, Syllogisms, Venn Diagrams, Mirror/Water Images, Counting Figures, and 3D Cube/Dice Reasoning.',
+      'There is NO negative marking for wrong answers.',
+      'Complete answer key, step-by-step explanations, and subject-wise score breakdown are displayed immediately upon submission.'
+    ],
+    sections: [
+      {
+        name: 'Section A: Marathi (Second Language)',
+        startQuestionNumber: 1,
+        endQuestionNumber: 25,
         questionCount: 25,
         marksPerQuestion: 2,
         maxMarks: 50,
+      },
+      {
+        name: 'Section B: Intelligence Test',
+        startQuestionNumber: 26,
+        endQuestionNumber: 75,
+        questionCount: 50,
+        marksPerQuestion: 2,
+        maxMarks: 100,
       },
     ],
   },
@@ -1234,36 +1319,38 @@ export function buildDefaultDemoExamQuestions(
     );
 
     list.push(...balancedCdp, ...mappedRaw.slice(30, 150));
-  } else if (testId === 'demo_scholarship_4' || testId === 'demo_scholarship_7') {
-    const isClass4 = testId === 'demo_scholarship_4';
-    const langPool = isClass4 ? SCHOLARSHIP_C4_LANGUAGE_POOL : SCHOLARSHIP_C7_LANGUAGE_POOL;
-    const mathPool = isClass4 ? SCHOLARSHIP_C4_MATH_POOL : SCHOLARSHIP_C7_MATH_POOL;
-    const intPool = isClass4 ? SCHOLARSHIP_C4_INTELLIGENCE_POOL : SCHOLARSHIP_C7_INTELLIGENCE_POOL;
+  } else if (
+    testId === 'demo_scholarship_4_p1' ||
+    testId === 'demo_scholarship_4_p2' ||
+    testId === 'demo_scholarship_7_p1' ||
+    testId === 'demo_scholarship_7_p2'
+  ) {
+    let sectionABank: CuratedScholarshipMcq[];
+    let sectionBBank: CuratedScholarshipMcq[];
 
-    const shift = (testSetNumber - 1) * 5;
-    const pick25 = <T,>(pool: T[]): T[] => {
-      const picked: T[] = [];
-      for (let i = 0; i < 25; i++) {
-        picked.push(pool[(shift + i) % pool.length]);
-      }
-      return picked;
-    };
-
-    const selectedLang = pick25(langPool);
-    const selectedMath = pick25(mathPool);
-    const selectedInt = pick25(intPool);
+    if (testId === 'demo_scholarship_4_p1') {
+      sectionABank = CURATED_STD4_PAPER1_ENGLISH_25;
+      sectionBBank = CURATED_STD4_PAPER1_MATH_50;
+    } else if (testId === 'demo_scholarship_4_p2') {
+      sectionABank = CURATED_STD4_PAPER2_MARATHI_25;
+      sectionBBank = CURATED_STD4_PAPER2_INTELLIGENCE_50;
+    } else if (testId === 'demo_scholarship_7_p1') {
+      sectionABank = CURATED_STD7_PAPER1_ENGLISH_25;
+      sectionBBank = CURATED_STD7_PAPER1_MATH_50;
+    } else {
+      sectionABank = CURATED_STD7_PAPER2_MARATHI_25;
+      sectionBBank = CURATED_STD7_PAPER2_INTELLIGENCE_50;
+    }
 
     const combined = [
-      ...selectedLang.map((item) => ({ item, secIdx: 0 })),
-      ...selectedMath.map((item) => ({ item, secIdx: 1 })),
-      ...selectedInt.map((item) => ({ item, secIdx: 2 })),
+      ...sectionABank.slice(0, 25).map((item) => ({ item, secIdx: 0 })),
+      ...sectionBBank.slice(0, 50).map((item) => ({ item, secIdx: 1 })),
     ];
 
     combined.forEach(({ item, secIdx }, idx) => {
       const qNum = idx + 1;
       const sec = config.sections[secIdx];
-      const qId = `${testId}_s${testSetNumber}_q_${qNum}`;
-      const permuted = seededPermuteOptions(item.options, item.correctAnswer, qId);
+      const qId = `${testId}_q_${qNum}`;
       list.push({
         id: qId,
         testId,
@@ -1271,8 +1358,8 @@ export function buildDefaultDemoExamQuestions(
         section: sec.name,
         subjectLabel: sec.name,
         question: item.question,
-        options: permuted.options,
-        correctAnswer: permuted.correctAnswer,
+        options: item.options,
+        correctAnswer: item.correctAnswer,
         explanation: item.explanation,
         marks: 2,
         topic: item.topic,
@@ -1288,16 +1375,26 @@ export function buildDefaultDemoExamQuestions(
 }
 
 /**
- * Returns the full expanded pool of unique questions for a demo exam (across multiple curated sets)
- * so repeat student attempts can draw fresh, unseen questions per section.
+ * Returns the full expanded pool of unique questions for a demo exam
+ * so repeat student attempts draw strictly validated, non-repeating questions per section.
  */
 export function buildExpandedDemoQuestionPool(
   testId: DemoExamTypeId,
   stream: DemoPaper2Stream = 'MATH_SCIENCE'
 ): DemoExamQuestion[] {
+  const isScholarship =
+    testId === 'demo_scholarship_4_p1' ||
+    testId === 'demo_scholarship_4_p2' ||
+    testId === 'demo_scholarship_7_p1' ||
+    testId === 'demo_scholarship_7_p2';
+
+  if (isScholarship) {
+    return buildDefaultDemoExamQuestions(testId, { stream, testSetNumber: 1 });
+  }
+
   const seenStems = new Set<string>();
   const pool: DemoExamQuestion[] = [];
-  const maxSets = testId === 'demo_scholarship_4' || testId === 'demo_scholarship_7' ? 2 : 3;
+  const maxSets = 3;
 
   for (let setNum = 1; setNum <= maxSets; setNum++) {
     const qs = buildDefaultDemoExamQuestions(testId, { stream, testSetNumber: setNum });

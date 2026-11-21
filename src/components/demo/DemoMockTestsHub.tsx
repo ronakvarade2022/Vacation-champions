@@ -8,6 +8,7 @@ import { DemoExamSimulator } from './DemoExamSimulator';
 import { PlanSkuId } from '../../types';
 import {
   Clock,
+  GraduationCap,
   Layers,
   Play,
   ShieldCheck,
@@ -22,6 +23,59 @@ interface DemoMockTestsHubProps {
   onClose?: () => void;
   filterAudience?: 'all' | 'teachers' | 'scholarship';
 }
+
+const SCHOLARSHIP_GROUPS: {
+  groupTitle: string;
+  groupSubtitle: string;
+  standardLabel: string;
+  papers: {
+    id: DemoExamTypeId;
+    paperBadge: string;
+    heading: string;
+    durationLabel: string;
+  }[];
+}[] = [
+  {
+    groupTitle: 'STANDARD 4TH SCHOLARSHIP DEMO',
+    groupSubtitle:
+      'Primary Scholarship Examination (PSE) · Official MSCE Pune Syllabus & Examination Pattern',
+    standardLabel: 'Standard 4th (PSE)',
+    papers: [
+      {
+        id: 'demo_scholarship_4_p1',
+        paperBadge: 'PAPER 1 · 90 MINUTES',
+        heading: 'Paper 1: English + Mathematics (90 minutes)',
+        durationLabel: '90 Minutes',
+      },
+      {
+        id: 'demo_scholarship_4_p2',
+        paperBadge: 'PAPER 2 · 90 MINUTES',
+        heading: 'Paper 2: Marathi + Intelligence Test (90 minutes)',
+        durationLabel: '90 Minutes',
+      },
+    ],
+  },
+  {
+    groupTitle: 'STANDARD 7TH SCHOLARSHIP DEMO',
+    groupSubtitle:
+      'Upper Primary Scholarship Examination (UPS) · Official MSCE Pune Syllabus & Examination Pattern',
+    standardLabel: 'Standard 7th (UPS)',
+    papers: [
+      {
+        id: 'demo_scholarship_7_p1',
+        paperBadge: 'PAPER 1 · 90 MINUTES',
+        heading: 'Paper 1: English + Mathematics (90 minutes)',
+        durationLabel: '90 Minutes',
+      },
+      {
+        id: 'demo_scholarship_7_p2',
+        paperBadge: 'PAPER 2 · 90 MINUTES',
+        heading: 'Paper 2: Marathi + Intelligence Test (90 minutes)',
+        durationLabel: '90 Minutes',
+      },
+    ],
+  },
+];
 
 export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
   initialTestId = null,
@@ -41,29 +95,15 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
     filterAudience
   );
 
-  const testList: DemoExamTypeId[] = [
+  const teacherTestList: DemoExamTypeId[] = [
     'demo_ctet',
     'demo_ctet_p2',
     'demo_tet',
     'demo_tet_p2',
-    'demo_scholarship_4',
-    'demo_scholarship_7',
   ];
 
-  const filteredTests = testList.filter((tid) => {
-    if (activeTabFilter === 'teachers') {
-      return (
-        tid === 'demo_tet' ||
-        tid === 'demo_tet_p2' ||
-        tid === 'demo_ctet' ||
-        tid === 'demo_ctet_p2'
-      );
-    }
-    if (activeTabFilter === 'scholarship') {
-      return tid === 'demo_scholarship_4' || tid === 'demo_scholarship_7';
-    }
-    return true;
-  });
+  const showTeachers = activeTabFilter === 'all' || activeTabFilter === 'teachers';
+  const showScholarship = activeTabFilter === 'all' || activeTabFilter === 'scholarship';
 
   if (activeTestId) {
     return (
@@ -80,14 +120,14 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Hero Strip */}
       <div className="rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-2 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-emerald-400 text-emerald-950 text-xs font-black uppercase tracking-wider">
-                100% Free · English-Medium Mock Tests
+                FULL-LENGTH DEMO MOCK TESTS
               </span>
               <span className="text-xs text-indigo-200 font-semibold">
                 Official Syllabus · Zero Duplicate Questions
@@ -97,9 +137,10 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
               Free Full-Length Demo Mock Examinations
             </h1>
             <p className="text-xs sm:text-sm text-indigo-100 leading-relaxed">
-              Practise realistic, syllabus-balanced English-medium mock tests for CTET (Paper I &amp; Paper II),
-              MAHA TET (Paper I &amp; Paper II), and Class 4 &amp; Class 7 Scholarship with real countdown timers,
-              question palettes, and step-by-step explanations.
+              Practise realistic, syllabus-based full-length mock tests for CTET (Paper I &amp; Paper II),
+              MAHA TET (Paper I &amp; Paper II), and MSCE Pune Standard 4th &amp; Standard 7th Scholarship
+              Examinations (Paper 1 &amp; Paper 2) with real 90-minute countdown timers, question palettes,
+              and detailed explanations.
             </p>
           </div>
 
@@ -114,7 +155,7 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                   : 'text-white hover:bg-white/10'
               }`}
             >
-              All 6 Demo Exams
+              All Full-Length Demo Exams
             </button>
             <button
               type="button"
@@ -136,193 +177,358 @@ export const DemoMockTestsHub: React.FC<DemoMockTestsHubProps> = ({
                   : 'text-white hover:bg-white/10'
               }`}
             >
-              Scholarship (Class 4 &amp; 7)
+              Scholarship (Std 4th &amp; Std 7th)
             </button>
           </div>
         </div>
       </div>
 
-      {/* Grid of 6 Demo Tests */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {filteredTests.map((tid) => {
-          const currentCardStream = cardStreams[tid] || 'MATH_SCIENCE';
-          const cfg = demoExamService.getConfig(tid, currentCardStream);
-          const qs = demoExamService.getQuestions(tid, currentCardStream);
-          const stats = demoExamService.getStats(tid);
-          const activeSession = demoExamService.loadActiveSession(tid);
-          const hasInProgress = Boolean(activeSession && !activeSession.isExpired);
-
-          const isCtet = tid === 'demo_ctet' || tid === 'demo_ctet_p2';
-          const isTet = tid === 'demo_tet' || tid === 'demo_tet_p2';
-
-          return (
+      {/* =====================================================================
+          MSCE PUNE SCHOLARSHIP EXAMINATION — FULL-LENGTH DEMO MOCK TESTS
+          (Standard 4th PSE: Paper 1 & Paper 2 | Standard 7th UPS: Paper 1 & Paper 2)
+         ===================================================================== */}
+      {showScholarship && (
+        <div className="space-y-6">
+          {SCHOLARSHIP_GROUPS.map((group) => (
             <div
-              key={tid}
-              className="rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between space-y-5"
+              key={group.groupTitle}
+              className="rounded-3xl bg-slate-50/90 border border-emerald-200/80 p-5 sm:p-6 space-y-5 shadow-xs"
             >
-              <div className="space-y-4">
-                {/* Header row */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          isCtet
-                            ? 'bg-purple-100 text-purple-900'
-                            : isTet
-                            ? 'bg-blue-100 text-blue-900'
-                            : 'bg-emerald-100 text-emerald-900'
-                        }`}
-                      >
-                        {isCtet
-                          ? `CBSE CTET · Paper ${cfg.paperNumber === 2 ? 'II' : 'I'}`
-                          : isTet
-                          ? `MAHA TET (English) · Paper ${cfg.paperNumber === 2 ? 'II' : 'I'}`
-                          : 'MSCE Scholarship (English)'}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black uppercase">
-                        English Medium
-                      </span>
-                      {hasInProgress && (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black animate-pulse">
-                          In Progress
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="text-lg sm:text-xl font-display font-black text-slate-900 leading-snug">
-                      {cfg.title}
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">{cfg.patternName}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-emerald-200/70">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-3 py-1 rounded-full bg-emerald-700 text-white text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      FULL-LENGTH DEMO MOCK TESTS
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-white text-emerald-900 border border-emerald-300 text-[11px] font-bold">
+                      MSCE Pune Official Pattern · 2 Papers (150 Marks Each)
+                    </span>
                   </div>
+                  <h2 className="text-xl sm:text-2xl font-display font-black text-slate-900 tracking-tight pt-1">
+                    {group.groupTitle}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                    {group.groupSubtitle}
+                  </p>
                 </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed">{cfg.description}</p>
-
-                {/* Paper II Stream Switcher right on the card */}
-                {cfg.supportsStreamSelection && (
-                  <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/70 space-y-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1">
-                      <Layers className="w-3 h-3 text-indigo-700" />
-                      Select Paper II Elective Stream (60 Qs):
-                    </span>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCardStreams((prev) => ({ ...prev, [tid]: 'MATH_SCIENCE' }))
-                        }
-                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-colors ${
-                          currentCardStream === 'MATH_SCIENCE'
-                            ? 'bg-indigo-700 text-white shadow-xs'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        Mathematics &amp; Science
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCardStreams((prev) => ({ ...prev, [tid]: 'SOCIAL_STUDIES' }))
-                        }
-                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-colors ${
-                          currentCardStream === 'SOCIAL_STUDIES'
-                            ? 'bg-indigo-700 text-white shadow-xs'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        Social Studies / Science
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Key Spec Badges */}
-                <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                      Questions
-                    </span>
-                    <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
-                      {qs.length} Qs
-                    </span>
-                  </div>
-                  <div className="border-x border-slate-200/80">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                      Total Marks
-                    </span>
-                    <span className="text-sm sm:text-base font-black text-indigo-900 font-mono">
-                      {cfg.totalMarks} Marks
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                      Duration
-                    </span>
-                    <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
-                      {cfg.durationMinutes} Mins
-                    </span>
-                  </div>
-                </div>
-
-                {/* Sections list snippet */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-slate-700 block">
-                    Examination Sections Covered:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {cfg.sections.map((s) => (
-                      <span
-                        key={s.name}
-                        className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium"
-                      >
-                        {s.name} ({s.questionCount} Qs · {s.maxMarks}M)
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Reload Safe callout */}
-                <div className="text-[11px] text-slate-500 flex items-center gap-3 font-medium">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Real timer &amp; reload protection</span>
-                  </span>
-                  <span className="flex items-center gap-1 text-emerald-700 font-semibold">
-                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                    <span>Balanced syllabus · 0% duplicates</span>
-                  </span>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-950 bg-emerald-100/90 border border-emerald-300 px-3.5 py-2 rounded-2xl shrink-0">
+                  <span>Paper 1 (90 Mins) + Paper 2 (90 Mins)</span>
                 </div>
               </div>
 
-              {/* Action row */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-                <div className="text-[11px] text-slate-500 font-medium">
-                  {stats.totalAttempts > 0 ? (
-                    <span>
-                      {stats.totalAttempts} Attempts · Avg: {stats.averageScore}/{cfg.totalMarks} (
-                      {stats.averagePercentage}%)
-                    </span>
-                  ) : (
-                    <span>100% Verified Question Bank</span>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {group.papers.map((paper) => {
+                  const tid = paper.id;
+                  const cfg = demoExamService.getConfig(tid);
+                  const qs = demoExamService.getQuestions(tid);
+                  const stats = demoExamService.getStats(tid);
+                  const activeSession = demoExamService.loadActiveSession(tid);
+                  const hasInProgress = Boolean(activeSession && !activeSession.isExpired);
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveStream(currentCardStream);
-                    setActiveTestId(tid);
-                  }}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 shrink-0"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>{hasInProgress ? 'Resume Demo Exam' : 'Start Free Demo Test'}</span>
-                </button>
+                  return (
+                    <div
+                      key={tid}
+                      className="rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between space-y-5"
+                    >
+                      <div className="space-y-4">
+                        {/* Header row */}
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black uppercase tracking-wider">
+                              {group.standardLabel} · {paper.paperBadge}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-black uppercase">
+                              FULL-LENGTH DEMO MOCK TEST
+                            </span>
+                            {hasInProgress && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black animate-pulse">
+                                In Progress
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-lg sm:text-xl font-display font-black text-slate-900 leading-snug">
+                            {paper.heading}
+                          </h3>
+                          <p className="text-xs text-slate-500 font-medium">{cfg.patternName}</p>
+                        </div>
+
+                        <p className="text-xs text-slate-600 leading-relaxed">{cfg.description}</p>
+
+                        {/* Key Spec Badges */}
+                        <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                              Questions
+                            </span>
+                            <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                              {qs.length} Qs
+                            </span>
+                          </div>
+                          <div className="border-x border-slate-200/80">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                              Total Marks
+                            </span>
+                            <span className="text-sm sm:text-base font-black text-indigo-900 font-mono">
+                              {cfg.totalMarks} Marks
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                              Duration
+                            </span>
+                            <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                              {cfg.durationMinutes} Mins
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Sections list snippet */}
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[11px] font-bold text-slate-700 block">
+                            Official Paper Sections (2 Marks per Question · No Negative Marking):
+                          </span>
+                          <div className="flex flex-col gap-1.5">
+                            {cfg.sections.map((s) => (
+                              <div
+                                key={s.name}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 text-slate-800 text-xs font-bold flex items-center justify-between"
+                              >
+                                <span>{s.name}</span>
+                                <span className="text-emerald-900 font-mono">
+                                  {s.questionCount} Qs · {s.maxMarks} Marks
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Reload Safe callout */}
+                        <div className="text-[11px] text-slate-500 flex items-center gap-3 font-medium">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>90-min countdown timer</span>
+                          </span>
+                          <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                            <span>MSCE Pune Syllabus · 0% duplicates</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action row */}
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                        <div className="text-[11px] text-slate-500 font-medium">
+                          {stats.totalAttempts > 0 ? (
+                            <span>
+                              {stats.totalAttempts} Attempts · Avg: {stats.averageScore}/{cfg.totalMarks} (
+                              {stats.averagePercentage}%)
+                            </span>
+                          ) : (
+                            <span>75 Unique Questions · 150 Marks</span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTestId(tid);
+                          }}
+                          className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>{hasInProgress ? 'Resume Paper' : 'Start Full-Length Paper'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* =====================================================================
+          TEACHER ELIGIBILITY DEMO MOCK TESTS (CTET & MAHA TET PAPERS I & II)
+         ===================================================================== */}
+      {showTeachers && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {teacherTestList.map((tid) => {
+            const currentCardStream = cardStreams[tid] || 'MATH_SCIENCE';
+            const cfg = demoExamService.getConfig(tid, currentCardStream);
+            const qs = demoExamService.getQuestions(tid, currentCardStream);
+            const stats = demoExamService.getStats(tid);
+            const activeSession = demoExamService.loadActiveSession(tid);
+            const hasInProgress = Boolean(activeSession && !activeSession.isExpired);
+
+            const isCtet = tid === 'demo_ctet' || tid === 'demo_ctet_p2';
+
+            return (
+              <div
+                key={tid}
+                className="rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between space-y-5"
+              >
+                <div className="space-y-4">
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            isCtet
+                              ? 'bg-purple-100 text-purple-900'
+                              : 'bg-blue-100 text-blue-900'
+                          }`}
+                        >
+                          {isCtet
+                            ? `CBSE CTET · Paper ${cfg.paperNumber === 2 ? 'II' : 'I'}`
+                            : `MAHA TET (English) · Paper ${cfg.paperNumber === 2 ? 'II' : 'I'}`}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black uppercase">
+                          English Medium
+                        </span>
+                        {hasInProgress && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black animate-pulse">
+                            In Progress
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-display font-black text-slate-900 leading-snug">
+                        {cfg.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">{cfg.patternName}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">{cfg.description}</p>
+
+                  {/* Paper II Stream Switcher right on the card */}
+                  {cfg.supportsStreamSelection && (
+                    <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/70 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-indigo-700" />
+                        Select Paper II Elective Stream (60 Qs):
+                      </span>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCardStreams((prev) => ({ ...prev, [tid]: 'MATH_SCIENCE' }))
+                          }
+                          className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-colors ${
+                            currentCardStream === 'MATH_SCIENCE'
+                              ? 'bg-indigo-700 text-white shadow-xs'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Mathematics &amp; Science
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCardStreams((prev) => ({ ...prev, [tid]: 'SOCIAL_STUDIES' }))
+                          }
+                          className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-colors ${
+                            currentCardStream === 'SOCIAL_STUDIES'
+                              ? 'bg-indigo-700 text-white shadow-xs'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Social Studies / Science
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Key Spec Badges */}
+                  <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                        Questions
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                        {qs.length} Qs
+                      </span>
+                    </div>
+                    <div className="border-x border-slate-200/80">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                        Total Marks
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-indigo-900 font-mono">
+                        {cfg.totalMarks} Marks
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                        Duration
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                        {cfg.durationMinutes} Mins
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Sections list snippet */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-slate-700 block">
+                      Examination Sections Covered:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cfg.sections.map((s) => (
+                        <span
+                          key={s.name}
+                          className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium"
+                        >
+                          {s.name} ({s.questionCount} Qs · {s.maxMarks}M)
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Reload Safe callout */}
+                  <div className="text-[11px] text-slate-500 flex items-center gap-3 font-medium">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Real timer &amp; reload protection</span>
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      <span>Balanced syllabus · 0% duplicates</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action row */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {stats.totalAttempts > 0 ? (
+                      <span>
+                        {stats.totalAttempts} Attempts · Avg: {stats.averageScore}/{cfg.totalMarks} (
+                        {stats.averagePercentage}%)
+                      </span>
+                    ) : (
+                      <span>100% Verified Question Bank</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveStream(currentCardStream);
+                      setActiveTestId(tid);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-display font-black text-xs sm:text-sm cursor-pointer shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>{hasInProgress ? 'Resume Demo Exam' : 'Start Free Demo Test'}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

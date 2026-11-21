@@ -29,8 +29,10 @@ const TEST_LIST: { id: DemoExamTypeId; label: string; tag: string }[] = [
   { id: 'demo_ctet_p2', label: 'CTET Paper II Demo (Classes VI–VIII)', tag: 'Teachers (CBSE CTET P2)' },
   { id: 'demo_tet', label: 'TET Paper I Demo (English Medium)', tag: 'Teachers (MAHA TET P1)' },
   { id: 'demo_tet_p2', label: 'TET Paper II Demo (English Medium)', tag: 'Teachers (MAHA TET P2)' },
-  { id: 'demo_scholarship_4', label: 'Class 4 Scholarship Demo', tag: 'Std 4th (150 Marks · English)' },
-  { id: 'demo_scholarship_7', label: 'Class 7 Scholarship Demo', tag: 'Std 7th (150 Marks · English)' }
+  { id: 'demo_scholarship_4_p1', label: 'Std 4th Scholarship – Paper 1 (English + Math)', tag: 'Std 4th PSE P1 (90m · 150M)' },
+  { id: 'demo_scholarship_4_p2', label: 'Std 4th Scholarship – Paper 2 (Marathi + Intelligence)', tag: 'Std 4th PSE P2 (90m · 150M)' },
+  { id: 'demo_scholarship_7_p1', label: 'Std 7th Scholarship – Paper 1 (English + Math)', tag: 'Std 7th UPS P1 (90m · 150M)' },
+  { id: 'demo_scholarship_7_p2', label: 'Std 7th Scholarship – Paper 2 (Marathi + Intelligence)', tag: 'Std 7th UPS P2 (90m · 150M)' }
 ];
 
 export const AdminDemoExamsSection: React.FC = () => {
