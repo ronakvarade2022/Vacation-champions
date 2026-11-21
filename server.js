@@ -6163,12 +6163,12 @@ var SERVER_FREE_ALLOWED_FEATURES = /* @__PURE__ */ new Set([
 ]);
 function parseServerWorksheetBoardAndClass(worksheetId) {
   const trimmed = String(worksheetId || "").trim();
-  const boardMatch = /^WS-(CBSE|ICSE)-C(\d{1,2})-/i.exec(trimmed);
+  const boardMatch = /^WS-(?:NEW-)?(CBSE|ICSE|MH|MAHARASHTRA)-C(\d{1,2})-/i.exec(trimmed);
   if (boardMatch) {
     const n = parseInt(boardMatch[2], 10);
     if (n >= 1 && n <= 10) {
       return {
-        board: boardMatch[1].toUpperCase() === "CBSE" ? "CBSE" : "ICSE",
+        board: normalizeBackendBoard(boardMatch[1]),
         classLevel: `Class ${n}`
       };
     }
@@ -6184,6 +6184,9 @@ function parseServerWorksheetBoardAndClass(worksheetId) {
     }
   }
   return null;
+}
+function hasServerUniversalWorksheetAccess(sub) {
+  return hasServerCategoryAccess(sub, "all_classes") || getServerActivatedBoardClassKeys(sub).length > 0;
 }
 function getServerFreeDemoIdsForClass(classLevel = "Class 1", board = "Maharashtra") {
   const cNum = parseInt(String(classLevel).replace("Class ", ""), 10) || 1;
@@ -7340,11 +7343,12 @@ app.post("/api/subscription/verify-access", async (req, res) => {
     const wsClass = parsedWs?.classLevel || requestedClass || userClass;
     const wsClassStatus = getServerBoardClassStatus(sub, wsBoard, wsClass);
     const activePaidKeys = getServerActivatedBoardClassKeys(sub);
+    const hasUniversalWs = wsClassStatus.isPaidActive || hasServerUniversalWorksheetAccess(sub);
     const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass, wsBoard));
     const isDemo = demoIds.has(cleanWsId);
     let allowed = false;
     let upgradeMsg = SERVER_WORKSHEET_UPGRADE_MSG;
-    if (wsClassStatus.isPaidActive) {
+    if (hasUniversalWs) {
       allowed = true;
       upgradeMsg = "";
     } else if (wsClassStatus.status === "EXPIRED") {
@@ -7364,14 +7368,14 @@ app.post("/api/subscription/verify-access", async (req, res) => {
     return res.json({
       success: true,
       allowed,
-      isDemo: wsClassStatus.isPaidActive ? false : isDemo && allowed,
-      isOtherClassLocked: wsClassStatus.status === "LOCKED",
-      isClassExpired: wsClassStatus.status === "EXPIRED",
+      isDemo: hasUniversalWs ? false : isDemo && allowed,
+      isOtherClassLocked: !hasUniversalWs && wsClassStatus.status === "LOCKED",
+      isClassExpired: !hasUniversalWs && wsClassStatus.status === "EXPIRED",
       selectedBoard: userBoard,
       selectedClass: userClass,
       worksheetBoard: wsBoard,
       worksheetClass: wsClass,
-      effectivePlan: wsClassStatus.isPaidActive ? "premium" : "free",
+      effectivePlan: hasUniversalWs ? "premium" : "free",
       requiredPlan: "premium",
       upgradeMessage: allowed ? "" : upgradeMsg,
       message: allowed ? "Worksheet access granted." : upgradeMsg
@@ -7433,7 +7437,7 @@ app.get("/api/worksheets/access/:studentId", async (req, res) => {
   const userBoard = (sub.hasStoredProfile ? queryBoard || sub.selectedBoard : queryBoard) || sub.selectedBoard || sub.primaryBoard || "Maharashtra";
   const userClass = (sub.hasStoredProfile ? queryClass || sub.selectedClass : queryClass) || sub.selectedClass || sub.primaryClassLevel || "Class 1";
   const classStatus = getServerBoardClassStatus(sub, userBoard, userClass);
-  const isPremium = classStatus.isPaidActive;
+  const isPremium = classStatus.isPaidActive || hasServerUniversalWorksheetAccess(sub);
   const demoIds = getServerFreeDemoIdsForClass(userClass, userBoard);
   return res.json({
     success: true,
@@ -7441,16 +7445,16 @@ app.get("/api/worksheets/access/:studentId", async (req, res) => {
     selectedBoard: userBoard,
     selectedClass: userClass,
     classStatus: classStatus.status,
-    activatedBoard: isPremium ? userBoard : null,
-    activatedClassLevel: isPremium ? userClass : null,
+    activatedBoard: classStatus.isPaidActive ? userBoard : null,
+    activatedClassLevel: classStatus.isPaidActive ? userClass : null,
     activatedClasses: getServerActivatedClasses(sub, userBoard),
     activatedClassKeys: getServerActivatedBoardClassKeys(sub),
     effectivePlan: isPremium ? "premium" : "free",
     isPremium,
     printingAllowed: false,
     downloadingAllowed: false,
-    demoWorksheetIds: classStatus.status === "ACTIVE_FREE" ? demoIds : [],
-    allowedWorksheets: isPremium ? `ALL_WORKSHEETS_FOR_${userBoard.toUpperCase()}_${userClass.toUpperCase().replace(/\s+/g, "_")}` : classStatus.status === "ACTIVE_FREE" ? demoIds : [],
+    demoWorksheetIds: !isPremium && classStatus.status === "ACTIVE_FREE" ? demoIds : [],
+    allowedWorksheets: isPremium ? "ALL_WORKSHEETS_UNIVERSAL_ALL_BOARDS_CLASSES_1_TO_10" : classStatus.status === "ACTIVE_FREE" ? demoIds : [],
     upgradeMessage: SERVER_WORKSHEET_UPGRADE_MSG
   });
 });
@@ -7482,11 +7486,12 @@ app.post("/api/worksheets/verify-access", async (req, res) => {
   const wsClass = parsedWs?.classLevel || userClass;
   const wsClassStatus = getServerBoardClassStatus(sub, wsBoard, wsClass);
   const activePaidKeys = getServerActivatedBoardClassKeys(sub);
+  const hasUniversalWs = wsClassStatus.isPaidActive || hasServerUniversalWorksheetAccess(sub);
   const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass, wsBoard));
   const isDemo = demoIds.has(cleanWorksheetId);
   let allowed = false;
   let upgradeMsg = SERVER_WORKSHEET_UPGRADE_MSG;
-  if (wsClassStatus.isPaidActive) {
+  if (hasUniversalWs) {
     allowed = true;
     upgradeMsg = "";
   } else if (wsClassStatus.status === "EXPIRED") {
@@ -7506,16 +7511,16 @@ app.post("/api/worksheets/verify-access", async (req, res) => {
   return res.status(allowed ? 200 : 403).json({
     success: allowed,
     allowed,
-    isDemo: wsClassStatus.isPaidActive ? false : isDemo && allowed,
-    isOtherClassLocked: wsClassStatus.status === "LOCKED",
-    isClassExpired: wsClassStatus.status === "EXPIRED",
+    isDemo: hasUniversalWs ? false : isDemo && allowed,
+    isOtherClassLocked: !hasUniversalWs && wsClassStatus.status === "LOCKED",
+    isClassExpired: !hasUniversalWs && wsClassStatus.status === "EXPIRED",
     studentId: cleanStudentId,
     selectedBoard: userBoard,
     selectedClass: userClass,
     worksheetBoard: wsBoard,
     worksheetClass: wsClass,
     worksheetId: cleanWorksheetId,
-    effectivePlan: wsClassStatus.isPaidActive ? "premium" : "free",
+    effectivePlan: hasUniversalWs ? "premium" : "free",
     requiredPlan: "premium",
     printingAllowed: false,
     downloadingAllowed: false,
@@ -7588,6 +7593,75 @@ async function startServer() {
         watch: null
       },
       appType: "spa"
+    });
+    app.get("/@vite/client", (_req, res) => {
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      res.send(`
+const sheetsMap = new Map();
+const linkSheetsMap = new Map();
+if ("document" in globalThis) {
+  document.querySelectorAll("style[data-vite-dev-id]").forEach((el) => {
+    sheetsMap.set(el.getAttribute("data-vite-dev-id"), el);
+  });
+  document.querySelectorAll('link[rel="stylesheet"][data-vite-dev-id]').forEach((el) => {
+    linkSheetsMap.set(el.getAttribute("data-vite-dev-id"), el);
+  });
+}
+let lastInsertedStyle;
+export function updateStyle(id, content) {
+  if (linkSheetsMap.has(id)) return;
+  let style = sheetsMap.get(id);
+  if (!style) {
+    style = document.createElement("style");
+    style.setAttribute("type", "text/css");
+    style.setAttribute("data-vite-dev-id", id);
+    style.textContent = content;
+    if (!lastInsertedStyle) {
+      document.head.appendChild(style);
+      setTimeout(() => { lastInsertedStyle = undefined; }, 0);
+    } else {
+      lastInsertedStyle.insertAdjacentElement("afterend", style);
+    }
+    lastInsertedStyle = style;
+  } else if (style.textContent !== content) {
+    style.textContent = content;
+  }
+  sheetsMap.set(id, style);
+}
+export function removeStyle(id) {
+  if (linkSheetsMap.has(id)) {
+    document.querySelectorAll('link[rel="stylesheet"][data-vite-dev-id="' + CSS.escape(id) + '"]').forEach((el) => el.remove());
+    linkSheetsMap.delete(id);
+  }
+  const style = sheetsMap.get(id);
+  if (style) {
+    document.head.removeChild(style);
+    sheetsMap.delete(id);
+  }
+}
+export function createHotContext() {
+  return {
+    data: {},
+    accept() {},
+    acceptExports() {},
+    dispose() {},
+    prune() {},
+    decline() {},
+    invalidate() {},
+    on() {},
+    off() {},
+    send() {}
+  };
+}
+export function injectQuery(url, queryToInject) {
+  if (url[0] !== "." && url[0] !== "/") return url;
+  const pathname = url.replace(/[?#].*$/, "");
+  const { search, hash } = new URL(url, "http://vite.dev");
+  return pathname + "?" + queryToInject + (search ? "&" + search.slice(1) : "") + (hash || "");
+}
+export class ErrorOverlay extends HTMLElement {}
+`);
     });
     app.use(vite.middlewares);
     console.log("[Dev Mode] Vite middlewares mounted to Express (HMR WebSocket disabled).");

@@ -240,6 +240,8 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       onNavigateTab('puzzles');
     } else if (actionId === 'pz-sudoku') {
       onNavigateTab('sudoku');
+    } else if (actionId === 'pz-worksheets') {
+      onNavigateTab('worksheets');
     } else if (actionId.startsWith('sm-')) {
       onNavigateTab('study-materials', actionId);
     } else if (actionId.startsWith('pz-')) {

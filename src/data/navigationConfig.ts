@@ -313,6 +313,12 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
     whatShouldIClick: 'Pick any practice activity or logic game below to read instructions and start practising.',
     items: [
       {
+        id: 'pz-worksheets',
+        label: 'Online Worksheets',
+        description: '2 Existing + 23 New interactive worksheets per subject across Maharashtra, CBSE & ICSE',
+        badgeText: '23 New / Subject',
+      },
+      {
         id: 'pz-maths',
         label: 'Maths Practice',
         description: 'Interactive calculation drills, geometry, algebra & word problems',

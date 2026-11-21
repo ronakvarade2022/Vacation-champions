@@ -485,29 +485,15 @@ const AppContent: React.FC = () => {
       case 'open_worksheets': {
         setWorksheetsInitialClass(targetClass);
         setWorksheetsInitialBoard(targetBoard);
-        if (isLearningPortal && currentStudent) {
-          setCurrentTab('worksheets');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          setExplorerZone('study-material');
-          setExplorerSubFocus('sm-worksheets');
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        setCurrentTab('worksheets');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       case 'open_syllabus': {
         setStudyInitialClass(targetClass);
         setStudyInitialBoard(targetBoard);
-        if (isLearningPortal && currentStudent) {
-          setCurrentTab('study-materials');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          setExplorerZone('study-material');
-          setExplorerSubFocus('sm-notes');
-          setCurrentTab('explore-zone');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        setCurrentTab('study-materials');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       case 'open_all_courses': {
@@ -702,7 +688,7 @@ const AppContent: React.FC = () => {
       case 'sm-guides':
       case 'sm-important-questions':
       case 'sm-textbook-learning': {
-        if (actionId === 'sm-worksheets' && isSignedInLearner) {
+        if (actionId === 'sm-worksheets') {
           handleNavigateTab('worksheets');
           return;
         }
@@ -1140,6 +1126,10 @@ const AppContent: React.FC = () => {
                   handleNavigateTab(tab, subject);
                   return;
                 }
+                if (tab === 'worksheets' || tab === 'study-materials') {
+                  handleNavigateTab(tab, subject);
+                  return;
+                }
                 if (isLearningPortal && currentStudent) {
                   if (tab === 'performance') {
                     handleNavigateTab('dashboard');
@@ -1147,8 +1137,7 @@ const AppContent: React.FC = () => {
                     handleNavigateTab(tab, subject);
                   }
                 } else {
-                  if (tab === 'study-materials') setExplorerZone('study-material');
-                  else if (tab === 'worksheets' || tab === 'quizzes') {
+                  if (tab === 'quizzes') {
                     setExplorerZone('practice-zone');
                   } else if (tab === 'performance') {
                     setExplorerZone('performance');
@@ -1221,6 +1210,22 @@ const AppContent: React.FC = () => {
               onOpenSubjectPractice={(board, cls, subj, mode) => {
                 setPublicBoard(board);
                 setPublicClass(cls);
+                if (mode === 'worksheets') {
+                  setWorksheetsInitialBoard(board);
+                  setWorksheetsInitialClass(cls);
+                  setQuizInitialSubject(subj);
+                  setCurrentTab('worksheets');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  return;
+                }
+                if (mode === 'study-materials') {
+                  setStudyInitialBoard(board);
+                  setStudyInitialClass(cls);
+                  setQuizInitialSubject(subj);
+                  setCurrentTab('study-materials');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  return;
+                }
                 if (currentStudent) {
                   handleNavigateTab(mode, subj);
                 } else {
@@ -1250,6 +1255,26 @@ const AppContent: React.FC = () => {
               onOpenAuth={() => openAuthModalWithTab('teacher', 'teacher')}
               onOpenMembership={(planSku) =>
                 openMembershipWithPlan('premium', publicClass, publicBoard, planSku || 'TET_1Y')
+              }
+            />
+          ) : currentTab === 'worksheets' ? (
+            <WorksheetsView
+              initialClassLevel={worksheetsInitialClass || currentStudent?.classLevel || publicClass}
+              initialBoard={worksheetsInitialBoard || (currentStudent ? activeBoard : publicBoard)}
+              initialSubject={quizInitialSubject}
+              onOpenAuth={(tab) => openAuthModalWithTab(tab || 'login')}
+              onUnlockClick={(targetClass, targetBoard) =>
+                openMembershipWithPlan('premium', targetClass, targetBoard)
+              }
+            />
+          ) : currentTab === 'study-materials' ? (
+            <StudyMaterialsView
+              initialBoard={studyInitialBoard || (currentStudent ? activeBoard : publicBoard)}
+              initialClass={studyInitialClass || currentStudent?.classLevel || publicClass}
+              initialSubject={quizInitialSubject}
+              onNavigateTab={handleNavigateTab}
+              onOpenMembership={(plan, targetClass, targetBoard) =>
+                openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)
               }
             />
           ) : (['scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku', 'future-skills', 'ai-academy'] as const).includes(currentTab as 'scholarship') ? (
@@ -1368,8 +1393,11 @@ const AppContent: React.FC = () => {
                     handleNavigateTab(tab, subject);
                     return;
                   }
-                  if (tab === 'study-materials') setExplorerZone('study-material');
-                  else if (tab === 'worksheets' || tab === 'quizzes') {
+                  if (tab === 'worksheets' || tab === 'study-materials') {
+                    handleNavigateTab(tab, subject);
+                    return;
+                  }
+                  if (tab === 'quizzes') {
                     setExplorerZone('practice-zone');
                   } else if (tab === 'performance') {
                     setExplorerZone('performance');
@@ -1652,25 +1680,6 @@ const AppContent: React.FC = () => {
                   <SubjectQuizView
                     initialSubject={quizInitialSubject}
                     initialLevel={quizInitialLevel}
-                    onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
-                  />
-                )}
-
-                {currentTab === 'worksheets' && (
-                  <WorksheetsView
-                    initialClassLevel={worksheetsInitialClass}
-                    initialBoard={worksheetsInitialBoard}
-                    initialSubject={quizInitialSubject}
-                    onUnlockClick={(targetClass, targetBoard) => openMembershipWithPlan('premium', targetClass, targetBoard)}
-                  />
-                )}
-
-                {currentTab === 'study-materials' && (
-                  <StudyMaterialsView
-                    initialBoard={studyInitialBoard || activeBoard}
-                    initialClass={studyInitialClass || currentStudent.classLevel}
-                    initialSubject={quizInitialSubject}
-                    onNavigateTab={handleNavigateTab}
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                   />
                 )}

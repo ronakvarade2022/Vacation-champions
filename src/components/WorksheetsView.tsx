@@ -61,13 +61,15 @@ interface WorksheetsViewProps {
   initialBoard?: EducationBoard;
   initialSubject?: SubjectName;
   onUnlockClick?: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
+  onOpenAuth?: (defaultTab?: 'login' | 'register') => void;
 }
 
 export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   initialClassLevel,
   initialBoard,
   initialSubject,
-  onUnlockClick
+  onUnlockClick,
+  onOpenAuth
 }) => {
   const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass } = useApp();
 
@@ -80,6 +82,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   );
   const [collectionFilter, setCollectionFilter] = useState<'all' | WorksheetCollectionType>('all');
   const [selectedChapter, setSelectedChapter] = useState<string>('ALL');
+  const [wsPage, setWsPage] = useState<number>(1);
+  const [showAllInGrid, setShowAllInGrid] = useState<boolean>(false);
   const [activeWorksheet, setActiveWorksheet] = useState<OnlineWorksheet | null>(null);
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -87,6 +91,11 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [lockedModalWorksheet, setLockedModalWorksheet] = useState<OnlineWorksheet | null>(null);
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setWsPage(1);
+    setShowAllInGrid(false);
+  }, [selectedBoard, selectedClass, selectedSubject, collectionFilter, selectedChapter]);
 
   const selectedClassInfo = useMemo(
     () => getBoardClassSubscriptionInfo(currentStudent, selectedBoard, selectedClass),
@@ -206,6 +215,15 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     if (effectiveChapter === 'ALL') return collectionScopedWorksheets;
     return collectionScopedWorksheets.filter(ws => ws.chapterName === effectiveChapter);
   }, [collectionScopedWorksheets, effectiveChapter]);
+
+  const WS_PAGE_SIZE = 25;
+  const totalWsPages = Math.max(1, Math.ceil(worksheetsList.length / WS_PAGE_SIZE));
+  const safeWsPage = Math.min(wsPage, totalWsPages);
+  const visibleWorksheetsList = useMemo(() => {
+    if (showAllInGrid || worksheetsList.length <= WS_PAGE_SIZE) return worksheetsList;
+    const start = (safeWsPage - 1) * WS_PAGE_SIZE;
+    return worksheetsList.slice(start, start + WS_PAGE_SIZE);
+  }, [worksheetsList, showAllInGrid, safeWsPage]);
 
   const completedWorksheetIds = useMemo(
     () => new Set(currentStudent?.completedWorksheetIds || []),
@@ -870,7 +888,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   {classCompletedCount} / {classTotalWorksheets}
                 </div>
                 <span className="text-xs font-extrabold text-emerald-300">
-                  {ownClassWorksheetsSummary.existingCount} Existing + {ownClassWorksheetsSummary.newCount} New Set
+                  {ownClassWorksheetsSummary.existingCount} Existing + {ownClassWorksheetsSummary.newCount} New (23/Subject)
                 </span>
               </div>
               <div className="w-full h-2.5 bg-white/15 rounded-full overflow-hidden">
@@ -979,6 +997,41 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               <span>Renew {selectedBoardLabel} {selectedClass} – ₹99</span>
               <ChevronRight className="w-4 h-4" />
             </button>
+          </div>
+        ) : !currentStudent ? (
+          <div className="rounded-3xl border-2 border-indigo-300 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-7 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div className="space-y-2 max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xs">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{selectedBoardLabel} • {selectedClass} Online Worksheets ({ownClassWorksheetsSummary.ownClassTotal} Sheets)</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-display font-black text-white">
+                Browse All {ownClassWorksheetsSummary.ownClassTotal} Worksheets ({ownClassWorksheetsSummary.existingCount} Existing + 23 New Per Subject)
+              </h2>
+              <p className="text-xs sm:text-sm text-indigo-100 font-medium leading-relaxed">
+                Register or Sign In Free to solve your 2 Free Demo Worksheets for <strong>{selectedBoardLabel} {selectedClass}</strong>, or unlock all worksheets across Maharashtra, CBSE &amp; ICSE (Classes 1–10) for just <strong>₹99 (365 Days)</strong>.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {onOpenAuth && (
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('login')}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-white hover:bg-amber-50 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+                >
+                  <span>Sign In / Free Register</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleTriggerUpgrade(selectedClass, selectedBoard)}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:from-amber-500 hover:to-orange-500 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition-all cursor-pointer"
+              >
+                <Crown className="w-4 h-4" />
+                <span>Activate ₹99 Plan</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ) : selectedClassInfo.isLocked ? (
           <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-7 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-5">
@@ -1125,7 +1178,9 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               })}
             </div>
             <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
-              Active Workspace: {getBoardShortLabel(activeBoard)} • {userRegisteredClass}
+              {currentStudent
+                ? `Active Workspace: ${getBoardShortLabel(activeBoard)} • ${userRegisteredClass}`
+                : `Browsing: ${getBoardShortLabel(selectedBoard)} • ${selectedClass}`}
             </span>
           </div>
 
@@ -1226,7 +1281,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             })}
           </div>
 
-          {!isClassWorksheetsUnlocked && !selectedClassInfo.isAccessible && (
+          {currentStudent && !isClassWorksheetsUnlocked && !selectedClassInfo.isAccessible && (
             <div className="rounded-2xl bg-amber-50 border-2 border-amber-300 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <Lock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -1279,7 +1334,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               {([
                 { id: 'all' as const, label: `All Sets (${ownClassWorksheetsSummary.ownClassTotal})` },
                 { id: 'existing' as const, label: `Existing Set (${ownClassWorksheetsSummary.existingCount})` },
-                { id: 'new_23' as const, label: `23 New Set (${ownClassWorksheetsSummary.newCount})` }
+                { id: 'new_23' as const, label: `23 New / Subject (${ownClassWorksheetsSummary.newCount})` }
               ]).map((tab) => (
                 <button
                   key={tab.id}
@@ -1318,6 +1373,14 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             {classSubjects.map(subj => {
               const meta = getSubjectMeta(subj, selectedBoard);
               const isSelected = effectiveSubject === subj;
+              const subjSheetsCount = classAllWorksheets.filter(w =>
+                w.subject === subj &&
+                (collectionFilter === 'all'
+                  ? true
+                  : collectionFilter === 'new_23'
+                  ? w.worksheetCollection === 'new_23'
+                  : w.worksheetCollection !== 'new_23')
+              ).length;
               return (
                 <button
                   key={subj}
@@ -1334,6 +1397,9 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 >
                   <span>{meta.icon}</span>
                   <span>{subj}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${isSelected ? 'bg-white/25 text-white' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'}`}>
+                    {subjSheetsCount}
+                  </span>
                 </button>
               );
             })}
@@ -1390,9 +1456,31 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           )}
         </div>
 
+        {/* Selection Summary & Pagination Status */}
+        {worksheetsList.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 text-xs">
+            <span className="font-extrabold text-indigo-950">
+              {effectiveSubject === 'ALL'
+                ? `Showing ${showAllInGrid ? `all ${worksheetsList.length}` : `${(safeWsPage - 1) * WS_PAGE_SIZE + 1}–${Math.min(safeWsPage * WS_PAGE_SIZE, worksheetsList.length)} of ${worksheetsList.length}`} Worksheets across ${classSubjects.length} subjects (2 Existing + 23 New per subject)`
+                : `${effectiveSubject}: ${worksheetsList.length} Worksheets (${worksheetsList.filter(w => w.worksheetCollection !== 'new_23').length} Existing + ${worksheetsList.filter(w => w.worksheetCollection === 'new_23').length} New)`}
+            </span>
+            {worksheetsList.length > WS_PAGE_SIZE && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAllInGrid(prev => !prev)}
+                  className="px-3 py-1 rounded-xl bg-white hover:bg-indigo-100 text-indigo-900 font-bold border border-indigo-200 cursor-pointer"
+                >
+                  {showAllInGrid ? 'Paginate (25/page)' : `Show All ${worksheetsList.length}`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Worksheets Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {worksheetsList.map(ws => {
+          {visibleWorksheetsList.map(ws => {
             const wsBoard = ws.board || selectedBoard;
             const subjMeta = getSubjectMeta(ws.subject, wsBoard);
             const isCompleted = completedWorksheetIds.has(ws.id);
@@ -1575,6 +1663,37 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             );
           })}
         </div>
+
+        {/* Pagination Footer when viewing All Subjects */}
+        {!showAllInGrid && totalWsPages > 1 && (
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button
+              type="button"
+              disabled={safeWsPage <= 1}
+              onClick={() => {
+                setWsPage(p => Math.max(1, p - 1));
+                window.scrollTo({ top: 320, behavior: 'smooth' });
+              }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-extrabold text-slate-800 disabled:opacity-40 hover:bg-amber-50 cursor-pointer"
+            >
+              Previous
+            </button>
+            <span className="px-3 py-2 text-xs font-black text-slate-700">
+              Page {safeWsPage} of {totalWsPages} ({worksheetsList.length} Worksheets)
+            </span>
+            <button
+              type="button"
+              disabled={safeWsPage >= totalWsPages}
+              onClick={() => {
+                setWsPage(p => Math.min(totalWsPages, p + 1));
+                window.scrollTo({ top: 320, behavior: 'smooth' });
+              }}
+              className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold disabled:opacity-40 hover:bg-indigo-700 cursor-pointer"
+            >
+              Next 25 Worksheets
+            </button>
+          </div>
+        )}
       </div>
 
       {/* LOCKED WORKSHEET BOARD & CLASS-WISE ACTIVATION / RENEWAL MODAL */}
@@ -1655,7 +1774,19 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                       : `Activate ${modalBoardLabel} ${lockedModalWorksheet.classLevel} – ₹99`}
                   </span>
                 </button>
-                {(lockedModalWorksheet.classLevel !== userRegisteredClass || modalBoard !== activeBoard) && (
+                {!currentStudent && onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLockedModalWorksheet(null);
+                      onOpenAuth('login');
+                    }}
+                    className="w-full sm:w-auto px-4 py-3.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-extrabold text-xs transition-all cursor-pointer"
+                  >
+                    Sign In / Free Register
+                  </button>
+                )}
+                {currentStudent && (lockedModalWorksheet.classLevel !== userRegisteredClass || modalBoard !== activeBoard) && (
                   <button
                     type="button"
                     onClick={() => {

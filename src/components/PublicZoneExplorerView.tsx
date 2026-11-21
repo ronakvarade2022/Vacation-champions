@@ -536,6 +536,17 @@ export const PublicZoneExplorerView: React.FC<PublicZoneExplorerViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
+              id: 'pz-worksheets',
+              title: '0. Online Worksheets',
+              illustration: 'writing' as const,
+              gradient: 'from-[#e0e7ff] via-[#c7d2fe] to-[#a5b4fc]',
+              border: 'border-[#4f46e5]/40',
+              instructions:
+                `Solve ${getAllWorksheetsForClass(selectedClass, selectedBoard).length} board-aligned interactive worksheets (2 Existing + 23 New per subject) for ${boardMeta.shortLabel} ${selectedClass}.`,
+              buttonLabel: 'Open All Worksheets',
+              onClick: () => triggerTab('worksheets'),
+            },
+            {
               id: 'pz-maths',
               title: '1. Maths Practice',
               illustration: 'maths' as const,

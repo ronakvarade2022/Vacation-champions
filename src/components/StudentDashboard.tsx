@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Layers,
   Headphones,
+  FileText,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -192,6 +193,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigateTab('worksheets')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Online Worksheets</span>
+            </button>
             <button
               type="button"
               onClick={() => onNavigateTab('profile')}

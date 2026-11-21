@@ -228,7 +228,7 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
             {([
               { id: 'all' as const, label: 'All Sets' },
               { id: 'existing' as const, label: 'Existing Set' },
-              { id: 'new_23' as const, label: '23 New Set' },
+              { id: 'new_23' as const, label: '23 New / Subject' },
             ]).map((col) => (
               <button
                 type="button"
