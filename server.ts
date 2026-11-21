@@ -3515,7 +3515,13 @@ async function startServer() {
         maxAge: '1y',
         immutable: true,
         setHeaders: (res, filePath) => {
-          if (filePath.endsWith('.html') || filePath.endsWith('manifest.json')) {
+          if (
+            filePath.endsWith('.html') ||
+            filePath.endsWith('manifest.json') ||
+            filePath.endsWith('manifest.webmanifest') ||
+            filePath.endsWith('sw.js') ||
+            filePath.endsWith('registerSW.js')
+          ) {
             res.setHeader('Cache-Control', 'no-cache, must-revalidate');
           } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

@@ -32,6 +32,7 @@ import {
 } from '../data/classCurriculumConfig';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
@@ -208,6 +209,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <Headphones className="w-3.5 h-3.5" />
               <span>HELP &amp; SUPPORT</span>
             </button>
+            <PWAInstallButton variant="compact" />
             <button
               type="button"
               onClick={() =>

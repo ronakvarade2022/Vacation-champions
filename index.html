@@ -6,9 +6,14 @@
     <link rel="preload" as="image" href="/assets/aistudio/file_00000000bcf8820bad2b1b276650f09a_9a0b6552.webp" type="image/webp" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#d97706" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MyStudyZone" />
     <title>MyStudyZone (mystudyzone.in) – Classes 1 to 10 Online Learning Platform</title>
     <meta name="description" content="MyStudyZone – Your Complete Learning Destination for Classes 1 to 10 (Maharashtra State Board, CBSE & ICSE). Chapter-wise notes, MCQ practice, printable worksheets, mock tests, MSCE Scholarship Corner, Drawing Studio, Story World, and Shivaji Maharaj Stories." />
     <meta name="keywords" content="MyStudyZone, mystudyzone.in, Classes 1 to 10 Online Learning Platform, Maharashtra State Board, CBSE, ICSE, MSCE Scholarship Exam Preparation, Interactive Quizzes, Worksheets, Audio Stories" />
@@ -66,6 +71,19 @@
             console.debug('[Vite HMR Guard] Handled gracefully:', msg);
           }
         }
+      });
+      // Capture PWA beforeinstallprompt early so late-mounted components can always trigger native install
+      window.__mszDeferredInstallPrompt = null;
+      window.__mszAppInstalled = false;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__mszDeferredInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('msz-pwa-prompt-ready'));
+      });
+      window.addEventListener('appinstalled', function() {
+        window.__mszDeferredInstallPrompt = null;
+        window.__mszAppInstalled = true;
+        window.dispatchEvent(new CustomEvent('msz-pwa-installed'));
       });
     </script>
   </head>

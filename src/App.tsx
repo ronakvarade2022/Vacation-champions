@@ -5,6 +5,7 @@ import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
+import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -1586,6 +1587,7 @@ const AppContent: React.FC = () => {
                         <Headphones className="w-3.5 h-3.5" />
                         <span>HELP &amp; SUPPORT</span>
                       </button>
+                      <PWAInstallButton variant="teacher" />
                     </div>
                   </div>
                 )}
@@ -1862,6 +1864,9 @@ const AppContent: React.FC = () => {
         onNavigateAction={handleHelpSupportNavigation}
         activeTab={currentTab}
       />
+
+      {/* Non-intrusive PWA Offline Connectivity Banner */}
+      <PWAOfflineIndicator />
 
       {/* Professional Education Platform Footer */}
       <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-12 pb-8 text-xs">

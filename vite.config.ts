@@ -1,11 +1,149 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        manifestFilename: 'manifest.json',
+        includeAssets: [
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-maskable-512x512.png',
+          'apple-touch-icon.png',
+          'file_00000000b7dc8211912b865fa7acee86.webp',
+          'icon.svg',
+        ],
+        manifest: {
+          id: '/',
+          name: 'MyStudyZone',
+          short_name: 'MyStudyZone',
+          description:
+            'MyStudyZone – Complete Online Learning Platform for Classes 1 to 10 (Maharashtra State Board, CBSE & ICSE), Scholarship & TET/CTET Exam Prep.',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          background_color: '#fffbeb',
+          theme_color: '#d97706',
+          orientation: 'portrait-primary',
+          categories: ['education', 'books'],
+          icons: [
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/pwa-maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          globPatterns: [
+            '**/*.{css,html,ico,woff,woff2}',
+            'assets/index-*.js',
+            'assets/vendor-*.js',
+          ],
+          globIgnores: [
+            '**/assets/aistudio/*.png',
+            '**/data-tet-*',
+            '**/data-scholarship-*',
+            '**/data-questions-*',
+            '**/data-stories-*',
+            '**/data-drawings-*',
+            '**/admin-*',
+          ],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\//, /^\/functions\//, /^\/\.netlify\//],
+          runtimeCaching: [
+            {
+              urlPattern: /^\/api\/.*/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^\/functions\/.*/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^\/\.netlify\/.*/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^https:\/\/(checkout|api)\.razorpay\.com\/.*/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern:
+                /^https:\/\/(firestore|identitytoolkit|securetoken)\.googleapis\.com\/.*/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^https:\/\/.*\.firebaseapp\.com\/.*/i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'mystudyzone-pages-cache',
+                networkTimeoutSeconds: 4,
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'gstatic-fonts-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+          ],
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(process.cwd(), '.'),

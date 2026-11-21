@@ -12,6 +12,7 @@ import {
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export type HomeScrollTarget =
   | 'home-overview'
@@ -96,6 +97,9 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
           }}
         />
       </div>
+
+      {/* DIRECT PWA MOBILE APP INSTALL BANNER */}
+      <PWAInstallButton variant="banner" />
 
       {/* ROLE-BASED PORTAL ACCESS STRIP (Student · Teacher · Admin) */}
       <section aria-label="Role Access Portals" className="space-y-4">
