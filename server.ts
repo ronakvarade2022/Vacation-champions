@@ -1738,12 +1738,12 @@ function parseServerWorksheetBoardAndClass(worksheetId: string): {
   classLevel: string;
 } | null {
   const trimmed = String(worksheetId || '').trim();
-  const boardMatch = /^WS-(CBSE|ICSE)-C(\d{1,2})-/i.exec(trimmed);
+  const boardMatch = /^WS-(?:NEW-)?(CBSE|ICSE|MH|MAHARASHTRA)-C(\d{1,2})-/i.exec(trimmed);
   if (boardMatch) {
     const n = parseInt(boardMatch[2], 10);
     if (n >= 1 && n <= 10) {
       return {
-        board: boardMatch[1].toUpperCase() === 'CBSE' ? 'CBSE' : 'ICSE',
+        board: normalizeBackendBoard(boardMatch[1]),
         classLevel: `Class ${n}`
       };
     }
@@ -1759,6 +1759,13 @@ function parseServerWorksheetBoardAndClass(worksheetId: string): {
     }
   }
   return null;
+}
+
+function hasServerUniversalWorksheetAccess(sub: ServerStudentSubscription): boolean {
+  return (
+    hasServerCategoryAccess(sub, 'all_classes') ||
+    getServerActivatedBoardClassKeys(sub).length > 0
+  );
 }
 
 function getServerFreeDemoIdsForClass(
@@ -3175,12 +3182,13 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
     const wsClass = parsedWs?.classLevel || requestedClass || userClass;
     const wsClassStatus = getServerBoardClassStatus(sub, wsBoard, wsClass);
     const activePaidKeys = getServerActivatedBoardClassKeys(sub);
+    const hasUniversalWs = wsClassStatus.isPaidActive || hasServerUniversalWorksheetAccess(sub);
     const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass, wsBoard));
     const isDemo = demoIds.has(cleanWsId);
 
     let allowed = false;
     let upgradeMsg = SERVER_WORKSHEET_UPGRADE_MSG;
-    if (wsClassStatus.isPaidActive) {
+    if (hasUniversalWs) {
       allowed = true;
       upgradeMsg = '';
     } else if (wsClassStatus.status === 'EXPIRED') {
@@ -3201,14 +3209,14 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
     return res.json({
       success: true,
       allowed,
-      isDemo: wsClassStatus.isPaidActive ? false : isDemo && allowed,
-      isOtherClassLocked: wsClassStatus.status === 'LOCKED',
-      isClassExpired: wsClassStatus.status === 'EXPIRED',
+      isDemo: hasUniversalWs ? false : isDemo && allowed,
+      isOtherClassLocked: !hasUniversalWs && wsClassStatus.status === 'LOCKED',
+      isClassExpired: !hasUniversalWs && wsClassStatus.status === 'EXPIRED',
       selectedBoard: userBoard,
       selectedClass: userClass,
       worksheetBoard: wsBoard,
       worksheetClass: wsClass,
-      effectivePlan: wsClassStatus.isPaidActive ? 'premium' : 'free',
+      effectivePlan: hasUniversalWs ? 'premium' : 'free',
       requiredPlan: 'premium',
       upgradeMessage: allowed ? '' : upgradeMsg,
       message: allowed ? 'Worksheet access granted.' : upgradeMsg
@@ -3315,7 +3323,7 @@ app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response)
     sub.primaryClassLevel ||
     'Class 1';
   const classStatus = getServerBoardClassStatus(sub, userBoard, userClass);
-  const isPremium = classStatus.isPaidActive;
+  const isPremium = classStatus.isPaidActive || hasServerUniversalWorksheetAccess(sub);
   const demoIds = getServerFreeDemoIdsForClass(userClass, userBoard);
 
   return res.json({
@@ -3324,17 +3332,17 @@ app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response)
     selectedBoard: userBoard,
     selectedClass: userClass,
     classStatus: classStatus.status,
-    activatedBoard: isPremium ? userBoard : null,
-    activatedClassLevel: isPremium ? userClass : null,
+    activatedBoard: classStatus.isPaidActive ? userBoard : null,
+    activatedClassLevel: classStatus.isPaidActive ? userClass : null,
     activatedClasses: getServerActivatedClasses(sub, userBoard),
     activatedClassKeys: getServerActivatedBoardClassKeys(sub),
     effectivePlan: isPremium ? 'premium' : 'free',
     isPremium,
     printingAllowed: false,
     downloadingAllowed: false,
-    demoWorksheetIds: classStatus.status === 'ACTIVE_FREE' ? demoIds : [],
+    demoWorksheetIds: !isPremium && classStatus.status === 'ACTIVE_FREE' ? demoIds : [],
     allowedWorksheets: isPremium
-      ? `ALL_WORKSHEETS_FOR_${userBoard.toUpperCase()}_${userClass.toUpperCase().replace(/\s+/g, '_')}`
+      ? 'ALL_WORKSHEETS_UNIVERSAL_ALL_BOARDS_CLASSES_1_TO_10'
       : classStatus.status === 'ACTIVE_FREE'
       ? demoIds
       : [],
@@ -3389,12 +3397,13 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
   const wsClass = parsedWs?.classLevel || userClass;
   const wsClassStatus = getServerBoardClassStatus(sub, wsBoard, wsClass);
   const activePaidKeys = getServerActivatedBoardClassKeys(sub);
+  const hasUniversalWs = wsClassStatus.isPaidActive || hasServerUniversalWorksheetAccess(sub);
   const demoIds = new Set(getServerFreeDemoIdsForClass(wsClass, wsBoard));
   const isDemo = demoIds.has(cleanWorksheetId);
 
   let allowed = false;
   let upgradeMsg = SERVER_WORKSHEET_UPGRADE_MSG;
-  if (wsClassStatus.isPaidActive) {
+  if (hasUniversalWs) {
     allowed = true;
     upgradeMsg = '';
   } else if (wsClassStatus.status === 'EXPIRED') {
@@ -3415,16 +3424,16 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
   return res.status(allowed ? 200 : 403).json({
     success: allowed,
     allowed,
-    isDemo: wsClassStatus.isPaidActive ? false : isDemo && allowed,
-    isOtherClassLocked: wsClassStatus.status === 'LOCKED',
-    isClassExpired: wsClassStatus.status === 'EXPIRED',
+    isDemo: hasUniversalWs ? false : isDemo && allowed,
+    isOtherClassLocked: !hasUniversalWs && wsClassStatus.status === 'LOCKED',
+    isClassExpired: !hasUniversalWs && wsClassStatus.status === 'EXPIRED',
     studentId: cleanStudentId,
     selectedBoard: userBoard,
     selectedClass: userClass,
     worksheetBoard: wsBoard,
     worksheetClass: wsClass,
     worksheetId: cleanWorksheetId,
-    effectivePlan: wsClassStatus.isPaidActive ? 'premium' : 'free',
+    effectivePlan: hasUniversalWs ? 'premium' : 'free',
     requiredPlan: 'premium',
     printingAllowed: false,
     downloadingAllowed: false,

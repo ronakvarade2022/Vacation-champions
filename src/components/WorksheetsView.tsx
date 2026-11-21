@@ -37,6 +37,7 @@ import {
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import {
   OnlineWorksheet,
+  WorksheetCollectionType,
   WORKSHEET_FORMAT_LABELS,
   getAllWorksheetsForClass,
   getWorksheetsForClassAndSubject,
@@ -45,6 +46,7 @@ import {
 } from '../data/worksheetsData';
 import {
   canAccessWorksheet,
+  hasUniversalWorksheetAccess,
   getBoardClassSubscriptionInfo,
   getBoardShortLabel,
   getPremiumActivatedBannerMessage,
@@ -76,6 +78,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   const [selectedSubject, setSelectedSubject] = useState<SubjectName | 'ALL'>(
     initialSubject || 'ALL'
   );
+  const [collectionFilter, setCollectionFilter] = useState<'all' | WorksheetCollectionType>('all');
+  const [selectedChapter, setSelectedChapter] = useState<string>('ALL');
   const [activeWorksheet, setActiveWorksheet] = useState<OnlineWorksheet | null>(null);
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -88,7 +92,12 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     () => getBoardClassSubscriptionInfo(currentStudent, selectedBoard, selectedClass),
     [currentStudent, selectedBoard, selectedClass]
   );
-  const isPremiumStudent = selectedClassInfo.isPaidActive;
+  const hasUniversalWs = useMemo(
+    () => hasUniversalWorksheetAccess(currentStudent),
+    [currentStudent]
+  );
+  const isClassWorksheetsUnlocked = selectedClassInfo.isPaidActive || hasUniversalWs;
+  const isPremiumStudent = isClassWorksheetsUnlocked;
   const freeDemoWorksheetIds = useMemo(
     () => getFreeDemoWorksheetIdsForClass(selectedClass, selectedBoard),
     [selectedClass, selectedBoard]
@@ -160,12 +169,43 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     return classSubjects.includes(selectedSubject) ? selectedSubject : 'ALL';
   }, [selectedSubject, classSubjects]);
 
-  const worksheetsList = useMemo(() => {
+  const subjectScopedWorksheets = useMemo(() => {
     if (effectiveSubject === 'ALL') {
       return getAllWorksheetsForClass(selectedClass, selectedBoard);
     }
     return getWorksheetsForClassAndSubject(selectedClass, effectiveSubject, selectedBoard);
   }, [selectedClass, effectiveSubject, selectedBoard]);
+
+  const collectionScopedWorksheets = useMemo(() => {
+    if (collectionFilter === 'all') return subjectScopedWorksheets;
+    return subjectScopedWorksheets.filter(ws =>
+      collectionFilter === 'new_23'
+        ? ws.worksheetCollection === 'new_23'
+        : ws.worksheetCollection !== 'new_23'
+    );
+  }, [subjectScopedWorksheets, collectionFilter]);
+
+  const availableChapters = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const ws of collectionScopedWorksheets) {
+      if (ws.chapterName && !seen.has(ws.chapterName)) {
+        seen.add(ws.chapterName);
+        list.push(ws.chapterName);
+      }
+    }
+    return list;
+  }, [collectionScopedWorksheets]);
+
+  const effectiveChapter = useMemo(() => {
+    if (selectedChapter === 'ALL') return 'ALL';
+    return availableChapters.includes(selectedChapter) ? selectedChapter : 'ALL';
+  }, [selectedChapter, availableChapters]);
+
+  const worksheetsList = useMemo(() => {
+    if (effectiveChapter === 'ALL') return collectionScopedWorksheets;
+    return collectionScopedWorksheets.filter(ws => ws.chapterName === effectiveChapter);
+  }, [collectionScopedWorksheets, effectiveChapter]);
 
   const completedWorksheetIds = useMemo(
     () => new Set(currentStudent?.completedWorksheetIds || []),
@@ -288,14 +328,19 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   }, [activeWorksheet, selectedAnswers]);
 
   const ownClassWorksheetsSummary = useMemo(() => {
-    const ownClassTotal = getAllWorksheetsForClass(selectedClass, selectedBoard).length;
+    const allClassSheets = getAllWorksheetsForClass(selectedClass, selectedBoard);
+    const ownClassTotal = allClassSheets.length;
+    const existingCount = allClassSheets.filter(w => w.worksheetCollection !== 'new_23').length;
+    const newCount = allClassSheets.filter(w => w.worksheetCollection === 'new_23').length;
     const freeDemoCount = selectedClassInfo.isFreeBase ? freeDemoWorksheetIds.length : 0;
     return {
       ownClassTotal,
+      existingCount,
+      newCount,
       freeDemoCount,
-      lockedInOwnClassCount: Math.max(0, ownClassTotal - freeDemoCount)
+      lockedInOwnClassCount: isClassWorksheetsUnlocked ? 0 : Math.max(0, ownClassTotal - freeDemoCount)
     };
-  }, [selectedClass, selectedBoard, selectedClassInfo.isFreeBase, freeDemoWorksheetIds]);
+  }, [selectedClass, selectedBoard, selectedClassInfo.isFreeBase, freeDemoWorksheetIds, isClassWorksheetsUnlocked]);
 
   // If solving a specific worksheet (strictly verified unlocked or demo worksheet for user's registered board & class)
   if (
@@ -319,9 +364,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     if (!isSubmitted && activeWorksheet.questions.length > 0) {
       const safeIdx = Math.min(Math.max(0, activeQuestionIdx), activeWorksheet.questions.length - 1);
       const q = activeWorksheet.questions[safeIdx];
-      const fmtMeta = WORKSHEET_FORMAT_LABELS[q.format];
+      const fmtMeta = WORKSHEET_FORMAT_LABELS[q.format] || WORKSHEET_FORMAT_LABELS.mcq;
       const userSelected = selectedAnswers[q.id];
       const needsWrittenBox =
+        Boolean(fmtMeta.requiresWrittenSpace) ||
         q.format === 'short_answer' ||
         q.format === 'long_answer' ||
         q.format === 'math_exercise' ||
@@ -519,6 +565,20 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 <p className="text-sm font-bold text-slate-600">
                   {activeWorksheet.marathiSubtitle} • <span className="text-indigo-700">{activeWorksheet.chapterName}</span>
                 </p>
+                {(activeWorksheet.topic || activeWorksheet.difficultyLevel) && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {activeWorksheet.topic && (
+                      <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200">
+                        Topic: {activeWorksheet.topic}
+                      </span>
+                    )}
+                    {activeWorksheet.difficultyLevel && (
+                      <span className="px-2.5 py-0.5 rounded-lg bg-purple-100 text-purple-800 font-bold text-xs border border-purple-200">
+                        Level: {activeWorksheet.difficultyLevel}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3 shrink-0">
@@ -585,10 +645,11 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             {/* Questions List */}
             <div className="space-y-6">
               {activeWorksheet.questions.map(q => {
-                const fmtMeta = WORKSHEET_FORMAT_LABELS[q.format];
+                const fmtMeta = WORKSHEET_FORMAT_LABELS[q.format] || WORKSHEET_FORMAT_LABELS.mcq;
                 const userSelected = selectedAnswers[q.id];
                 const isCorrect = userSelected === q.correctIndex;
                 const needsWrittenBox =
+                  Boolean(fmtMeta.requiresWrittenSpace) ||
                   q.format === 'short_answer' ||
                   q.format === 'long_answer' ||
                   q.format === 'math_exercise' ||
@@ -784,7 +845,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 </div>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase ${
-                    selectedClassInfo.isPaidActive
+                    isClassWorksheetsUnlocked
                       ? 'bg-emerald-400 text-slate-950'
                       : selectedClassInfo.isExpired
                       ? 'bg-rose-400 text-slate-950'
@@ -795,6 +856,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 >
                   {selectedClassInfo.isPaidActive
                     ? `₹99 Premium (${selectedClassInfo.daysRemainingDisplay})`
+                    : hasUniversalWs
+                    ? '₹99 All Worksheets Unlocked'
                     : selectedClassInfo.isExpired
                     ? 'Expired • Renew ₹99'
                     : selectedClassInfo.isFreeBase
@@ -807,7 +870,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   {classCompletedCount} / {classTotalWorksheets}
                 </div>
                 <span className="text-xs font-extrabold text-emerald-300">
-                  {classTotalWorksheets - classCompletedCount} Pending
+                  {ownClassWorksheetsSummary.existingCount} Existing + {ownClassWorksheetsSummary.newCount} New Set
                 </span>
               </div>
               <div className="w-full h-2.5 bg-white/15 rounded-full overflow-hidden">
@@ -819,7 +882,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 />
               </div>
               <div className="text-[11px] text-indigo-200 font-medium">
-                {selectedClassInfo.isPaidActive
+                {isClassWorksheetsUnlocked
                   ? `All ${ownClassWorksheetsSummary.ownClassTotal} Worksheets Unlocked for ${selectedBoardLabel} Std ${selectedStandardOrdinal}`
                   : selectedClassInfo.isFreeBase
                   ? `2 Free Demo Worksheets Unlocked • ${ownClassWorksheetsSummary.lockedInOwnClassCount} Locked in ${selectedBoardLabel} ${selectedClass}`
@@ -844,7 +907,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           </div>
         )}
 
-        {/* PER-BOARD & PER-CLASS STATUS BANNER: PAID ACTIVE vs EXPIRED vs LOCKED vs FREE BASE DEMO */}
+        {/* PER-BOARD & PER-CLASS STATUS BANNER: PAID ACTIVE vs UNIVERSAL ₹99 WORKSHEET ACCESS vs EXPIRED vs LOCKED vs FREE BASE DEMO */}
         {selectedClassInfo.isPaidActive ? (
           <div className="rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center gap-3.5">
@@ -861,12 +924,36 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   {premiumActivatedBannerText}
                 </p>
                 <p className="text-xs font-bold text-slate-600">
-                  All {ownClassWorksheetsSummary.ownClassTotal} worksheets across all {getSubjectsForClass(selectedClass, selectedBoard).length} subjects for {selectedBoardLabel} Standard {selectedStandardOrdinal} ({selectedClass}) are unlocked • {selectedClassInfo.daysRemainingDisplay}.
+                  All {ownClassWorksheetsSummary.ownClassTotal} worksheets ({ownClassWorksheetsSummary.existingCount} existing + {ownClassWorksheetsSummary.newCount} new syllabus worksheets) across all {getSubjectsForClass(selectedClass, selectedBoard).length} subjects AND all 3 boards (Classes 1–10) are unlocked • {selectedClassInfo.daysRemainingDisplay}.
                 </p>
               </div>
             </div>
             <span className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-xs shrink-0 self-start sm:self-auto">
-              {selectedBoardLabel} Std {selectedStandardOrdinal} Unlocked
+              All Boards &amp; Classes Unlocked
+            </span>
+          </div>
+        ) : hasUniversalWs ? (
+          <div className="rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Crown className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-emerald-800">
+                    ₹99 Plan Universal Worksheet Access • {selectedBoardLabel} • {selectedClass}
+                  </span>
+                </div>
+                <p className="text-sm sm:text-base font-display font-black text-slate-900">
+                  All {ownClassWorksheetsSummary.ownClassTotal} Worksheets Unlocked Free with Your Active ₹99 Plan!
+                </p>
+                <p className="text-xs font-bold text-slate-600">
+                  Enjoy full online practice across all {ownClassWorksheetsSummary.existingCount} existing + {ownClassWorksheetsSummary.newCount} new chapter-wise worksheets for {selectedBoardLabel} Standard {selectedStandardOrdinal} at zero extra fee! (Quizzes &amp; chapter study notes for unpurchased boards/classes remain optional via their own ₹99 class plan.)
+                </p>
+              </div>
+            </div>
+            <span className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-xs shrink-0 self-start sm:self-auto">
+              Worksheets Unlocked ✓
             </span>
           </div>
         ) : selectedClassInfo.isExpired ? (
@@ -1019,6 +1106,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                     onClick={() => {
                       setSelectedBoard(bm.id);
                       setSelectedSubject('ALL');
+                      setSelectedChapter('ALL');
                       const bClsInfo = getBoardClassSubscriptionInfo(currentStudent, bm.id, selectedClass);
                       if (bClsInfo.isAccessible) {
                         void switchActiveBoardAndClass(bm.id, selectedClass);
@@ -1045,11 +1133,13 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             <div className="flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-indigo-600" />
               <h2 className="text-lg font-display font-extrabold text-slate-900">
-                1. {selectedBoardLabel} • Standard 1st to Standard 10th (₹99 Per Board &amp; Class)
+                1. {selectedBoardLabel} • Standard 1st to Standard 10th {hasUniversalWs ? '(All Worksheets Included in ₹99)' : '(₹99 Per Board & Class)'}
               </h2>
             </div>
             <span className="text-xs font-semibold text-slate-500">
-              Tap any class to switch or activate for ₹99
+              {hasUniversalWs
+                ? 'Tap any board or class to browse & solve worksheets'
+                : 'Tap any class to switch or activate for ₹99'}
             </span>
           </div>
 
@@ -1057,6 +1147,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             {ALL_10_CLASSES.map(cls => {
               const isSelected = cls === selectedClass;
               const cInfo = getBoardClassSubscriptionInfo(currentStudent, selectedBoard, cls);
+              const clsWsUnlocked = cInfo.isPaidActive || hasUniversalWs;
               return (
                 <button
                   key={cls}
@@ -1064,17 +1155,20 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   onClick={() => {
                     setSelectedClass(cls);
                     setSelectedSubject('ALL');
+                    setSelectedChapter('ALL');
                     if (cInfo.isAccessible) {
                       void switchActiveBoardAndClass(selectedBoard, cls);
                     }
                   }}
                   className={`relative px-3 py-2.5 rounded-2xl font-extrabold text-xs transition-all cursor-pointer border-2 flex flex-col items-center justify-center gap-0.5 ${
                     isSelected
-                      ? cInfo.isAccessible
+                      ? clsWsUnlocked || cInfo.isAccessible
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
                         : 'bg-slate-800 text-white border-slate-800 shadow-md'
                       : cInfo.isPaidActive
                       ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-400'
+                      : hasUniversalWs
+                      ? 'bg-teal-50/70 hover:bg-teal-100 text-teal-950 border-teal-300'
                       : cInfo.isFreeBase
                       ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-300'
                       : cInfo.isExpired
@@ -1083,7 +1177,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   }`}
                 >
                   <span className="inline-flex items-center gap-1">
-                    {!cInfo.isAccessible && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                    {!clsWsUnlocked && !cInfo.isAccessible && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                     <span>{cls}</span>
                   </span>
                   {cInfo.isPaidActive ? (
@@ -1093,6 +1187,14 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                       }`}
                     >
                       Paid • {cInfo.daysRemaining}d
+                    </span>
+                  ) : hasUniversalWs ? (
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                        isSelected ? 'bg-emerald-300 text-slate-950' : 'bg-teal-100 text-teal-900'
+                      }`}
+                    >
+                      WS Unlocked
                     </span>
                   ) : cInfo.isFreeBase ? (
                     <span
@@ -1124,7 +1226,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             })}
           </div>
 
-          {!selectedClassInfo.isAccessible && (
+          {!isClassWorksheetsUnlocked && !selectedClassInfo.isAccessible && (
             <div className="rounded-2xl bg-amber-50 border-2 border-amber-300 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <Lock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -1135,7 +1237,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                   <p className="text-xs font-semibold text-slate-700">
                     {selectedClassInfo.isExpired
                       ? `Your paid subscription for ${selectedBoardLabel} ${selectedClass} expired (${selectedClassInfo.expiryDisplay}). Renew ${selectedBoardLabel} ${selectedClass} for ₹99 (365 Days) on your existing account!`
-                      : `Activate ${selectedBoardLabel} ${selectedClass} for ₹99 (365 Days / 1 Year) on your existing account to unlock all ${classTotalWorksheets} worksheets and subjects for ${selectedBoardLabel} ${selectedClass}.`}
+                      : `Activate ${selectedBoardLabel} ${selectedClass} for ₹99 (365 Days / 1 Year) on your existing account to unlock all ${classTotalWorksheets} worksheets and subjects across every board!`}
                   </p>
                 </div>
               </div>
@@ -1153,6 +1255,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                     setSelectedBoard(activeBoard);
                     setSelectedClass(userRegisteredClass);
                     setSelectedSubject('ALL');
+                    setSelectedChapter('ALL');
                   }}
                   className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs cursor-pointer shadow-xs"
                 >
@@ -1163,26 +1266,47 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           )}
         </div>
 
-        {/* Subject Filter Pills */}
-        <div className="bg-white rounded-3xl border border-amber-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between gap-2">
+        {/* Subject, Collection & Chapter Filter Pills (Board -> Class -> Subject -> Chapter -> Worksheet) */}
+        <div className="bg-white rounded-3xl border border-amber-200/80 p-5 sm:p-6 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-amber-600" />
               <h2 className="text-base sm:text-lg font-display font-extrabold text-slate-900">
                 2. Filter by Subject ({selectedBoardLabel} • {selectedClass} • {selectedClassMeta?.marathiLabel})
               </h2>
             </div>
-            <span className="text-xs font-semibold text-slate-500">
-              {selectedClass === 'Class 9' || selectedClass === 'Class 10'
-                ? 'Board-specific syllabus worksheets'
-                : '2 Multi-Format Worksheets per Subject'}
-            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([
+                { id: 'all' as const, label: `All Sets (${ownClassWorksheetsSummary.ownClassTotal})` },
+                { id: 'existing' as const, label: `Existing Set (${ownClassWorksheetsSummary.existingCount})` },
+                { id: 'new_23' as const, label: `23 New Set (${ownClassWorksheetsSummary.newCount})` }
+              ]).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setCollectionFilter(tab.id);
+                    setSelectedChapter('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
+                    collectionFilter === tab.id
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-slate-50 hover:bg-indigo-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setSelectedSubject('ALL')}
+              onClick={() => {
+                setSelectedSubject('ALL');
+                setSelectedChapter('ALL');
+              }}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
                 effectiveSubject === 'ALL'
                   ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
@@ -1198,7 +1322,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 <button
                   key={subj}
                   type="button"
-                  onClick={() => setSelectedSubject(subj)}
+                  onClick={() => {
+                    setSelectedSubject(subj);
+                    setSelectedChapter('ALL');
+                  }}
                   className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
                     isSelected
                       ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
@@ -1211,6 +1338,56 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
               );
             })}
           </div>
+
+          {/* 3. Chapter Filter Strip */}
+          {availableChapters.length > 0 && (
+            <div className="pt-4 border-t border-slate-100 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
+                  3. Filter by Chapter ({availableChapters.length} Chapters in Selection)
+                </span>
+                {effectiveChapter !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChapter('ALL')}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                  >
+                    Show All Chapters
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedChapter('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer border ${
+                    effectiveChapter === 'ALL'
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  All Chapters ({collectionScopedWorksheets.length})
+                </button>
+                {availableChapters.map((chap) => {
+                  const isChapSelected = effectiveChapter === chap;
+                  return (
+                    <button
+                      key={chap}
+                      type="button"
+                      onClick={() => setSelectedChapter(chap)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border text-left ${
+                        isChapSelected
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-white hover:bg-indigo-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      📖 {chap}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Worksheets Grid */}
@@ -1258,6 +1435,20 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                           <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold text-[11px]">
                             Worksheet #{ws.worksheetNumber}
                           </span>
+                          {ws.worksheetCollection === 'new_23' ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white font-black text-[10px] uppercase tracking-wider">
+                              23 New Set
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 font-extrabold text-[10px] uppercase tracking-wider">
+                              Existing Set
+                            </span>
+                          )}
+                          {ws.difficultyLevel && (
+                            <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold text-[10px]">
+                              {ws.difficultyLevel}
+                            </span>
+                          )}
                           {isFreeDemo && (
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider">
                               FREE DEMO WORKSHEET
@@ -1265,7 +1456,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                           )}
                         </div>
                         <h3 className="text-lg font-display font-black text-slate-900 mt-1 flex items-center gap-2">
-                          <span>{ws.subject} – Worksheet #{ws.worksheetNumber}</span>
+                          <span>{ws.title || `${ws.subject} – Worksheet #${ws.worksheetNumber}`}</span>
                           {isLocked && <Lock className="w-4 h-4 text-amber-600 shrink-0" />}
                         </h3>
                       </div>
@@ -1292,14 +1483,19 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                     )}
                   </div>
 
-                  <p className="text-xs font-bold text-indigo-700 bg-indigo-50/80 px-3 py-2 rounded-xl border border-indigo-100">
-                    📖 {ws.chapterName}
-                  </p>
+                  <div className="text-xs font-bold text-indigo-700 bg-indigo-50/80 px-3 py-2 rounded-xl border border-indigo-100 space-y-0.5">
+                    <div>📖 {ws.chapterName}</div>
+                    {ws.topic && (
+                      <div className="text-[11px] font-semibold text-slate-600">
+                        🎯 Topic: {ws.topic}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Format Badges Included */}
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {ws.formatsIncluded.slice(0, 6).map(fmt => {
-                      const fMeta = WORKSHEET_FORMAT_LABELS[fmt];
+                      const fMeta = WORKSHEET_FORMAT_LABELS[fmt] || WORKSHEET_FORMAT_LABELS.mcq;
                       return (
                         <span
                           key={fmt}

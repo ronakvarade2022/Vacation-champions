@@ -154,6 +154,7 @@ function buildInitialTetCtetBatchesMetadata(): Record<string, TetCtetBatchStatus
 }
 import {
   buildBoardClassKey,
+  canAccessSubject,
   canAccessWorksheet,
   canSwitchBoardAndClass,
   canSwitchToClass,
@@ -2810,6 +2811,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mobile: '9000000004'
     });
 
+    const expiredOnlyFixture = baseFixture({
+      id: 'audit_expired_only',
+      classLevel: 'Class 5',
+      primaryClassLevel: 'Class 5',
+      activatedClasses: [],
+      classSubscriptions: {
+        'Class 5': {
+          classLevel: 'Class 5',
+          plan: 'premium',
+          status: 'EXPIRED',
+          purchasedAt: '2024-01-01',
+          expiresAt: '2025-01-01',
+          amountInr: 99,
+          validityDays: 365
+        }
+      },
+      plan: 'free',
+      email: 'expired@test.local',
+      mobile: '9000000005'
+    });
+
     const checks: SecurityAuditCheck[] = [
       {
         id: 'sec-chk-1',
@@ -2821,26 +2843,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       {
         id: 'sec-chk-2',
-        title: 'Per-Class Independent Expiry & ₹99 Strict Lock Enforcement',
-        description: 'Verify Class 5 expiry locks Class 5 without revoking active Class 6, and unpaid Class 7 remains strictly locked.',
+        title: 'Per-Class Isolation, Expired Locks & Universal ₹99 Worksheet Access',
+        description: 'Verify expired-only/free accounts stay strictly locked on paid content while any active ₹99 plan unlocks worksheets across Classes 1–10 and keeps non-worksheet classes isolated.',
         category: 'student_isolation',
         passed:
+          !canAccessWorksheet(s1, 'WS-NEW-CBSE-C4-MATHEMATICS-1', 'Class 4', undefined, 'CBSE').allowed &&
+          canAccessWorksheet(s1, 'WS-C4-ENGLISH-1', 'Class 4', undefined, 'Maharashtra').allowed &&
+          !canAccessWorksheet(expiredOnlyFixture, 'WS-C5-SCIENCE-2', 'Class 5', undefined, 'Maharashtra').allowed &&
           canAccessWorksheet(s2, 'WS-C6-SCIENCE-2', 'Class 6', undefined, 'Maharashtra').allowed &&
-          !canAccessWorksheet(s2, 'WS-C5-SCIENCE-2', 'Class 5', undefined, 'Maharashtra').allowed &&
-          !canAccessWorksheet(s2, 'WS-C7-SCIENCE-2', 'Class 7', undefined, 'Maharashtra').allowed &&
+          canAccessWorksheet(s2, 'WS-NEW-CBSE-C7-SCIENCE-1', 'Class 7', undefined, 'CBSE').allowed &&
           !canSwitchToClass(s2, 'Class 7', undefined, 'Maharashtra').allowed &&
           canSwitchToClass(s2, 'Class 6', undefined, 'Maharashtra').allowed,
-        details: 'PASS: Expired Class 5 & unpaid Class 7 stay locked while active Class 6 remains fully accessible.'
+        details: 'PASS: Free/Expired accounts stay locked on paid sheets, active Class 6 stays isolated for quizzes/subjects, and ₹99 unlocks all worksheets.'
       },
       {
         id: 'sec-chk-3',
         title: 'Teacher Portal Board & Class Restriction',
-        description: 'Verify Teachers can access only activated or base registered board & classes.',
+        description: 'Verify Teachers access only activated or base registered board & classes for quizzes/subjects while ₹99 active status unlocks practice worksheets.',
         category: 'parent_isolation',
         passed:
+          canSwitchBoardAndClass(t2, 'Maharashtra', 'Class 9').allowed &&
+          !canSwitchBoardAndClass(t2, 'Maharashtra', 'Class 8').allowed &&
           canAccessWorksheet(t2, 'WS-C9-PHYSICS-1', 'Class 9', undefined, 'Maharashtra').allowed &&
-          !canAccessWorksheet(t2, 'WS-C8-SCIENCE-1', 'Class 8', undefined, 'Maharashtra').allowed,
-        details: 'PASS: Class-9 Teacher account accesses Class 9 curriculum while unactivated classes remain restricted.'
+          canAccessWorksheet(t2, 'WS-NEW-ICSE-C8-BIOLOGY-5', 'Class 8', undefined, 'ICSE').allowed,
+        details: 'PASS: Class-9 Teacher account keeps Class 8 curriculum/quizzes isolated while unlocking cross-board practice worksheets.'
       },
       {
         id: 'sec-chk-4',
@@ -2852,18 +2878,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       {
         id: 'sec-chk-5',
-        title: 'Strict 3-Board Subscription Isolation (Maharashtra • CBSE • ICSE)',
-        description: 'Verify activating CBSE Class 5 unlocks ONLY CBSE Class 5 and never unlocks ICSE Class 5, Maharashtra Class 5, or CBSE Class 6.',
+        title: 'Strict 3-Board Curriculum Isolation + ₹99 All-Board Worksheet Library',
+        description: 'Verify activating CBSE Class 5 keeps non-worksheet subjects/quizzes strictly isolated from ICSE/Maharashtra/Class 6 while unlocking all 3-board worksheets.',
         category: 'student_isolation',
         passed:
           canSwitchBoardAndClass(cbseFixture, 'CBSE', 'Class 5').allowed &&
-          canAccessWorksheet(cbseFixture, 'WS-CBSE-C5-SCIENCE-2', 'Class 5', undefined, 'CBSE').allowed &&
           !canSwitchBoardAndClass(cbseFixture, 'ICSE', 'Class 5').allowed &&
           !canSwitchBoardAndClass(cbseFixture, 'Maharashtra', 'Class 5').allowed &&
           !canSwitchBoardAndClass(cbseFixture, 'CBSE', 'Class 6').allowed &&
-          !canAccessWorksheet(cbseFixture, 'WS-ICSE-C5-SCIENCE-2', 'Class 5', undefined, 'ICSE').allowed &&
-          !canAccessWorksheet(cbseFixture, 'WS-C5-SCIENCE-2', 'Class 5', undefined, 'Maharashtra').allowed,
-        details: 'PASS: CBSE Class 5 active stays strictly isolated from ICSE, Maharashtra, and unpaid CBSE Class 6.'
+          !canAccessSubject(cbseFixture, 'Science', 'Class 5', undefined, 'ICSE').allowed &&
+          canAccessWorksheet(cbseFixture, 'WS-CBSE-C5-SCIENCE-2', 'Class 5', undefined, 'CBSE').allowed &&
+          canAccessWorksheet(cbseFixture, 'WS-ICSE-C5-SCIENCE-2', 'Class 5', undefined, 'ICSE').allowed &&
+          canAccessWorksheet(cbseFixture, 'WS-NEW-MH-C10-MATHEMATICSALGEBRA-1', 'Class 10', undefined, 'Maharashtra').allowed,
+        details: 'PASS: CBSE Class 5 keeps ICSE, Maharashtra, and Class 6 quizzes/subjects strictly isolated while unlocking all 3-board worksheets.'
       }
     ];
 

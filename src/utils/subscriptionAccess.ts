@@ -1299,7 +1299,7 @@ export function parseBoardAndClassFromWorksheetId(
   worksheetId: string
 ): { board: EducationBoard; classLevel: ClassLevel | null } {
   const idStr = String(worksheetId || '').trim();
-  const boardMatch = /^WS-(CBSE|ICSE|MH|MAHARASHTRA)-C(\d{1,2})-/i.exec(idStr);
+  const boardMatch = /^WS-(?:NEW-)?(CBSE|ICSE|MH|MAHARASHTRA)-C(\d{1,2})-/i.exec(idStr);
   if (boardMatch) {
     const board = normalizeBoardValue(boardMatch[1]);
     const num = parseInt(boardMatch[2], 10);
@@ -1340,13 +1340,29 @@ export function isFreeDemoWorksheet(
 }
 
 /**
+ * Checks whether a student or teacher qualifies for Universal ₹99 Worksheet Access:
+ * Any user holding ANY active paid ₹99 Class subscription (across any Board/Class)
+ * OR the All-Access Bundle ('all_classes') gets ALL existing and newly added worksheets
+ * unlocked across ALL 3 Boards (Maharashtra, CBSE, ICSE) and Classes 1–10 with zero extra fees.
+ */
+export function hasUniversalWorksheetAccess(
+  student: StudentProfile | null | undefined,
+  referenceNow?: Date | string | number
+): boolean {
+  if (!student) return false;
+  if (hasCategoryAccess(student, 'all_classes', referenceNow)) {
+    return true;
+  }
+  return getActivatedBoardClassesList(student, referenceNow).length > 0;
+}
+
+/**
  * Checks whether a student or teacher has access to a specific worksheet across Boards (MH/CBSE/ICSE) and Standards 1st–10th.
- * STRICT MULTI-BOARD & MULTI-CLASS ACCESS RULES:
- * 1. Purchasing CBSE Class 5 unlocks ONLY CBSE Class 5 (not ICSE Class 5, Maharashtra Class 5, or CBSE Class 6).
- * 2. Active Paid (Board, Class) -> ALL worksheets for that (Board, Class) unlocked.
- * 3. Expired (Board, Class) -> locked until renewed (sole Free base retains 2 demo worksheets if no other active paid).
- * 4. Base Free (Board, Class) -> ONLY the 2 Demo Worksheets (1 English + 1 Mathematics) unlocked.
- * 5. Any other unpurchased (Board, Class) -> STRICTLY LOCKED until ₹99 paid verification.
+ * WORKSHEET ENTITLEMENT RULES:
+ * 1. Any Active Paid ₹99 Subscriber (any active Board+Class subscription OR 'all_classes' bundle) -> ALL existing & new worksheets across ALL 3 Boards & Classes 1–10 unlocked!
+ * 2. Expired Paid (with NO other active paid plan) -> locked until renewed (sole Free base retains ONLY the 2 existing demo worksheets).
+ * 3. Base Free (Board, Class) -> ONLY the 2 existing Demo Worksheets (1 English + 1 Mathematics) unlocked.
+ * 4. Any other unpurchased (Board, Class) for unpaid users -> STRICTLY LOCKED until ₹99 paid verification.
  */
 export function canAccessWorksheet(
   student: StudentProfile | null | undefined,
@@ -1382,8 +1398,8 @@ export function canAccessWorksheet(
   const wsClassInfo = getBoardClassSubscriptionInfo(student, wsBoard, wsClass, referenceNow);
   const isDemo = isFreeDemoWorksheet(worksheetId, wsClass, wsBoard);
 
-  // Rule 1: Active Paid Subscription specifically for (wsBoard, wsClass) -> Unlock ALL worksheets!
-  if (wsClassInfo.isPaidActive) {
+  // Rule 1: Active Paid Subscription for (wsBoard, wsClass) OR Universal ₹99 Worksheet Access -> Unlock ALL worksheets across all 3 boards & Classes 1–10!
+  if (wsClassInfo.isPaidActive || hasUniversalWorksheetAccess(student, referenceNow)) {
     return {
       allowed: true,
       isDemo,

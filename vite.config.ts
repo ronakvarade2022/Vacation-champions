@@ -68,6 +68,7 @@ export default defineConfig(() => {
             '**/data-tet-*',
             '**/data-scholarship-*',
             '**/data-questions-*',
+            '**/data-worksheets*',
             '**/data-stories-*',
             '**/data-drawings-*',
             '**/admin-*',
@@ -223,6 +224,9 @@ export default defineConfig(() => {
             }
             if (id.includes('src/data/drawingsData') || id.includes('src/data/readyMadeDrawings')) {
               return 'data-drawings';
+            }
+            if (id.includes('src/data/worksheets/')) {
+              return 'data-worksheets-new';
             }
             if (
               id.includes('src/data/worksheetsData') ||

@@ -6,61 +6,39 @@ import {
   getClassSpecificWorksheetQuestions
 } from './classDemoWorksheetsData';
 
-export type WorksheetItemFormat =
-  | 'mcq'
-  | 'fill_blank'
-  | 'match_following'
-  | 'true_false'
-  | 'short_answer'
-  | 'long_answer'
-  | 'math_exercise'
-  | 'grammar_practice'
-  | 'science_activity'
-  | 'logical_reasoning'
-  | 'chapter_exercise';
+import {
+  WorksheetItemFormat,
+  WORKSHEET_FORMAT_LABELS,
+  WorksheetFormatMeta,
+  WorksheetDifficultyLevel,
+  WorksheetCollectionType,
+  WorksheetQuestionItem,
+  OnlineWorksheet,
+  NewWorksheetSpec,
+  CompactWorksheetQuestionSpec
+} from './worksheets/types';
+import {
+  getAllNew690Worksheets,
+  getNew23WorksheetsForClass,
+  getNew23WorksheetsForClassAndSubject
+} from './worksheets/index';
 
-export const WORKSHEET_FORMAT_LABELS: Record<WorksheetItemFormat, { label: string; badgeColor: string; icon: string }> = {
-  mcq: { label: 'MCQ', badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200', icon: '🎯' },
-  fill_blank: { label: 'Fill in the Blanks', badgeColor: 'bg-amber-100 text-amber-800 border-amber-200', icon: '✍️' },
-  match_following: { label: 'Match the Following', badgeColor: 'bg-purple-100 text-purple-800 border-purple-200', icon: '🔗' },
-  true_false: { label: 'True or False', badgeColor: 'bg-teal-100 text-teal-800 border-teal-200', icon: '⚖️' },
-  short_answer: { label: 'Short-Answer Question', badgeColor: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📝' },
-  long_answer: { label: 'Long-Answer / Structured', badgeColor: 'bg-rose-100 text-rose-800 border-rose-200', icon: '📖' },
-  math_exercise: { label: 'Mathematics Exercise', badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: '🔢' },
-  grammar_practice: { label: 'Grammar Practice', badgeColor: 'bg-pink-100 text-pink-800 border-pink-200', icon: '🔤' },
-  science_activity: { label: 'Science Activity', badgeColor: 'bg-cyan-100 text-cyan-800 border-cyan-200', icon: '🔬' },
-  logical_reasoning: { label: 'Logical Reasoning', badgeColor: 'bg-orange-100 text-orange-800 border-orange-200', icon: '🧠' },
-  chapter_exercise: { label: 'Chapter-Wise Exercise', badgeColor: 'bg-violet-100 text-violet-800 border-violet-200', icon: '📚' }
+export type {
+  WorksheetItemFormat,
+  WorksheetFormatMeta,
+  WorksheetDifficultyLevel,
+  WorksheetCollectionType,
+  WorksheetQuestionItem,
+  OnlineWorksheet,
+  NewWorksheetSpec,
+  CompactWorksheetQuestionSpec
 };
-
-export interface WorksheetQuestionItem {
-  id: string;
-  number: number;
-  format: WorksheetItemFormat;
-  chapterTitle: string;
-  prompt: string;
-  options: [string, string, string, string];
-  correctIndex: number;
-  modelWrittenAnswer?: string;
-  explanation: string;
-  marks: number;
-}
-
-export interface OnlineWorksheet {
-  id: string;
-  board?: EducationBoard;
-  classLevel: ClassLevel;
-  subject: SubjectName;
-  worksheetNumber: 1 | 2;
-  title: string;
-  marathiSubtitle: string;
-  chapterName: string;
-  durationMinutes: number;
-  totalMarks: number;
-  isDemo?: boolean;
-  formatsIncluded: WorksheetItemFormat[];
-  questions: WorksheetQuestionItem[];
-}
+export {
+  WORKSHEET_FORMAT_LABELS,
+  getAllNew690Worksheets,
+  getNew23WorksheetsForClass,
+  getNew23WorksheetsForClassAndSubject
+};
 
 export function getFreeDemoWorksheetIdsForClass(
   classLevel: ClassLevel = 'Class 1',
@@ -188,7 +166,7 @@ function selectFormatForSubjectAndIndex(subject: SubjectName, index: number): Wo
  * - Worksheet 1: Foundation & Intermediate Practice (combines Level 1 & Level 2 concepts, 10 structured questions, 20 Marks)
  * - Worksheet 2: Advanced & Expert Mastery (combines Level 3 & Level 4 concepts, 10 structured questions, 20 Marks)
  */
-export function getWorksheetsForClassAndSubject(
+export function getExistingWorksheetsForClassAndSubject(
   classLevel: ClassLevel,
   subject: SubjectName,
   board: EducationBoard = 'Maharashtra'
@@ -257,6 +235,8 @@ export function getWorksheetsForClassAndSubject(
       classLevel,
       subject,
       worksheetNumber: wsNum,
+      worksheetCollection: 'existing',
+      difficultyLevel: wsNum === 1 ? 'Foundation' : 'Advanced',
       title: `${titlePrefix}${classLevel} • ${subject} – Worksheet #${wsNum}`,
       marathiSubtitle:
         normalizedBoard === 'Maharashtra'
@@ -277,16 +257,41 @@ export function getWorksheetsForClassAndSubject(
   ];
 }
 
-export function getAllWorksheetsForClass(
+/**
+ * Returns ALL worksheets (existing legacy worksheets + newly added 23-worksheet set) for a (board, classLevel, subject).
+ * Existing worksheets are always preserved intact and returned first, followed by new additional worksheets.
+ */
+export function getWorksheetsForClassAndSubject(
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  board: EducationBoard = 'Maharashtra'
+): OnlineWorksheet[] {
+  const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
+  const existing = getExistingWorksheetsForClassAndSubject(classLevel, subject, normalizedBoard);
+  const additional = getNew23WorksheetsForClassAndSubject(classLevel, subject, normalizedBoard);
+  return [...existing, ...additional];
+}
+
+export function getExistingWorksheetsForClass(
   classLevel: ClassLevel,
   board: EducationBoard = 'Maharashtra'
 ): OnlineWorksheet[] {
   const subjects = getSubjectsForClass(classLevel, board);
   const list: OnlineWorksheet[] = [];
   for (const subj of subjects) {
-    list.push(...getWorksheetsForClassAndSubject(classLevel, subj, board));
+    list.push(...getExistingWorksheetsForClassAndSubject(classLevel, subj, board));
   }
   return list;
+}
+
+export function getAllWorksheetsForClass(
+  classLevel: ClassLevel,
+  board: EducationBoard = 'Maharashtra'
+): OnlineWorksheet[] {
+  const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
+  const existing = getExistingWorksheetsForClass(classLevel, normalizedBoard);
+  const additional = getNew23WorksheetsForClass(classLevel, normalizedBoard);
+  return [...existing, ...additional];
 }
 
 /**
@@ -296,10 +301,10 @@ export function getFreeDemoWorksheets(
   classLevel: ClassLevel = 'Class 1',
   board: EducationBoard = 'Maharashtra'
 ): OnlineWorksheet[] {
-  const englishDemo = getWorksheetsForClassAndSubject(classLevel, 'English', board)[0];
+  const englishDemo = getExistingWorksheetsForClassAndSubject(classLevel, 'English', board)[0];
   const mathSubject: SubjectName =
     board === 'Maharashtra' && classLevel === 'Class 10' ? 'Mathematics – Algebra' : 'Mathematics';
-  const mathDemo = getWorksheetsForClassAndSubject(classLevel, mathSubject, board)[0];
+  const mathDemo = getExistingWorksheetsForClassAndSubject(classLevel, mathSubject, board)[0];
   return [englishDemo, mathDemo].filter(Boolean);
 }
 

@@ -5,6 +5,7 @@ import {
   getAllWorksheetsForClass,
   getVisitorDemoWorksheetsForClass,
   type OnlineWorksheet,
+  type WorksheetCollectionType,
 } from '../../data/worksheetsData';
 import { BOARD_META_LIST } from '../../data/boards/boardMeta';
 import { ALL_ADMIN_CLASSES } from '../../utils/adminAnalytics';
@@ -25,6 +26,7 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
       selectedClassWorkspace !== 'all' ? (selectedClassWorkspace as ClassLevel) : 'Class 1'
     );
     const [typeFilter, setTypeFilter] = useState<'all' | 'demo' | 'premium'>('all');
+    const [collectionFilter, setCollectionFilter] = useState<'all' | WorksheetCollectionType>('all');
     const [searchInput, setSearchInput] = useState<string>('');
     const [debouncedSearch, setDebouncedSearch] = useState<string>('');
     const [expandedWorksheetId, setExpandedWorksheetId] = useState<string | null>(null);
@@ -63,21 +65,24 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
       return classWorksheets.filter((ws) => {
         if (typeFilter === 'demo' && !ws.isDemo) return false;
         if (typeFilter === 'premium' && ws.isDemo) return false;
+        if (collectionFilter === 'existing' && ws.worksheetCollection === 'new_23') return false;
+        if (collectionFilter === 'new_23' && ws.worksheetCollection !== 'new_23') return false;
         if (debouncedSearch) {
           const hit =
             ws.id.toLowerCase().includes(debouncedSearch) ||
             ws.title.toLowerCase().includes(debouncedSearch) ||
             ws.subject.toLowerCase().includes(debouncedSearch) ||
-            ws.chapterName.toLowerCase().includes(debouncedSearch);
+            ws.chapterName.toLowerCase().includes(debouncedSearch) ||
+            (ws.topic || '').toLowerCase().includes(debouncedSearch);
           if (!hit) return false;
         }
         return true;
       });
-    }, [classWorksheets, typeFilter, debouncedSearch]);
+    }, [classWorksheets, typeFilter, collectionFilter, debouncedSearch]);
 
     useEffect(() => {
       setCurrentPage(1);
-    }, [activeBoard, activeClass, typeFilter, debouncedSearch]);
+    }, [activeBoard, activeClass, typeFilter, collectionFilter, debouncedSearch]);
 
     const totalPages = Math.max(1, Math.ceil(filteredWorksheets.length / pageSize));
     const safePage = Math.min(currentPage, totalPages);
@@ -174,7 +179,8 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
             <p className="text-[10px] font-bold uppercase text-amber-900">Class Worksheets</p>
             <p className="text-2xl font-extrabold text-slate-900 mt-1">{classWorksheets.length}</p>
             <p className="text-[10px] text-slate-500 mt-0.5">
-              2 per subject ({getBoardShortLabel(activeBoard)})
+              {classWorksheets.filter((w) => w.worksheetCollection !== 'new_23').length} existing +{' '}
+              {classWorksheets.filter((w) => w.worksheetCollection === 'new_23').length} new set ({getBoardShortLabel(activeBoard)})
             </p>
           </div>
           <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200">
@@ -194,7 +200,7 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
             <p className="text-2xl font-extrabold text-purple-700 mt-1">
               {classWorksheets.reduce((s, w) => s + w.questions.length, 0)} Qs
             </p>
-            <p className="text-[10px] text-purple-600 mt-0.5">10 Qs • 20 Marks per sheet</p>
+            <p className="text-[10px] text-purple-600 mt-0.5">Chapter-aligned multi-format bank</p>
           </div>
         </div>
 
@@ -217,6 +223,24 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
                   : mode === 'demo'
                     ? 'Free Demo (Registered)'
                     : 'Premium Only (₹99)'}
+              </button>
+            ))}
+            {([
+              { id: 'all' as const, label: 'All Sets' },
+              { id: 'existing' as const, label: 'Existing Set' },
+              { id: 'new_23' as const, label: '23 New Set' },
+            ]).map((col) => (
+              <button
+                type="button"
+                key={col.id}
+                onClick={() => setCollectionFilter(col.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                  collectionFilter === col.id
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {col.label}
               </button>
             ))}
           </div>
@@ -275,6 +299,15 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
                         >
                           {ws.isDemo ? 'FREE DEMO' : 'PREMIUM ₹99'}
                         </span>
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            ws.worksheetCollection === 'new_23'
+                              ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {ws.worksheetCollection === 'new_23' ? '23 NEW SET' : 'EXISTING SET'}
+                        </span>
                       </div>
                       <h4 className="font-extrabold text-sm text-slate-900">{ws.title}</h4>
                       <p className="text-[11px] text-slate-500">
@@ -289,7 +322,7 @@ export const AdminWorksheetsSection: React.FC<AdminWorksheetsSectionProps> = Rea
                       className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-amber-100 text-slate-800 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-center shrink-0"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>{isExpanded ? 'Hide Questions' : 'Inspect 10 Questions'}</span>
+                      <span>{isExpanded ? 'Hide Questions' : `Inspect ${ws.questions.length} Questions`}</span>
                       {isExpanded ? (
                         <ChevronUp className="w-3.5 h-3.5" />
                       ) : (
