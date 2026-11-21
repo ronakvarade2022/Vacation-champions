@@ -88,6 +88,10 @@ import {
   type CategorySubscriptionRecord,
   type PlanSkuId
 } from './src/data/planCatalog.ts';
+import {
+  handleSupportChatRequest,
+  handleSupportTicketSubmission
+} from './server/supportAssistant.ts';
 
 dotenv.config();
 
@@ -3428,6 +3432,54 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
   });
 });
 
+// 11. AI Help & Support Assistant Chat & Support Request Endpoints
+function resolveClientIp(req: Request): string {
+  const fwd = req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string' && fwd.trim()) {
+    return fwd.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+}
+
+app.post('/api/support/chat', async (req: Request, res: Response) => {
+  try {
+    const payload = await handleSupportChatRequest(
+      (req.body || {}) as Record<string, unknown>,
+      resolveClientIp(req)
+    );
+    return res.status(payload.success ? 200 : 400).json(payload);
+  } catch (err: any) {
+    console.error('[Support Chat Route Error]:', err);
+    return res.status(500).json({
+      success: false,
+      source: 'kb_fallback',
+      aiStatus: 'upstream_error',
+      reply:
+        'Help Desk encountered a temporary issue. Please retry your question or submit a Support Request.',
+      language: 'en',
+      navigationActions: [],
+      suggestSupportTicket: true,
+    });
+  }
+});
+
+app.post('/api/support/tickets', async (req: Request, res: Response) => {
+  try {
+    const result = await handleSupportTicketSubmission(
+      (req.body || {}) as Record<string, unknown>,
+      { authorization: req.headers.authorization },
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err: any) {
+    console.error('[Support Ticket Route Error]:', err);
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: 'Unable to submit your support request right now. Please try again shortly.',
+    });
+  }
+});
 
 // Setup Vite or static serving
 async function startServer() {

@@ -56,10 +56,14 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   );
 
   useEffect(() => {
-    if (currentStudent?.board && !initialBoard) {
+    if (initialBoard) {
+      setSelectedBoard(normalizeBoardValue(initialBoard));
+    } else if (currentStudent?.board) {
       setSelectedBoard(normalizeBoardValue(currentStudent.board));
     }
-    if (currentStudent?.classLevel && !initialClass) {
+    if (initialClass) {
+      setSelectedClass(initialClass);
+    } else if (currentStudent?.classLevel) {
       setSelectedClass(currentStudent.classLevel);
     }
   }, [currentStudent?.id, currentStudent?.board, currentStudent?.classLevel, initialBoard, initialClass]);

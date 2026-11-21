@@ -12,6 +12,7 @@ import {
   Award,
   CheckCircle2,
   Layers,
+  Headphones,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -198,6 +199,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <User className="w-3.5 h-3.5" />
               <span>My Account</span>
               <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('help-support')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+            >
+              <Headphones className="w-3.5 h-3.5" />
+              <span>HELP &amp; SUPPORT</span>
             </button>
             <button
               type="button"

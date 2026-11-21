@@ -3871,6 +3871,1056 @@ async function handleRazorpayWebhook(req, res) {
   }
 }
 
+// server/supportAssistant.ts
+import { GoogleGenAI, Type } from "@google/genai";
+
+// src/data/helpSupportKnowledgeBase.ts
+var SUPPORT_NAVIGATION_ALLOWLIST = {
+  open_worksheets: {
+    defaultLabel: "OPEN WORKSHEETS",
+    description: "Class-wise & board-wise online interactive worksheets (Classes 1 to 10)"
+  },
+  open_syllabus: {
+    defaultLabel: "OPEN SYLLABUS & STUDY NOTES",
+    description: "Chapter-wise study notes, syllabus concepts, formulas & solved examples"
+  },
+  open_all_courses: {
+    defaultLabel: "OPEN COURSES (CLASSES 1\u201310)",
+    description: "All Courses directory for Maharashtra, CBSE, and ICSE Boards"
+  },
+  open_quizzes: {
+    defaultLabel: "OPEN PRACTICE QUIZZES",
+    description: "4-level subject practice quizzes with zero repeated questions"
+  },
+  open_scholarship: {
+    defaultLabel: "OPEN 4TH & 7TH SCHOLARSHIP",
+    description: "MSCE Pune Standard 4th (PSE) and Standard 7th (UPS) Scholarship prep & mocks"
+  },
+  open_tet_ctet: {
+    defaultLabel: "OPEN TET & CTET EXAM PREP",
+    description: "MAHA TET and CTET Paper 1 & Paper 2 full-length CBT mock tests"
+  },
+  open_teacher_resources: {
+    defaultLabel: "OPEN TEACHER RESOURCES",
+    description: "Educator Hub for Classes 1\u201310 worksheets, chapter notes, Scholarship & TET/CTET"
+  },
+  open_stories: {
+    defaultLabel: "OPEN STORY WORLD",
+    description: "45+ English, Hindi & Marathi audio stories with voice narration & morals"
+  },
+  open_shivaji: {
+    defaultLabel: "OPEN SHIVAJI MAHARAJ STORIES",
+    description: "50 chronological Chhatrapati Shivaji Maharaj historical chapters with audio"
+  },
+  open_drawing: {
+    defaultLabel: "OPEN DRAWING STUDIO",
+    description: "Digital colouring templates, drawing canvas & saved artwork gallery"
+  },
+  open_puzzles: {
+    defaultLabel: "OPEN BRAIN PUZZLES",
+    description: "Free interactive logic riddles and lateral thinking puzzles"
+  },
+  open_sudoku: {
+    defaultLabel: "OPEN SUDOKU",
+    description: "Free 4x4, 6x6 and 9x9 interactive Sudoku challenges"
+  },
+  open_cricket: {
+    defaultLabel: "OPEN CRICKET & GK",
+    description: "Cricket Champions Hub and General Knowledge quizzes"
+  },
+  open_ai_academy: {
+    defaultLabel: "OPEN AI LEARNING ACADEMY",
+    description: "AI Learning Academy & Future Skills modules"
+  },
+  open_other_programs: {
+    defaultLabel: "OPEN SPECIAL LEARNING",
+    description: "All Special Learning studios and enrichment programs"
+  },
+  open_demo: {
+    defaultLabel: "OPEN FREE DEMO TESTS",
+    description: "Free visitor demo quizzes, curriculum previews & full-length demo mock tests"
+  },
+  open_certificates: {
+    defaultLabel: "OPEN CERTIFICATES & LEADERBOARD",
+    description: "Milestone Champion Certificates and leaderboard rankings"
+  },
+  open_referrals: {
+    defaultLabel: "OPEN REFER & EARN",
+    description: "Referral link sharing and \u20B95 cashback wallet"
+  },
+  open_profile: {
+    defaultLabel: "OPEN MY ACCOUNT",
+    description: "Personal profile, active plans, UID and account details"
+  },
+  open_plans: {
+    defaultLabel: "VIEW PLANS & PRICING",
+    description: "Free \u20B90 Lifetime plan, \u20B999 / 365 Days class plans & TET/CTET plans"
+  },
+  open_login: {
+    defaultLabel: "OPEN STUDENT LOGIN",
+    description: "Sign in with registered email and password"
+  },
+  open_teacher_login: {
+    defaultLabel: "OPEN TEACHER LOGIN",
+    description: "Dedicated Teacher Portal sign-in"
+  },
+  open_register: {
+    defaultLabel: "OPEN REGISTRATION",
+    description: "Create a new Student or Teacher account"
+  },
+  open_password_reset: {
+    defaultLabel: "OPEN PASSWORD RESET",
+    description: "Reset forgotten password via registered email link"
+  },
+  open_dashboard: {
+    defaultLabel: "OPEN MAIN DASHBOARD",
+    description: "Return to the main MyStudyZone home dashboard"
+  }
+};
+function buildNavigationAction(id, targetClass, targetBoard) {
+  const base = SUPPORT_NAVIGATION_ALLOWLIST[id];
+  let label = base.defaultLabel;
+  if (id === "open_worksheets" && targetClass) {
+    label = `OPEN ${targetClass.toUpperCase()} WORKSHEETS`;
+  } else if (id === "open_syllabus" && targetClass) {
+    label = `OPEN ${targetClass.toUpperCase()} SYLLABUS`;
+  } else if (id === "open_all_courses" && targetBoard) {
+    label = `OPEN ${targetBoard.toUpperCase()} COURSES`;
+  }
+  return {
+    id,
+    label,
+    ...targetClass ? { targetClass } : {},
+    ...targetBoard ? { targetBoard } : {}
+  };
+}
+function detectQueryLanguage(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "en";
+  if (/[\u0900-\u097F]/.test(raw)) {
+    const marathiHints = [
+      "\u0906\u0939\u0947",
+      "\u0906\u0939\u0947\u0924",
+      "\u0928\u093E\u0939\u0940",
+      "\u0915\u0941\u0920\u0947",
+      "\u0915\u0938\u0947",
+      "\u0915\u0938\u093E",
+      "\u0915\u0936\u0940",
+      "\u092E\u093E\u091D\u0940",
+      "\u092E\u093E\u091D\u093E",
+      "\u092E\u093E\u091D\u0947",
+      "\u0907\u092F\u0924\u094D\u0924\u093E",
+      "\u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E",
+      "\u0936\u093F\u0915\u094D\u0937\u0915",
+      "\u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940",
+      "\u092A\u093E\u0939\u093F\u091C\u0947",
+      "\u092E\u0926\u0924",
+      "\u0932\u0949\u0917\u093F\u0928",
+      "\u0928\u094B\u0902\u0926\u0923\u0940",
+      "\u0915\u0943\u092A\u092F\u093E",
+      "\u092E\u093F\u0933\u0947\u0932",
+      "\u092C\u0918\u093E\u092F\u091A\u0947",
+      "\u0938\u093E\u0902\u0917\u093E",
+      "\u0915\u0930\u093E\u092F\u091A\u0947",
+      "\u0935\u093F\u0938\u0930\u0932\u094B",
+      "\u092A\u093E\u0938\u0935\u0930\u094D\u0921"
+    ];
+    const hindiHints = [
+      "\u0939\u0948",
+      "\u0939\u0948\u0902",
+      "\u0928\u0939\u0940\u0902",
+      "\u0915\u0939\u093E\u0901",
+      "\u0915\u0939\u093E\u0902",
+      "\u0915\u0948\u0938\u0947",
+      "\u092E\u0947\u0930\u093E",
+      "\u092E\u0947\u0930\u0940",
+      "\u092E\u0947\u0930\u0947",
+      "\u0915\u0915\u094D\u0937\u093E",
+      "\u091A\u093E\u0939\u093F\u090F",
+      "\u092E\u0926\u0926",
+      "\u092C\u0924\u093E\u0907\u090F",
+      "\u092E\u093F\u0932\u0947\u0917\u093E",
+      "\u092E\u093F\u0932\u0947\u0917\u0940",
+      "\u0915\u0930\u0947\u0902",
+      "\u0916\u094B\u0932\u0947\u0902",
+      "\u092D\u0942\u0932",
+      "\u0917\u092F\u093E",
+      "\u0926\u0947\u0916\u0928\u093E",
+      "\u092C\u0924\u093E\u0913",
+      "\u091B\u093E\u0924\u094D\u0930"
+    ];
+    let mrScore = 0;
+    let hiScore = 0;
+    for (const w of marathiHints) if (raw.includes(w)) mrScore += 1;
+    for (const w of hindiHints) if (raw.includes(w)) hiScore += 1;
+    if (mrScore > hiScore) return "mr";
+    if (hiScore > 0) return "hi";
+    if (raw.includes("\u0933") || /्या|चे|ची|चा|तील|मध्ये/.test(raw)) return "mr";
+    return "hi";
+  }
+  const lower = raw.toLowerCase();
+  const marathiRoman = [
+    "kuthe",
+    "kase",
+    "kasa",
+    "kashi",
+    "iyatta",
+    "abhyaskram",
+    "shikshak",
+    "pahije",
+    "visarlo",
+    "milel",
+    "aahe",
+    "ahe",
+    "majha",
+    "majhi",
+    "krpaya",
+    "sanga"
+  ];
+  const hindiRoman = [
+    "kaha",
+    "kahan",
+    "kaise",
+    "kya",
+    "milega",
+    "milegi",
+    "chahiye",
+    "madad",
+    "batao",
+    "bataiye",
+    "kaksha",
+    "bhul",
+    "gaya",
+    "karna",
+    "dekho",
+    "mera",
+    "meri",
+    "hai"
+  ];
+  let mrR = 0;
+  let hiR = 0;
+  for (const w of marathiRoman) {
+    if (new RegExp(`\\b${w}\\b`, "i").test(lower)) mrR += 1;
+  }
+  for (const w of hindiRoman) {
+    if (new RegExp(`\\b${w}\\b`, "i").test(lower)) hiR += 1;
+  }
+  if (mrR > hiR && mrR >= 1) return "mr";
+  if (hiR >= 1) return "hi";
+  return "en";
+}
+function extractClassLevel(text) {
+  const normalized = String(text || "").replace(/[०१२३४५६७८९]/g, (d) => String("\u0966\u0967\u0968\u0969\u096A\u096B\u096C\u096D\u096E\u096F".indexOf(d))).toLowerCase();
+  const match = /(?:class|std|standard|grade|kaksha|iyatta|कक्षा|इयत्ता)\s*[-:]?\s*(10|9|8|7|6|5|4|3|2|1)(?:st|nd|rd|th|vi|wi|ve|ती|री|ली|थी|वी|व्या)?\b/i.exec(
+    normalized
+  ) || /\b(10|9|8|7|6|5|4|3|2|1)(?:st|nd|rd|th)\s*(?:class|std|standard|worksheet|worksheets|syllabus|notes|quiz|quizzes)\b/i.exec(
+    normalized
+  );
+  if (match) {
+    const n = parseInt(match[1], 10);
+    if (n >= 1 && n <= 10) return `Class ${n}`;
+  }
+  const wordMap = {
+    first: "Class 1",
+    second: "Class 2",
+    third: "Class 3",
+    fourth: "Class 4",
+    fifth: "Class 5",
+    sixth: "Class 6",
+    seventh: "Class 7",
+    eighth: "Class 8",
+    ninth: "Class 9",
+    tenth: "Class 10"
+  };
+  for (const [word, cls] of Object.entries(wordMap)) {
+    if (new RegExp(`\\b${word}\\b`, "i").test(normalized)) return cls;
+  }
+  return void 0;
+}
+function extractBoard(text) {
+  const lower = String(text || "").toLowerCase();
+  if (/\bcbse\b|\bncert\b|सीबीएसई/.test(lower)) return "CBSE";
+  if (/\bicse\b|\bcisce\b|आयसीएसई/.test(lower)) return "ICSE";
+  if (/maharashtra|maharastra|ssc|balbharati|msce|महाराष्ट्र/.test(lower)) return "Maharashtra";
+  return void 0;
+}
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (Math.abs(m - n) > 2) return 3;
+  const dp = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+function tokenizeNormalized(text) {
+  return String(text || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+}
+function hasFuzzyKeyword(tokens, rawLower, keywords) {
+  for (const kw of keywords) {
+    if (kw.includes(" ")) {
+      if (rawLower.includes(kw)) return true;
+      continue;
+    }
+    if (tokens.includes(kw) || rawLower.includes(kw)) return true;
+    if (kw.length >= 5) {
+      for (const tok of tokens) {
+        if (tok.length >= 4 && levenshtein(tok, kw) <= (kw.length >= 8 ? 2 : 1)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+var KB_TOPICS = [
+  {
+    id: "greeting",
+    priority: 10,
+    keywords: ["hello", "hi", "hey", "namaste", "namaskar", "good morning", "good afternoon", "good evening", "\u0928\u092E\u0938\u094D\u0924\u0947", "\u0928\u092E\u0938\u094D\u0915\u093E\u0930", "\u0939\u0945\u0932\u094B"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_teacher_resources", "open_worksheets", "open_tet_ctet"] : ["open_all_courses", "open_worksheets", "open_demo"],
+    responses: {
+      en: () => "Hello! I am your MyStudyZone Help Desk assistant. You can ask me in English, Hindi, or Marathi about Classes 1\u201310 courses, Maharashtra/CBSE/ICSE syllabus, worksheets, Scholarship (4th & 7th), MAHA TET & CTET, Story World, Shivaji Maharaj Stories, Drawing Studio, quizzes, login, password reset, or Teacher resources.",
+      hi: () => "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E MyStudyZone \u0939\u0947\u0932\u094D\u092A \u0921\u0947\u0938\u094D\u0915 \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964 \u0906\u092A \u092E\u0941\u091D\u0938\u0947 \u0939\u093F\u0902\u0926\u0940, \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092F\u093E \u092E\u0930\u093E\u0920\u0940 \u092E\u0947\u0902 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0915\u0947 \u0915\u094B\u0930\u094D\u0938, \u0938\u093F\u0932\u0947\u092C\u0938, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (4\u0925\u0940 \u0935 7\u0935\u0940\u0902), MAHA TET \u0935 CTET, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0935\u093F\u091C\u093C, \u0932\u0949\u0917\u093F\u0928, \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u092F\u093E \u091F\u0940\u091A\u0930 \u0938\u0941\u0935\u093F\u0927\u093E\u0913\u0902 \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902 \u092A\u0942\u091B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
+      mr: () => "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E MyStudyZone \u0939\u0947\u0932\u094D\u092A \u0921\u0947\u0938\u094D\u0915 \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947. \u0924\u0941\u092E\u094D\u0939\u0940 \u092E\u0932\u093E \u092E\u0930\u093E\u0920\u0940, \u0939\u093F\u0902\u0926\u0940 \u0915\u093F\u0902\u0935\u093E \u0907\u0902\u0917\u094D\u0930\u091C\u0940\u092E\u0927\u094D\u092F\u0947 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u091A\u0947 \u0915\u094B\u0930\u094D\u0938, \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 (\u096A \u0925\u0940 \u0935 \u096D \u0935\u0940), MAHA TET \u0935 CTET, \u0917\u094B\u0937\u094D\u091F\u0940, \u091A\u093F\u0924\u094D\u0930\u0915\u0932\u093E, \u0915\u094D\u0935\u093F\u091D, \u0932\u0949\u0917\u093F\u0928, \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u093F\u0902\u0935\u093E \u0936\u093F\u0915\u094D\u0937\u0915 \u0938\u0941\u0935\u093F\u0927\u093E\u0902\u092C\u0926\u094D\u0926\u0932 \u0915\u093E\u0939\u0940\u0939\u0940 \u0935\u093F\u091A\u093E\u0930\u0942 \u0936\u0915\u0924\u093E."
+    }
+  },
+  {
+    id: "unresolved_account_problem",
+    priority: 100,
+    keywords: [
+      "cannot login",
+      "cant login",
+      "login failed",
+      "login error",
+      "not opening",
+      "payment deducted",
+      "paid but locked",
+      "plan not activated",
+      "still locked",
+      "wrong class",
+      "change class",
+      "single device",
+      "another device",
+      "blocked",
+      "bug",
+      "technical error",
+      "not working",
+      "submit request",
+      "support request",
+      "complaint",
+      "raise ticket",
+      "support ticket",
+      "\u0932\u0949\u0917\u093F\u0928 \u0928\u0939\u0940\u0902",
+      "\u0938\u092E\u0938\u094D\u092F\u093E",
+      "\u092A\u0947\u092E\u0947\u0902\u091F \u0915\u091F",
+      "\u0905\u0921\u091A\u0923",
+      "\u0932\u0949\u0917\u093F\u0928 \u0939\u094B\u0924 \u0928\u093E\u0939\u0940",
+      "\u0924\u0915\u094D\u0930\u093E\u0930"
+    ],
+    suggestSupportTicket: true,
+    actionIds: () => ["open_password_reset", "open_login"],
+    responses: {
+      en: () => "Here are quick troubleshooting steps you can check right away:\n1. Make sure you are signing in on the matching portal (Student Login vs Teacher Login) with your registered email.\n2. MyStudyZone protects accounts with Single-Device Session security\u2014if you are logged in on another phone/browser, log out there first or use Lost/Damaged Device Recovery inside the Login box.\n3. If you forgot your password, use Forgot Password to receive a reset link on your registered email.\n4. For a \u20B999 payment that has not reflected, sign out and log back in, or check your profile subscription card.\n\nNote: For your safety, never share your password, OTP, or UPI/card PIN. If the issue is still not resolved, click SUBMIT A SUPPORT REQUEST below to send it directly to our support team.",
+      hi: () => "\u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u092F\u0947 \u0906\u0938\u093E\u0928 \u0915\u0926\u092E \u0906\u091C\u093C\u092E\u093E\u090F\u0901:\n1. \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0947\u0902 \u0915\u093F \u0906\u092A \u0938\u0939\u0940 \u092A\u094B\u0930\u094D\u091F\u0932 (Student Login \u092F\u093E Teacher Login) \u092A\u0930 \u0905\u092A\u0928\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0938\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964\n2. MyStudyZone \u092E\u0947\u0902 Single-Device \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0939\u0948\u2014\u092F\u0926\u093F \u0906\u092A\u0915\u093E \u0905\u0915\u093E\u0909\u0902\u091F \u0915\u093F\u0938\u0940 \u0926\u0942\u0938\u0930\u0947 \u092B\u094B\u0928/\u092C\u094D\u0930\u093E\u0909\u091C\u093C\u0930 \u092E\u0947\u0902 \u0916\u0941\u0932\u093E \u0939\u0948, \u0924\u094B \u092A\u0939\u0932\u0947 \u0935\u0939\u093E\u0901 \u0938\u0947 Logout \u0915\u0930\u0947\u0902 \u092F\u093E Login \u092C\u0949\u0915\u094D\u0938 \u092E\u0947\u0902 Device Recovery \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964\n3. \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F \u0939\u094B\u0902 \u0924\u094B Forgot Password \u0938\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092E\u0901\u0917\u0935\u093E\u090F\u0901\u0964\n4. \u092A\u0947\u092E\u0947\u0902\u091F \u0915\u0947 \u092C\u093E\u0926 \u092A\u094D\u0932\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F \u0928 \u0926\u093F\u0916\u0947 \u0924\u094B \u090F\u0915 \u092C\u093E\u0930 Logout \u0915\u0930\u0915\u0947 \u0926\u094B\u092C\u093E\u0930\u093E Login \u0915\u0930\u0947\u0902\u0964\n\n\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0942\u091A\u0928\u093E: \u0915\u092D\u0940 \u092D\u0940 \u0905\u092A\u0928\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP \u092F\u093E UPI/\u0915\u093E\u0930\u094D\u0921 PIN \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964 \u092F\u0926\u093F \u0938\u092E\u0938\u094D\u092F\u093E \u092C\u0928\u0940 \u0930\u0939\u0924\u0940 \u0939\u0948, \u0924\u094B \u0928\u0940\u091A\u0947 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0928 \u0926\u092C\u093E\u0915\u0930 \u0939\u092E\u093E\u0930\u0940 \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C\u0947\u0902\u0964",
+      mr: () => "\u0915\u0943\u092A\u092F\u093E \u0906\u0927\u0940 \u0916\u093E\u0932\u0940\u0932 \u0909\u092A\u093E\u092F \u0915\u0930\u0942\u0928 \u092A\u0939\u093E:\n1. \u0924\u0941\u092E\u094D\u0939\u0940 \u092F\u094B\u0917\u094D\u092F \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 (Student Login \u0915\u093F\u0902\u0935\u093E Teacher Login) \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932\u0928\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0924 \u0906\u0939\u093E\u0924 \u092F\u093E\u091A\u0940 \u0916\u093E\u0924\u094D\u0930\u0940 \u0915\u0930\u093E.\n2. Single-Device \u0938\u0941\u0930\u0915\u094D\u0937\u0947\u092E\u0941\u0933\u0947 \u0924\u0941\u092E\u091A\u0947 \u0916\u093E\u0924\u0947 \u0926\u0941\u0938\u0931\u094D\u092F\u093E \u0921\u093F\u0935\u094D\u0939\u093E\u0907\u0938\u0935\u0930 \u0938\u0941\u0930\u0942 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0906\u0927\u0940 \u0924\u0947\u0925\u0942\u0928 Logout \u0915\u0930\u093E \u0915\u093F\u0902\u0935\u093E Login \u0935\u093F\u0902\u0921\u094B\u092E\u0927\u0940\u0932 Device Recovery \u0935\u093E\u092A\u0930\u093E.\n3. \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0935\u093F\u0938\u0930\u0932\u094D\u092F\u093E\u0938 Forgot Password \u0935\u093E\u092A\u0930\u0942\u0928 \u0908\u092E\u0947\u0932\u0935\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092E\u093F\u0933\u0935\u093E.\n4. \u092A\u0947\u092E\u0947\u0902\u091F\u0928\u0902\u0924\u0930 \u092A\u094D\u0932\u093E\u0928 \u0926\u093F\u0938\u0924 \u0928\u0938\u0932\u094D\u092F\u093E\u0938 \u090F\u0915\u0926\u093E Logout \u0915\u0930\u0942\u0928 \u092A\u0941\u0928\u094D\u0939\u093E Login \u0915\u0930\u093E.\n\n\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0942\u091A\u0928\u093E: \u0915\u0927\u0940\u0939\u0940 \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP \u0915\u093F\u0902\u0935\u093E UPI/\u0915\u093E\u0930\u094D\u0921 PIN \u0936\u0947\u0905\u0930 \u0915\u0930\u0942 \u0928\u0915\u093E. \u0938\u092E\u0938\u094D\u092F\u093E \u0938\u0941\u091F\u0932\u0940 \u0928\u0938\u0932\u094D\u092F\u093E\u0938 \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E."
+    }
+  },
+  {
+    id: "password_reset",
+    priority: 90,
+    keywords: [
+      "forgot password",
+      "reset password",
+      "password problem",
+      "password change",
+      "pasword",
+      "bhul gaya",
+      "visarlo",
+      "\u092A\u093E\u0938\u0935\u0930\u094D\u0921",
+      "\u0930\u0940\u0938\u0947\u091F"
+    ],
+    suggestSupportTicket: true,
+    actionIds: () => ["open_password_reset", "open_login"],
+    responses: {
+      en: () => 'To reset your MyStudyZone password:\n1. Click Login at the top-right and select "Forgot Password" (or click OPEN PASSWORD RESET below).\n2. Enter your registered email address and submit.\n3. Open the password reset email sent by MyStudyZone (check Spam/Promotions if not in Inbox) and set a new password.\n\nNever share your password with anyone. If you still cannot access your email or reset link, click SUBMIT A SUPPORT REQUEST below.',
+      hi: () => '\u0905\u092A\u0928\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F:\n1. \u090A\u092A\u0930 \u0926\u093E\u0908\u0902 \u0913\u0930 Login \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u0914\u0930 "Forgot Password" \u091A\u0941\u0928\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN PASSWORD RESET \u0926\u092C\u093E\u090F\u0901)\u0964\n2. \u0905\u092A\u0928\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n3. \u0906\u092A\u0915\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0906\u090F \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 (Spam \u092B\u093C\u094B\u0932\u094D\u0921\u0930 \u092D\u0940 \u0926\u0947\u0916\u0947\u0902) \u0938\u0947 \u0928\u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964\n\n\u092F\u0926\u093F \u092B\u093F\u0930 \u092D\u0940 \u0926\u093F\u0915\u094D\u0915\u0924 \u0939\u094B, \u0924\u094B \u0928\u0940\u091A\u0947 SUBMIT A SUPPORT REQUEST \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964',
+      mr: () => '\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940:\n1. \u0935\u0930 \u0909\u091C\u0935\u0940\u0915\u0921\u0947 Login \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 "Forgot Password" \u0928\u093F\u0935\u0921\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN PASSWORD RESET \u0926\u093E\u092C\u093E).\n2. \u0924\u0941\u092E\u091A\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u092A\u0924\u094D\u0924\u093E \u091F\u093E\u0915\u093E.\n3. \u0908\u092E\u0947\u0932\u0935\u0930 \u0906\u0932\u0947\u0932\u094D\u092F\u093E \u0932\u093F\u0902\u0915\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 (Spam \u092B\u094B\u0932\u094D\u0921\u0930\u0939\u0940 \u0924\u092A\u093E\u0938\u093E) \u0928\u0935\u0940\u0928 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947\u091F \u0915\u0930\u093E.\n\n\u0905\u0921\u091A\u0923 \u092F\u0947\u0924 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.'
+    }
+  },
+  {
+    id: "teacher_resources",
+    priority: 85,
+    keywords: [
+      "teacher resources",
+      "teaching resources",
+      "teaching material",
+      "teacher portal",
+      "teacher dashboard",
+      "teacher facility",
+      "teacher facilities",
+      "for teachers",
+      "educator",
+      "techer",
+      "shikshak",
+      "\u0936\u093F\u0915\u094D\u0937\u0915",
+      "\u0905\u0927\u094D\u092F\u093E\u092A\u0928"
+    ],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_teacher_resources", "open_worksheets", "open_syllabus", "open_tet_ctet"] : ["open_teacher_login", "open_teacher_resources", "open_tet_ctet"],
+    responses: {
+      en: () => "MyStudyZone Teacher Portal gives educators unified access to:\n\u2022 Classes 1 to 10 curriculum across Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE)\n\u2022 Class-wise interactive Worksheets & Chapter Study Notes with solved examples\n\u2022 4-Level Practice Quizzes across school subjects\n\u2022 4th & 7th Standard MSCE Scholarship preparation\n\u2022 MAHA TET & CTET (Paper 1 & Paper 2) mock tests\n\u2022 Multilingual Audio Stories, Chhatrapati Shivaji Maharaj 50 historical chapters, Drawing Studio, Cricket & GK\n\nUse the Teacher Login portal at the top or click OPEN TEACHER RESOURCES below to jump straight in.",
+      hi: () => "MyStudyZone \u091F\u0940\u091A\u0930 \u092A\u094B\u0930\u094D\u091F\u0932 \u092A\u0930 \u0936\u093F\u0915\u094D\u0937\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u092F\u0947 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0914\u0930 ICSE (CISCE) \u0915\u0947 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0924\u0915 \u0915\u0947 \u0935\u093F\u0937\u092F\n\u2022 \u0915\u0915\u094D\u0937\u093E-\u0935\u093E\u0930 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u091A\u0948\u092A\u094D\u091F\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0914\u0930 \u0939\u0932 \u0915\u093F\u090F \u0917\u090F \u0909\u0926\u093E\u0939\u0930\u0923\n\u2022 4-\u0932\u0947\u0935\u0932 \u092A\u094D\u0930\u0948\u0915\u094D\u091F\u093F\u0938 \u0915\u094D\u0935\u093F\u091C\u093C\n\u2022 \u0915\u0915\u094D\u0937\u093E 4\u0925\u0940 \u0914\u0930 7\u0935\u0940\u0902 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (MSCE) \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\n\u2022 MAHA TET \u0914\u0930 CTET (\u092A\u0947\u092A\u0930 1 \u0935 2) \u092A\u0930\u0940\u0915\u094D\u0937\u093E \u0924\u0948\u092F\u093E\u0930\u0940\n\u2022 \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901 (\u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940/\u0939\u093F\u0902\u0926\u0940/\u092E\u0930\u093E\u0920\u0940), \u0936\u093F\u0935\u093E\u091C\u0940 \u092E\u0939\u093E\u0930\u093E\u091C \u0915\u0947 50 \u0905\u0927\u094D\u092F\u093E\u092F, \u0921\u094D\u0930\u093E\u0907\u0902\u0917 \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0914\u0930 GK\u0964\n\n\u0938\u0940\u0927\u0947 \u091C\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964",
+      mr: () => "MyStudyZone \u0936\u093F\u0915\u094D\u0937\u0915 \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 \u0936\u093F\u0915\u094D\u0937\u0915\u093E\u0902\u0938\u093E\u0920\u0940 \u092A\u0941\u0922\u0940\u0932 \u0938\u0941\u0935\u093F\u0927\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0935 ICSE (CISCE) \u092E\u0927\u0940\u0932 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u091A\u0947 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F\n\u2022 \u0907\u092F\u0924\u094D\u0924\u093E\u0935\u093E\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u092A\u093E\u0920\u0928\u093F\u0939\u093E\u092F \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0906\u0923\u093F \u0938\u094B\u0921\u0935\u0932\u0947\u0932\u0940 \u0909\u0926\u093E\u0939\u0930\u0923\u0947\n\u2022 \u096A-\u0932\u0947\u0935\u094D\u0939\u0932 \u0938\u0930\u093E\u0935 \u0915\u094D\u0935\u093F\u091D\n\u2022 \u0907\u092F\u0924\u094D\u0924\u093E \u096A \u0925\u0940 \u0935 \u096D \u0935\u0940 MSCE \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 \u0938\u0930\u093E\u0935 \u092A\u0930\u0940\u0915\u094D\u0937\u093E\n\u2022 MAHA TET \u0906\u0923\u093F CTET (\u092A\u0947\u092A\u0930 \u0967 \u0935 \u0968) \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\n\u2022 \u0917\u094B\u0937\u094D\u091F\u0940 (\u092E\u0930\u093E\u0920\u0940/\u0939\u093F\u0902\u0926\u0940/\u0907\u0902\u0917\u094D\u0930\u091C\u0940 \u0911\u0921\u093F\u0913), \u091B\u0924\u094D\u0930\u092A\u0924\u0940 \u0936\u093F\u0935\u093E\u091C\u0940 \u092E\u0939\u093E\u0930\u093E\u091C\u093E\u0902\u091A\u0947 \u096B\u0966 \u0905\u0927\u094D\u092F\u093E\u092F, \u0921\u094D\u0930\u0949\u0907\u0902\u0917 \u0938\u094D\u091F\u0941\u0921\u093F\u0913 \u0935 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u091C\u094D\u091E\u093E\u0928.\n\n\u0916\u093E\u0932\u0940\u0932 \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 \u0925\u0947\u091F \u092A\u094D\u0930\u0935\u0947\u0936 \u0915\u0930\u093E."
+    }
+  },
+  {
+    id: "tet_ctet",
+    priority: 82,
+    keywords: ["tet", "ctet", "maha tet", "mahatet", "paper 1", "paper 2", "\u091F\u0940\u0908\u091F\u0940", "\u0938\u0940\u091F\u0940\u0908\u091F\u0940"],
+    actionIds: () => ["open_tet_ctet", "open_demo"],
+    responses: {
+      en: () => "In the TET & CTET Exam Prep section, both students/aspirants and teachers can access:\n\u2022 Maharashtra TET (Paper 1 & Paper 2)\n\u2022 CTET Paper 1 (Classes 1\u20135) and CTET Paper 2 (Classes 6\u20138)\n\u2022 Free Demo Mock Tests with real 150-minute countdown timers and detailed solutions, plus full mock test series plans.",
+      hi: () => "TET \u0914\u0930 CTET Exam Prep \u0905\u0928\u0941\u092D\u093E\u0917 \u092E\u0947\u0902 \u0906\u092A\u0915\u094B \u092E\u093F\u0932\u0924\u093E \u0939\u0948:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 TET (\u092A\u0947\u092A\u0930 1 \u0935 \u092A\u0947\u092A\u0930 2)\n\u2022 CTET \u092A\u0947\u092A\u0930 1 (\u0915\u0915\u094D\u0937\u093E 1\u20135) \u0914\u0930 CTET \u092A\u0947\u092A\u0930 2 (\u0915\u0915\u094D\u0937\u093E 6\u20138)\n\u2022 \u0930\u093F\u092F\u0932 \u091F\u093E\u0907\u092E\u0930 \u0914\u0930 \u0938\u092E\u093E\u0927\u093E\u0928 \u0938\u0939\u093F\u0924 \u092B\u094D\u0930\u0940 \u0921\u0947\u092E\u094B \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0924\u0925\u093E \u092A\u0942\u0930\u094D\u0923 \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u0940\u0930\u0940\u091C\u0964",
+      mr: () => "TET \u0906\u0923\u093F CTET Exam Prep \u0935\u093F\u092D\u093E\u0917\u093E\u0924 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0941\u0935\u093F\u0927\u093E:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 TET (\u092A\u0947\u092A\u0930 \u0967 \u0935 \u092A\u0947\u092A\u0930 \u0968)\n\u2022 CTET \u092A\u0947\u092A\u0930 \u0967 (\u0907\u092F\u0924\u094D\u0924\u093E \u0967\u2013\u096B) \u0906\u0923\u093F CTET \u092A\u0947\u092A\u0930 \u0968 (\u0907\u092F\u0924\u094D\u0924\u093E \u096C\u2013\u096E)\n\u2022 \u0905\u091A\u0942\u0915 \u091F\u093E\u0907\u092E\u0930 \u0935 \u0938\u094D\u092A\u0937\u094D\u091F\u0940\u0915\u0930\u0923\u093E\u0938\u0939 \u092E\u094B\u092B\u0924 \u0921\u0947\u092E\u094B \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0924\u0938\u0947\u091A \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u093F\u0930\u0940\u091C."
+    }
+  },
+  {
+    id: "scholarship",
+    priority: 80,
+    keywords: ["scholarship", "sholarship", "msce", "pse", "ups", "\u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940", "\u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A"],
+    actionIds: () => ["open_scholarship", "open_demo"],
+    responses: {
+      en: () => "MyStudyZone Scholarship Corner follows the MSCE Pune pattern for Standard 4th (PSE) and Standard 7th (UPS):\n\u2022 Paper 1: First Language (English) & Mathematics\n\u2022 Paper 2: Third Language (Marathi) & Intelligence Test\n\u2022 Includes free interactive demo mock tests (90-minute timer, question palette & solutions) as well as full mock test sets.",
+      hi: () => "MyStudyZone \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A \u0915\u0949\u0930\u094D\u0928\u0930 \u092E\u0947\u0902 MSCE \u092A\u0941\u0923\u0947 \u092A\u0948\u091F\u0930\u094D\u0928 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0915\u0915\u094D\u0937\u093E 4\u0925\u0940 (PSE) \u0914\u0930 \u0915\u0915\u094D\u0937\u093E 7\u0935\u0940\u0902 (UPS) \u0915\u0940 \u0924\u0948\u092F\u093E\u0930\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948:\n\u2022 \u092A\u0947\u092A\u0930 1: \u092A\u094D\u0930\u0925\u092E \u092D\u093E\u0937\u093E (English) \u0914\u0930 \u0917\u0923\u093F\u0924\n\u2022 \u092A\u0947\u092A\u0930 2: \u0924\u0943\u0924\u0940\u092F \u092D\u093E\u0937\u093E (Marathi) \u0914\u0930 \u092C\u0941\u0926\u094D\u0927\u093F\u092E\u0924\u094D\u0924\u093E \u091A\u093E\u091A\u0923\u0940\n\u2022 90-\u092E\u093F\u0928\u091F \u091F\u093E\u0907\u092E\u0930 \u0935\u093E\u0932\u093E \u092B\u094D\u0930\u0940 \u0921\u0947\u092E\u094B \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0914\u0930 \u092A\u0942\u0930\u094D\u0923 \u092E\u0949\u0915 \u0938\u0947\u091F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964",
+      mr: () => "MyStudyZone \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A \u0915\u0949\u0930\u094D\u0928\u0930\u092E\u0927\u094D\u092F\u0947 MSCE \u092A\u0941\u0923\u0947 \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E\u093E\u0928\u0941\u0938\u093E\u0930 \u0907\u092F\u0924\u094D\u0924\u093E \u096A \u0925\u0940 (PSE) \u0906\u0923\u093F \u0907\u092F\u0924\u094D\u0924\u093E \u096D \u0935\u0940 (UPS) \u0938\u093E\u0920\u0940 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0938\u0930\u093E\u0935 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947:\n\u2022 \u092A\u0947\u092A\u0930 \u0967: \u092A\u094D\u0930\u0925\u092E \u092D\u093E\u0937\u093E (English) \u0935 \u0917\u0923\u093F\u0924\n\u2022 \u092A\u0947\u092A\u0930 \u0968: \u0924\u0943\u0924\u0940\u092F \u092D\u093E\u0937\u093E (\u092E\u0930\u093E\u0920\u0940) \u0935 \u092C\u0941\u0926\u094D\u0927\u093F\u092E\u0924\u094D\u0924\u093E \u091A\u093E\u091A\u0923\u0940\n\u2022 \u096F\u0966 \u092E\u093F\u0928\u093F\u091F\u093E\u0902\u091A\u094D\u092F\u093E \u091F\u093E\u0907\u092E\u0930\u0938\u0939 \u092E\u094B\u092B\u0924 \u0921\u0947\u092E\u094B \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0906\u0923\u093F \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u092A\u094D\u0930\u0936\u094D\u0928\u0938\u0902\u091A \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924."
+    }
+  },
+  {
+    id: "worksheets",
+    priority: 78,
+    keywords: ["worksheet", "worksheets", "workshets", "exercise", "exercises", "practice sheet", "\u0935\u0930\u094D\u0915\u0936\u0940\u091F", "\u0938\u0930\u093E\u0935\u092A\u0924\u094D\u0930\u093F\u0915\u093E"],
+    actionIds: () => ["open_worksheets", "open_quizzes"],
+    responses: {
+      en: (cls, board) => {
+        const scope = [board ? `${board} Board` : "", cls || "Classes 1\u201310"].filter(Boolean).join(" \u2022 ");
+        return `You can open online interactive Worksheets for ${scope} directly inside the Worksheets section.
+\u2022 Free accounts include 2 demo worksheets (English & Mathematics) for your registered Board & Class.
+\u2022 Premium \u20B999 (365 Days) unlocks all subjects' worksheets for that Board & Class.
+\u2022 Note: Worksheets are completed interactively online (printing and offline downloads are disabled).`;
+      },
+      hi: (cls, board) => {
+        const scope = [board ? `${board} \u092C\u094B\u0930\u094D\u0921` : "", cls || "\u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10"].filter(Boolean).join(" \u2022 ");
+        return `\u0906\u092A ${scope} \u0915\u0940 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0938\u0940\u0927\u0947 Worksheets \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
+\u2022 \u092B\u094D\u0930\u0940 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0906\u092A\u0915\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0940 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F (English \u0914\u0930 Maths) \u092E\u0941\u092B\u094D\u0924 \u0939\u0948\u0902\u0964
+\u2022 \u20B999 (365 \u0926\u093F\u0928) \u092A\u094D\u0932\u093E\u0928 \u0938\u0947 \u0909\u0938 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F\u094B\u0902 \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0916\u0941\u0932\u0924\u0940 \u0939\u0948\u0902\u0964
+\u2022 \u0928\u094B\u091F: \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0915\u0947\u0935\u0932 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u092A\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0939\u0932 \u0915\u0940 \u091C\u093E\u0924\u0940 \u0939\u0948\u0902 (\u092A\u094D\u0930\u093F\u0902\u091F \u0935 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092C\u0902\u0926 \u0939\u0948)\u0964`;
+      },
+      mr: (cls, board) => {
+        const scope = [board ? `${board} \u092C\u094B\u0930\u094D\u0921` : "", cls || "\u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966"].filter(Boolean).join(" \u2022 ");
+        return `${scope} \u0938\u093E\u0920\u0940 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0905\u200D\u0945\u0915\u094D\u091F\u093F\u0935\u094D\u0939 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u0924\u0941\u092E\u094D\u0939\u0940 \u0925\u0947\u091F Worksheets \u0935\u093F\u092D\u093E\u0917\u093E\u0924 \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E.
+\u2022 \u092E\u094B\u092B\u0924 \u092A\u094D\u0932\u093E\u0928\u092E\u0927\u094D\u092F\u0947 \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 (English \u0935 Maths) \u0916\u0941\u0932\u094D\u092F\u093E \u0906\u0939\u0947\u0924.
+\u2022 \u20B9\u096F\u096F (\u0969\u096C\u096B \u0926\u093F\u0935\u0938) \u092A\u094D\u0932\u093E\u0928\u0928\u0947 \u0924\u094D\u092F\u093E \u0907\u092F\u0924\u094D\u0924\u0947\u091A\u0947 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.
+\u2022 \u091F\u0940\u092A: \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u092B\u0915\u094D\u0924 \u0935\u0947\u092C\u0938\u093E\u0907\u091F\u0935\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0938\u094B\u0921\u0935\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0906\u0939\u0947\u0924 (\u092A\u094D\u0930\u093F\u0902\u091F \u0906\u0923\u093F \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092C\u0902\u0926 \u0906\u0939\u0947).`;
+      }
+    }
+  },
+  {
+    id: "syllabus_and_notes",
+    priority: 76,
+    keywords: [
+      "syllabus",
+      "silabus",
+      "sylabus",
+      "curriculum",
+      "study material",
+      "study materials",
+      "notes",
+      "chapter notes",
+      "textbook",
+      "summary",
+      "abhyaskram",
+      "\u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E",
+      "\u0938\u093F\u0932\u0947\u092C\u0938",
+      "\u0928\u094B\u091F\u094D\u0938"
+    ],
+    actionIds: () => ["open_syllabus", "open_all_courses"],
+    responses: {
+      en: (cls, board) => {
+        const scope = [board || "Maharashtra / CBSE / ICSE", cls || "Classes 1 to 10"].join(" \u2022 ");
+        return `Your complete Syllabus & Study Materials (${scope}) include:
+\u2022 Chapter-wise syllabus concepts & textbook references
+\u2022 Formulas, theorems, rules & solved walkthrough examples
+\u2022 Interactive chapter self-revision checklists
+
+Click OPEN SYLLABUS & STUDY NOTES below to view your board, class, and subject chapters.`;
+      },
+      hi: (cls, board) => {
+        const scope = [board || "Maharashtra / CBSE / ICSE", cls || "\u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10"].join(" \u2022 ");
+        return `${scope} \u0915\u093E \u092A\u0942\u0930\u093E \u0938\u093F\u0932\u0947\u092C\u0938 \u0914\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 Study Materials \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902:
+\u2022 \u0905\u0927\u094D\u092F\u093E\u092F-\u0935\u093E\u0930 \u092E\u0941\u0916\u094D\u092F \u0905\u0935\u0927\u093E\u0930\u0923\u093E\u090F\u0901 \u0914\u0930 \u092A\u093E\u0920\u094D\u092F\u092A\u0941\u0938\u094D\u0924\u0915 \u0938\u0902\u0926\u0930\u094D\u092D
+\u2022 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u0942\u0924\u094D\u0930, \u0928\u093F\u092F\u092E \u0914\u0930 \u0939\u0932 \u0915\u093F\u090F \u0917\u090F \u0909\u0926\u093E\u0939\u0930\u0923
+\u2022 \u0930\u093F\u0935\u0940\u091C\u0928 \u091A\u0947\u0915\u0932\u093F\u0938\u094D\u091F
+
+\u0938\u0940\u0927\u0947 \u0926\u0947\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0940\u091A\u0947 OPEN SYLLABUS & STUDY NOTES \u0926\u092C\u093E\u090F\u0901\u0964`;
+      },
+      mr: (cls, board) => {
+        const scope = [board || "Maharashtra / CBSE / ICSE", cls || "\u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966"].join(" \u2022 ");
+        return `${scope} \u0938\u093E\u0920\u0940 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E \u0935 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 Study Materials \u0935\u093F\u092D\u093E\u0917\u093E\u0924 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924:
+\u2022 \u092A\u093E\u0920\u0928\u093F\u0939\u093E\u092F \u092E\u0939\u0924\u094D\u0924\u094D\u0935\u093E\u091A\u094D\u092F\u093E \u0938\u0902\u0915\u0932\u094D\u092A\u0928\u093E \u0935 \u092A\u093E\u0920\u094D\u092F\u092A\u0941\u0938\u094D\u0924\u0915 \u0938\u0902\u0926\u0930\u094D\u092D
+\u2022 \u092E\u0939\u0924\u094D\u0924\u094D\u0935\u093E\u091A\u0940 \u0938\u0942\u0924\u094D\u0930\u0947, \u0928\u093F\u092F\u092E \u0906\u0923\u093F \u0938\u094B\u0921\u0935\u0932\u0947\u0932\u0940 \u0909\u0926\u093E\u0939\u0930\u0923\u0947
+\u2022 \u0909\u091C\u0933\u0923\u0940 \u091A\u0947\u0915\u0932\u093F\u0938\u094D\u091F
+
+\u092A\u093E\u0939\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0916\u093E\u0932\u0940\u0932 OPEN SYLLABUS & STUDY NOTES \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.`;
+      }
+    }
+  },
+  {
+    id: "download_resources",
+    priority: 90,
+    keywords: ["download", "downlod", "pdf", "print", "save offline", "\u0921\u093E\u0909\u0928\u0932\u094B\u0921", "\u092A\u094D\u0930\u093F\u0902\u091F"],
+    actionIds: () => ["open_worksheets", "open_syllabus", "open_certificates"],
+    responses: {
+      en: () => "Important accuracy note about downloads on MyStudyZone:\n\u2022 Worksheets and Study Materials are strictly online interactive resources \u2014 offline PDF downloading and printing are disabled to protect educational content.\n\u2022 However, once you earn Milestone Champion Certificates, you can view/print them from the Certificates & Leaderboard page, and you can save your Drawing Studio artwork in your artwork gallery.",
+      hi: () => "\u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0938\u0939\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940:\n\u2022 MyStudyZone \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0914\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0909\u092A\u092F\u094B\u0917 \u0915\u0947 \u0932\u093F\u090F \u0939\u0948\u0902 \u2014 \u0907\u0928\u0915\u093E PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092F\u093E \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0928\u093E \u092C\u0902\u0926 \u0930\u0916\u093E \u0917\u092F\u093E \u0939\u0948\u0964\n\u2022 \u092F\u0926\u093F \u0906\u092A\u0928\u0947 \u0915\u094B\u0908 \u091A\u0948\u0902\u092A\u093F\u092F\u0928 \u0938\u0930\u094D\u091F\u093F\u092B\u093F\u0915\u0947\u091F \u0905\u0930\u094D\u091C\u093F\u0924 \u0915\u093F\u092F\u093E \u0939\u0948, \u0924\u094B \u0909\u0938\u0947 Certificates & Leaderboard \u0938\u0947 \u0926\u0947\u0916/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902, \u0914\u0930 Drawing Studio \u092E\u0947\u0902 \u0905\u092A\u0928\u0940 \u0915\u0932\u093E\u0915\u0943\u0924\u093F \u0917\u0948\u0932\u0930\u0940 \u092E\u0947\u0902 \u0938\u0947\u0935 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
+      mr: () => "\u0921\u093E\u0909\u0928\u0932\u094B\u0921\u092C\u093E\u092C\u0924 \u0905\u091A\u0942\u0915 \u092E\u093E\u0939\u093F\u0924\u0940:\n\u2022 MyStudyZone \u0935\u0930\u0940\u0932 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u0906\u0923\u093F \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u092B\u0915\u094D\u0924 \u0911\u0928\u0932\u093E\u0907\u0928 \u0938\u0930\u093E\u0935 \u0935 \u0935\u093E\u091A\u0928\u093E\u0938\u093E\u0920\u0940 \u0906\u0939\u0947\u0924 \u2014 \u092F\u093E\u0902\u091A\u0947 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093F\u0902\u0935\u093E \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0923\u0947 \u092C\u0902\u0926 \u0920\u0947\u0935\u0923\u094D\u092F\u093E\u0924 \u0906\u0932\u0947 \u0906\u0939\u0947.\n\u2022 \u092E\u093E\u0924\u094D\u0930, \u0924\u0941\u092E\u094D\u0939\u0940 \u092E\u093F\u0933\u0935\u0932\u0947\u0932\u0940 \u091A\u0945\u092E\u094D\u092A\u093F\u092F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u092A\u0924\u094D\u0930\u0947 Certificates & Leaderboard \u092E\u0927\u0942\u0928 \u092A\u093E\u0939\u0942/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0942 \u0936\u0915\u0924\u093E \u0906\u0923\u093F Drawing Studio \u092E\u0927\u0940\u0932 \u091A\u093F\u0924\u094D\u0930\u0947 \u0917\u0945\u0932\u0930\u0940\u0924 \u0938\u0947\u0935 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E."
+    }
+  },
+  {
+    id: "stories_and_shivaji",
+    priority: 70,
+    keywords: ["story", "stories", "moral", "shivaji", "maharaj", "audio story", "\u0917\u094B\u0937\u094D\u091F\u0940", "\u0915\u0939\u093E\u0928\u0940", "\u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901", "\u0936\u093F\u0935\u093E\u091C\u0940"],
+    actionIds: (_c, _b, _r) => ["open_stories", "open_shivaji"],
+    responses: {
+      en: () => "MyStudyZone has two dedicated story sections:\n1. Story World: 45+ English, Hindi, and Marathi stories with natural voice audio narration, morals, and vocabulary.\n2. Chhatrapati Shivaji Maharaj Stories: 50 chronological Swarajya history chapters with voice narration.\n\nClick either button below to explore them.",
+      hi: () => "MyStudyZone \u092E\u0947\u0902 \u0926\u094B \u0935\u093F\u0936\u0947\u0937 \u0915\u0939\u093E\u0928\u0940 \u0905\u0928\u0941\u092D\u093E\u0917 \u0939\u0948\u0902:\n1. Story World: \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940, \u0939\u093F\u0902\u0926\u0940 \u0914\u0930 \u092E\u0930\u093E\u0920\u0940 \u092E\u0947\u0902 45+ \u0911\u0921\u093F\u092F\u094B \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901 (\u0935\u0949\u0907\u0938 \u0928\u0930\u0947\u0936\u0928 \u0914\u0930 \u0928\u0948\u0924\u093F\u0915 \u0938\u0940\u0916 \u0938\u0939\u093F\u0924)\u0964\n2. \u091B\u0924\u094D\u0930\u092A\u0924\u093F \u0936\u093F\u0935\u093E\u091C\u0940 \u092E\u0939\u093E\u0930\u093E\u091C \u0915\u0940 \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901: \u0938\u094D\u0935\u0930\u093E\u091C\u094D\u092F \u0907\u0924\u093F\u0939\u093E\u0938 \u0915\u0947 50 \u0915\u094D\u0930\u092E\u093E\u0928\u0941\u0938\u093E\u0930 \u0905\u0927\u094D\u092F\u093E\u092F\u0964\n\n\u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u092C\u091F\u0928 \u0938\u0947 \u0938\u0940\u0927\u0947 \u0916\u094B\u0932\u0947\u0902\u0964",
+      mr: () => "MyStudyZone \u0935\u0930 \u0926\u094B\u0928 \u0916\u093E\u0938 \u0917\u094B\u0937\u094D\u091F\u0940\u0902\u091A\u0947 \u0935\u093F\u092D\u093E\u0917 \u0906\u0939\u0947\u0924:\n1. Story World: \u092E\u0930\u093E\u0920\u0940, \u0939\u093F\u0902\u0926\u0940 \u0935 \u0907\u0902\u0917\u094D\u0930\u091C\u0940 \u092D\u093E\u0937\u0947\u0924\u0940\u0932 \u096A\u096B+ \u0911\u0921\u093F\u0913 \u0917\u094B\u0937\u094D\u091F\u0940 (\u0906\u0935\u093E\u091C\u093E\u0924 \u0915\u0925\u0928 \u0935 \u0924\u093E\u0924\u094D\u092A\u0930\u094D\u092F\u093E\u0938\u0939).\n2. \u091B\u0924\u094D\u0930\u092A\u0924\u0940 \u0936\u093F\u0935\u093E\u091C\u0940 \u092E\u0939\u093E\u0930\u093E\u091C \u0917\u094B\u0937\u094D\u091F\u0940: \u0938\u094D\u0935\u0930\u093E\u091C\u094D\u092F\u093E\u091A\u094D\u092F\u093E \u0907\u0924\u093F\u0939\u093E\u0938\u093E\u0924\u0940\u0932 \u096B\u0966 \u0915\u094D\u0930\u092E\u093E\u0928\u0941\u0938\u093E\u0930 \u0905\u0927\u094D\u092F\u093E\u092F.\n\n\u0916\u093E\u0932\u0940\u0932 \u092C\u091F\u0923\u093E\u0902\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 \u0909\u0918\u0921\u093E."
+    }
+  },
+  {
+    id: "drawing_studio",
+    priority: 68,
+    keywords: ["drawing", "paint", "colouring", "coloring", "art", "\u091A\u093F\u0924\u094D\u0930\u0915\u0932\u093E", "\u0921\u094D\u0930\u0949\u0907\u0902\u0917"],
+    actionIds: () => ["open_drawing"],
+    responses: {
+      en: () => "Our Drawing Studio includes 120+ interactive colouring templates, freehand drawing brushes, flood-fill paint bucket, shapes, and a saved artwork gallery inside the browser.",
+      hi: () => "Drawing Studio \u092E\u0947\u0902 120+ \u0915\u0932\u0930\u093F\u0902\u0917 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F, \u092B\u094D\u0930\u0940\u0939\u0948\u0902\u0921 \u092C\u094D\u0930\u0936, \u092A\u0947\u0902\u091F \u092C\u0915\u0947\u091F \u091F\u0942\u0932, \u0936\u0947\u092A\u094D\u0938 \u0914\u0930 \u0906\u092A\u0915\u0940 \u092C\u0928\u093E\u0908 \u0917\u0908 \u0921\u094D\u0930\u093E\u0907\u0902\u0917 \u0938\u0947\u0935 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0917\u0948\u0932\u0930\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964",
+      mr: () => "Drawing Studio \u092E\u0927\u094D\u092F\u0947 \u0967\u0968\u0966+ \u0915\u0932\u0930\u093F\u0902\u0917 \u091F\u0947\u092E\u094D\u092A\u094D\u0932\u0947\u091F\u094D\u0938, \u092B\u094D\u0930\u0940\u0939\u0901\u0921 \u092C\u094D\u0930\u0936, \u092A\u0947\u0902\u091F \u092C\u0915\u0947\u091F, \u0906\u0915\u093E\u0930 \u0906\u0923\u093F \u0924\u0941\u092E\u091A\u0940 \u091A\u093F\u0924\u094D\u0930\u0947 \u0938\u0947\u0935 \u0915\u0930\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0906\u0930\u094D\u091F \u0917\u0945\u0932\u0930\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947."
+    }
+  },
+  {
+    id: "quizzes_and_puzzles",
+    priority: 65,
+    keywords: ["quiz", "quizzes", "mcq", "puzzle", "puzzles", "sudoku", "cricket", "gk", "ai academy", "future skills", "\u0915\u094D\u0935\u093F\u091C\u093C", "\u0915\u094B\u0921\u0947", "\u0938\u0941\u0921\u094B\u0915\u0942"],
+    actionIds: () => ["open_quizzes", "open_puzzles", "open_sudoku", "open_cricket", "open_ai_academy"],
+    responses: {
+      en: () => "For interactive practice and brain training, MyStudyZone offers:\n\u2022 4-Level Practice Quizzes (zero repeated questions tracking)\n\u2022 Brain Puzzles & Sudoku (4\xD74, 6\xD76, 9\xD79 \u2014 Free Forever)\n\u2022 Cricket & GK Arena\n\u2022 AI Learning Academy & Future Skills (8 modules)",
+      hi: () => "\u0905\u092D\u094D\u092F\u093E\u0938 \u0914\u0930 \u0926\u093F\u092E\u093E\u0917\u0940 \u0916\u0947\u0932 \u0915\u0947 \u0932\u093F\u090F MyStudyZone \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948:\n\u2022 4-\u0932\u0947\u0935\u0932 \u092A\u094D\u0930\u0948\u0915\u094D\u091F\u093F\u0938 \u0915\u094D\u0935\u093F\u091C\u093C (\u092C\u093F\u0928\u093E \u0926\u094B\u0939\u0930\u093E\u090F \u0917\u090F \u092A\u094D\u0930\u0936\u094D\u0928)\n\u2022 \u092C\u094D\u0930\u0947\u0928 \u092A\u091C\u093C\u0932\u094D\u0938 \u0914\u0930 \u0938\u0941\u0921\u094B\u0915\u0942 (\u0939\u092E\u0947\u0936\u093E \u092B\u094D\u0930\u0940)\n\u2022 \u0915\u094D\u0930\u093F\u0915\u0947\u091F \u0914\u0930 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u091C\u094D\u091E\u093E\u0928 (GK)\n\u2022 AI Learning Academy (\u092D\u0935\u093F\u0937\u094D\u092F \u0915\u0947 \u0915\u094C\u0936\u0932)\u0964",
+      mr: () => "\u0938\u0930\u093E\u0935 \u0906\u0923\u093F \u092C\u094C\u0926\u094D\u0927\u093F\u0915 \u0916\u0947\u0933\u093E\u0902\u0938\u093E\u0920\u0940 MyStudyZone \u0935\u0930 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947:\n\u2022 \u096A-\u0932\u0947\u0935\u094D\u0939\u0932 \u0938\u0930\u093E\u0935 \u0915\u094D\u0935\u093F\u091D (\u092A\u094D\u0930\u0936\u094D\u0928 \u092A\u0941\u0928\u094D\u0939\u093E \u0928 \u092F\u0947\u0923\u093E\u0930\u0940 \u092A\u094D\u0930\u0923\u093E\u0932\u0940)\n\u2022 \u092C\u094D\u0930\u0947\u0928 \u092A\u091D\u0932\u094D\u0938 \u0906\u0923\u093F \u0938\u0941\u0921\u094B\u0915\u0942 (\u0928\u0947\u0939\u092E\u0940 \u092E\u094B\u092B\u0924)\n\u2022 \u0915\u094D\u0930\u093F\u0915\u0947\u091F \u0935 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u091C\u094D\u091E\u093E\u0928 (GK)\n\u2022 AI Learning Academy (\u092D\u0935\u093F\u0937\u094D\u092F\u093E\u0924\u0940\u0932 \u0915\u094C\u0936\u0932\u094D\u092F\u0947)."
+    }
+  },
+  {
+    id: "registration_and_login",
+    priority: 62,
+    keywords: ["register", "registration", "sign up", "signup", "create account", "login", "log in", "logout", "sign in", "\u0928\u094B\u0902\u0926\u0923\u0940", "\u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928", "\u0932\u0949\u0917\u093F\u0928", "\u0932\u0949\u0917\u0906\u0909\u091F"],
+    actionIds: () => ["open_register", "open_login", "open_teacher_login"],
+    responses: {
+      en: () => "How Registration, Login & Logout work on MyStudyZone:\n\u2022 New students or teachers can click Login \u2192 Register tab, pick their role (Student or Teacher), Board (Maharashtra / CBSE / ICSE), Class (1\u201310), Name, Email, Mobile, and Password.\n\u2022 Existing users can log in anytime using the Student Login or Teacher Login portal.\n\u2022 When logged in, the Login button at the top-right turns into Logout so you can securely sign out from anywhere on desktop or mobile.",
+      hi: () => "MyStudyZone \u092A\u0930 \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928, \u0932\u0949\u0917\u093F\u0928 \u0914\u0930 \u0932\u0949\u0917\u0906\u0909\u091F \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902:\n\u2022 \u0928\u090F \u091B\u093E\u0924\u094D\u0930 \u092F\u093E \u0936\u093F\u0915\u094D\u0937\u0915 Login \u2192 Register \u091F\u0948\u092C \u092E\u0947\u0902 \u091C\u093E\u0915\u0930 \u0905\u092A\u0928\u0940 \u092D\u0942\u092E\u093F\u0915\u093E (Student/Teacher), \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u0915\u0915\u094D\u0937\u093E (1\u201310), \u0928\u093E\u092E, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947 \u0905\u0915\u093E\u0909\u0902\u091F \u092C\u0928\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964\n\u2022 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092C\u0928\u0947 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 Student Login \u092F\u093E Teacher Login \u0938\u0947 \u0938\u093E\u0907\u0928 \u0907\u0928 \u0915\u0930\u0947\u0902\u0964\n\u2022 \u0932\u0949\u0917\u093F\u0928 \u0939\u094B\u0928\u0947 \u092A\u0930 \u090A\u092A\u0930 \u0926\u093E\u0908\u0902 \u0913\u0930 Login \u092C\u091F\u0928 \u0915\u0940 \u091C\u0917\u0939 Logout \u092C\u091F\u0928 \u0926\u093F\u0916\u0924\u093E \u0939\u0948\u0964",
+      mr: () => "MyStudyZone \u0935\u0930 \u0928\u094B\u0902\u0926\u0923\u0940, \u0932\u0949\u0917\u093F\u0928 \u0906\u0923\u093F \u0932\u0949\u0917\u0906\u0909\u091F \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E:\n\u2022 \u0928\u0935\u0940\u0928 \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u0915\u093F\u0902\u0935\u093E \u0936\u093F\u0915\u094D\u0937\u0915 Login \u2192 Register \u091F\u0945\u092C\u0935\u0930 \u091C\u093E\u090A\u0928 \u0906\u092A\u0932\u0940 \u092D\u0942\u092E\u093F\u0915\u093E (Student/Teacher), \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966), \u0928\u093E\u0935, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0947\u090A\u0928 \u0928\u094B\u0902\u0926\u0923\u0940 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E\u0924.\n\u2022 \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0935\u093E\u092A\u0930\u0915\u0930\u094D\u0924\u0947 Student Login \u0915\u093F\u0902\u0935\u093E Teacher Login \u092E\u0927\u0942\u0928 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E\u0924.\n\u2022 \u0932\u0949\u0917\u093F\u0928 \u0915\u0947\u0932\u094D\u092F\u093E\u0935\u0930 \u0935\u0930 \u0909\u091C\u0935\u0940\u0915\u0921\u0947 Login \u092C\u091F\u0923\u093E\u091A\u094D\u092F\u093E \u091C\u093E\u0917\u0940 Logout \u092C\u091F\u0923 \u0926\u093F\u0938\u0924\u0947."
+    }
+  },
+  {
+    id: "boards_and_plans",
+    priority: 60,
+    keywords: ["maharashtra", "cbse", "icse", "subscription plan", "plan details", "free plan", "premium plan", "price", "pricing", "99", "fee", "subscription", "\u092A\u094D\u0932\u093E\u0928", "\u092B\u0940\u0938", "\u092C\u094B\u0930\u094D\u0921"],
+    actionIds: () => ["open_all_courses", "open_plans"],
+    responses: {
+      en: () => "MyStudyZone covers Classes 1 to 10 across all 3 Education Boards: Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE).\n\u2022 FREE PLAN (\u20B90 Lifetime): 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, and Chapter 1 sample notes.\n\u2022 PREMIUM PLAN (\u20B999 / 365 Days): Full 1-year unlock of all subjects, worksheets, study materials, stories, drawing, cricket GK & AI academy for your selected Board & Class.\n\u2022 Separate plans are also available for Scholarship (4th & 7th) and MAHA TET / CTET.",
+      hi: () => "MyStudyZone \u092A\u0930 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0915\u0947 \u0932\u093F\u090F \u0924\u0940\u0928\u094B\u0902 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0914\u0930 ICSE (CISCE)\u0964\n\u2022 FREE PLAN (\u20B90 \u0932\u093E\u0907\u092B\u091F\u093E\u0907\u092E): 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F, English/Maths \u0915\u094D\u0935\u093F\u091C\u093C, \u092A\u091C\u093C\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0914\u0930 \u0938\u0948\u0902\u092A\u0932 \u0928\u094B\u091F\u094D\u0938\u0964\n\u2022 PREMIUM PLAN (\u20B999 / 365 \u0926\u093F\u0928): \u091A\u0941\u0928\u0947 \u0939\u0941\u090F \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0928\u094B\u091F\u094D\u0938, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0914\u0930 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u092A\u0942\u0930\u0947 1 \u0935\u0930\u094D\u0937 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0932\u0949\u0915\u0964\n\u2022 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A \u0935 TET/CTET \u0915\u0947 \u0932\u093F\u090F \u0905\u0932\u0917 \u092A\u094D\u0932\u093E\u0928 \u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964",
+      mr: () => "MyStudyZone \u0935\u0930 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u0938\u093E\u0920\u0940 \u0924\u093F\u0928\u094D\u0939\u0940 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0930\u093E\u091C\u094D\u092F \u092E\u0902\u0921\u0933, CBSE (NCERT) \u0906\u0923\u093F ICSE (CISCE).\n\u2022 FREE PLAN (\u20B9\u0966 \u0906\u091C\u0940\u0935\u0928): \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, English/Maths \u0915\u094D\u0935\u093F\u091D, \u092A\u091D\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0935 \u0928\u092E\u0941\u0928\u093E \u0928\u094B\u091F\u094D\u0938.\n\u2022 PREMIUM PLAN (\u20B9\u096F\u096F / \u0969\u096C\u096B \u0926\u093F\u0935\u0938): \u0928\u093F\u0935\u0921\u0932\u0947\u0932\u094D\u092F\u093E \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0917\u094B\u0937\u094D\u091F\u0940, \u0921\u094D\u0930\u0949\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0935 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u0967 \u0935\u0930\u094D\u0937\u093E\u0938\u093E\u0920\u0940 \u092A\u0942\u0930\u094D\u0923\u092A\u0923\u0947 \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.\n\u2022 \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 \u0935 TET/CTET \u0938\u093E\u0920\u0940 \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930 \u092A\u094D\u0932\u093E\u0928 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924."
+    }
+  }
+];
+function matchKnowledgeBaseFastPath(userMessage, options) {
+  const raw = String(userMessage || "").trim();
+  const language = detectQueryLanguage(raw);
+  const detectedClass = extractClassLevel(raw);
+  const detectedBoard = extractBoard(raw);
+  const tokens = tokenizeNormalized(raw);
+  const rawLower = raw.toLowerCase();
+  const isComplexMultiQuestion = raw.length > 140 || raw.split("?").length > 2 || /\b(explain|difference|compare|why|how does|suggest|recommend|problem|error|stuck)\b/i.test(rawLower);
+  let bestTopic = null;
+  let bestScore = 0;
+  for (const topic of KB_TOPICS) {
+    let hits = 0;
+    for (const kw of topic.keywords) {
+      if (hasFuzzyKeyword(tokens, rawLower, [kw])) {
+        hits += 1;
+      }
+    }
+    if (hits > 0) {
+      const score = topic.priority + hits * 5;
+      if (score > bestScore) {
+        bestScore = score;
+        bestTopic = topic;
+      }
+    }
+  }
+  if (bestTopic && (bestTopic.id === "unresolved_account_problem" || bestTopic.id === "password_reset" || !isComplexMultiQuestion)) {
+    const actionIds = bestTopic.actionIds(detectedClass, detectedBoard, options?.userRole);
+    const navigationActions = actionIds.map(
+      (id) => buildNavigationAction(id, detectedClass, detectedBoard)
+    );
+    return {
+      matched: true,
+      reply: bestTopic.responses[language](detectedClass, detectedBoard),
+      language,
+      navigationActions,
+      suggestSupportTicket: Boolean(bestTopic.suggestSupportTicket),
+      topicId: bestTopic.id
+    };
+  }
+  return {
+    matched: false,
+    reply: "",
+    language,
+    navigationActions: [],
+    suggestSupportTicket: false
+  };
+}
+var HELP_DESK_SYSTEM_PROMPT = `
+You are the official Help & Support Assistant for MyStudyZone (mystudyzone.in), an Indian K-10 school and competitive teacher-exam learning platform.
+
+STRICT RULES \u2014 NEVER VIOLATE:
+1. ACCURACY ONLY: Only describe features, boards, classes, plans, and links that actually exist on MyStudyZone:
+   - Education Boards (Classes 1 to 10): Maharashtra State Board (SSC), CBSE (NCERT), ICSE (CISCE).
+   - School Features: All Courses Directory (Classes 1\u201310), Chapter-wise Study Materials & Syllabus Notes (with solved examples & revision checklists), Online Interactive Worksheets (Classes 1\u201310), 4-Level Practice Quizzes (zero-repeated-question tracking), Milestone Champion Certificates & Leaderboard.
+   - IMPORTANT DOWNLOAD RULE: Worksheets and Study Notes are ONLINE ONLY inside the website (printing and PDF downloads of worksheets are intentionally disabled). Do NOT tell users they can download worksheet PDFs. Users CAN view/print earned Champion Certificates and save drawings in Drawing Studio gallery.
+   - Special Learning Studios: Story World (45+ audio stories in English, Hindi, Marathi), Chhatrapati Shivaji Maharaj Stories (50 audio chapters), Drawing Studio (120+ colouring templates & canvas), Brain Puzzles & Sudoku (4x4, 6x6, 9x9 \u2014 Free Forever), Cricket & GK Hub, AI Learning Academy & Future Skills (8 modules).
+   - Exam Prep: 4th Std Scholarship (MSCE PSE) & 7th Std Scholarship (MSCE UPS), MAHA TET (Paper 1 & 2) & CTET (Paper 1 & 2), Free Interactive Visitor Demo & Free Full-Length Demo Mock Tests.
+   - Accounts & Portals: Student Registration/Login, Dedicated Teacher Registration/Login (with Teacher Hub for Classes 1\u201310, Worksheets, Study Notes, 4-Level Quizzes, Scholarship, TET/CTET, Stories, Current Affairs), Single-Device Session Protection (with Lost/Damaged Device Recovery in Login modal), Forgot Password email reset, Top-Right Login/Logout button, Refer & Earn (\u20B95 cashback wallet).
+   - Plans: FREE PLAN (\u20B90 Lifetime: 2 Demo Worksheets English & Math for registered class, English & Math quizzes, Brain Puzzles, Sudoku, Chapter 1 sample notes); PREMIUM PLAN (\u20B999 / 365 Days per Board & Class); Scholarship & TET/CTET plans via Razorpay.
+2. NEVER INVENT FEATURES: Never invent live video classes, downloadable worksheet PDFs, 1-on-1 tutors, WhatsApp bots, or non-existent routes/buttons. If asked for something unavailable, politely say it is not available on MyStudyZone.
+3. PRIVACY & SAFETY: NEVER ask users for passwords, OTPs, bank details, or card/UPI PINs. NEVER claim to have automatically fixed an account, reset a password, or activated a plan\u2014always guide the user or set suggestSupportTicket=true so they can submit a Support Request. NEVER disclose admin details or another user's private info.
+4. MULTILINGUAL SUPPORT: Reply fluently in the user's language \u2014 English ('en'), Hindi ('hi'), or Marathi ('mr'), understanding spelling mistakes and Hinglish/Marathi transliteration naturally.
+5. NAVIGATION ACTIONS: Only choose from these exact navigationActionIds when genuinely helpful to take the user directly to a section:
+   open_worksheets, open_syllabus, open_all_courses, open_quizzes, open_scholarship, open_tet_ctet, open_teacher_resources, open_stories, open_shivaji, open_drawing, open_puzzles, open_sudoku, open_cricket, open_ai_academy, open_other_programs, open_demo, open_certificates, open_referrals, open_profile, open_plans, open_login, open_teacher_login, open_register, open_password_reset, open_dashboard.
+6. TROUBLESHOOTING & ESCALATION: For personal account, login, payment not reflecting, class correction, or bug issues, give concise troubleshooting steps first and set suggestSupportTicket=true so the UI displays the "SUBMIT A SUPPORT REQUEST" button.
+`.trim();
+
+// server/supportAssistant.ts
+var VALID_CLASSES = /* @__PURE__ */ new Set([
+  "Class 1",
+  "Class 2",
+  "Class 3",
+  "Class 4",
+  "Class 5",
+  "Class 6",
+  "Class 7",
+  "Class 8",
+  "Class 9",
+  "Class 10"
+]);
+var VALID_BOARDS2 = /* @__PURE__ */ new Set(["Maharashtra", "CBSE", "ICSE"]);
+var VALID_SUPPORT_CATEGORIES = /* @__PURE__ */ new Set([
+  "Registration & Login",
+  "Password Reset",
+  "Payment & Subscription",
+  "Educational Material Access",
+  "Notes & Study Material Downloads",
+  "Technical Errors",
+  "Incorrect Questions or Answers",
+  "Website Navigation",
+  "General Queries"
+]);
+var MAX_MESSAGE_CHARS = 600;
+var MAX_HISTORY_TURNS = 6;
+var CHAT_WINDOW_MS = 10 * 60 * 1e3;
+var MAX_REQUESTS_PER_IP = 45;
+var MAX_AI_CALLS_PER_IP = 15;
+var MAX_DAILY_AI_CALLS = 500;
+var TICKET_WINDOW_MS = 15 * 60 * 1e3;
+var MAX_TICKETS_PER_IP = 6;
+var ipRequestTimestamps = /* @__PURE__ */ new Map();
+var ipAiTimestamps = /* @__PURE__ */ new Map();
+var ipTicketTimestamps = /* @__PURE__ */ new Map();
+var dailyAiTracker = {
+  dateKey: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+  count: 0
+};
+function pruneAndCheckWindow(store, ip, windowMs, limit, record = true) {
+  const now = Date.now();
+  const list = (store.get(ip) || []).filter((ts) => now - ts < windowMs);
+  if (list.length >= limit) {
+    store.set(ip, list);
+    return false;
+  }
+  if (record) {
+    list.push(now);
+    store.set(ip, list);
+  }
+  return true;
+}
+function getConfiguredGeminiKey() {
+  const raw = String(process.env.GEMINI_API_KEY || "").trim().replace(/^["']+|["']+$/g, "");
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (upper.includes("MY_GEMINI_API_KEY") || upper.includes("YOUR_") || upper.includes("REPLACE_") || upper.includes("EXAMPLE_")) {
+    return "";
+  }
+  return raw;
+}
+function buildFallbackMessage(lang, userMessage, suggestTicket) {
+  const cls = extractClassLevel(userMessage);
+  const board = extractBoard(userMessage);
+  const actions = [
+    buildNavigationAction("open_all_courses", cls, board),
+    buildNavigationAction("open_worksheets", cls, board),
+    buildNavigationAction("open_syllabus", cls, board),
+    buildNavigationAction("open_teacher_resources")
+  ];
+  if (lang === "hi") {
+    return {
+      reply: suggestTicket ? "\u0906\u092A \u0938\u0940\u0927\u0947 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0928\u0947\u0935\u093F\u0917\u0947\u0936\u0928 \u092C\u091F\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u0947\u0915\u094D\u0936\u0928 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u092F\u0926\u093F \u092F\u0939 \u0906\u092A\u0915\u0947 \u0916\u093E\u0924\u0947, \u0932\u0949\u0917\u093F\u0928, \u092A\u0947\u092E\u0947\u0902\u091F \u092F\u093E \u0915\u093F\u0938\u0940 \u0924\u0915\u0928\u0940\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0939\u0948, \u0924\u094B \u0915\u0943\u092A\u092F\u093E SUBMIT A SUPPORT REQUEST \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0915\u0947 \u0905\u092A\u0928\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u092D\u0947\u091C\u0947\u0902\u0964" : "\u0906\u092A \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0928 \u0938\u0947 \u0915\u094B\u0930\u094D\u0938 (\u0915\u0915\u094D\u0937\u093E 1\u201310), \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0938\u093F\u0932\u0947\u092C\u0938 \u0928\u094B\u091F\u094D\u0938, \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A, TET/CTET \u092F\u093E \u091F\u0940\u091A\u0930 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u092F\u0926\u093F \u0915\u093F\u0938\u0940 \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u0917\u0924 \u0938\u092E\u0938\u094D\u092F\u093E \u092E\u0947\u0902 \u092E\u0926\u0926 \u091A\u093E\u0939\u093F\u090F, \u0924\u094B \u0906\u092A Support Request \u092D\u0940 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
+      navigationActions: actions
+    };
+  }
+  if (lang === "mr") {
+    return {
+      reply: suggestTicket ? "\u0924\u0941\u092E\u094D\u0939\u0940 \u0916\u093E\u0932\u0940\u0932 \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0923\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E. \u0939\u0940 \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0916\u093E\u0924\u094D\u092F\u093E\u0936\u0940, \u0932\u0949\u0917\u093F\u0928, \u092A\u0947\u092E\u0947\u0902\u091F \u0915\u093F\u0902\u0935\u093E \u0924\u093E\u0902\u0924\u094D\u0930\u093F\u0915 \u0905\u0921\u091A\u0923\u0940\u0936\u0940 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u092E\u0938\u094D\u092F\u093E \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0915\u0943\u092A\u092F\u093E \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E." : "\u0924\u0941\u092E\u094D\u0939\u0940 \u0916\u093E\u0932\u0940\u0932 \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0923\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u0915\u094B\u0930\u094D\u0938 (\u0907\u092F\u0924\u094D\u0924\u093E \u0967\u2013\u0967\u0966), \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E \u0935 \u0928\u094B\u091F\u094D\u0938, \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940, TET/CTET \u0915\u093F\u0902\u0935\u093E \u0936\u093F\u0915\u094D\u0937\u0915 \u0938\u0941\u0935\u093F\u0927\u093E \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E. \u0935\u0948\u092F\u0915\u094D\u0924\u093F\u0915 \u0905\u0921\u091A\u0923\u0940\u0938\u093E\u0920\u0940 Support Request \u0926\u0947\u0916\u0940\u0932 \u092A\u093E\u0920\u0935\u0942 \u0936\u0915\u0924\u093E.",
+      navigationActions: actions
+    };
+  }
+  return {
+    reply: suggestTicket ? "You can jump directly to key MyStudyZone sections using the buttons below. If you are facing a personal account, login, payment, or technical issue, click SUBMIT A SUPPORT REQUEST below to reach our support team." : "You can use the direct navigation buttons below to open Courses (Classes 1\u201310), Worksheets, Syllabus & Study Notes, Scholarship, TET/CTET, or Teacher Resources. Feel free to ask a more specific question or submit a Support Request if needed.",
+    navigationActions: actions
+  };
+}
+async function handleSupportChatRequest(body, clientIp) {
+  const rawMessage = String(body?.message || "").trim();
+  if (!rawMessage) {
+    return {
+      success: false,
+      source: "knowledge_base",
+      aiStatus: "upstream_error",
+      reply: "Please type your question so I can help you.",
+      language: "en",
+      navigationActions: [],
+      suggestSupportTicket: false
+    };
+  }
+  const message = rawMessage.slice(0, MAX_MESSAGE_CHARS);
+  const lang = detectQueryLanguage(message);
+  const userRole = body?.userRole === "teacher" ? "teacher" : body?.userRole === "student" ? "student" : "visitor";
+  const withinGlobalLimit = pruneAndCheckWindow(
+    ipRequestTimestamps,
+    clientIp || "unknown",
+    CHAT_WINDOW_MS,
+    MAX_REQUESTS_PER_IP
+  );
+  if (!withinGlobalLimit) {
+    return {
+      success: true,
+      source: "kb_fallback",
+      aiStatus: "rate_limited",
+      reply: lang === "hi" ? "\u092C\u0939\u0941\u0924 \u0905\u0927\u093F\u0915 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C\u0947 \u0917\u090F \u0939\u0948\u0902\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u092E\u093F\u0928\u091F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902, \u092F\u093E \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u092C\u091F\u0928 \u0938\u0947 \u0905\u092A\u0928\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u092D\u0947\u091C\u0947\u0902\u0964" : lang === "mr" ? "\u0916\u0942\u092A \u091C\u093E\u0938\u094D\u0924 \u0938\u0902\u0926\u0947\u0936 \u092A\u093E\u0920\u0935\u0932\u0947 \u0917\u0947\u0932\u0947 \u0906\u0939\u0947\u0924. \u0915\u0943\u092A\u092F\u093E \u0925\u094B\u0921\u094D\u092F\u093E \u0935\u0947\u0933\u093E\u0928\u0947 \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E, \u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 \u092C\u091F\u0923\u093E\u0935\u0930\u0942\u0928 \u0924\u0915\u094D\u0930\u093E\u0930 \u0928\u094B\u0902\u0926\u0935\u093E." : "Too many messages sent in a short time. Please wait a few minutes or submit a Support Request below.",
+      language: lang,
+      navigationActions: [buildNavigationAction("open_dashboard")],
+      suggestSupportTicket: true,
+      notice: "Rate limit reached to keep MyStudyZone Help Desk fast and free for everyone."
+    };
+  }
+  const kbMatch = matchKnowledgeBaseFastPath(message, { userRole });
+  if (kbMatch.matched) {
+    return {
+      success: true,
+      source: "knowledge_base",
+      aiStatus: "kb_fastpath",
+      reply: kbMatch.reply,
+      language: kbMatch.language,
+      navigationActions: kbMatch.navigationActions,
+      suggestSupportTicket: kbMatch.suggestSupportTicket
+    };
+  }
+  const apiKey = getConfiguredGeminiKey();
+  if (!apiKey) {
+    const fb = buildFallbackMessage(lang, message, false);
+    return {
+      success: true,
+      source: "kb_fallback",
+      aiStatus: "missing_key",
+      reply: fb.reply,
+      language: lang,
+      navigationActions: fb.navigationActions,
+      suggestSupportTicket: true,
+      notice: "Live AI assistant is currently running in Knowledge Base mode (GEMINI_API_KEY is not configured on the server). You can still navigate directly or submit a Support Request."
+    };
+  }
+  const todayKey = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  if (dailyAiTracker.dateKey !== todayKey) {
+    dailyAiTracker = { dateKey: todayKey, count: 0 };
+  }
+  const withinAiIpLimit = pruneAndCheckWindow(
+    ipAiTimestamps,
+    clientIp || "unknown",
+    CHAT_WINDOW_MS,
+    MAX_AI_CALLS_PER_IP
+  );
+  if (!withinAiIpLimit || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
+    const fb = buildFallbackMessage(lang, message, true);
+    return {
+      success: true,
+      source: "kb_fallback",
+      aiStatus: "rate_limited",
+      reply: fb.reply,
+      language: lang,
+      navigationActions: fb.navigationActions,
+      suggestSupportTicket: true,
+      notice: "AI chat limit reached for now. Showing Knowledge Base guidance & direct links."
+    };
+  }
+  try {
+    dailyAiTracker.count += 1;
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: { headers: { "User-Agent": "aistudio-build" } }
+    });
+    const rawHistory = Array.isArray(body?.history) ? body.history : [];
+    const safeHistory = rawHistory.slice(-MAX_HISTORY_TURNS).map((t) => ({
+      role: t?.role === "assistant" ? "assistant" : "user",
+      text: String(t?.text || "").slice(0, 400)
+    })).filter((t) => Boolean(t.text));
+    const historyText = safeHistory.map((t) => `${t.role === "assistant" ? "Assistant" : "User"}: ${t.text}`).join("\n");
+    const promptText = [
+      `Current User Portal Role: ${userRole}`,
+      historyText ? `Recent Conversation:
+${historyText}` : "",
+      `Latest User Question: ${message}`
+    ].filter(Boolean).join("\n\n");
+    const response = await ai.models.generateContent({
+      model: "gemini-4-hydrogen",
+      contents: promptText,
+      config: {
+        systemInstruction: HELP_DESK_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        maxOutputTokens: 700,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            reply: {
+              type: Type.STRING,
+              description: "Helpful, concise, accurate answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features."
+            },
+            language: {
+              type: Type.STRING,
+              description: "Language code: en, hi, or mr"
+            },
+            navigationActionIds: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "0 to 3 exact allowlisted action IDs from system instructions"
+            },
+            detectedClass: {
+              type: Type.STRING,
+              description: "Optional Class 1 through Class 10 if specifically requested"
+            },
+            detectedBoard: {
+              type: Type.STRING,
+              description: "Optional Maharashtra, CBSE, or ICSE if specifically requested"
+            },
+            suggestSupportTicket: {
+              type: Type.BOOLEAN,
+              description: "True if the user has a personal account, login, payment, class correction, or unresolved technical problem."
+            }
+          },
+          required: ["reply", "language", "navigationActionIds", "suggestSupportTicket"]
+        }
+      }
+    });
+    const rawJson = response.text || "{}";
+    const parsed = JSON.parse(rawJson);
+    const replyLang = parsed.language === "hi" || parsed.language === "mr" ? parsed.language : lang;
+    const targetClass = parsed.detectedClass && VALID_CLASSES.has(parsed.detectedClass) ? parsed.detectedClass : extractClassLevel(message);
+    const targetBoard = parsed.detectedBoard && VALID_BOARDS2.has(parsed.detectedBoard) ? parsed.detectedBoard : extractBoard(message);
+    const validActions = [];
+    const seenIds = /* @__PURE__ */ new Set();
+    for (const rawId of parsed.navigationActionIds || []) {
+      const id = String(rawId || "").trim();
+      if (id in SUPPORT_NAVIGATION_ALLOWLIST && !seenIds.has(id) && validActions.length < 3) {
+        seenIds.add(id);
+        validActions.push(buildNavigationAction(id, targetClass, targetBoard));
+      }
+    }
+    const cleanReply = String(parsed.reply || "").trim();
+    if (!cleanReply) {
+      const fb = buildFallbackMessage(replyLang, message, Boolean(parsed.suggestSupportTicket));
+      return {
+        success: true,
+        source: "kb_fallback",
+        aiStatus: "upstream_error",
+        reply: fb.reply,
+        language: replyLang,
+        navigationActions: validActions.length ? validActions : fb.navigationActions,
+        suggestSupportTicket: Boolean(parsed.suggestSupportTicket)
+      };
+    }
+    return {
+      success: true,
+      source: "gemini_ai",
+      aiStatus: "ok",
+      reply: cleanReply,
+      language: replyLang,
+      navigationActions: validActions,
+      suggestSupportTicket: Boolean(parsed.suggestSupportTicket)
+    };
+  } catch (err) {
+    const errMsg = String(err?.message || err || "");
+    const isQuota = err?.status === 429 || errMsg.includes("429") || errMsg.toUpperCase().includes("RESOURCE_EXHAUSTED") || errMsg.toLowerCase().includes("quota");
+    console.warn("[Support Assistant AI Fallback]:", errMsg);
+    const fb = buildFallbackMessage(lang, message, true);
+    return {
+      success: true,
+      source: "kb_fallback",
+      aiStatus: isQuota ? "quota_exceeded" : "upstream_error",
+      reply: fb.reply,
+      language: lang,
+      navigationActions: fb.navigationActions,
+      suggestSupportTicket: true,
+      notice: isQuota ? "AI usage quota is temporarily full. Showing Knowledge Base guidance, direct links, and Support Request option." : "AI assistant is temporarily unavailable. Showing Knowledge Base guidance and Support Request option."
+    };
+  }
+}
+async function handleSupportTicketSubmission(body, headers, clientIp) {
+  const withinTicketLimit = pruneAndCheckWindow(
+    ipTicketTimestamps,
+    clientIp || "unknown",
+    TICKET_WINDOW_MS,
+    MAX_TICKETS_PER_IP
+  );
+  if (!withinTicketLimit) {
+    return {
+      statusCode: 429,
+      payload: {
+        success: false,
+        persisted: false,
+        error: "Too many support requests submitted from your connection. Please try again in 15 minutes."
+      }
+    };
+  }
+  const requesterRole = body?.requesterRole === "teacher" ? "teacher" : "student";
+  const name = String(body?.name || "").trim().slice(0, 100);
+  const email = String(body?.email || "").trim().toLowerCase().slice(0, 150);
+  const mobile = String(body?.mobile || "").replace(/[^\d+\-\s]/g, "").trim().slice(0, 20);
+  const rawCategory = String(body?.category || "General Queries").trim();
+  const category = VALID_SUPPORT_CATEGORIES.has(rawCategory) ? rawCategory : "General Queries";
+  const description = String(body?.description || "").trim().slice(0, 1800);
+  const subjectInput = String(body?.subject || "").trim().slice(0, 180);
+  if (name.length < 2) {
+    return {
+      statusCode: 400,
+      payload: { success: false, persisted: false, error: "Please enter your full name." }
+    };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return {
+      statusCode: 400,
+      payload: { success: false, persisted: false, error: "Please enter a valid registered email address." }
+    };
+  }
+  if (description.length < 10) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        persisted: false,
+        error: "Please describe your problem in at least 10 characters."
+      }
+    };
+  }
+  let verifiedUid = null;
+  if (headers.authorization) {
+    const authRes = await verifyBearerIdToken(headers.authorization).catch(() => null);
+    if (authRes?.valid && authRes.uid) {
+      verifiedUid = authRes.uid;
+    }
+  }
+  if (!isFirebaseAdminConfigured()) {
+    return {
+      statusCode: 503,
+      payload: {
+        success: false,
+        persisted: false,
+        requiresClientAuthFallback: true,
+        error: "Server-side Firebase Admin credentials (FIREBASE_SERVICE_ACCOUNT_JSON) are not configured yet for guest ticket writes."
+      }
+    };
+  }
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const rand = Math.floor(1e4 + Math.random() * 9e4);
+  const ticketNumber = `TKT-VC-${rand}`;
+  const ticketId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const subject = subjectInput || `[${requesterRole === "teacher" ? "Teacher" : "Student"}] ${category}`;
+  const ticketDoc = {
+    id: ticketId,
+    ticketNumber,
+    studentId: verifiedUid || String(body?.studentId || "guest_helpdesk").slice(0, 128),
+    studentName: name,
+    requesterRole,
+    email,
+    mobile,
+    category,
+    subject,
+    description,
+    status: "OPEN",
+    priority: category.includes("Payment") ? "HIGH" : "MEDIUM",
+    source: "ai_help_desk",
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+  try {
+    const writeRes = await serverSetDoc("support_tickets", ticketId, ticketDoc, { merge: false });
+    if (!writeRes.usedAdminSdk) {
+      return {
+        statusCode: 503,
+        payload: {
+          success: false,
+          persisted: false,
+          requiresClientAuthFallback: true,
+          error: "Firebase Admin SDK is required to persist unauthenticated support requests."
+        }
+      };
+    }
+    return {
+      statusCode: 201,
+      payload: {
+        success: true,
+        persisted: true,
+        storage: "firestore_admin",
+        ticket: ticketDoc
+      }
+    };
+  } catch (err) {
+    console.error("[Support Ticket Server Error]:", err);
+    return {
+      statusCode: 500,
+      payload: {
+        success: false,
+        persisted: false,
+        error: "Unable to save your support request right now. Please retry or email support@mystudyzone.in."
+      }
+    };
+  }
+}
+
 // server.ts
 dotenv3.config();
 var app = express();
@@ -6471,6 +7521,50 @@ app.post("/api/worksheets/verify-access", async (req, res) => {
     downloadingAllowed: false,
     upgradeMessage: allowed ? "" : upgradeMsg
   });
+});
+function resolveClientIp(req) {
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd.trim()) {
+    return fwd.split(",")[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
+app.post("/api/support/chat", async (req, res) => {
+  try {
+    const payload = await handleSupportChatRequest(
+      req.body || {},
+      resolveClientIp(req)
+    );
+    return res.status(payload.success ? 200 : 400).json(payload);
+  } catch (err) {
+    console.error("[Support Chat Route Error]:", err);
+    return res.status(500).json({
+      success: false,
+      source: "kb_fallback",
+      aiStatus: "upstream_error",
+      reply: "Help Desk encountered a temporary issue. Please retry your question or submit a Support Request.",
+      language: "en",
+      navigationActions: [],
+      suggestSupportTicket: true
+    });
+  }
+});
+app.post("/api/support/tickets", async (req, res) => {
+  try {
+    const result = await handleSupportTicketSubmission(
+      req.body || {},
+      { authorization: req.headers.authorization },
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err) {
+    console.error("[Support Ticket Route Error]:", err);
+    return res.status(500).json({
+      success: false,
+      persisted: false,
+      error: "Unable to submit your support request right now. Please try again shortly."
+    });
+  }
 });
 async function startServer() {
   const isProduction = process.env.NODE_ENV === "production";

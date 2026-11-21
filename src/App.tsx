@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
+import { HelpSupportAssistant } from './components/HelpSupportAssistant';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -141,6 +142,7 @@ import { ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel, SpecialL
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationConfig';
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
 import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
+import type { SupportNavigationAction } from './data/helpSupportKnowledgeBase';
 import {
   canAccessFeature,
   canAccessSubject,
@@ -216,6 +218,11 @@ const AppContent: React.FC = () => {
   const [explorerZone, setExplorerZone] = useState<ExplorerZoneType>('study-material');
   const [explorerSubFocus, setExplorerSubFocus] = useState<string>('notes');
   const [dashboardMainSection, setDashboardMainSection] = useState<MainMenuId>('special-learning');
+  const [isHelpDrawerOpen, setIsHelpDrawerOpen] = useState<boolean>(false);
+  const [worksheetsInitialClass, setWorksheetsInitialClass] = useState<ClassLevel | undefined>(undefined);
+  const [worksheetsInitialBoard, setWorksheetsInitialBoard] = useState<EducationBoard | undefined>(undefined);
+  const [studyInitialClass, setStudyInitialClass] = useState<ClassLevel | undefined>(undefined);
+  const [studyInitialBoard, setStudyInitialBoard] = useState<EducationBoard | undefined>(undefined);
 
   const handleSelectDashboardSection = (sectionId: MainMenuId) => {
     setDashboardMainSection(sectionId);
@@ -413,6 +420,11 @@ const AppContent: React.FC = () => {
   };
 
   const handleNavigateTab = (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => {
+    if (tab === 'help-support') {
+      setIsHelpDrawerOpen(true);
+      return;
+    }
+
     if (tab === 'demo-mock-tests') {
       openDemoWithTab('demo-mock-tests');
       return;
@@ -460,6 +472,15 @@ const AppContent: React.FC = () => {
       }
     }
 
+    if (tab !== 'worksheets') {
+      setWorksheetsInitialClass(undefined);
+      setWorksheetsInitialBoard(undefined);
+    }
+    if (tab !== 'study-materials' && tab !== 'study-material') {
+      setStudyInitialClass(undefined);
+      setStudyInitialBoard(undefined);
+    }
+
     if (subjectParam) {
       setQuizInitialSubject(subjectParam);
     }
@@ -468,6 +489,158 @@ const AppContent: React.FC = () => {
     }
     setCurrentTab(tab === 'study-material' ? 'study-materials' : tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleHelpSupportNavigation = (action: SupportNavigationAction) => {
+    const { id, targetClass, targetBoard } = action;
+    if (targetBoard) {
+      setPublicBoard(targetBoard);
+    }
+    if (targetClass) {
+      setPublicClass(targetClass);
+    }
+
+    switch (id) {
+      case 'open_worksheets': {
+        setWorksheetsInitialClass(targetClass);
+        setWorksheetsInitialBoard(targetBoard);
+        if (isLearningPortal && currentStudent) {
+          setCurrentTab('worksheets');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setExplorerZone('study-material');
+          setExplorerSubFocus('sm-worksheets');
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+      case 'open_syllabus': {
+        setStudyInitialClass(targetClass);
+        setStudyInitialBoard(targetBoard);
+        if (isLearningPortal && currentStudent) {
+          setCurrentTab('study-materials');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setExplorerZone('study-material');
+          setExplorerSubFocus('sm-notes');
+          setCurrentTab('explore-zone');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+      case 'open_all_courses': {
+        handleNavigateTab('all-courses');
+        return;
+      }
+      case 'open_quizzes': {
+        if (isLearningPortal && currentStudent) {
+          handleNavigateTab('quizzes');
+        } else {
+          openDemoWithTab('live-quiz');
+        }
+        return;
+      }
+      case 'open_scholarship': {
+        handleNavigateTab('scholarship');
+        return;
+      }
+      case 'open_tet_ctet': {
+        handleNavigateTab('tet-ctet');
+        return;
+      }
+      case 'open_teacher_resources': {
+        if (currentStudent && (currentStudent.accountRole === 'teacher' || isTeacherPortal)) {
+          switchRole('teacher');
+          setCurrentTab('dashboard');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (currentStudent) {
+          handleNavigateTab('all-courses');
+        } else {
+          openAuthModalWithTab('teacher', 'teacher');
+        }
+        return;
+      }
+      case 'open_stories': {
+        handleNavigateTab('stories');
+        return;
+      }
+      case 'open_shivaji': {
+        handleNavigateTab('shivaji');
+        return;
+      }
+      case 'open_drawing': {
+        handleNavigateTab('drawing');
+        return;
+      }
+      case 'open_puzzles': {
+        handleNavigateTab('puzzles');
+        return;
+      }
+      case 'open_sudoku': {
+        handleNavigateTab('sudoku');
+        return;
+      }
+      case 'open_cricket': {
+        handleNavigateTab('cricket');
+        return;
+      }
+      case 'open_ai_academy': {
+        handleNavigateTab('future-skills');
+        return;
+      }
+      case 'open_other_programs': {
+        handleNavigateTab('other-programs');
+        return;
+      }
+      case 'open_demo': {
+        openDemoWithTab('overview');
+        return;
+      }
+      case 'open_certificates': {
+        handleMenuAction('perf-certificates');
+        return;
+      }
+      case 'open_referrals': {
+        handleNavigateTab('referrals');
+        return;
+      }
+      case 'open_profile': {
+        handleMenuAction('acc-profile');
+        return;
+      }
+      case 'open_plans': {
+        openMembershipWithPlan(
+          'premium',
+          targetClass || currentStudent?.classLevel || publicClass,
+          targetBoard || (currentStudent ? activeBoard : publicBoard)
+        );
+        return;
+      }
+      case 'open_login': {
+        openAuthModalWithTab('login', 'student');
+        return;
+      }
+      case 'open_teacher_login': {
+        openAuthModalWithTab('teacher', 'teacher');
+        return;
+      }
+      case 'open_register': {
+        openAuthModalWithTab('register', 'student');
+        return;
+      }
+      case 'open_password_reset': {
+        openAuthModalWithTab('forgot', 'student');
+        return;
+      }
+      case 'open_dashboard':
+      default: {
+        setHomeScrollTarget('home-overview');
+        setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
   };
 
   const handleMenuAction = (actionId: NavSubActionId) => {
@@ -1405,6 +1578,14 @@ const AppContent: React.FC = () => {
                         <Activity className="w-3.5 h-3.5" />
                         <span>Current Affairs</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('help-support')}
+                        className="px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-xs"
+                      >
+                        <Headphones className="w-3.5 h-3.5" />
+                        <span>HELP &amp; SUPPORT</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1434,6 +1615,8 @@ const AppContent: React.FC = () => {
 
                 {currentTab === 'worksheets' && (
                   <WorksheetsView
+                    initialClassLevel={worksheetsInitialClass}
+                    initialBoard={worksheetsInitialBoard}
                     initialSubject={quizInitialSubject}
                     onUnlockClick={(targetClass, targetBoard) => openMembershipWithPlan('premium', targetClass, targetBoard)}
                   />
@@ -1441,8 +1624,8 @@ const AppContent: React.FC = () => {
 
                 {currentTab === 'study-materials' && (
                   <StudyMaterialsView
-                    initialBoard={activeBoard}
-                    initialClass={currentStudent.classLevel}
+                    initialBoard={studyInitialBoard || activeBoard}
+                    initialClass={studyInitialClass || currentStudent.classLevel}
                     initialSubject={quizInitialSubject}
                     onNavigateTab={handleNavigateTab}
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
@@ -1671,6 +1854,14 @@ const AppContent: React.FC = () => {
           />
         )}
       </Suspense>
+
+      {/* Unified AI-Powered Help & Support Assistant (Shared for Students, Teachers & Visitors) */}
+      <HelpSupportAssistant
+        isOpen={isHelpDrawerOpen}
+        onOpenChange={setIsHelpDrawerOpen}
+        onNavigateAction={handleHelpSupportNavigation}
+        activeTab={currentTab}
+      />
 
       {/* Professional Education Platform Footer */}
       <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-12 pb-8 text-xs">

@@ -7,6 +7,10 @@ import {
 } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestoreSdk } from 'firebase-admin/firestore';
 import { getAuth as getAdminAuthSdk } from 'firebase-admin/auth';
+import {
+  handleSupportChatRequest,
+  handleSupportTicketSubmission
+} from '../../server/supportAssistant.ts';
 
 dotenv.config();
 
@@ -2721,6 +2725,50 @@ export async function handler(event) {
     } catch {
       return jsonResponse(401, { success: false, error: 'Invalid admin token.' });
     }
+  }
+
+  if (method === 'POST' && normalizedPath === '/support/chat') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const clientIp =
+      String(
+        event.headers?.['x-nf-client-connection-ip'] ||
+          event.headers?.['x-forwarded-for'] ||
+          'unknown'
+      )
+        .split(',')[0]
+        .trim() || 'unknown';
+    const payload = await handleSupportChatRequest(body, clientIp);
+    return jsonResponse(payload.success ? 200 : 400, payload);
+  }
+
+  if (method === 'POST' && normalizedPath === '/support/tickets') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const clientIp =
+      String(
+        event.headers?.['x-nf-client-connection-ip'] ||
+          event.headers?.['x-forwarded-for'] ||
+          'unknown'
+      )
+        .split(',')[0]
+        .trim() || 'unknown';
+    const authHeader =
+      event.headers?.authorization || event.headers?.Authorization || undefined;
+    const result = await handleSupportTicketSubmission(
+      body,
+      { authorization: authHeader },
+      clientIp
+    );
+    return jsonResponse(result.statusCode, result.payload);
   }
 
   return jsonResponse(404, {

@@ -56,19 +56,21 @@ import { getLocalSessionHeaders } from '../services/deviceSessionService';
 
 interface WorksheetsViewProps {
   initialClassLevel?: ClassLevel;
+  initialBoard?: EducationBoard;
   initialSubject?: SubjectName;
   onUnlockClick?: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
 export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   initialClassLevel,
+  initialBoard,
   initialSubject,
   onUnlockClick
 }) => {
   const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass } = useApp();
 
-  const userRegisteredBoard: EducationBoard = activeBoard;
-  const userRegisteredClass: ClassLevel = currentStudent?.classLevel || initialClassLevel || 'Class 4';
+  const userRegisteredBoard: EducationBoard = initialBoard || activeBoard;
+  const userRegisteredClass: ClassLevel = initialClassLevel || currentStudent?.classLevel || 'Class 4';
   const [selectedBoard, setSelectedBoard] = useState<EducationBoard>(userRegisteredBoard);
   const [selectedClass, setSelectedClass] = useState<ClassLevel>(userRegisteredClass);
   const [selectedSubject, setSelectedSubject] = useState<SubjectName | 'ALL'>(
@@ -96,13 +98,25 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     [selectedClass, selectedBoard]
   );
 
-  // Keep selectedBoard & selectedClass synced to user's active workspace when account/workspace changes
+  // Keep selectedBoard & selectedClass synced to user's active workspace or explicit deep-link target
   useEffect(() => {
-    setSelectedBoard(activeBoard);
-    if (currentStudent?.classLevel) {
+    setSelectedBoard(initialBoard || activeBoard);
+    if (initialClassLevel) {
+      setSelectedClass(initialClassLevel);
+    } else if (currentStudent?.classLevel) {
       setSelectedClass(currentStudent.classLevel);
     }
-  }, [currentStudent?.id, currentStudent?.classLevel, activeBoard]);
+    if (initialSubject) {
+      setSelectedSubject(initialSubject);
+    }
+  }, [
+    currentStudent?.id,
+    currentStudent?.classLevel,
+    activeBoard,
+    initialBoard,
+    initialClassLevel,
+    initialSubject
+  ]);
 
   // Security guard: if activeWorksheet is ever set to a locked worksheet (e.g. account switch or state tampering), close immediately
   useEffect(() => {
