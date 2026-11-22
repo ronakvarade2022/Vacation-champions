@@ -8,6 +8,8 @@ import {
   UserCheck,
   UserPlus,
   Users,
+  BookOpen,
+  ArrowRight,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
@@ -100,6 +102,61 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
 
       {/* DIRECT PWA MOBILE APP INSTALL BANNER */}
       <PWAInstallButton variant="banner" />
+
+      {/* 100% FREE STUDY MATERIAL LIBRARY PUBLIC ENTRY (Classes 1–10 · MH / CBSE / ICSE) */}
+      <section
+        aria-label="Free Study Material Library"
+        className="rounded-3xl bg-slate-900 text-white p-5 sm:p-7 border border-slate-800 shadow-sm space-y-4"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-300">
+              <span>100% Free Forever</span>
+              <span aria-hidden="true">·</span>
+              <span>No Login Required</span>
+              <span aria-hidden="true">·</span>
+              <span>Maharashtra · CBSE · ICSE (Classes 1–10)</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-display font-black text-white tracking-tight">
+              MyStudyZone Free Study Material Library
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Read official textbooks, chapter-wise notes, 1-page revision sheets, 9-format Q&amp;A
+              banks, 10-MCQ chapter tests, board model papers, previous year papers, video lessons,
+              and 12 Science SVG diagrams free across Classes 1 to 10.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onNavigateZone('study-materials', 'chapter_notes')}
+            className="px-5 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors shrink-0 whitespace-nowrap"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Open Free Study Library</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-800">
+          {[
+            { label: 'Official Textbooks (382)', tab: 'textbooks' },
+            { label: 'Chapter Notes & Revision', tab: 'chapter_notes' },
+            { label: 'Model Papers & PYQs', tab: 'pyq_papers' },
+            { label: 'Math, Science & Grammar Hubs', tab: 'science_diagrams' },
+          ].map((quick) => (
+            <button
+              key={quick.tab}
+              type="button"
+              onClick={() => onNavigateZone('study-materials', quick.tab)}
+              className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-left text-xs font-bold text-slate-100 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+            >
+              <span className="truncate">{quick.label}</span>
+              <ArrowRight className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* ROLE-BASED PORTAL ACCESS STRIP (Student · Teacher · Admin) */}
       <section aria-label="Role Access Portals" className="space-y-4">

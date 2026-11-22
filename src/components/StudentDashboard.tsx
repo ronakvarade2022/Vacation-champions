@@ -14,6 +14,7 @@ import {
   Layers,
   Headphones,
   FileText,
+  BookOpen,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -193,6 +194,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigateTab('study-materials')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Free Study Library</span>
+            </button>
             <button
               type="button"
               onClick={() => onNavigateTab('worksheets')}

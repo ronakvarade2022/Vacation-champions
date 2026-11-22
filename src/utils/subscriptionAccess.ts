@@ -1181,42 +1181,21 @@ export function canAccessSubject(
 }
 
 /**
- * Checks whether Chapter Study Material is unlocked for a given (Board, Class, Subject).
+ * Checks whether Chapter Study Material / Free Study Material Library is unlocked for a given (Board, Class, Subject).
+ * Per MyStudyZone Free Study Material Library policy, all Study Material Library content
+ * across Maharashtra State Board, CBSE, and ICSE (Classes 1 to 10) is 100% FREE for all visitors,
+ * free students, paid students, and teachers.
+ * (Paid gates on Worksheets, 4-Level Subject Quizzes, Scholarship, and TET/CTET remain strictly enforced.)
  */
 export function canAccessStudyMaterial(
-  student: StudentProfile | null | undefined,
-  board: EducationBoard,
-  classLevel: ClassLevel,
-  subject: SubjectName,
-  isFreePreview?: boolean,
-  referenceNow?: Date | string | number
+  _student: StudentProfile | null | undefined,
+  _board: EducationBoard,
+  _classLevel: ClassLevel,
+  _subject: SubjectName,
+  _isFreePreview?: boolean,
+  _referenceNow?: Date | string | number
 ): { allowed: boolean; reason?: string } {
-  const b = normalizeBoardValue(board);
-  const c = normalizeClassLevelValue(classLevel) || 'Class 1';
-  const info = getBoardClassSubscriptionInfo(student, b, c, referenceNow);
-  if (info.isPaidActive) {
-    return { allowed: true };
-  }
-  if (info.status === 'LOCKED') {
-    return {
-      allowed: false,
-      reason: `${getBoardShortLabel(b)} ${c} is locked. Unlock ${getBoardShortLabel(b)} ${c} for ₹99 (365 Days) to access all chapter notes and study materials!`,
-    };
-  }
-  if (info.status === 'EXPIRED') {
-    return {
-      allowed: false,
-      reason: `Your ${getBoardShortLabel(b)} ${c} subscription expired. Renew for ₹99 (365 Days) to access chapter notes and study materials.`,
-    };
-  }
-  // Free Base Board+Class allows English/Maths chapter notes or designated free previews
-  if (isFreePreview || FREE_ALLOWED_SUBJECTS.includes(subject)) {
-    return { allowed: true };
-  }
-  return {
-    allowed: false,
-    reason: `${subject} chapter notes are locked on the Free Plan for ${getBoardShortLabel(b)} ${c}. Upgrade ${getBoardShortLabel(b)} ${c} to Premium (₹99 / 365 Days) to unlock all chapters!`,
-  };
+  return { allowed: true };
 }
 
 /**

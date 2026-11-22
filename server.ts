@@ -3490,6 +3490,107 @@ app.post('/api/support/tickets', async (req: Request, res: Response) => {
   }
 });
 
+// Zero-Cost Official Textbook & Educational Video Link Verification Route (SSRF-hardened)
+function isSafeExternalEducationalUrl(rawUrl: string): {
+  safe: boolean;
+  parsed?: URL;
+  reason?: string;
+} {
+  try {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) return { safe: false, reason: 'URL is required.' };
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return { safe: false, reason: 'Only HTTP/HTTPS educational links are permitted.' };
+    }
+    const host = parsed.hostname.toLowerCase();
+    // Block localhost, internal hostnames, and private IPv4/IPv6 ranges (SSRF guard)
+    if (
+      host === 'localhost' ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host === '[::1]' ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)
+    ) {
+      return { safe: false, reason: 'Private or local network addresses are not permitted.' };
+    }
+    return { safe: true, parsed };
+  } catch {
+    return { safe: false, reason: 'Malformed URL format.' };
+  }
+}
+
+app.post('/api/study-library/verify-link', async (req: Request, res: Response) => {
+  const rawUrl = String(req.body?.url || '').trim();
+  const check = isSafeExternalEducationalUrl(rawUrl);
+  if (!check.safe || !check.parsed) {
+    return res.status(400).json({
+      success: false,
+      ok: false,
+      status: 0,
+      url: rawUrl,
+      error: check.reason || 'Invalid URL.',
+      checkedAt: new Date().toISOString(),
+    });
+  }
+
+  const targetUrl = check.parsed.toString();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  try {
+    let response = await fetch(targetUrl, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'MyStudyZone-LinkVerifier/1.0 (+https://mystudyzone.in)',
+      },
+    }).catch(() => null);
+
+    // Some government textbook servers (e.g., eBalbharati / NCERT) reject HEAD with 403/405; fallback to lightweight GET
+    if (!response || response.status === 405 || response.status === 403 || response.status >= 500) {
+      response = await fetch(targetUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'MyStudyZone-LinkVerifier/1.0 (+https://mystudyzone.in)',
+          Range: 'bytes=0-1024',
+        },
+      });
+    }
+
+    const ok = response.status >= 200 && response.status < 400;
+    return res.status(200).json({
+      success: true,
+      ok,
+      status: response.status,
+      url: rawUrl,
+      finalUrl: response.url || targetUrl,
+      contentType: response.headers.get('content-type') || 'unknown',
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(200).json({
+      success: true,
+      ok: false,
+      status: 0,
+      url: rawUrl,
+      finalUrl: targetUrl,
+      error: err?.name === 'AbortError' ? 'Connection timed out after 5 seconds.' : 'Unable to reach destination server.',
+      checkedAt: new Date().toISOString(),
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+});
+
 // Setup Vite or static serving
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';

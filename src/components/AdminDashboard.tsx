@@ -84,11 +84,17 @@ const AdminQuestionErrorReportsSection = lazyWithRetry(() =>
 const AdminDemoExamsSection = lazyWithRetry(() =>
   import('./admin/AdminDemoExamsSection').then((m) => ({ default: m.AdminDemoExamsSection }))
 );
+const AdminStudyLibraryCmsSection = lazyWithRetry(() =>
+  import('./admin/AdminStudyLibraryCmsSection').then((m) => ({
+    default: m.AdminStudyLibraryCmsSection,
+  }))
+);
 
 type AdminSectionId =
   | 'students'
   | 'questions'
   | 'worksheets'
+  | 'study-library-cms'
   | 'progression'
   | 'duplicates'
   | 'stories'
@@ -397,6 +403,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('study-library-cms')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'study-library-cms'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Free Study Library CMS &amp; Health</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('duplicates')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'duplicates'
@@ -595,6 +613,13 @@ export const AdminDashboard: React.FC = () => {
 
         {activeSection === 'worksheets' && (
           <AdminWorksheetsSection
+            selectedBoardWorkspace={selectedBoardWorkspace}
+            selectedClassWorkspace={selectedClassWorkspace}
+          />
+        )}
+
+        {activeSection === 'study-library-cms' && (
+          <AdminStudyLibraryCmsSection
             selectedBoardWorkspace={selectedBoardWorkspace}
             selectedClassWorkspace={selectedClassWorkspace}
           />

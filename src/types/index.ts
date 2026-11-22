@@ -177,6 +177,57 @@ export interface ChapterNoteExample {
   solution: string;
 }
 
+export interface OfficialTextbookResource {
+  id: string;
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  bookTitle: string;
+  publisher: string;
+  editionYear: string;
+  mediums: ('English' | 'Marathi' | 'Hindi')[];
+  officialReadUrl: string;
+  officialPortalName: string;
+  secondaryPortalUrl: string;
+  secondaryPortalName: string;
+  syllabusCode: string;
+  totalChapters: number;
+  chapters: string[];
+}
+
+export interface ChapterDefinitionItem {
+  term: string;
+  meaning: string;
+}
+
+export interface ChapterShortRevisionNotes {
+  onePageSummary: string;
+  quickRevisionPoints: string[];
+  memoryTricks: string[];
+  importantFacts: string[];
+}
+
+export type ChapterQAFormat =
+  | 'very_short'
+  | 'short_answer'
+  | 'long_answer'
+  | 'textbook_exercise'
+  | 'give_reason'
+  | 'distinguish_between'
+  | 'explain_concept'
+  | 'fill_in_blanks'
+  | 'match_and_true_false';
+
+export interface ChapterQAItem {
+  id: string;
+  format: ChapterQAFormat;
+  formatLabel: string;
+  marks: number;
+  question: string;
+  answer: string;
+  examTip?: string;
+}
+
 export interface ChapterStudyMaterial {
   id: string;
   board: EducationBoard;
@@ -191,6 +242,84 @@ export interface ChapterStudyMaterial {
   solvedExamples: ChapterNoteExample[];
   revisionChecklist: string[];
   isFreePreview?: boolean;
+  // Phase 2 Free Study Material Library Enrichments
+  officialTextbook?: OfficialTextbookResource;
+  detailedExplanation?: string[];
+  keyDefinitions?: ChapterDefinitionItem[];
+  chapterSummary?: string;
+  shortRevisionNotes?: ChapterShortRevisionNotes;
+  qaBank?: ChapterQAItem[];
+}
+
+export interface ChapterPracticeTestQuestion {
+  id: string;
+  question: string;
+  options: [string, string, string, string];
+  correctIndex: number;
+  explanation: string;
+  difficulty: 'Easy' | 'Medium' | 'Exam-Ready';
+}
+
+export interface ChapterPracticeTest {
+  id: string;
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  chapterNumber: number;
+  chapterTitle: string;
+  durationMinutes: number;
+  totalMarks: number;
+  questions: ChapterPracticeTestQuestion[];
+}
+
+export interface ExamPaperQuestionItem {
+  qNo: string;
+  question: string;
+  marks: number;
+  modelAnswer: string;
+}
+
+export interface ExamPaperSection {
+  sectionTitle: string;
+  sectionInstructions: string;
+  totalSectionMarks: number;
+  questions: ExamPaperQuestionItem[];
+}
+
+export interface StudyLibraryExamPaper {
+  id: string;
+  paperType: 'model_paper' | 'pyq';
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  title: string;
+  yearOrTerm: string;
+  boardPatternLabel: string;
+  durationLabel: string;
+  totalMarks: number;
+  officialPortalUrl: string;
+  officialPortalName: string;
+  generalInstructions: string[];
+  sections: ExamPaperSection[];
+}
+
+export interface EducationalVideoLesson {
+  id: string;
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  chapterNumber: number;
+  chapterTitle: string;
+  lessonTitle: string;
+  durationLabel: string;
+  mediums: string[];
+  providerName: string;
+  officialVideoPortalUrl: string;
+  dikshaSearchUrl: string;
+  ncertVideoUrl?: string;
+  learningObjectives: string[];
+  lessonOutline: string[];
+  keyTakeaway: string;
 }
 
 export interface ParentProfile {

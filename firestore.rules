@@ -473,7 +473,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // PlatformConfig Schema Validator (Zero-PII global timers & visibility configuration)
+    // PlatformConfig Schema Validator (Zero-PII global timers, visibility & study library cache version)
     function isValidPlatformConfig(data) {
       return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              !('email' in data) &&
@@ -482,13 +482,14 @@ service cloud.firestore {
              !('passwordHash' in data) &&
              (!('timers' in data) || data.timers is map) &&
              (!('sectionVisibility' in data) || data.sectionVisibility is map) &&
+             (!('studyLibraryVersion' in data) || (data.studyLibraryVersion is number && data.studyLibraryVersion >= 0)) &&
              (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
     }
 
-    // SpecialContentItem Schema Validator (Zero-PII admin-managed Special Learning records)
+    // SpecialContentItem Schema Validator (Zero-PII admin-managed Special Learning & Study Library records)
     function isValidSpecialContentItem(data) {
       return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
-             data.contentType in ['story', 'shivaji_story', 'scholarship_question', 'drawing_template', 'gk_question', 'learning_program'] &&
+             data.contentType in ['story', 'shivaji_story', 'scholarship_question', 'drawing_template', 'gk_question', 'learning_program', 'study_material_item'] &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
              data.published is bool &&
              data.payload is map &&
@@ -496,6 +497,10 @@ service cloud.firestore {
              !('mobile' in data) &&
              !('phone' in data) &&
              !('passwordHash' in data) &&
+             (!('board' in data) || (data.board in ['Maharashtra', 'CBSE', 'ICSE'])) &&
+             (!('classLevel' in data) || (data.classLevel is string && data.classLevel.size() <= 20)) &&
+             (!('subject' in data) || (data.subject is string && data.subject.size() <= 100)) &&
+             (!('materialCategory' in data) || (data.materialCategory is string && data.materialCategory.size() <= 60)) &&
              (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
              (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
     }

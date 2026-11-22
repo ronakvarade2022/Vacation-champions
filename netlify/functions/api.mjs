@@ -2771,6 +2771,97 @@ export async function handler(event) {
     return jsonResponse(result.statusCode, result.payload);
   }
 
+  if (method === 'POST' && normalizedPath === '/study-library/verify-link') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const rawUrl = String(body?.url || '').trim();
+    let parsedUrl = null;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      parsedUrl = null;
+    }
+    const host = parsedUrl ? parsedUrl.hostname.toLowerCase() : '';
+    const isBlockedHost =
+      !parsedUrl ||
+      (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') ||
+      host === 'localhost' ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host === '[::1]' ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+
+    if (isBlockedHost) {
+      return jsonResponse(400, {
+        success: false,
+        ok: false,
+        status: 0,
+        url: rawUrl,
+        error: 'Invalid or restricted URL.',
+        checkedAt: new Date().toISOString()
+      });
+    }
+
+    const targetUrl = parsedUrl.toString();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+      let response = await fetch(targetUrl, {
+        method: 'HEAD',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'MyStudyZone-LinkVerifier/1.0 (+https://mystudyzone.in)'
+        }
+      }).catch(() => null);
+
+      if (!response || response.status === 405 || response.status === 403 || response.status >= 500) {
+        response = await fetch(targetUrl, {
+          method: 'GET',
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'MyStudyZone-LinkVerifier/1.0 (+https://mystudyzone.in)',
+            Range: 'bytes=0-1024'
+          }
+        });
+      }
+
+      const ok = response.status >= 200 && response.status < 400;
+      return jsonResponse(200, {
+        success: true,
+        ok,
+        status: response.status,
+        url: rawUrl,
+        finalUrl: response.url || targetUrl,
+        contentType: response.headers.get('content-type') || 'unknown',
+        checkedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      return jsonResponse(200, {
+        success: true,
+        ok: false,
+        status: 0,
+        url: rawUrl,
+        finalUrl: targetUrl,
+        error: err?.name === 'AbortError' ? 'Connection timed out after 5 seconds.' : 'Unable to reach destination server.',
+        checkedAt: new Date().toISOString()
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   return jsonResponse(404, {
     success: false,
     error: `API route not found: ${method} ${rawPath}`

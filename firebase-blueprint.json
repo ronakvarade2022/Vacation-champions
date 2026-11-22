@@ -276,25 +276,30 @@
     },
     "PlatformConfig": {
       "title": "PlatformConfig",
-      "description": "Zero-PII global platform configuration storing quiz timers and visitor/student visibility toggles.",
+      "description": "Zero-PII global platform configuration storing quiz timers, visitor/student visibility toggles, and Study Material Library version counter.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
         "timers": { "type": "object" },
         "sectionVisibility": { "type": "object" },
+        "studyLibraryVersion": { "type": "number", "description": "Monotonic version counter for dynamic Study Material Library cache invalidation." },
         "updatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id"]
     },
     "SpecialContentItem": {
       "title": "SpecialContentItem",
-      "description": "Zero-PII admin-published Special Learning enrichment content (stories, Shivaji chapters, scholarship questions, drawing templates, GK items, programs).",
+      "description": "Zero-PII admin-published Special Learning enrichment content and dynamic Study Material Library items.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
-        "contentType": { "type": "string", "enum": ["story", "shivaji_story", "scholarship_question", "drawing_template", "gk_question", "learning_program"] },
+        "contentType": { "type": "string", "enum": ["story", "shivaji_story", "scholarship_question", "drawing_template", "gk_question", "learning_program", "study_material_item"] },
         "title": { "type": "string", "maxLength": 200 },
         "published": { "type": "boolean" },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "classLevel": { "type": "string", "maxLength": 20 },
+        "subject": { "type": "string", "maxLength": 100 },
+        "materialCategory": { "type": "string", "maxLength": 60 },
         "payload": { "type": "object" },
         "createdAt": { "type": "string", "maxLength": 50 },
         "updatedAt": { "type": "string", "maxLength": 50 }

@@ -21,7 +21,7 @@ import {
   OperationType,
   reportFirestoreConnectionStatus,
 } from './firebase';
-import { SectionVisibilityConfig } from '../types';
+import { ClassLevel, EducationBoard, SectionVisibilityConfig, SubjectName } from '../types';
 
 export type SpecialContentType =
   | 'story'
@@ -29,13 +29,18 @@ export type SpecialContentType =
   | 'scholarship_question'
   | 'drawing_template'
   | 'gk_question'
-  | 'learning_program';
+  | 'learning_program'
+  | 'study_material_item';
 
 export interface SpecialContentDocument<T = Record<string, unknown>> {
   id: string;
   contentType: SpecialContentType;
   title: string;
   published: boolean;
+  board?: EducationBoard;
+  classLevel?: ClassLevel;
+  subject?: SubjectName | string;
+  materialCategory?: string;
   payload: T;
   createdAt?: string;
   updatedAt?: string;
@@ -48,6 +53,7 @@ export interface PlatformConfigData {
     classes6to8?: number;
   };
   sectionVisibility?: Partial<SectionVisibilityConfig>;
+  studyLibraryVersion?: number;
 }
 
 export interface PlatformConfigLoadResult {
@@ -127,6 +133,10 @@ function extractPlatformConfigFields(rawData: Record<string, any> | undefined): 
     sectionVisibility:
       rawData?.sectionVisibility && typeof rawData.sectionVisibility === 'object'
         ? (rawData.sectionVisibility as Partial<SectionVisibilityConfig>)
+        : undefined,
+    studyLibraryVersion:
+      typeof rawData?.studyLibraryVersion === 'number' && Number.isFinite(rawData.studyLibraryVersion)
+        ? rawData.studyLibraryVersion
         : undefined,
   };
 }
@@ -480,20 +490,33 @@ export async function savePlatformConfigToFirestore(config: {
     classes6to8: number;
   };
   sectionVisibility: SectionVisibilityConfig;
+  studyLibraryVersion?: number;
 }): Promise<{ success: boolean }> {
   const path = 'platform_config/main';
   try {
     await ensureFirestoreOnline();
     const ref = doc(db, 'platform_config', 'main');
+    const existingVersion = memPlatformConfigCache?.data?.studyLibraryVersion;
+    const resolvedVersion =
+      typeof config.studyLibraryVersion === 'number'
+        ? config.studyLibraryVersion
+        : typeof existingVersion === 'number'
+        ? existingVersion
+        : undefined;
     const payload = stripUndefinedDeep({
       id: 'main',
       timers: config.timers,
       sectionVisibility: config.sectionVisibility,
+      studyLibraryVersion: resolvedVersion,
       updatedAt: new Date().toISOString(),
     });
     await setDoc(ref, payload, { merge: true });
     persistPlatformConfigCache(
-      { timers: config.timers, sectionVisibility: config.sectionVisibility },
+      {
+        timers: config.timers,
+        sectionVisibility: config.sectionVisibility,
+        studyLibraryVersion: resolvedVersion,
+      },
       true
     );
     reportFirestoreConnectionStatus({
@@ -654,4 +677,209 @@ export async function deleteSpecialContentItemFromFirestore(id: string): Promise
     handleFirestoreError(error, OperationType.DELETE, path);
     return { success: false };
   }
+}
+
+/**
+ * Spark-Free-Plan Optimized Study Material Library Firestore Helpers
+ * - Zero new collections (uses `special_content` with `contentType: 'study_material_item'`)
+ * - Version-gated localStorage cache (`studyLibraryVersion` on `platform_config/main`)
+ *   so repeat student visits incur 0 extra Firestore reads unless Admin publishes an update.
+ * - Paginated queries (`limit(pageSize)`) so the full collection is never downloaded at once.
+ */
+const STUDY_LIB_CACHE_PREFIX = 'msz_study_lib_page_v1_';
+
+export interface StudyLibraryDynamicItemPayload {
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName | string;
+  materialCategory:
+    | 'textbook'
+    | 'notes'
+    | 'revision'
+    | 'qa'
+    | 'test'
+    | 'model_paper'
+    | 'pyq'
+    | 'video'
+    | 'math_formula'
+    | 'science_diagram'
+    | 'english_grammar'
+    | 'scholarship_olympiad';
+  chapterNumber?: number;
+  chapterTitle?: string;
+  description?: string;
+  externalUrl?: string;
+  videoUrl?: string;
+  contentMarkdown?: string;
+  keyPoints?: string[];
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+export async function bumpStudyLibraryVersionInFirestore(): Promise<number> {
+  const path = 'platform_config/main';
+  try {
+    await ensureFirestoreOnline();
+    const currentCfg = await loadPlatformConfigFromFirestore();
+    const nextVersion = Date.now();
+    const ref = doc(db, 'platform_config', 'main');
+    await setDoc(
+      ref,
+      stripUndefinedDeep({
+        id: 'main',
+        timers: currentCfg?.timers,
+        sectionVisibility: currentCfg?.sectionVisibility,
+        studyLibraryVersion: nextVersion,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+    persistPlatformConfigCache(
+      {
+        ...(currentCfg || {}),
+        studyLibraryVersion: nextVersion,
+      },
+      true
+    );
+    return nextVersion;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    return 0;
+  }
+}
+
+export async function loadPaginatedStudyLibraryItemsFromFirestore(params?: {
+  board?: EducationBoard;
+  classLevel?: ClassLevel;
+  materialCategory?: string;
+  pageSize?: number;
+  includeDraftsForAdmin?: boolean;
+  forceRefresh?: boolean;
+}): Promise<SpecialContentDocument<StudyLibraryDynamicItemPayload>[]> {
+  const board = params?.board;
+  const classLevel = params?.classLevel;
+  const materialCategory = params?.materialCategory;
+  const pageSize = Math.min(Math.max(params?.pageSize || 25, 1), 100);
+  const includeDrafts = Boolean(params?.includeDraftsForAdmin);
+  const forceRefresh = Boolean(params?.forceRefresh);
+
+  const cacheKey = `${STUDY_LIB_CACHE_PREFIX}${board || 'ALL'}_${classLevel || 'ALL'}_${
+    materialCategory || 'ALL'
+  }_${pageSize}_${includeDrafts ? 'admin' : 'pub'}`;
+
+  // Check version from platform_config/main (already loaded once at boot)
+  const platformCfg = getFallbackPlatformConfig();
+  const currentVersion = platformCfg?.studyLibraryVersion ?? 0;
+
+  if (!forceRefresh && !includeDrafts) {
+    const cached = readCachedJson<{
+      version: number;
+      ts: number;
+      items: SpecialContentDocument<StudyLibraryDynamicItemPayload>[];
+    }>(typeof localStorage !== 'undefined' ? localStorage : undefined, cacheKey);
+
+    if (cached && Array.isArray(cached.items)) {
+      // If studyLibraryVersion is 0 (no dynamic admin items ever published), or matches currentVersion, return 0-read cached result!
+      if (currentVersion === 0 || cached.version === currentVersion) {
+        return cached.items;
+      }
+    } else if (currentVersion === 0) {
+      // Zero dynamic items have been published by Admin yet -> 0 Firestore reads!
+      return [];
+    }
+  }
+
+  try {
+    await ensureFirestoreOnline();
+    const colRef = collection(db, 'special_content');
+    const q = includeDrafts
+      ? query(colRef, where('contentType', '==', 'study_material_item'), limit(pageSize))
+      : query(
+          colRef,
+          where('published', '==', true),
+          where('contentType', '==', 'study_material_item'),
+          limit(pageSize)
+        );
+    const snap = await getDocs(q);
+    const items = snap.docs
+      .map((d) => {
+        const raw = d.data() as SpecialContentDocument<StudyLibraryDynamicItemPayload>;
+        return {
+          ...raw,
+          id: raw.id || d.id,
+        };
+      })
+      .filter((docItem) => {
+        const itemBoard = docItem.board || docItem.payload?.board;
+        const itemClass = docItem.classLevel || docItem.payload?.classLevel;
+        const itemCat = docItem.materialCategory || docItem.payload?.materialCategory;
+        if (board && itemBoard && itemBoard !== board) return false;
+        if (classLevel && itemClass && itemClass !== classLevel) return false;
+        if (materialCategory && itemCat && itemCat !== materialCategory) return false;
+        return true;
+      });
+
+    if (!includeDrafts) {
+      writeCachedJson(typeof localStorage !== 'undefined' ? localStorage : undefined, cacheKey, {
+        version: currentVersion,
+        ts: Date.now(),
+        items,
+      });
+    }
+    return items;
+  } catch {
+    const fallback = readCachedJson<{
+      items?: SpecialContentDocument<StudyLibraryDynamicItemPayload>[];
+    }>(typeof localStorage !== 'undefined' ? localStorage : undefined, cacheKey);
+    return fallback?.items || [];
+  }
+}
+
+export async function saveStudyLibraryItemToFirestore(params: {
+  id: string;
+  title: string;
+  published: boolean;
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName | string;
+  materialCategory: StudyLibraryDynamicItemPayload['materialCategory'];
+  payload: StudyLibraryDynamicItemPayload;
+  createdAt?: string;
+}): Promise<{ success: boolean; version?: number }> {
+  const safeId = sanitizeFirestoreId(params.id);
+  const path = `special_content/${safeId}`;
+  try {
+    await ensureFirestoreOnline();
+    const ref = doc(db, 'special_content', safeId);
+    const nowIso = new Date().toISOString();
+    const cleanDoc = stripUndefinedDeep({
+      id: safeId,
+      contentType: 'study_material_item' as const,
+      title: String(params.title || 'Study Material Item').slice(0, 195),
+      published: Boolean(params.published),
+      board: params.board,
+      classLevel: params.classLevel,
+      subject: String(params.subject || 'English').slice(0, 100),
+      materialCategory: String(params.materialCategory || 'notes').slice(0, 60),
+      payload: params.payload,
+      createdAt: params.createdAt || nowIso,
+      updatedAt: nowIso,
+    });
+    await setDoc(ref, cleanDoc, { merge: true });
+    invalidateSpecialContentCache();
+    const newVersion = await bumpStudyLibraryVersionInFirestore();
+    return { success: true, version: newVersion };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    return { success: false };
+  }
+}
+
+export async function deleteStudyLibraryItemFromFirestore(
+  id: string
+): Promise<{ success: boolean; version?: number }> {
+  const res = await deleteSpecialContentItemFromFirestore(id);
+  if (!res.success) return { success: false };
+  const newVersion = await bumpStudyLibraryVersionInFirestore();
+  return { success: true, version: newVersion };
 }

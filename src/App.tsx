@@ -92,6 +92,7 @@ const ReferralHubView = lazyWithRetry(() =>
 const WorksheetsView = lazyWithRetry(() =>
   import('./components/WorksheetsView').then((m) => ({ default: m.WorksheetsView }))
 );
+import type { StudyLibrarySectionTab } from './components/StudyMaterialsView';
 const StudyMaterialsView = lazyWithRetry(() =>
   import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
 );
@@ -204,9 +205,18 @@ const AppContent: React.FC = () => {
   const [worksheetsInitialBoard, setWorksheetsInitialBoard] = useState<EducationBoard | undefined>(undefined);
   const [studyInitialClass, setStudyInitialClass] = useState<ClassLevel | undefined>(undefined);
   const [studyInitialBoard, setStudyInitialBoard] = useState<EducationBoard | undefined>(undefined);
+  const [studyInitialSectionTab, setStudyInitialSectionTab] = useState<
+    StudyLibrarySectionTab | undefined
+  >(undefined);
 
   const handleSelectDashboardSection = (sectionId: MainMenuId) => {
     setDashboardMainSection(sectionId);
+    if (sectionId === 'study-material') {
+      setStudyInitialSectionTab(undefined);
+      setCurrentTab('study-materials');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (currentTab !== 'dashboard' && currentTab !== 'public-home') {
       setCurrentTab('dashboard');
     }
@@ -460,6 +470,7 @@ const AppContent: React.FC = () => {
     if (tab !== 'study-materials' && tab !== 'study-material') {
       setStudyInitialClass(undefined);
       setStudyInitialBoard(undefined);
+      setStudyInitialSectionTab(undefined);
     }
 
     if (subjectParam) {
@@ -679,7 +690,7 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      // SECTION 4: STUDY MATERIAL (Notes, Worksheets, Summaries, PDFs, Question Banks, Study Guides)
+      // SECTION 4: STUDY MATERIAL (100% Free Study Material Library for Visitors, Students & Teachers)
       case 'sm-notes':
       case 'sm-worksheets':
       case 'sm-summaries':
@@ -692,9 +703,17 @@ const AppContent: React.FC = () => {
           handleNavigateTab('worksheets');
           return;
         }
-        setExplorerZone('study-material');
-        setExplorerSubFocus(actionId);
-        setCurrentTab('explore-zone');
+        const tabMap: Record<string, StudyLibrarySectionTab> = {
+          'sm-notes': 'chapter_notes',
+          'sm-summaries': 'short_revision',
+          'sm-pdfs': 'model_papers',
+          'sm-question-banks': 'qa_bank',
+          'sm-guides': 'pyq_papers',
+          'sm-important-questions': 'qa_bank',
+          'sm-textbook-learning': 'textbooks',
+        };
+        setStudyInitialSectionTab(tabMap[actionId] || 'chapter_notes');
+        setCurrentTab('study-materials');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -1272,6 +1291,7 @@ const AppContent: React.FC = () => {
               initialBoard={studyInitialBoard || (currentStudent ? activeBoard : publicBoard)}
               initialClass={studyInitialClass || currentStudent?.classLevel || publicClass}
               initialSubject={quizInitialSubject}
+              initialSectionTab={studyInitialSectionTab}
               onNavigateTab={handleNavigateTab}
               onOpenMembership={(plan, targetClass, targetBoard) =>
                 openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)
@@ -1394,6 +1414,25 @@ const AppContent: React.FC = () => {
                     return;
                   }
                   if (tab === 'worksheets' || tab === 'study-materials') {
+                    if (tab === 'study-materials' && subSection) {
+                      const subTabMap: Record<string, StudyLibrarySectionTab> = {
+                        textbooks: 'textbooks',
+                        chapter_notes: 'chapter_notes',
+                        short_revision: 'short_revision',
+                        qa_bank: 'qa_bank',
+                        chapter_test: 'chapter_test',
+                        model_papers: 'model_papers',
+                        pyq_papers: 'pyq_papers',
+                        video_lessons: 'video_lessons',
+                        math_hub: 'math_hub',
+                        science_diagrams: 'science_diagrams',
+                        english_grammar: 'english_grammar',
+                        scholarship_olympiad: 'scholarship_olympiad',
+                      };
+                      if (subTabMap[subSection]) {
+                        setStudyInitialSectionTab(subTabMap[subSection]);
+                      }
+                    }
                     handleNavigateTab(tab, subject);
                     return;
                   }
@@ -1596,7 +1635,7 @@ const AppContent: React.FC = () => {
                         }`}
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        <span>Chapter Study Notes</span>
+                        <span>Free Study Library (12 Modules)</span>
                       </button>
                       <button
                         type="button"
