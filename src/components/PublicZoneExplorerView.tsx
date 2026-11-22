@@ -328,202 +328,38 @@ export const PublicZoneExplorerView: React.FC<PublicZoneExplorerViewProps> = ({
           SECTION 4: STUDY MATERIAL (6 Reference Categories — Zero Course Duplication)
           ===================================================================== */}
       {zone === 'study-material' && (
-        <div className="space-y-6">
-          {/* 6 Study Material Categories */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {[
-              {
-                id: 'sm-notes',
-                title: '1. Notes',
-                sub: 'Chapter Concept Notes',
-                icon: BookOpen,
-                action: () => {
-                  setActiveMaterialCategory('sm-notes');
-                  if (currentStudent) triggerTab('study-materials', effectiveSubject);
-                },
-              },
-              {
-                id: 'sm-worksheets',
-                title: '2. Worksheets',
-                sub: 'Subject Reference Sheets',
-                icon: FileText,
-                action: () => triggerTab('worksheets', effectiveSubject),
-              },
-              {
-                id: 'sm-summaries',
-                title: '3. Chapter Summaries',
-                sub: 'Quick Revision Overviews',
-                icon: Layers,
-                action: () => {
-                  setActiveMaterialCategory('sm-summaries');
-                  if (currentStudent) triggerTab('study-materials', effectiveSubject);
-                },
-              },
-              {
-                id: 'sm-pdfs',
-                title: '4. Practice PDFs',
-                sub: 'Printable Handouts',
-                icon: ClipboardCheck,
-                action: () => {
-                  setActiveMaterialCategory('sm-pdfs');
-                  if (currentStudent) triggerTab('study-materials', effectiveSubject);
-                },
-              },
-              {
-                id: 'sm-question-banks',
-                title: '5. Question Banks',
-                sub: 'Solved Textbook Q&A',
-                icon: Award,
-                action: () => {
-                  setActiveMaterialCategory('sm-question-banks');
-                  if (currentStudent) triggerTab('study-materials', effectiveSubject);
-                },
-              },
-              {
-                id: 'sm-guides',
-                title: '6. Study Guides',
-                sub: 'Formulas & Exam Rules',
-                icon: Sparkles,
-                action: () => {
-                  setActiveMaterialCategory('sm-guides');
-                  if (currentStudent) triggerTab('study-materials', effectiveSubject);
-                },
-              },
-            ].map((cat) => {
-              const IconComp = cat.icon;
-              const isAct = activeMaterialCategory === cat.id || subFocus === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={cat.action}
-                  className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                    isAct
-                      ? 'bg-emerald-50 border-emerald-500 shadow-sm'
-                      : 'bg-white border-slate-200 hover:border-emerald-300'
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                    <IconComp className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-extrabold text-xs sm:text-sm text-slate-900">
-                      {cat.title}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{cat.sub}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-display font-extrabold text-slate-900">
-                  {boardMeta.shortLabel} &bull; {selectedClass} Reference Materials ({effectiveSubject})
-                </h2>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Select a subject below to read chapter summaries, key formulas, and solved question banks, or open the full Study Material reader.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => triggerTab('study-materials', effectiveSubject)}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>Open Full Study Material Reader</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => triggerTab('worksheets', effectiveSubject)}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Open {effectiveSubject} Worksheets</span>
-                </button>
-              </div>
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-200 shadow-xs space-y-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5 max-w-2xl">
+              <span className="inline-block px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-900 font-extrabold text-[11px] uppercase tracking-wider">
+                100% Free For All Students &amp; Visitors
+              </span>
+              <h2 className="text-xl font-display font-extrabold text-slate-900">
+                {boardMeta.shortLabel} &bull; {selectedClass} Unified Study Material Library
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                All official textbooks, chapter study notes, 1-page revision sheets, 9-format Q&amp;A banks,
+                interactive chapter tests, model &amp; previous year papers, video lessons, and special academic hubs
+                are organized in one central library by Board &rarr; Medium &rarr; Class &rarr; Subject &rarr; Chapter.
+              </p>
             </div>
-
-            {/* Subject Selector */}
-            <div className="flex flex-wrap gap-2">
-              {subjects.map((sub) => {
-                const isSel = effectiveSubject === sub;
-                return (
-                  <button
-                    key={sub}
-                    type="button"
-                    onClick={() => setPreviewSubject(sub)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                      isSel
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
-                    }`}
-                  >
-                    {getSubjectMeta(sub, selectedBoard).icon} {sub}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Chapter Reference Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {chapters.map((ch, idx) => {
-                const isFreePreview =
-                  idx === 0 || FREE_ALLOWED_SUBJECTS.includes(effectiveSubject) || Boolean(currentStudent);
-                return (
-                  <div
-                    key={ch.id}
-                    className="rounded-2xl p-5 border border-slate-200 bg-slate-50/70 space-y-3 flex flex-col justify-between"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-[11px] font-bold">
-                        <span className="text-emerald-800 uppercase">
-                          Chapter {ch.chapterNumber} &bull; {ch.subject}
-                        </span>
-                        <span
-                          className={
-                            isFreePreview ? 'text-emerald-700' : 'text-slate-500 flex items-center gap-1'
-                          }
-                        >
-                          {!isFreePreview && <Lock className="w-3 h-3" />}
-                          {isFreePreview ? 'Reference Unlocked' : 'Included in ₹99 Plan'}
-                        </span>
-                      </div>
-                      <h3 className="font-display font-extrabold text-base text-slate-900">
-                        {ch.chapterTitle}
-                      </h3>
-                      <p className="text-xs text-slate-600 leading-relaxed">{ch.overview}</p>
-
-                      {isFreePreview && ch.keyPoints.length > 0 && (
-                        <ul className="space-y-1 pt-2 border-t border-slate-200 text-xs text-slate-700">
-                          {ch.keyPoints.slice(0, 3).map((kp) => (
-                            <li key={kp} className="flex items-start gap-2">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                              <span>{kp}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    <div className="pt-2 flex items-center justify-between border-t border-slate-200/70">
-                      <span className="text-[11px] text-slate-500 font-semibold">
-                        {ch.solvedExamples.length} Solved Q&amp;A &bull; {ch.formulasAndRules.length} Study Rules
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => triggerTab('study-materials', effectiveSubject)}
-                        className="text-xs font-extrabold text-emerald-800 hover:underline cursor-pointer"
-                      >
-                        Read Full Reference Notes →
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex flex-wrap gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => triggerTab('study-materials', effectiveSubject)}
+                className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Open 100% Free Study Material Library</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerTab('worksheets', effectiveSubject)}
+                className="px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Open Interactive Worksheets</span>
+              </button>
             </div>
           </div>
         </div>

@@ -23,17 +23,25 @@ import {
   Megaphone,
   GraduationCap,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
+  ExternalLink,
+  FileText,
+  PlayCircle,
+  Zap,
+  HelpCircle,
+  Layers,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
-import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from '../data/navigationConfig';
+import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId, NavSubItemConfig } from '../data/navigationConfig';
 import {
   ALL_10_CLASSES,
   ALL_10_CLASSES_META,
   getSubjectMeta,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
+import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
+import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
+import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
+import { getVideoLessonsForSubject } from '../data/studyLibrary/videoLessonsData';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import {
   SpecialCardIllustration,
@@ -198,14 +206,62 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     activeMainSection && activeMainSection !== 'account' ? activeMainSection : 'special-learning'
   );
 
+  // Helper to build the exact subsection list for any Main Menu (without duplicating or deleting any subsection)
+  const getSubsectionsForMainMenu = (
+    sectionId: MainMenuId
+  ): (NavSubItemConfig | { id: 'perf-leaderboard'; label: string; description: string; badgeText?: string })[] => {
+    const group =
+      MAIN_NAV_MENUS.find((m) => m.id === sectionId) ||
+      MAIN_NAV_MENUS.find((m) => m.id === 'special-learning')!;
+    if (sectionId === 'performance') {
+      return [
+        ...group.items,
+        {
+          id: 'perf-leaderboard',
+          label: 'Leaderboard & Rankings',
+          description: 'All-India student XP leaderboard, streaks & hall of fame',
+          badgeText: 'Leaderboard',
+        },
+      ];
+    }
+    return group.items;
+  };
+
+  const [selectedSubId, setSelectedSubId] = useState<string>(() => {
+    const initialMenu =
+      activeMainSection && activeMainSection !== 'account' ? activeMainSection : 'special-learning';
+    const subs = getSubsectionsForMainMenu(initialMenu);
+    return subs[0]?.id || 'sl-drawing';
+  });
+
+  // Preview subject state for Study Material Level 3 content
+  const [previewSubject, setPreviewSubject] = useState<SubjectName>(
+    () => getSubjectsForClass(selectedClass, selectedBoard)[0] || 'English'
+  );
+
+  useEffect(() => {
+    const subjectsForScope = getSubjectsForClass(selectedClass, selectedBoard);
+    if (!subjectsForScope.includes(previewSubject)) {
+      setPreviewSubject(subjectsForScope[0] || 'English');
+    }
+  }, [selectedBoard, selectedClass, previewSubject]);
+
   useEffect(() => {
     if (activeMainSection && activeMainSection !== 'account') {
       setExpandedSectionId(activeMainSection);
+      const subs = getSubsectionsForMainMenu(activeMainSection);
+      if (subs.length > 0) {
+        setSelectedSubId(subs[0].id);
+      }
     }
   }, [activeMainSection]);
 
   const handleSelectAccordionSection = (sectionId: MainMenuId) => {
     setExpandedSectionId(sectionId);
+    const subs = getSubsectionsForMainMenu(sectionId);
+    if (subs.length > 0) {
+      setSelectedSubId(subs[0].id);
+    }
     if (onSelectMainSection) {
       onSelectMainSection(sectionId);
     }
@@ -266,131 +322,40 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - (pct / 100) * ringCircumference;
 
-  // Subjects for selected Board & Class (displayed inside Section 2: Courses)
-  const currentSubjects = getSubjectsForClass(selectedClass, selectedBoard);
+  // Board context for Courses Level 3 (respects board-specific subsections)
+  const coursesEffectiveBoard: EducationBoard =
+    selectedSubId === 'course-maharashtra'
+      ? 'Maharashtra'
+      : selectedSubId === 'course-cbse'
+      ? 'CBSE'
+      : selectedSubId === 'course-icse'
+      ? 'ICSE'
+      : selectedBoard;
 
-  // Reference-matched 12 Special Learning Cards (preserving exact titles, illustrations, colours & destinations)
-  const specialLearningReferenceCards: {
-    id: string;
-    title: string;
-    illustrationType:
-      | 'courses'
-      | 'maths'
-      | 'science'
-      | 'english'
-      | 'drawing'
-      | 'stories'
-      | 'shivaji'
-      | 'puzzles'
-      | 'sudoku'
-      | 'cricket'
-      | 'ai'
-      | 'scholarship';
-    cardGradient: string;
-    borderClass: string;
-    onClick: () => void;
-  }[] = [
-    {
-      id: 'sl-card-courses',
-      title: 'Courses & Classes',
-      illustrationType: 'courses',
-      cardGradient: 'from-[#bae6fd] via-[#93c5fd] to-[#7dd3fc]',
-      borderClass: 'border-sky-400',
-      onClick: () => onNavigateTab('all-courses'),
-    },
-    {
-      id: 'sl-card-maths',
-      title: 'Maths Practice',
-      illustrationType: 'maths',
-      cardGradient: 'from-[#d9f99d] via-[#bef264] to-[#a3e635]',
-      borderClass: 'border-lime-500',
-      onClick: () => triggerSubAction('pz-maths'),
-    },
-    {
-      id: 'sl-card-science',
-      title: 'Science & Discovery',
-      illustrationType: 'science',
-      cardGradient: 'from-[#fbcfe8] via-[#f9a8d4] to-[#f472b6]',
-      borderClass: 'border-pink-400',
-      onClick: () => triggerSubAction('pz-science'),
-    },
-    {
-      id: 'sl-card-english',
-      title: 'English & Grammar',
-      illustrationType: 'english',
-      cardGradient: 'from-[#fed7aa] via-[#fdba74] to-[#fb923c]',
-      borderClass: 'border-orange-400',
-      onClick: () => triggerSubAction('pz-english'),
-    },
-    {
-      id: 'sl-card-drawing',
-      title: 'Drawing Studio',
-      illustrationType: 'drawing',
-      cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
-      borderClass: 'border-purple-400',
-      onClick: () => triggerSubAction('sl-drawing'),
-    },
-    {
-      id: 'sl-card-stories',
-      title: 'Story World',
-      illustrationType: 'stories',
-      cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
-      borderClass: 'border-emerald-400',
-      onClick: () => triggerSubAction('sl-stories'),
-    },
-    {
-      id: 'sl-card-shivaji',
-      title: 'Shivaji Stories',
-      illustrationType: 'shivaji',
-      cardGradient: 'from-[#fde68a] via-[#fcd34d] to-[#fbbf24]',
-      borderClass: 'border-amber-500',
-      onClick: () => triggerSubAction('sl-shivaji'),
-    },
-    {
-      id: 'sl-card-puzzles',
-      title: 'Brain Puzzles',
-      illustrationType: 'puzzles',
-      cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#60a5fa]',
-      borderClass: 'border-sky-400',
-      onClick: () => triggerSubAction('pz-puzzles'),
-    },
-    {
-      id: 'sl-card-sudoku',
-      title: 'Sudoku Game',
-      illustrationType: 'sudoku',
-      cardGradient: 'from-[#bbf7d0] via-[#86efac] to-[#4ade80]',
-      borderClass: 'border-emerald-500',
-      onClick: () => triggerSubAction('pz-sudoku'),
-    },
-    {
-      id: 'sl-card-cricket',
-      title: 'Cricket & GK',
-      illustrationType: 'cricket',
-      cardGradient: 'from-[#bae6fd] via-[#93c5fd] to-[#60a5fa]',
-      borderClass: 'border-blue-400',
-      onClick: () => triggerSubAction('sl-gk'),
-    },
-    {
-      id: 'sl-card-ai',
-      title: 'AI Learning Academy',
-      illustrationType: 'ai',
-      cardGradient: 'from-[#e9d5ff] via-[#d8b4fe] to-[#c084fc]',
-      borderClass: 'border-purple-400',
-      onClick: () => triggerSubAction('sl-ai-academy'),
-    },
-    {
-      id: 'sl-card-scholarship',
-      title: 'Scholarship Corner',
-      illustrationType: 'scholarship',
-      cardGradient: 'from-[#fef08a] via-[#d9f99d] to-[#a3e635]',
-      borderClass: 'border-lime-500',
-      onClick: () => triggerSubAction('sl-scholarship'),
-    },
-  ];
+  const currentSubjects = getSubjectsForClass(selectedClass, coursesEffectiveBoard);
+  const studyPreviewSubjects = getSubjectsForClass(selectedClass, selectedBoard);
+
+  // Live Study Material preview datasets (100% real data, zero Firestore reads)
+  const previewTextbooks =
+    expandedSectionId === 'study-material'
+      ? getOfficialTextbooksForBoardClass(selectedBoard, selectedClass)
+      : [];
+  const previewChapters =
+    expandedSectionId === 'study-material'
+      ? getStudyMaterialsForSubject(selectedBoard, selectedClass, previewSubject)
+      : [];
+  const previewExamPapers =
+    expandedSectionId === 'study-material' || expandedSectionId === 'exam-zone'
+      ? getExamPapersForSubject(selectedBoard, selectedClass, previewSubject)
+      : null;
+  const previewVideos =
+    expandedSectionId === 'study-material'
+      ? getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject)
+      : [];
 
   // Helper to get existing icon illustration and colour theme for any sub-action item
   const getSubItemIconVisuals = (
-    subId: NavSubActionId,
+    subId: string,
     menuId: MainMenuId
   ): {
     illustrationType?:
@@ -415,6 +380,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     cardGradient: string;
     borderClass: string;
   } => {
+    if (subId === 'perf-leaderboard') {
+      return {
+        emojiIcon: '🏆',
+        cardGradient: 'from-[#dcfce7] via-[#bbf7d0] to-[#86efac]',
+        borderClass: 'border-emerald-400',
+      };
+    }
     if (subId === 'acc-referrals') {
       return {
         emojiIcon: '🎁',
@@ -692,369 +664,1187 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </section>
 
       {/* =====================================================================
-          THIRD SECTION – MAIN DASHBOARD NAVIGATION MENU (SINGLE-OPEN ACCORDION)
-          All 8 main menu sections remain visible with their existing icons & arrows.
-          Clicking any section expands its subsections directly below the main menu.
+          TWO-LEVEL HORIZONTAL SECTION & SUBSECTION NAVIGATION SYSTEM
+          LEVEL 1 (FIRST ROW): ALL Main Section Tabs together horizontally
+          LEVEL 2 (SECOND ROW): ONLY the Selected Section's Subsections horizontally
+                                strictly BELOW the entire First Row
+          LEVEL 3 (THIRD AREA): Selected Subsection's complete relevant content
+                                immediately BELOW the Second Row
           ===================================================================== */}
-      <section
-        aria-label="Main Dashboard Navigation Menu"
-        className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden divide-y divide-slate-200/80"
-      >
-        {DASHBOARD_ACCORDION_MENU_IDS.map((menuId) => {
-          const menu = MAIN_NAV_MENUS.find((m) => m.id === menuId);
-          if (!menu) return null;
-          const meta = MAIN_SECTION_ICONS[menu.id];
-          const IconComp = meta.icon;
-          const isSelected = expandedSectionId === menu.id;
-          const cleanLabel = menu.label.replace('🎓 ', '').toUpperCase();
+      {(() => {
+        const activeSubsections = getSubsectionsForMainMenu(activeMenuGroup.id);
+        const activeSub =
+          activeSubsections.find((s) => s.id === selectedSubId) || activeSubsections[0];
+        const activeSubVisuals = activeSub
+          ? getSubItemIconVisuals(activeSub.id, activeMenuGroup.id)
+          : null;
 
-          return (
-            <button
-              key={menu.id}
-              type="button"
-              id={`accordion-menu-${menu.id}`}
-              aria-expanded={isSelected}
-              aria-controls="dashboard-expanded-subsections"
-              onClick={() => handleSelectAccordionSection(menu.id)}
-              className={`w-full px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
-                isSelected
-                  ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a]/85 to-[#fef3c7] text-[#0f2952] font-black shadow-inner'
-                  : 'bg-white hover:bg-sky-50/70 text-[#0f2952]'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-xs shrink-0`}
-                >
-                  <IconComp className="w-4 h-4 sm:w-5 sm:h-5" />
-                </span>
-                <span className="font-display font-black text-xs sm:text-sm md:text-base tracking-wide uppercase text-[#0f2952] truncate">
-                  {cleanLabel}
-                </span>
-              </div>
+        const handleOpenSelectedSubFullPage = () => {
+          if (!activeSub) return;
+          if (activeSub.id === 'perf-leaderboard') {
+            onNavigateTab('leaderboard');
+            return;
+          }
+          if (activeSub.id === 'course-maharashtra' && onSelectBoard) onSelectBoard('Maharashtra');
+          if (activeSub.id === 'course-cbse' && onSelectBoard) onSelectBoard('CBSE');
+          if (activeSub.id === 'course-icse' && onSelectBoard) onSelectBoard('ICSE');
+          triggerSubAction(activeSub.id as NavSubActionId);
+        };
 
-              <div className="flex items-center gap-2 shrink-0">
-                <span
-                  className={`hidden sm:inline-block text-[11px] font-extrabold px-2.5 py-0.5 rounded-full ${
-                    isSelected
-                      ? 'bg-[#0f2952] text-amber-300'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {isSelected ? 'Expanded' : meta.tagline}
-                </span>
-                {isSelected ? (
-                  <ChevronUp className="w-5 h-5 text-[#0f2952] stroke-[2.75]" />
-                ) : (
-                  <ChevronDown className="w-5 h-5 text-slate-600 stroke-[2.5]" />
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </section>
+        return (
+          <section
+            id="two-level-horizontal-navigation"
+            aria-label="Main Dashboard Two-Level Horizontal Navigation"
+            className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden"
+          >
+            {/* ---------------------------------------------------------------
+                MAIN SECTION TABS – VERTICAL ARRANGEMENT (ALL MAIN SECTIONS TOGETHER)
+                --------------------------------------------------------------- */}
+            <div className="border-b-2 border-sky-200/80 bg-white">
+              <div
+                role="tablist"
+                aria-orientation="vertical"
+                aria-label="All Main Sections"
+                className="flex flex-col divide-y divide-slate-200/80"
+              >
+                {DASHBOARD_ACCORDION_MENU_IDS.map((menuId) => {
+                  const menu = MAIN_NAV_MENUS.find((m) => m.id === menuId);
+                  if (!menu) return null;
+                  const meta = MAIN_SECTION_ICONS[menu.id];
+                  const IconComp = meta.icon;
+                  const isSelected = expandedSectionId === menu.id;
+                  const cleanLabel = menu.label.replace('🎓 ', '');
 
-      {/* =====================================================================
-          FOURTH SECTION – DYNAMIC SUBSECTIONS (DIRECTLY BELOW THE MAIN MENU)
-          Only ONE main section is expanded at a time.
-          ===================================================================== */}
-      <section
-        id="dashboard-expanded-subsections"
-        aria-label={`${activeMenuGroup.label.replace('🎓 ', '')} Subsections`}
-        className="rounded-3xl bg-white/95 border-2 border-sky-200/90 shadow-md overflow-hidden"
-      >
-        {/* Reference-Matched Navy Pill Section Header Bar */}
-        <div className="bg-gradient-to-r from-[#e0f2fe] via-[#bae6fd]/60 to-[#e0f2fe] px-3 sm:px-5 py-2.5 border-b border-sky-200/80 flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white px-4 sm:px-5 py-1.5 sm:py-2 rounded-full shadow-sm">
-            <span className="text-base sm:text-lg leading-none">{activeSectionMeta.pillEmoji}</span>
-            <h2 className="text-sm sm:text-lg font-display font-black tracking-tight">
-              {activeMenuGroup.label.replace('🎓 ', '')}
-            </h2>
-          </div>
-
-          <span className="text-xs sm:text-base font-display font-black italic text-[#0f2952] pr-2">
-            {activeSectionMeta.tagline}
-          </span>
-        </div>
-
-        {/* Expanded Subsections Content Body */}
-        <div className="p-3.5 sm:p-5 space-y-4">
-          {expandedSectionId === 'special-learning' ? (
-            <>
-              {/* 4x3 Grid of the Exact 12 Special Learning Cards from Reference Image */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5">
-                {specialLearningReferenceCards.map((card) => (
-                  <button
-                    key={card.id}
-                    type="button"
-                    onClick={card.onClick}
-                    className={`group rounded-2xl bg-gradient-to-r ${card.cardGradient} border-2 ${card.borderClass} p-2.5 sm:p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-2.5 sm:gap-3.5 text-left min-h-[78px] sm:min-h-[88px]`}
-                  >
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <SpecialCardIllustration
-                        type={card.illustrationType}
-                        className="w-full h-full drop-shadow-xs"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="block font-display font-black text-xs sm:text-base text-[#0f2952] leading-snug">
-                        {card.title}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Additional Special Learning Quick-Access Studios (TET/CTET, Moral Stories, Creative Activities) */}
-              <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-slate-600">
-                  More Special Learning Studios:
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => triggerSubAction('sl-tet-ctet')}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                  >
-                    <span>🎓 TET &amp; CTET Exam Prep (200 Mocks)</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => triggerSubAction('sl-moral')}
-                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                  >
-                    <span>💛 Moral Stories</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => triggerSubAction('sl-creative')}
-                    className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                  >
-                    <span>🎨 Creative Activities</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Responsive Grid of Colourful Subsection Cards for Selected Main Menu */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
-                {activeMenuGroup.items.map((item) => {
-                  const visuals = getSubItemIconVisuals(item.id, activeMenuGroup.id);
                   return (
                     <button
-                      key={item.id}
+                      key={menu.id}
+                      id={`main-sec-tab-${menu.id}`}
                       type="button"
-                      onClick={() => triggerSubAction(item.id)}
-                      className={`group rounded-2xl bg-gradient-to-r ${visuals.cardGradient} border-2 ${visuals.borderClass} p-3 sm:p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left`}
+                      role="tab"
+                      aria-selected={isSelected}
+                      aria-controls="second-row-subsections"
+                      onClick={() => handleSelectAccordionSection(menu.id)}
+                      className={`w-full min-h-[46px] px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white shadow-inner'
+                          : 'bg-white hover:bg-sky-50/70 text-[#0f2952]'
+                      }`}
                     >
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                        {visuals.emojiIcon ? (
-                          <span className="w-13 h-13 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-sm text-2xl">
-                            {visuals.emojiIcon}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+                        >
+                          <IconComp className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </span>
+                        <span
+                          className={`font-display font-black text-xs sm:text-sm md:text-base tracking-wide uppercase truncate ${
+                            isSelected ? 'text-white' : 'text-[#0f2952]'
+                          }`}
+                        >
+                          {cleanLabel}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span
+                          className={`hidden sm:inline text-xs font-bold ${
+                            isSelected ? 'text-amber-300' : 'text-slate-500'
+                          }`}
+                        >
+                          {isSelected ? 'Selected' : meta.tagline}
+                        </span>
+                        <ArrowRight
+                          className={`w-4 h-4 shrink-0 transition-transform ${
+                            isSelected ? 'text-amber-300 translate-x-0.5' : 'text-slate-400'
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ---------------------------------------------------------------
+                SECOND ROW – SELECTED SECTION'S SUBSECTIONS (STRICTLY BELOW ROW 1)
+                --------------------------------------------------------------- */}
+            <div
+              id="second-row-subsections"
+              className="bg-gradient-to-r from-[#e0f2fe]/80 via-[#f0f9ff] to-[#fef9c3]/50 border-b-2 border-sky-200/90 px-3 sm:px-4 py-3 space-y-2.5"
+            >
+              {/* Fixed Section Context Strip */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white px-3.5 py-1 rounded-full shadow-2xs">
+                  <span className="text-sm leading-none">{activeSectionMeta.pillEmoji}</span>
+                  <h2 className="text-xs sm:text-sm font-display font-black tracking-tight">
+                    {activeMenuGroup.label.replace('🎓 ', '')} — Subsections ({activeSubsections.length})
+                  </h2>
+                </div>
+                <span className="text-[11px] sm:text-xs font-display font-extrabold italic text-[#0f2952]">
+                  {activeSectionMeta.tagline}
+                </span>
+              </div>
+
+              {/* Horizontal Scrollable Row of ONLY Selected Section's Subsections */}
+              <div
+                role="tablist"
+                aria-label={`${activeMenuGroup.label.replace('🎓 ', '')} Subsections`}
+                className="flex items-stretch gap-2.5 overflow-x-auto pb-1.5 pt-0.5"
+              >
+                {activeSubsections.map((sub) => {
+                  const isSubSelected = activeSub?.id === sub.id;
+                  const vis = getSubItemIconVisuals(sub.id, activeMenuGroup.id);
+
+                  return (
+                    <button
+                      key={sub.id}
+                      id={`sub-sec-tab-${sub.id}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSubSelected}
+                      aria-controls="third-area-subsection-content"
+                      onClick={() => {
+                        setSelectedSubId(sub.id);
+                        if (sub.id === 'course-maharashtra' && onSelectBoard) {
+                          onSelectBoard('Maharashtra');
+                        } else if (sub.id === 'course-cbse' && onSelectBoard) {
+                          onSelectBoard('CBSE');
+                        } else if (sub.id === 'course-icse' && onSelectBoard) {
+                          onSelectBoard('ICSE');
+                        }
+                      }}
+                      className={`shrink-0 min-w-[168px] sm:min-w-[190px] max-w-[240px] rounded-2xl p-2.5 transition-all cursor-pointer flex items-center gap-2.5 text-left border-2 ${
+                        isSubSelected
+                          ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fcd34d] border-[#0f2952] shadow-md ring-2 ring-[#0f2952]/20'
+                          : 'bg-white hover:bg-sky-50/90 border-sky-200/90 hover:border-sky-300 shadow-2xs'
+                      }`}
+                    >
+                      <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                        {vis.emojiIcon ? (
+                          <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-2xs text-lg">
+                            {vis.emojiIcon}
                           </span>
-                        ) : visuals.boardEmblem ? (
+                        ) : vis.boardEmblem ? (
                           <HeroBoardEmblemIcon
-                            board={visuals.boardEmblem}
-                            className="w-13 h-13 drop-shadow-xs"
+                            board={vis.boardEmblem}
+                            className="w-9 h-9 drop-shadow-xs"
                           />
                         ) : (
                           <SpecialCardIllustration
-                            type={visuals.illustrationType || 'courses'}
+                            type={vis.illustrationType || 'courses'}
                             className="w-full h-full drop-shadow-xs"
                           />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
-                          {item.label}
+                        <span className="block font-display font-black text-xs text-[#0f2952] leading-tight truncate">
+                          {sub.label}
                         </span>
-                        <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
-                          {item.description}
-                        </p>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-1.5 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
-                          <span>{item.badgeText || 'Open'}</span>
-                          <ArrowRight className="w-3 h-3" />
+                        <span
+                          className={`inline-block text-[10px] font-extrabold mt-1 px-2 py-0.5 rounded-full ${
+                            isSubSelected
+                              ? 'bg-[#0f2952] text-amber-300'
+                              : 'bg-sky-100/90 text-[#0f2952]/80'
+                          }`}
+                        >
+                          {isSubSelected ? 'Selected' : sub.badgeText || 'View'}
                         </span>
                       </div>
                     </button>
                   );
                 })}
-
-                {expandedSectionId === 'performance' && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigateTab('leaderboard')}
-                    className="group rounded-2xl bg-gradient-to-r from-[#dcfce7] via-[#bbf7d0] to-[#86efac] border-2 border-emerald-400 p-3 sm:p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 text-left"
-                  >
-                    <span className="w-13 h-13 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform">
-                      <Trophy className="w-6 h-6" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] leading-tight">
-                        Leaderboard &amp; Rankings
-                      </span>
-                      <p className="text-[11px] font-bold text-[#0f2952]/80 line-clamp-2 mt-1">
-                        All-India student XP leaderboard, streaks &amp; hall of fame
-                      </p>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#0f2952] mt-1.5 bg-white/85 px-2.5 py-0.5 rounded-full shadow-2xs">
-                        <span>Leaderboard</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </span>
-                    </div>
-                  </button>
-                )}
               </div>
+            </div>
 
-              {/* Extra Home Quick Overview & Important Announcements when HOME is selected */}
-              {expandedSectionId === 'home' && (
-                <div className="rounded-2xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border border-indigo-400/30 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
-                      <Megaphone className="w-5 h-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
-                          Important Announcements
+            {/* ---------------------------------------------------------------
+                THIRD AREA – SELECTED SUBSECTION CONTENT (IMMEDIATELY BELOW ROW 2)
+                --------------------------------------------------------------- */}
+            {activeSub && activeSubVisuals && (
+              <div
+                id="third-area-subsection-content"
+                role="tabpanel"
+                aria-label={`${activeSub.label} Content`}
+                className="p-4 sm:p-6 bg-white space-y-5 animate-in fade-in duration-150"
+              >
+                {/* Visually Connected Active Subsection Header */}
+                <div
+                  className={`rounded-2xl bg-gradient-to-r ${activeSubVisuals.cardGradient} border-2 ${activeSubVisuals.borderClass} p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center bg-white/80 rounded-2xl p-1.5 border border-white shadow-2xs">
+                      {activeSubVisuals.emojiIcon ? (
+                        <span className="w-full h-full rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 text-white flex items-center justify-center text-2xl">
+                          {activeSubVisuals.emojiIcon}
                         </span>
-                        <span className="text-xs font-bold text-sky-200">
-                          Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                      ) : activeSubVisuals.boardEmblem ? (
+                        <HeroBoardEmblemIcon
+                          board={activeSubVisuals.boardEmblem}
+                          className="w-full h-full"
+                        />
+                      ) : (
+                        <SpecialCardIllustration
+                          type={activeSubVisuals.illustrationType || 'courses'}
+                          className="w-full h-full"
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-[#0f2952]/75">
+                        <span>{activeMenuGroup.label.replace('🎓 ', '')}</span>
+                        <span>&rarr;</span>
+                        <span className="bg-[#0f2952] text-amber-300 px-2 py-0.5 rounded-full">
+                          {activeSub.badgeText || 'Active Subsection'}
                         </span>
                       </div>
-                      <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed">
-                        100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10), 4th &amp; 7th Scholarship, and TET/CTET.
+                      <h3 className="text-base sm:text-xl font-display font-black text-[#0f2952] leading-snug">
+                        {activeSub.label}
+                      </h3>
+                      <p className="text-xs sm:text-sm font-bold text-[#0f2952]/85 leading-relaxed">
+                        {activeSub.description}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onOpenDemo('live-quiz')}
-                      className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Try Free Demo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenMembership(selectedClass, selectedBoard)}
-                      className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
-                    >
-                      <Crown className="w-3.5 h-3.5" />
-                      <span>₹99 / 365 Days Plan</span>
-                    </button>
+                    {activeSub.id !== 'home-overview' && (
+                      <button
+                        type="button"
+                        onClick={handleOpenSelectedSubFullPage}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] hover:brightness-110 text-white font-display font-black text-xs sm:text-sm shadow-sm flex items-center gap-2 cursor-pointer transition-all"
+                      >
+                        <span>Open {activeSub.label.replace(/^🎓\s*/, '')}</span>
+                        <ArrowRight className="w-4 h-4 text-amber-300" />
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
 
-              {/* Extra Class-Wise & Subject-Wise Tabs when COURSES is selected */}
-              {expandedSectionId === 'courses' && (
-                <div className="space-y-4 pt-3 border-t border-slate-100">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2 px-1">
-                      <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
-                        Class-Wise Tabs ({getBoardShortLabel(selectedBoard)} — Classes 1 to 10)
-                      </span>
-                      <span className="text-[11px] font-bold text-sky-700">
-                        Active: {selectedClass}
-                      </span>
+                {/* =========================================================
+                    CONTENT FOR SECTION 1: HOME
+                    ========================================================= */}
+                {expandedSectionId === 'home' && (
+                  <div className="space-y-4">
+                    {activeSub.id === 'home-overview' && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                        <div className="p-4 rounded-2xl bg-sky-50/80 border border-sky-200 space-y-2">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-sky-800">
+                            Active Academic Scope
+                          </span>
+                          <p className="text-base font-display font-black text-[#0f2952]">
+                            {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                          </p>
+                          <p className="text-xs font-semibold text-slate-600">
+                            {studyPreviewSubjects.length} syllabus subjects with Textbooks, Notes, Worksheets &amp; Chapter Tests ready.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAccordionSection('courses')}
+                            className="inline-flex items-center gap-1.5 text-xs font-black text-[#0f2952] hover:text-blue-700 cursor-pointer pt-1"
+                          >
+                            <span>Browse Class Subjects</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800">
+                            100% Free Study Library
+                          </span>
+                          <p className="text-base font-display font-black text-[#0f2952]">
+                            Classes 1 to 10 (All 3 Boards)
+                          </p>
+                          <p className="text-xs font-semibold text-slate-600">
+                            Official Textbooks, Chapter Notes, Short Revision, 9-Format Q&amp;A Bank, Model Papers, PYQs &amp; Videos.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAccordionSection('study-material')}
+                            className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-900 hover:text-emerald-700 cursor-pointer pt-1"
+                          >
+                            <span>Explore Study Material</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-amber-900">
+                            Quick Start &amp; Free Demo
+                          </span>
+                          <p className="text-base font-display font-black text-[#0f2952]">
+                            Try Live Quiz &amp; Worksheets
+                          </p>
+                          <p className="text-xs font-semibold text-slate-600">
+                            Test interactive syllabus quizzes, brain puzzles, and Sudoku right away—zero registration needed for demo.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => onOpenDemo('live-quiz')}
+                            className="inline-flex items-center gap-1.5 text-xs font-black text-amber-950 hover:text-amber-700 cursor-pointer pt-1"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Launch Free Demo</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeSub.id === 'home-how-it-works' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {[
+                          {
+                            id: 'sl-scholarship' as NavSubActionId,
+                            title: 'Scholarship Corner',
+                            sub: 'MSCE Std 4th & 7th Exam Prep',
+                            ill: 'scholarship' as const,
+                            bg: 'from-[#dcfce7] to-[#bbf7d0] border-emerald-300',
+                          },
+                          {
+                            id: 'sl-shivaji' as NavSubActionId,
+                            title: 'Shivaji Maharaj Stories',
+                            sub: '50 Audio Swarajya Chapters',
+                            ill: 'shivaji' as const,
+                            bg: 'from-[#fef3c7] to-[#fde68a] border-amber-300',
+                          },
+                          {
+                            id: 'sl-drawing' as NavSubActionId,
+                            title: 'Drawing Studio',
+                            sub: '120+ Templates & Paint Canvas',
+                            ill: 'drawing' as const,
+                            bg: 'from-[#f3e8ff] to-[#e9d5ff] border-purple-300',
+                          },
+                          {
+                            id: 'sl-ai-academy' as NavSubActionId,
+                            title: 'AI Learning Academy',
+                            sub: '8 Modules & 24 Future-Tech Lessons',
+                            ill: 'ai' as const,
+                            bg: 'from-[#fae8ff] to-[#f5d0fe] border-fuchsia-300',
+                          },
+                        ].map((prog) => (
+                          <button
+                            key={prog.id}
+                            type="button"
+                            onClick={() => triggerSubAction(prog.id)}
+                            className={`rounded-2xl bg-gradient-to-r ${prog.bg} border-2 p-3.5 text-left flex items-center gap-3 cursor-pointer hover:shadow-md transition-all`}
+                          >
+                            <span className="w-12 h-12 shrink-0 flex items-center justify-center">
+                              <SpecialCardIllustration type={prog.ill} className="w-full h-full" />
+                            </span>
+                            <div className="min-w-0">
+                              <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] truncate">
+                                {prog.title}
+                              </span>
+                              <span className="block text-[11px] font-bold text-[#0f2952]/75 mt-0.5">
+                                {prog.sub}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {activeSub.id === 'home-why-choose-us' && (
+                      <div className="rounded-2xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white p-4 sm:p-5 border border-indigo-400/30 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
+                            <Megaphone className="w-5 h-5" />
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30">
+                                Important Announcements
+                              </span>
+                              <span className="text-xs font-bold text-sky-200">
+                                Active Scope: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                              </span>
+                            </div>
+                            <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed">
+                              100% syllabus-verified questions across Maharashtra Board, CBSE &amp; ICSE (Classes 1–10), 4th &amp; 7th Scholarship, and 200 TET/CTET CBT Mock Tests.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => onOpenDemo('live-quiz')}
+                            className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Try Free Demo</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onOpenMembership(selectedClass, selectedBoard)}
+                            className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                          >
+                            <Crown className="w-3.5 h-3.5" />
+                            <span>₹99 / 365 Days Plan</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 2: COURSES (CLASS 1-10 & SUBJECTS)
+                    ========================================================= */}
+                {expandedSectionId === 'courses' && (
+                  <div className="space-y-4">
+                    {/* Class-Wise Horizontal Selector (Updates subjects in place without forced redirect) */}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                        <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
+                          Select Class ({getBoardShortLabel(coursesEffectiveBoard)} — Classes 1 to 10)
+                        </span>
+                        <span className="text-[11px] font-bold text-sky-700">
+                          Active Class: {selectedClass}
+                        </span>
+                      </div>
+                      <div className="flex items-stretch gap-2 overflow-x-auto pb-1.5">
+                        {ALL_10_CLASSES.map((cls) => {
+                          const clsMeta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
+                          const isCurrentClass = selectedClass === cls;
+                          return (
+                            <button
+                              key={cls}
+                              type="button"
+                              onClick={() => {
+                                if (onSelectClass) onSelectClass(cls);
+                              }}
+                              className={`min-w-[104px] shrink-0 px-3 py-2 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                isCurrentClass
+                                  ? 'bg-gradient-to-r from-[#0f2952] to-[#1d4ed8] text-white border-amber-400 shadow-sm'
+                                  : 'bg-sky-50/80 hover:bg-amber-50 text-[#0f2952] border-sky-200 hover:border-amber-300'
+                              }`}
+                            >
+                              <div>
+                                <span className="block font-display font-black text-xs leading-tight">
+                                  {cls}
+                                </span>
+                                <span
+                                  className={`block text-[10px] font-bold mt-0.5 ${
+                                    isCurrentClass ? 'text-amber-300' : 'text-slate-500'
+                                  }`}
+                                >
+                                  {coursesEffectiveBoard === 'Maharashtra'
+                                    ? clsMeta?.marathiLabel
+                                    : clsMeta?.shortLabel}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <div className="flex items-stretch gap-2.5 overflow-x-auto pb-2">
-                      {ALL_10_CLASSES.map((cls) => {
-                        const clsMeta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
-                        const isCurrentClass = selectedClass === cls;
-                        return (
-                          <button
-                            key={cls}
-                            type="button"
-                            onClick={() => {
-                              if (onSelectClass) {
-                                onSelectClass(cls);
-                              }
-                              onNavigateTab('all-courses');
-                            }}
-                            className={`min-w-[115px] shrink-0 px-3.5 py-2.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                              isCurrentClass
-                                ? 'bg-gradient-to-r from-[#0f2952] to-[#1d4ed8] text-white border-amber-400 shadow-md'
-                                : 'bg-sky-50/80 hover:bg-amber-50 text-[#0f2952] border-sky-200 hover:border-amber-300'
-                            }`}
-                          >
-                            <div>
-                              <span className="block font-display font-black text-xs sm:text-sm leading-tight">
-                                {cls}
+                    {/* Subject Cards for Selected Board & Class */}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                        <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
+                          Syllabus Subjects ({getBoardShortLabel(coursesEffectiveBoard)} &bull; {selectedClass} — {currentSubjects.length} Subjects)
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-500">
+                          Click any subject to open lessons
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {currentSubjects.map((subj) => {
+                          const subjMeta = getSubjectMeta(subj, coursesEffectiveBoard);
+                          return (
+                            <button
+                              key={subj}
+                              type="button"
+                              onClick={() => {
+                                if (onSelectBoard) onSelectBoard(coursesEffectiveBoard);
+                                onNavigateTab('all-courses', 'overview', subj);
+                              }}
+                              className="group rounded-2xl bg-gradient-to-r from-white via-sky-50/60 to-indigo-50/50 hover:from-amber-50 hover:to-sky-100 border-2 border-sky-200/90 hover:border-amber-400 p-3 shadow-2xs hover:shadow-md transition-all cursor-pointer flex items-center gap-3 text-left"
+                            >
+                              <span className="w-11 h-11 rounded-2xl bg-white border border-sky-200 flex items-center justify-center text-2xl shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+                                {subjMeta.icon}
                               </span>
-                              <span
-                                className={`block text-[10px] font-bold mt-0.5 ${
-                                  isCurrentClass ? 'text-amber-300' : 'text-slate-500'
+                              <div className="min-w-0 flex-1">
+                                <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] truncate">
+                                  {subj}
+                                </span>
+                                <span className="block text-[10px] font-bold text-slate-500 truncate mt-0.5">
+                                  {subjMeta.chapters.length} Chapters &bull; Open Lessons
+                                </span>
+                              </div>
+                              <ArrowRight className="w-4 h-4 text-sky-600 shrink-0" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 3: SPECIAL LEARNING STUDIOS
+                    ========================================================= */}
+                {expandedSectionId === 'special-learning' && (() => {
+                  const studioDetailsMap: Record<
+                    string,
+                    { highlights: string[]; stats: { label: string; value: string }[]; cta: string }
+                  > = {
+                    'sl-drawing': {
+                      highlights: [
+                        '120+ structured step-by-step colouring & sketching templates across Nature, Animals, Festivals & Heritage',
+                        'Interactive digital paint canvas with brush sizes, colour palette, undo/redo & saved artwork gallery',
+                        'Safe child-friendly creative studio encouraging fine motor skills and visual imagination',
+                      ],
+                      stats: [
+                        { label: 'Templates', value: '120+ Artworks' },
+                        { label: 'Tools', value: 'Paint & Fill' },
+                        { label: 'Gallery', value: 'Save & Print' },
+                      ],
+                      cta: 'Launch Drawing Studio',
+                    },
+                    'sl-stories': {
+                      highlights: [
+                        '45+ curated English, Hindi & Marathi audio-narrated stories with built-in voice playback',
+                        'Interactive vocabulary builder, key moral takeaways & comprehension check after every story',
+                        'Organised by age group and language for effortless bedtime and classroom reading',
+                      ],
+                      stats: [
+                        { label: 'Library', value: '45+ Stories' },
+                        { label: 'Languages', value: 'EN · HI · MR' },
+                        { label: 'Narration', value: 'Audio Read-Aloud' },
+                      ],
+                      cta: 'Open Story World',
+                    },
+                    'sl-shivaji': {
+                      highlights: [
+                        '50 chronological historical chapters tracing the life, forts, administration & Swarajya values of Chhatrapati Shivaji Maharaj',
+                        'Available with multilingual narration, timeline milestones & historical quiz questions',
+                        'Inspires courage, leadership, strategic thinking & respect for heritage among Classes 1–10 students',
+                      ],
+                      stats: [
+                        { label: 'Chapters', value: '50 Chronological' },
+                        { label: 'Audio', value: 'Voice Narration' },
+                        { label: 'Focus', value: 'Swarajya History' },
+                      ],
+                      cta: 'Read Shivaji Maharaj Stories',
+                    },
+                    'sl-moral': {
+                      highlights: [
+                        'Value-education fables, Panchatantra tales & character-building life lessons',
+                        'Clear moral summary highlighted at the end of every tale for daily reflection',
+                        'Supports multilingual reading & read-aloud audio narration',
+                      ],
+                      stats: [
+                        { label: 'Category', value: 'Value Education' },
+                        { label: 'Themes', value: 'Honesty & Kindness' },
+                        { label: 'Format', value: 'Illustrated + Audio' },
+                      ],
+                      cta: 'Explore Moral Stories',
+                    },
+                    'sl-scholarship': {
+                      highlights: [
+                        'Official MSCE Pune Std 4th (PSE) & Std 7th (UPS) Scholarship preparation studio',
+                        'Covers Paper 1 (First Language & Mathematics) and Paper 2 (Third Language & Intelligence Test)',
+                        'Includes full-length timed mock tests, mental ability drills & instant accuracy evaluation',
+                      ],
+                      stats: [
+                        { label: 'Standards', value: 'Std 4th & 7th' },
+                        { label: 'Papers', value: 'Paper 1 & 2' },
+                        { label: 'Pattern', value: 'MSCE Official' },
+                      ],
+                      cta: 'Open Scholarship Corner',
+                    },
+                    'sl-tet-ctet': {
+                      highlights: [
+                        '200 Full-Length CBT Mock Tests (100 MAHA TET + 100 CTET) covering Paper 1 (Classes 1–5) and Paper 2 (Classes 6–8)',
+                        '30,000 authentic syllabus-aligned questions across CDP, Languages, Mathematics, EVS, Science & Social Studies',
+                        'Real exam interface with 150-minute countdown timer, OMR palette, review flags & detailed answer explanations',
+                      ],
+                      stats: [
+                        { label: 'Mock Tests', value: '200 Full Mocks' },
+                        { label: 'Question Bank', value: '30,000 Qs' },
+                        { label: 'Duration', value: '150 Qs · 150 Mins' },
+                      ],
+                      cta: 'Enter TET & CTET Exam Prep',
+                    },
+                    'sl-gk': {
+                      highlights: [
+                        'Daily Cricket Current Affairs, World Cup records, Indian sports trivia & general knowledge challenges',
+                        'Interactive timed GK quiz rounds covering Science, Geography, Indian History & Current Events',
+                        'Fresh daily question sets designed to keep students curious and exam-ready',
+                      ],
+                      stats: [
+                        { label: 'Updates', value: 'Daily GK' },
+                        { label: 'Topics', value: 'Cricket & World' },
+                        { label: 'Mode', value: 'Interactive Quiz' },
+                      ],
+                      cta: 'Play Cricket & GK Arena',
+                    },
+                    'sl-ai-academy': {
+                      highlights: [
+                        '8 structured student modules & 24 interactive lessons introducing Artificial Intelligence, Logic & Future Skills',
+                        'Age-appropriate explanations of how smart computers learn, coding basics & safe digital citizenship',
+                        'Hands-on mini challenges and knowledge checks in every lesson',
+                      ],
+                      stats: [
+                        { label: 'Curriculum', value: '8 Modules' },
+                        { label: 'Lessons', value: '24 Interactive' },
+                        { label: 'Track', value: 'Future Tech' },
+                      ],
+                      cta: 'Open AI Learning Academy',
+                    },
+                    'sl-creative': {
+                      highlights: [
+                        'Creative writing prompts, essay starters, craft projects & enrichment challenges for holistic growth',
+                        'Designed to nurture expression, presentation skills & independent thinking alongside academics',
+                        'Suitable for all Classes 1 to 10 learners across Maharashtra, CBSE & ICSE boards',
+                      ],
+                      stats: [
+                        { label: 'Focus', value: 'Creative Writing' },
+                        { label: 'Activities', value: 'Workshops & Art' },
+                        { label: 'Access', value: 'Classes 1–10' },
+                      ],
+                      cta: 'Open Creative Activities',
+                    },
+                  };
+                  const info = studioDetailsMap[activeSub.id] || studioDetailsMap['sl-drawing'];
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {info.stats.map((st) => (
+                          <div
+                            key={st.label}
+                            className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200/80 text-center"
+                          >
+                            <span className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              {st.label}
+                            </span>
+                            <span className="block text-sm sm:text-base font-display font-black text-[#0f2952] mt-0.5">
+                              {st.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-2.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                          What You Will Learn &amp; Explore
+                        </span>
+                        <ul className="space-y-2">
+                          {info.highlights.map((pt, idx) => (
+                            <li
+                              key={idx}
+                              className="flex items-start gap-2 text-xs sm:text-sm font-semibold text-slate-700"
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                              <span>{pt}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 4: STUDY MATERIAL (LIVE REAL MATERIALS)
+                    ========================================================= */}
+                {expandedSectionId === 'study-material' && (
+                  <div className="space-y-4">
+                    {/* Quick Subject Switcher Inside Level 3 for Live Material Preview */}
+                    {activeSub.id !== 'sm-textbook-learning' &&
+                      activeSub.id !== 'sm-special-hubs' && (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 shrink-0">
+                            Subject ({getBoardShortLabel(selectedBoard)} · {selectedClass}):
+                          </span>
+                          {studyPreviewSubjects.map((subj) => {
+                            const sMeta = getSubjectMeta(subj, selectedBoard);
+                            const isSubjSel = previewSubject === subj;
+                            return (
+                              <button
+                                key={subj}
+                                type="button"
+                                onClick={() => setPreviewSubject(subj)}
+                                className={`shrink-0 px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                                  isSubjSel
+                                    ? 'bg-[#0f2952] text-white border-[#0f2952]'
+                                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-sky-50'
                                 }`}
                               >
-                                {selectedBoard === 'Maharashtra'
-                                  ? clsMeta?.marathiLabel
-                                  : clsMeta?.shortLabel}
-                              </span>
+                                <span>{sMeta.icon}</span>
+                                <span>{subj}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                    {/* 1. Textbooks & Syllabus */}
+                    {activeSub.id === 'sm-textbook-learning' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {previewTextbooks.slice(0, 6).map((tb) => {
+                          const sMeta = getSubjectMeta(tb.subject, selectedBoard);
+                          return (
+                            <div
+                              key={tb.id}
+                              className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between"
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between gap-2 text-[11px] font-black text-[#0f2952]">
+                                  <span>
+                                    {sMeta.icon} {tb.subject}
+                                  </span>
+                                  <span className="text-slate-500">{tb.totalChapters} Chapters</span>
+                                </div>
+                                <p className="text-xs font-bold text-slate-800 leading-snug">
+                                  {tb.bookTitle}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {tb.publisher} · {tb.mediums.join(' / ')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <a
+                                  href={tb.officialReadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2.5 py-1.5 rounded-lg bg-[#0f2952] hover:bg-blue-900 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                                >
+                                  <span>Official e-Book</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => onNavigateTab('study-materials', 'sm-notes', tb.subject)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-300 text-[#0f2952] text-[11px] font-bold cursor-pointer"
+                                >
+                                  Read Notes
+                                </button>
+                              </div>
                             </div>
-                            <ArrowRight
-                              className={`w-3.5 h-3.5 shrink-0 ${
-                                isCurrentClass ? 'text-amber-300' : 'text-slate-400'
-                              }`}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2 px-1">
-                      <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
-                        Subject-Wise Tabs ({getBoardShortLabel(selectedBoard)} &bull; {selectedClass} — {currentSubjects.length} Subjects)
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-500">
-                        Click any subject to open lessons →
-                      </span>
-                    </div>
-
-                    <div className="flex items-stretch gap-3 overflow-x-auto pb-2">
-                      {currentSubjects.map((subj) => {
-                        const subjMeta = getSubjectMeta(subj, selectedBoard);
-                        return (
-                          <button
-                            key={subj}
-                            type="button"
-                            onClick={() => {
-                              if (onSelectBoard) onSelectBoard(selectedBoard);
-                              onNavigateTab('all-courses', 'overview', subj);
-                            }}
-                            className="min-w-[195px] shrink-0 group rounded-2xl bg-gradient-to-r from-white via-sky-50/60 to-indigo-50/50 hover:from-amber-50 hover:to-sky-100 border-2 border-sky-200/90 hover:border-amber-400 p-3 shadow-2xs hover:shadow-md transition-all cursor-pointer flex items-center gap-3 text-left"
+                    {/* 2. Chapter Study Notes */}
+                    {activeSub.id === 'sm-notes' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {previewChapters.slice(0, 4).map((ch) => (
+                          <div
+                            key={ch.id}
+                            className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
                           >
-                            <span className="w-11 h-11 rounded-2xl bg-white border border-sky-200 flex items-center justify-center text-2xl shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
-                              {subjMeta.icon}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <span className="block font-display font-black text-xs sm:text-sm text-[#0f2952] truncate">
-                                {subj}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-mono font-black text-indigo-700">
+                                Chapter {String(ch.chapterNumber).padStart(2, '0')}
                               </span>
-                              <span className="block text-[10px] font-bold text-slate-500 truncate mt-0.5">
-                                {subjMeta.chapters.length} Chapters &bull; Open
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                100% Free Notes
                               </span>
                             </div>
+                            <h4 className="text-sm font-display font-black text-[#0f2952]">
+                              {ch.chapterTitle}
+                            </h4>
+                            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                              {ch.overview}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('study-materials', 'sm-notes', previewSubject)}
+                              className="inline-flex items-center gap-1 text-xs font-black text-indigo-700 hover:underline cursor-pointer pt-1"
+                            >
+                              <span>Read Complete Notes &amp; Formulas</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 3. Short Revision Sheets */}
+                    {activeSub.id === 'sm-summaries' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {previewChapters.slice(0, 4).map((ch) => (
+                          <div
+                            key={ch.id}
+                            className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2"
+                          >
+                            <div className="flex items-center gap-1.5 text-[11px] font-black text-amber-900">
+                              <Zap className="w-3.5 h-3.5 text-amber-600" />
+                              <span>
+                                Ch {String(ch.chapterNumber).padStart(2, '0')}: {ch.chapterTitle}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
+                              {ch.shortRevisionNotes?.onePageSummary || ch.overview}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('study-materials', 'sm-summaries', previewSubject)}
+                              className="inline-flex items-center gap-1 text-xs font-black text-amber-900 hover:underline cursor-pointer"
+                            >
+                              <span>Open 1-Page Revision Sheet</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 4. Important Q&A Bank */}
+                    {activeSub.id === 'sm-question-banks' && previewChapters[0] && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {(previewChapters[0].qaBank || []).slice(0, 4).map((qa) => (
+                            <div
+                              key={qa.id}
+                              className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                                <span className="flex items-center gap-1">
+                                  <HelpCircle className="w-3 h-3" />
+                                  {qa.formatLabel}
+                                </span>
+                                <span>{qa.marks}M</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-900 line-clamp-2">
+                                {qa.question}
+                              </p>
+                              <p className="text-[11px] text-emerald-800 line-clamp-2">
+                                <strong>Answer:</strong> {qa.answer}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 5. Worksheets Reference */}
+                    {activeSub.id === 'sm-worksheets' && (
+                      <div className="rounded-2xl bg-indigo-50/70 border border-indigo-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-indigo-800">
+                            Original Protected Worksheets Studio · 25 Worksheets per Subject
+                          </span>
+                          <p className="text-xs sm:text-sm font-bold text-slate-800">
+                            {getBoardShortLabel(selectedBoard)} &bull; {selectedClass} &bull; {previewSubject} interactive chapter worksheets with answer verification.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTab('worksheets', undefined, previewSubject)}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Open {previewSubject} Worksheets</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 6. Model & PYQ Papers */}
+                    {activeSub.id === 'sm-pdfs' && previewExamPapers && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {[
+                          ...previewExamPapers.modelPapers.slice(0, 2),
+                          ...previewExamPapers.pyqPapers.slice(0, 2),
+                        ].map((paper) => (
+                          <div
+                            key={paper.id}
+                            className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2 text-[11px] font-black text-indigo-700">
+                              <span>{paper.yearOrTerm}</span>
+                              <span>
+                                {paper.totalMarks} Marks · {paper.durationLabel}
+                              </span>
+                            </div>
+                            <p className="text-xs sm:text-sm font-bold text-[#0f2952]">
+                              {paper.title}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('study-materials', 'sm-pdfs', previewSubject)}
+                              className="inline-flex items-center gap-1 text-xs font-black text-indigo-700 hover:underline cursor-pointer"
+                            >
+                              <span>View Paper &amp; Marking Scheme</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 7. Chapter Tests & Video Lessons */}
+                    {activeSub.id === 'sm-guides' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {previewVideos.slice(0, 4).map((vid) => (
+                          <div
+                            key={vid.id}
+                            className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-200 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2 text-[11px] font-black text-rose-800">
+                              <span className="flex items-center gap-1">
+                                <PlayCircle className="w-3.5 h-3.5" />
+                                Ch {vid.chapterNumber} Video &amp; 10-MCQ Test
+                              </span>
+                              <span>{vid.durationLabel}</span>
+                            </div>
+                            <p className="text-xs sm:text-sm font-bold text-[#0f2952]">
+                              {vid.lessonTitle}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <a
+                                href={vid.dikshaSearchUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                              >
+                                <span>Watch Video</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('study-materials', 'sm-guides', previewSubject)}
+                                className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-[11px] font-bold cursor-pointer"
+                              >
+                                Take 10-MCQ Chapter Test
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 8. Special Academic Hubs */}
+                    {activeSub.id === 'sm-special-hubs' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {[
+                          {
+                            title: 'Math Formulas & Drills',
+                            desc: 'Class 1–10 essential formulas, squares, cubes & geometry laws',
+                            badge: 'Maths Hub',
+                          },
+                          {
+                            title: 'Science Diagrams (12 SVGs)',
+                            desc: 'Clean labelled biology, physics & chemistry visual diagrams',
+                            badge: '12 SVGs',
+                          },
+                          {
+                            title: 'English Grammar & Vocab',
+                            desc: 'Tenses, active-passive voice, parts of speech & idioms',
+                            badge: 'Grammar',
+                          },
+                          {
+                            title: 'Scholarship & Olympiad Hub',
+                            desc: 'Mental ability tricks, HOTS sets & Olympiad preparation',
+                            badge: 'Competitive',
+                          },
+                        ].map((hub) => (
+                          <button
+                            key={hub.title}
+                            type="button"
+                            onClick={() => onNavigateTab('study-materials', 'sm-special-hubs')}
+                            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-amber-50/70 border border-slate-200 hover:border-amber-300 text-left space-y-1.5 cursor-pointer transition-colors"
+                          >
+                            <span className="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">
+                              {hub.badge}
+                            </span>
+                            <h4 className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+                              {hub.title}
+                            </h4>
+                            <p className="text-[11px] text-slate-600 leading-relaxed">{hub.desc}</p>
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 5: PRACTICE ZONE
+                    ========================================================= */}
+                {expandedSectionId === 'practice-zone' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-4 rounded-2xl bg-lime-50/70 border border-lime-200 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-lime-800">
+                        Active Learning Scope
+                      </span>
+                      <p className="text-sm font-display font-black text-[#0f2952]">
+                        {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        All drills automatically align to your selected board and standard syllabus.
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-sky-800">
+                        Practice Format
+                      </span>
+                      <p className="text-sm font-display font-black text-[#0f2952]">
+                        {activeSub.badgeText || 'Interactive Practice'}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        Instant answer feedback, step-by-step explanations &amp; unlimited retry mastery.
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex flex-col justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">
+                          Ready to Practice?
+                        </span>
+                        <p className="text-xs text-slate-700 mt-1 font-semibold">
+                          Launch {activeSub.label} and earn XP toward your daily streak.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenSelectedSubFullPage}
+                        className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors"
+                      >
+                        Start {activeSub.label} Now &rarr;
+                      </button>
                     </div>
                   </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </section>
+                )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 6: EXAM ZONE
+                    ========================================================= */}
+                {expandedSectionId === 'exam-zone' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-pink-800">
+                        Examination Specification
+                      </span>
+                      <p className="text-sm font-display font-black text-[#0f2952]">
+                        {activeSub.badgeText || 'Timed Exam'}
+                      </p>
+                      <p className="text-xs text-slate-600">{activeSub.description}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800">
+                        Scoring &amp; Evaluation
+                      </span>
+                      <p className="text-sm font-display font-black text-[#0f2952]">
+                        Auto-Graded Report Card
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        Receive instant accuracy percentage, question review &amp; performance tracking upon submission.
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                          Exam Hall Ready
+                        </span>
+                        <p className="text-xs text-slate-300 mt-1">
+                          Board: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenSelectedSubFullPage}
+                        className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors"
+                      >
+                        Start {activeSub.label.replace(/^🎓\s*/, '')} &rarr;
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 7: PERFORMANCE
+                    ========================================================= */}
+                {expandedSectionId === 'performance' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200 text-center">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-indigo-800">
+                        Overall Mastery
+                      </span>
+                      <span className="block text-xl font-display font-black text-[#0f2952] mt-1">
+                        {pct}%
+                      </span>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-center">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                        Courses Completed
+                      </span>
+                      <span className="block text-xl font-display font-black text-[#0f2952] mt-1">
+                        {progressMetrics.coursesCompleted}
+                      </span>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-center">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-amber-800">
+                        Practice Tests
+                      </span>
+                      <span className="block text-xl font-display font-black text-[#0f2952] mt-1">
+                        {progressMetrics.practiceTests}
+                      </span>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-purple-50/80 border border-purple-200 text-center">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-purple-800">
+                        Achievements
+                      </span>
+                      <span className="block text-xl font-display font-black text-[#0f2952] mt-1">
+                        {progressMetrics.achievements}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 8: PLANS & PRICING
+                    ========================================================= */}
+                {expandedSectionId === 'plans' && (
+                  <div className="rounded-2xl bg-gradient-to-r from-[#fff7ed] via-white to-[#fef3c7]/60 border-2 border-orange-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-orange-800">
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>
+                          {activeSub.id === 'plan-free'
+                            ? '₹0 Forever Free Access'
+                            : '₹99 One-Time Activation · 365 Days Full Access'}
+                        </span>
+                      </span>
+                      <p className="text-xs sm:text-sm font-bold text-[#0f2952] max-w-2xl leading-relaxed">
+                        {activeSub.id === 'plan-free'
+                          ? 'Free Forever includes the entire Study Material Library (Textbooks, Notes, Revision Sheets, Q&A Banks, Model Papers, PYQs, Chapter Tests, Video Lessons), Free Demo Quizzes, Sudoku & Brain Puzzles.'
+                          : 'Unlocks full 4-Level Progressive Quizzes, 25 Interactive Worksheets per subject, Scholarship Corner, Drawing Studio, Story World, Shivaji Maharaj Stories, AI Learning Academy & Champion Certificates for 365 full days with zero auto-renewal.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const planBoard: EducationBoard =
+                          activeSub.id === 'plan-cbse'
+                            ? 'CBSE'
+                            : activeSub.id === 'plan-icse'
+                            ? 'ICSE'
+                            : activeSub.id === 'plan-maharashtra'
+                            ? 'Maharashtra'
+                            : selectedBoard;
+                        if (activeSub.id === 'plan-free') {
+                          onOpenDemo('live-quiz');
+                        } else {
+                          onOpenMembership(selectedClass, planBoard);
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 hover:brightness-105 text-slate-950 font-display font-black text-xs sm:text-sm shadow-sm cursor-pointer shrink-0"
+                    >
+                      {activeSub.id === 'plan-free'
+                        ? 'Try Free Learning Now →'
+                        : 'Unlock ₹99 / 365 Days Plan →'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* =====================================================================
           BOTTOM SECTION – MY LEARNING PROGRESS & DAILY CHALLENGE

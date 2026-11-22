@@ -200,6 +200,7 @@ const AppContent: React.FC = () => {
   const [explorerZone, setExplorerZone] = useState<ExplorerZoneType>('study-material');
   const [explorerSubFocus, setExplorerSubFocus] = useState<string>('notes');
   const [dashboardMainSection, setDashboardMainSection] = useState<MainMenuId>('special-learning');
+  const [activeSubActionId, setActiveSubActionId] = useState<NavSubActionId | null>(null);
   const [isHelpDrawerOpen, setIsHelpDrawerOpen] = useState<boolean>(false);
   const [worksheetsInitialClass, setWorksheetsInitialClass] = useState<ClassLevel | undefined>(undefined);
   const [worksheetsInitialBoard, setWorksheetsInitialBoard] = useState<EducationBoard | undefined>(undefined);
@@ -622,6 +623,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleMenuAction = (actionId: NavSubActionId) => {
+    setActiveSubActionId(actionId);
     const isSignedInLearner = Boolean(isLearningPortal && currentStudent);
 
     switch (actionId) {
@@ -691,28 +693,30 @@ const AppContent: React.FC = () => {
       }
 
       // SECTION 4: STUDY MATERIAL (100% Free Study Material Library for Visitors, Students & Teachers)
+      case 'sm-textbook-learning':
       case 'sm-notes':
-      case 'sm-worksheets':
       case 'sm-summaries':
-      case 'sm-pdfs':
       case 'sm-question-banks':
+      case 'sm-worksheets':
+      case 'sm-pdfs':
       case 'sm-guides':
-      case 'sm-important-questions':
-      case 'sm-textbook-learning': {
+      case 'sm-special-hubs':
+      case 'sm-important-questions': {
         if (actionId === 'sm-worksheets') {
           handleNavigateTab('worksheets');
           return;
         }
         const tabMap: Record<string, StudyLibrarySectionTab> = {
+          'sm-textbook-learning': 'textbooks',
           'sm-notes': 'chapter_notes',
           'sm-summaries': 'short_revision',
-          'sm-pdfs': 'model_papers',
           'sm-question-banks': 'qa_bank',
-          'sm-guides': 'pyq_papers',
           'sm-important-questions': 'qa_bank',
-          'sm-textbook-learning': 'textbooks',
+          'sm-pdfs': 'model_papers',
+          'sm-guides': 'chapter_test',
+          'sm-special-hubs': 'math_hub',
         };
-        setStudyInitialSectionTab(tabMap[actionId] || 'chapter_notes');
+        setStudyInitialSectionTab(tabMap[actionId] || 'textbooks');
         setCurrentTab('study-materials');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -1053,10 +1057,46 @@ const AppContent: React.FC = () => {
             </div>
           )}
 
-        {/* Consistent Sub-Page Navigation Bar (Return to Main Dashboard + Active Class + Left Vertical Section List + Right Horizontal Icon Display) */}
+        {/* Consistent Sub-Page Two-Level Horizontal Navigation Bar */}
         {isLearningPortal && currentTab !== 'public-home' && currentTab !== 'dashboard' && (
           <SubPageConsistencyBar
             activeSectionId={currentTab === 'referrals' ? 'referrals' : getActiveMenuId()}
+            activeSubActionId={
+              activeSubActionId ||
+              (currentTab === 'drawing'
+                ? 'sl-drawing'
+                : currentTab === 'stories'
+                ? 'sl-stories'
+                : currentTab === 'shivaji'
+                ? 'sl-shivaji'
+                : currentTab === 'scholarship'
+                ? 'sl-scholarship'
+                : currentTab === 'tet-ctet'
+                ? 'sl-tet-ctet'
+                : currentTab === 'cricket'
+                ? 'sl-gk'
+                : currentTab === 'future-skills' || currentTab === 'ai-academy'
+                ? 'sl-ai-academy'
+                : currentTab === 'other-programs'
+                ? 'sl-creative'
+                : currentTab === 'worksheets'
+                ? 'pz-worksheets'
+                : currentTab === 'puzzles'
+                ? 'pz-puzzles'
+                : currentTab === 'sudoku'
+                ? 'pz-sudoku'
+                : currentTab === 'study-materials'
+                ? 'sm-textbook-learning'
+                : currentTab === 'all-courses'
+                ? 'course-all'
+                : currentTab === 'certificates'
+                ? 'perf-certificates'
+                : currentTab === 'referrals'
+                ? 'acc-referrals'
+                : currentTab === 'profile'
+                ? 'acc-profile'
+                : null)
+            }
             selectedBoard={currentStudent ? activeBoard : publicBoard}
             selectedClass={currentStudent ? currentStudent.classLevel : publicClass}
             onSelectSection={(sectionId) => {
@@ -1158,14 +1198,17 @@ const AppContent: React.FC = () => {
                 } else {
                   if (tab === 'quizzes') {
                     setExplorerZone('practice-zone');
+                    setExplorerSubFocus(subSection || 'overview');
+                    setCurrentTab('explore-zone');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else if (tab === 'performance') {
                     setExplorerZone('performance');
+                    setExplorerSubFocus(subSection || 'overview');
+                    setCurrentTab('explore-zone');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else {
-                    setExplorerZone('study-material');
+                    handleNavigateTab('study-materials', subject);
                   }
-                  setExplorerSubFocus(subSection || 'overview');
-                  setCurrentTab('explore-zone');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
               }}
               onOpenAuth={(tab) => openAuthModalWithTab(tab)}
@@ -1438,14 +1481,17 @@ const AppContent: React.FC = () => {
                   }
                   if (tab === 'quizzes') {
                     setExplorerZone('practice-zone');
+                    setExplorerSubFocus(subSection || 'overview');
+                    setCurrentTab('explore-zone');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else if (tab === 'performance') {
                     setExplorerZone('performance');
+                    setExplorerSubFocus(subSection || 'overview');
+                    setCurrentTab('explore-zone');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   } else {
-                    setExplorerZone('study-material');
+                    handleNavigateTab('study-materials', subject);
                   }
-                  setExplorerSubFocus(subSection || 'overview');
-                  setCurrentTab('explore-zone');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onOpenAuth={(tab) => openAuthModalWithTab(tab)}
                 onOpenPanel={handleOpenRolePanel}

@@ -37,9 +37,11 @@ import {
   printExamPaperA4,
 } from '../utils/studyMaterialPdfExporter';
 import {
+  getAvailableMediumsForBoard,
   loadPaginatedStudyLibraryItemsFromFirestore,
   SpecialContentDocument,
   StudyLibraryDynamicItemPayload,
+  StudyMedium,
 } from '../services/specialContentFirestoreService';
 import { useApp } from '../context/AppContext';
 import { ChapterQAFormat, ClassLevel, EducationBoard, SubjectName } from '../types';
@@ -77,9 +79,10 @@ export type StudyLibrarySectionTab =
   | 'chapter_notes'
   | 'short_revision'
   | 'qa_bank'
-  | 'chapter_test'
+  | 'worksheets_ref'
   | 'model_papers'
   | 'pyq_papers'
+  | 'chapter_test'
   | 'video_lessons'
   | 'math_hub'
   | 'science_diagrams'
@@ -124,11 +127,23 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   const [selectedBoard, setSelectedBoard] = useState<EducationBoard>(
     normalizeBoardValue(initialBoard || activeBoard || 'Maharashtra')
   );
+  const availableMediums = useMemo(
+    () => getAvailableMediumsForBoard(selectedBoard),
+    [selectedBoard]
+  );
+  const [selectedMedium, setSelectedMedium] = useState<Exclude<StudyMedium, 'All Mediums'>>('English');
+
+  useEffect(() => {
+    if (!availableMediums.includes(selectedMedium)) {
+      setSelectedMedium(availableMediums[0] || 'English');
+    }
+  }, [availableMediums, selectedMedium]);
+
   const [selectedClass, setSelectedClass] = useState<ClassLevel>(
     initialClass || currentStudent?.classLevel || 'Class 5'
   );
   const [activeSectionTab, setActiveSectionTab] = useState<StudyLibrarySectionTab>(
-    initialSectionTab || 'chapter_notes'
+    initialSectionTab || 'textbooks'
   );
   const [qaFormatFilter, setQaFormatFilter] = useState<'all' | ChapterQAFormat>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -149,6 +164,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     let active = true;
     loadPaginatedStudyLibraryItemsFromFirestore({
       board: selectedBoard,
+      medium: selectedMedium,
       classLevel: selectedClass,
       pageSize: 25,
     })
@@ -161,7 +177,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     return () => {
       active = false;
     };
-  }, [selectedBoard, selectedClass]);
+  }, [selectedBoard, selectedMedium, selectedClass]);
 
   // Zero-Firestore-Write LocalStorage Bookmarks, Recent Views & Revision Checklists
   const [bookmarks, setBookmarks] = useState<StudyLibraryBookmarkItem[]>(() =>
@@ -472,74 +488,13 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
         onJumpToResult={handleGlobalSearchJump}
       />
 
-      {/* Dynamic Admin-Published Study Resources Strip (Renders only when Admin publishes items for this Board/Class) */}
-      {dynamicAdminItems.length > 0 && (
-        <section className="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-4 sm:p-5 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-emerald-700" />
-              <h2 className="text-sm font-black text-emerald-950">
-                Curated Extra Study Resources ({selectedBoard} · {selectedClass})
-              </h2>
-            </div>
-            <span className="text-xs font-semibold text-emerald-800 tabular-nums">
-              {dynamicAdminItems.length} Published Update{dynamicAdminItems.length === 1 ? '' : 's'}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {dynamicAdminItems.map((docItem) => {
-              const p = docItem.payload;
-              const linkUrl = p?.externalUrl || p?.videoUrl;
-              return (
-                <div
-                  key={docItem.id}
-                  className="bg-white rounded-xl border border-emerald-200/80 p-3.5 space-y-2 flex flex-col justify-between"
-                >
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5">
-                      <span>{docItem.subject || p?.subject || 'General'}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="uppercase">
-                        {(docItem.materialCategory || p?.materialCategory || 'notes').replace(
-                          /_/g,
-                          ' '
-                        )}
-                      </span>
-                    </div>
-                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
-                      {docItem.title}
-                    </h3>
-                    {p?.description && (
-                      <p className="text-xs text-slate-600 leading-relaxed">{p.description}</p>
-                    )}
-                    {Array.isArray(p?.keyPoints) && p.keyPoints.length > 0 && (
-                      <ul className="space-y-1 pt-1 text-[11px] text-slate-700 list-disc pl-4">
-                        {p.keyPoints.slice(0, 3).map((pt, i) => (
-                          <li key={i}>{pt}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  {linkUrl && (
-                    <a
-                      href={linkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 pt-1"
-                    >
-                      <span>Open Official Resource</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Controls Strip: Board Selector + Class Selector + Section Tabs */}
+      {/* =====================================================================
+          STRICT ACADEMIC HIERARCHY CONTROLS (PARTS 4, 5 & 6):
+          1. Board -> 2. Medium -> 3. Class (1-10) -> 4. Subject -> 5. Chapter
+          -> 6. Sequential Material Type Tabs -> Selected Content IMMEDIATELY Below
+          ===================================================================== */}
       <section className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+        {/* STEP 1: BOARD SELECTION */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-700">
             <GraduationCap className="w-4 h-4 text-indigo-600" />
@@ -576,13 +531,41 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
           </div>
         </div>
 
+        {/* STEP 2: MEDIUM SELECTION */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-700">
+            <Languages className="w-4 h-4 text-emerald-600" />
+            <span>2. Select Medium ({selectedBoard} Board)</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {availableMediums.map((med) => {
+              const isSelected = selectedMedium === med;
+              return (
+                <button
+                  key={med}
+                  type="button"
+                  onClick={() => setSelectedMedium(med)}
+                  className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-emerald-50'
+                  }`}
+                >
+                  {med} Medium
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* STEP 3: CLASS SELECTION (ASCENDING 1 TO 10) */}
         <div className="space-y-2 pb-3 border-b border-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-              2. Select Standard (Class 1 to Class 10)
+              3. Select Standard (Class 1 to Class 10)
             </span>
             <span className="text-xs font-bold text-emerald-700">
-              All {chapters.length} Chapters Unlocked Free • {selectedBoard} {selectedClass}
+              All {chapters.length} Chapters Unlocked Free · {selectedBoard} · {selectedMedium} Medium · {selectedClass}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
@@ -613,330 +596,517 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
           </div>
         </div>
 
-        {/* 8 Core Study Library Modules Strip */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('textbooks')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'textbooks'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <Library className="w-3.5 h-3.5" />
-              <span>A. Textbooks ({boardClassTextbooks.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('chapter_notes')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'chapter_notes'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>B. Chapter Notes ({chapters.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('short_revision')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'short_revision'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>C. Short Revision</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('qa_bank')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'qa_bank'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>D. Q&amp;A Bank (9 Formats)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('chapter_test')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'chapter_test'
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                  : 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>E. Chapter Test (10 MCQs)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('model_papers')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'model_papers'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>F. Model Papers ({examPapersBundle.modelPapers.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('pyq_papers')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'pyq_papers'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <Archive className="w-3.5 h-3.5" />
-              <span>G. Previous Year Papers ({examPapersBundle.pyqPapers.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSectionTab('video_lessons')}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-                activeSectionTab === 'video_lessons'
-                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                  : 'bg-rose-50/70 text-rose-900 border-rose-200 hover:bg-rose-100'
-              }`}
-            >
-              <PlayCircle className="w-3.5 h-3.5" />
-              <span>H. Video Lessons ({videoLessons.length})</span>
-            </button>
+        {/* STEP 4: SUBJECT SELECTION */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+              4. Select Subject ({subjects.length} Subjects for {selectedBoard} · {selectedClass})
+            </span>
+            <span className="text-xs font-semibold text-slate-500">
+              Active Subject: <strong className="text-slate-900">{selectedSubject}</strong>
+            </span>
           </div>
-
-          {/* Chapter Filter Search */}
-          <div className="relative min-w-[220px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search chapter or concept..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-            />
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {subjects.map((sub) => {
+              const sMeta = getSubjectMeta(sub, selectedBoard);
+              const active = selectedSubject === sub;
+              return (
+                <button
+                  key={sub}
+                  type="button"
+                  onClick={() => setSelectedSubject(sub)}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    active
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50'
+                  }`}
+                >
+                  <span>{sMeta.icon}</span>
+                  <span>{sub}</span>
+                </button>
+              );
+            })}
           </div>
-        </div>
-
-        {/* 4 Special Academic Hubs Strip (Phase 4) */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mr-1">
-            Special Academic Hubs:
-          </span>
-          <button
-            type="button"
-            onClick={() => setActiveSectionTab('math_hub')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-              activeSectionTab === 'math_hub'
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                : 'bg-indigo-50/70 text-indigo-900 border-indigo-200 hover:bg-indigo-100'
-            }`}
-          >
-            <Calculator className="w-3.5 h-3.5" />
-            <span>I. Math Formulas &amp; Drills</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSectionTab('science_diagrams')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-              activeSectionTab === 'science_diagrams'
-                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                : 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-            }`}
-          >
-            <FlaskConical className="w-3.5 h-3.5" />
-            <span>J. Science Diagrams (12 SVGs)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSectionTab('english_grammar')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-              activeSectionTab === 'english_grammar'
-                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                : 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'
-            }`}
-          >
-            <Languages className="w-3.5 h-3.5" />
-            <span>K. English Grammar &amp; Vocab</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSectionTab('scholarship_olympiad')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
-              activeSectionTab === 'scholarship_olympiad'
-                ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs font-black'
-                : 'bg-amber-50 text-amber-950 border-amber-200 hover:bg-amber-100'
-            }`}
-          >
-            <Trophy className="w-3.5 h-3.5" />
-            <span>L. Scholarship &amp; Olympiad Hub</span>
-          </button>
         </div>
       </section>
 
-      {/* Main Split Reading Stage */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Sidebar: Subjects, Chapters & Local Bookmarks */}
-        <aside className="lg:col-span-4 space-y-5">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
-            <h2 className="text-sm font-black text-slate-900">
-              Subjects ({selectedBoard} · {selectedClass})
-            </h2>
-            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-              {subjects.map((sub) => {
-                const sMeta = getSubjectMeta(sub, selectedBoard);
-                const active = selectedSubject === sub;
-                return (
-                  <button
-                    key={sub}
-                    type="button"
-                    onClick={() => setSelectedSubject(sub)}
-                    className={`w-full px-3 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer transition-colors ${
-                      active
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span className="shrink-0">{sMeta.icon}</span>
-                      <span className="truncate">{sub}</span>
-                    </span>
-                    <ChevronRight
-                      className={`w-3.5 h-3.5 shrink-0 ${
-                        active ? 'text-white' : 'text-slate-400'
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      {/* =====================================================================
+          TWO-LEVEL HORIZONTAL MATERIAL TABS & SUBSECTIONS
+          ROW 1: All 10 Material Type Tabs together in ONE horizontal row
+          ROW 2: Selected Material Type's horizontal subsections directly below Row 1
+          AREA 3: Selected Subsection's complete materials immediately below Row 2
+          ===================================================================== */}
+      {(() => {
+        const isSpecialHubTab =
+          activeSectionTab === 'math_hub' ||
+          activeSectionTab === 'science_diagrams' ||
+          activeSectionTab === 'english_grammar' ||
+          activeSectionTab === 'scholarship_olympiad';
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black text-slate-900">
-                Syllabus Chapters ({selectedSubject})
-              </h2>
-              <span className="text-xs font-semibold text-emerald-700 tabular-nums">
-                {filteredChapters.length} Free Units
-              </span>
+        return (
+          <section className="bg-white rounded-2xl border-2 border-slate-200 shadow-xs overflow-hidden">
+            {/* FIRST ROW — ALL 10 MAIN MATERIAL TYPE TABS (SINGLE HORIZONTAL ROW) */}
+            <div className="bg-slate-50 border-b-2 border-slate-200 px-3.5 sm:px-4 pt-3.5 pb-2.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                  Study Material Sections
+                </span>
+                <span className="text-[11px] font-bold text-indigo-700">
+                  {selectedBoard} &rarr; {selectedMedium} &rarr; {selectedClass} &rarr; {selectedSubject}
+                </span>
+              </div>
+
+              <div
+                role="tablist"
+                aria-label="Study Material Main Sections"
+                className="flex items-center gap-2 overflow-x-auto pb-1.5"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'textbooks'}
+                  onClick={() => setActiveSectionTab('textbooks')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'textbooks'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Library className="w-3.5 h-3.5" />
+                  <span>1. Textbooks ({boardClassTextbooks.length})</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'chapter_notes'}
+                  onClick={() => setActiveSectionTab('chapter_notes')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'chapter_notes'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>2. Study Notes ({chapters.length})</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'short_revision'}
+                  onClick={() => setActiveSectionTab('short_revision')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'short_revision'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>3. Short Revision</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'qa_bank'}
+                  onClick={() => setActiveSectionTab('qa_bank')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'qa_bank'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>4. Q&amp;A Bank (9 Formats)</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'worksheets_ref'}
+                  onClick={() => setActiveSectionTab('worksheets_ref')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'worksheets_ref'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>5. Worksheets</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'model_papers'}
+                  onClick={() => setActiveSectionTab('model_papers')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'model_papers'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>6. Model Papers ({examPapersBundle.modelPapers.length})</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'pyq_papers'}
+                  onClick={() => setActiveSectionTab('pyq_papers')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'pyq_papers'
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>7. Previous Year Papers ({examPapersBundle.pyqPapers.length})</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'chapter_test'}
+                  onClick={() => setActiveSectionTab('chapter_test')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'chapter_test'
+                      ? 'bg-emerald-700 text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-emerald-50/80 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>8. Chapter Test (10 MCQs)</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSectionTab === 'video_lessons'}
+                  onClick={() => setActiveSectionTab('video_lessons')}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    activeSectionTab === 'video_lessons'
+                      ? 'bg-rose-700 text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-rose-50/80 text-rose-900 border-rose-200 hover:bg-rose-100'
+                  }`}
+                >
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  <span>9. Video Lessons ({videoLessons.length})</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isSpecialHubTab}
+                  onClick={() => {
+                    if (!isSpecialHubTab) setActiveSectionTab('math_hub');
+                  }}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                    isSpecialHubTab
+                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                      : 'bg-amber-50 text-amber-950 border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  <Trophy className="w-3.5 h-3.5" />
+                  <span>10. Special Hubs (4)</span>
+                </button>
+              </div>
             </div>
-            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
-              {filteredChapters.map((ch) => {
-                const realIdx = chapters.findIndex((c) => c.id === ch.id);
-                const isSelected = realIdx === selectedChapterIdx;
-                return (
-                  <button
-                    key={ch.id}
-                    type="button"
-                    onClick={() => setSelectedChapterIdx(realIdx >= 0 ? realIdx : 0)}
-                    className={`w-full px-3 py-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                      isSelected
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs font-bold'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 font-semibold'
-                    }`}
+
+            {/* SECOND ROW — ONLY THE SELECTED MATERIAL SECTION'S SUBSECTIONS (HORIZONTAL, STRICTLY BELOW ROW 1) */}
+            <div className="bg-sky-50/60 border-b-2 border-slate-200 px-3.5 sm:px-4 py-3 space-y-2">
+              {/* Subsections for Textbooks & Worksheets: Subject Horizontal Row */}
+              {(activeSectionTab === 'textbooks' || activeSectionTab === 'worksheets_ref') && (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                      {activeSectionTab === 'textbooks'
+                        ? `Subject Textbooks (${boardClassTextbooks.length} Official Books)`
+                        : `Subject Worksheets (${subjects.length} Subjects)`}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-600">
+                      Selected: {selectedSubject}
+                    </span>
+                  </div>
+                  <div
+                    role="tablist"
+                    aria-label="Subject Subsections"
+                    className="flex items-center gap-2 overflow-x-auto pb-1"
                   >
-                    <span className="truncate">
-                      <span className="tabular-nums mr-1.5 opacity-75">
-                        {String(ch.chapterNumber).padStart(2, '0')}.
+                    {subjects.map((sub) => {
+                      const sMeta = getSubjectMeta(sub, selectedBoard);
+                      const isSel = selectedSubject === sub;
+                      return (
+                        <button
+                          key={sub}
+                          type="button"
+                          role="tab"
+                          aria-selected={isSel}
+                          onClick={() => setSelectedSubject(sub)}
+                          className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl border-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                            isSel
+                              ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50'
+                          }`}
+                        >
+                          <span>{sMeta.icon}</span>
+                          <span>{sub}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Subsections for Chapter-Based Tabs (Notes, Short Revision, Chapter Test, Video Lessons): Horizontal Chapters Row */}
+              {(activeSectionTab === 'chapter_notes' ||
+                activeSectionTab === 'short_revision' ||
+                activeSectionTab === 'chapter_test' ||
+                activeSectionTab === 'video_lessons') && (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                      Chapters in Textbook Sequence ({filteredChapters.length} of {chapters.length} Units)
+                    </span>
+                    <div className="relative min-w-[210px]">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Filter chapters..."
+                        className="w-full pl-8 pr-3 py-1 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div
+                    role="tablist"
+                    aria-label="Chapter Subsections"
+                    className="flex items-stretch gap-2 overflow-x-auto pb-1.5"
+                  >
+                    {filteredChapters.map((ch) => {
+                      const realIdx = chapters.findIndex((c) => c.id === ch.id);
+                      const isSelected = realIdx === selectedChapterIdx;
+                      return (
+                        <button
+                          key={ch.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={isSelected}
+                          onClick={() => setSelectedChapterIdx(realIdx >= 0 ? realIdx : 0)}
+                          className={`shrink-0 max-w-[250px] px-3 py-2 rounded-xl border-2 text-left text-xs transition-all cursor-pointer flex items-center gap-2 ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50 font-semibold'
+                          }`}
+                        >
+                          <span className="tabular-nums font-mono text-[11px] opacity-85 shrink-0">
+                            Ch {String(ch.chapterNumber).padStart(2, '0')}
+                          </span>
+                          <span className="truncate">{ch.chapterTitle}</span>
+                          <CheckCircle2
+                            className={`w-3.5 h-3.5 shrink-0 ${
+                              isSelected ? 'text-[#0f2952]' : 'text-emerald-600'
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Subsections for Q&A Bank: Horizontal 9 Format Subsections + Compact Chapter Selector */}
+              {activeSectionTab === 'qa_bank' && (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                      Q&amp;A Formats (Select Format Below)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="qa-chapter-select" className="text-[11px] font-bold text-slate-600">
+                        Chapter:
+                      </label>
+                      <select
+                        id="qa-chapter-select"
+                        value={selectedChapterIdx}
+                        onChange={(e) => setSelectedChapterIdx(Number(e.target.value))}
+                        className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-800 max-w-[230px]"
+                      >
+                        {chapters.map((ch, idx) => (
+                          <option key={ch.id} value={idx}>
+                            Ch {String(ch.chapterNumber).padStart(2, '0')}: {ch.chapterTitle}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div
+                    role="tablist"
+                    aria-label="Q&A Format Subsections"
+                    className="flex items-center gap-2 overflow-x-auto pb-1"
+                  >
+                    {QA_FORMAT_FILTERS.map((f) => {
+                      const active = qaFormatFilter === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setQaFormatFilter(f.id)}
+                          className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer border-2 transition-all ${
+                            active
+                              ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Subsections for Model Papers & PYQ Papers: Horizontal Paper Set / Year Tabs */}
+              {(activeSectionTab === 'model_papers' || activeSectionTab === 'pyq_papers') && (() => {
+                const isPyq = activeSectionTab === 'pyq_papers';
+                const papers = isPyq ? examPapersBundle.pyqPapers : examPapersBundle.modelPapers;
+                const activeIdx = isPyq ? selectedPyqPaperIdx : selectedModelPaperIdx;
+                const setIdx = isPyq ? setSelectedPyqPaperIdx : setSelectedModelPaperIdx;
+                return (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                        {isPyq
+                          ? `Previous Year Question Papers (${papers.length} Years)`
+                          : `Model Question Paper Sets (${papers.length} Sets)`}
                       </span>
-                      {ch.chapterTitle}
-                    </span>
-                    <CheckCircle2
-                      className={`w-3.5 h-3.5 shrink-0 ${
-                        isSelected ? 'text-emerald-300' : 'text-emerald-600'
-                      }`}
-                    />
-                  </button>
+                      <span className="text-[11px] font-bold text-slate-600">
+                        {selectedSubject} · {selectedClass}
+                      </span>
+                    </div>
+                    <div
+                      role="tablist"
+                      aria-label={isPyq ? 'Previous Year Paper Subsections' : 'Model Paper Subsections'}
+                      className="flex items-center gap-2 overflow-x-auto pb-1"
+                    >
+                      {papers.map((p, idx) => {
+                        const isSel = idx === activeIdx;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={isSel}
+                            onClick={() => setIdx(idx)}
+                            className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl border-2 text-xs font-bold cursor-pointer transition-all ${
+                              isSel
+                                ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50'
+                            }`}
+                          >
+                            {p.yearOrTerm} ({p.totalMarks}M)
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
                 );
-              })}
-            </div>
-          </div>
+              })()}
 
-          {/* Local Bookmarks & Recently Viewed (0 Firestore Reads/Writes) */}
-          {(bookmarks.length > 0 || recentItems.length > 0) && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
-              {bookmarks.length > 0 && (
-                <div className="space-y-1.5">
-                  <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Bookmark className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Saved Bookmarks ({bookmarks.length})</span>
-                  </h3>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {bookmarks.slice(0, 5).map((bm) => (
-                      <button
-                        key={bm.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedBoard(bm.board);
-                          setSelectedClass(bm.classLevel);
-                          setSelectedSubject(bm.subject as SubjectName);
-                          if (bm.chapterNumber) setSelectedChapterIdx(bm.chapterNumber - 1);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/70 text-[11px] font-semibold text-slate-800 truncate cursor-pointer"
-                      >
-                        {bm.board} · {bm.classLevel} · {bm.subject} — {bm.title}
-                      </button>
-                    ))}
+              {/* Subsections for 10. Special Hubs: Horizontal Row of ONLY the 4 Special Hubs */}
+              {isSpecialHubTab && (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                      Special Academic Hubs (4 Subsections)
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-600">
+                      100% Free Interactive Reference
+                    </span>
                   </div>
-                </div>
-              )}
-
-              {recentItems.length > 0 && (
-                <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                  <h3 className="text-xs font-black text-slate-600 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Recently Viewed on This Device</span>
-                  </h3>
-                  <div className="space-y-1 max-h-28 overflow-y-auto">
-                    {recentItems.slice(0, 4).map((rc) => (
-                      <button
-                        key={rc.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedBoard(rc.board);
-                          setSelectedClass(rc.classLevel);
-                          setSelectedSubject(rc.subject as SubjectName);
-                          if (rc.chapterNumber) setSelectedChapterIdx(rc.chapterNumber - 1);
-                        }}
-                        className="w-full text-left px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 text-[11px] text-slate-600 truncate cursor-pointer"
-                      >
-                        {rc.board} · {rc.classLevel} · {rc.subject} — {rc.title}
-                      </button>
-                    ))}
+                  <div
+                    role="tablist"
+                    aria-label="Special Academic Hub Subsections"
+                    className="flex items-center gap-2 overflow-x-auto pb-1"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSectionTab === 'math_hub'}
+                      onClick={() => setActiveSectionTab('math_hub')}
+                      className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                        activeSectionTab === 'math_hub'
+                          ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                          : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50'
+                      }`}
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      <span>Math Formulas &amp; Drills</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSectionTab === 'science_diagrams'}
+                      onClick={() => setActiveSectionTab('science_diagrams')}
+                      className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                        activeSectionTab === 'science_diagrams'
+                          ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                          : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <FlaskConical className="w-3.5 h-3.5" />
+                      <span>Science Diagrams (12 SVGs)</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSectionTab === 'english_grammar'}
+                      onClick={() => setActiveSectionTab('english_grammar')}
+                      className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                        activeSectionTab === 'english_grammar'
+                          ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Languages className="w-3.5 h-3.5" />
+                      <span>English Grammar &amp; Vocab</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSectionTab === 'scholarship_olympiad'}
+                      onClick={() => setActiveSectionTab('scholarship_olympiad')}
+                      className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
+                        activeSectionTab === 'scholarship_olympiad'
+                          ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-[#0f2952] shadow-xs font-black'
+                          : 'bg-white text-amber-950 border-amber-200 hover:bg-amber-50'
+                      }`}
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                      <span>Scholarship &amp; Olympiad Hub</span>
+                    </button>
                   </div>
-                </div>
+                </>
               )}
             </div>
-          )}
-        </aside>
 
-        {/* Right Reading Stage */}
-        <div className="lg:col-span-8">
+        {/* SELECTED TAB CONTENT STAGE — DISPLAYED IMMEDIATELY BELOW THE SELECTED TAB */}
+        <div className="p-5 sm:p-7">
           {activeChapter ? (
-            <article className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
-              {/* Editorial Metadata & Bookmark Bar */}
+            <article className="space-y-6">
+              {/* Editorial Metadata, Full Academic Path & Bookmark Bar */}
               <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-500">
                     <span>{selectedBoard} Board</span>
-                    <span aria-hidden="true">·</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-emerald-700 font-bold">{selectedMedium} Medium</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     <span>{selectedClass}</span>
-                    <span aria-hidden="true">·</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     <span>
                       {subjectMeta.icon} {selectedSubject}
                     </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="tabular-nums">Chapter {activeChapter.chapterNumber}</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="tabular-nums text-slate-800 font-bold">
+                      Chapter {activeChapter.chapterNumber}
+                    </span>
                   </div>
                   <h2 className="text-xl sm:text-2xl font-display font-black text-slate-900">
                     {String(activeChapter.chapterNumber).padStart(2, '0')}.{' '}
@@ -987,6 +1157,113 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Matching Dynamic Admin-Published Study Resources for Selected Board / Medium / Class / Subject */}
+              {(() => {
+                const scopedAdminItems = dynamicAdminItems.filter((docItem) => {
+                  const sub = docItem.subject || docItem.payload?.subject;
+                  return !sub || sub === selectedSubject;
+                });
+                if (scopedAdminItems.length === 0) return null;
+                return (
+                  <div className="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-emerald-700" />
+                        <h3 className="text-xs sm:text-sm font-black text-emerald-950">
+                          Admin-Published Resources ({selectedBoard} · {selectedMedium} Medium · {selectedClass} · {selectedSubject})
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-800 tabular-nums">
+                        {scopedAdminItems.length} Update{scopedAdminItems.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {scopedAdminItems.map((docItem) => {
+                        const p = docItem.payload;
+                        const linkUrl = p?.externalUrl || p?.videoUrl;
+                        return (
+                          <div
+                            key={docItem.id}
+                            className="bg-white rounded-xl border border-emerald-200/80 p-3.5 space-y-2 flex flex-col justify-between"
+                          >
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-bold text-slate-500 flex flex-wrap items-center gap-1.5">
+                                <span>{p?.medium || 'All Mediums'}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="uppercase">
+                                  {(docItem.materialCategory || p?.materialCategory || 'notes').replace(
+                                    /_/g,
+                                    ' '
+                                  )}
+                                </span>
+                                {p?.chapterNumber ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span>Ch {p.chapterNumber}</span>
+                                  </>
+                                ) : null}
+                              </div>
+                              <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
+                                {docItem.title}
+                              </h4>
+                              {p?.description && (
+                                <p className="text-xs text-slate-600 leading-relaxed">{p.description}</p>
+                              )}
+                              {Array.isArray(p?.keyPoints) && p.keyPoints.length > 0 && (
+                                <ul className="space-y-1 pt-1 text-[11px] text-slate-700 list-disc pl-4">
+                                  {p.keyPoints.slice(0, 3).map((pt, i) => (
+                                    <li key={i}>{pt}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                            {linkUrl && (
+                              <a
+                                href={linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 pt-1"
+                              >
+                                <span>Open Official Resource</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* TAB 5: WORKSHEETS REFERENCE (DIRECT LINK TO ORIGINAL WORKSHEETS MODULE — ZERO DUPLICATES) */}
+              {activeSectionTab === 'worksheets_ref' && (
+                <div className="rounded-2xl bg-indigo-50/70 border border-indigo-200 p-6 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1.5 max-w-2xl">
+                      <span className="inline-block text-[11px] font-black uppercase tracking-wider text-indigo-800">
+                        Original Protected Worksheets Module · Zero Duplicate Copies
+                      </span>
+                      <h3 className="text-lg sm:text-xl font-display font-black text-slate-900">
+                        {selectedBoard} Board · {selectedMedium} Medium · {selectedClass} · {selectedSubject} Worksheets
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                        Interactive chapter-wise worksheets for <strong>{selectedSubject}</strong> are maintained in their primary dedicated Worksheets studio (preserving all worksheet locks, answer keys, and print protections without duplicating worksheet files).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTab('worksheets', selectedSubject)}
+                      className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-2 cursor-pointer shrink-0 shadow-xs"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Open {selectedSubject} Worksheets</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* TAB A: OFFICIAL TEXTBOOK LIBRARY */}
               {activeSectionTab === 'textbooks' && (
@@ -1360,27 +1637,6 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Format Filter Strip */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {QA_FORMAT_FILTERS.map((f) => {
-                      const active = qaFormatFilter === f.id;
-                      return (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => setQaFormatFilter(f.id)}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${
-                            active
-                              ? 'bg-slate-900 text-white border-slate-900'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          {f.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
                   <div className="space-y-3">
                     {filteredQaBank.map((qa, idx) => {
                       const isOpen = Boolean(revealedQaAnswers[qa.id]);
@@ -1591,33 +1847,11 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 const isPyqTab = activeSectionTab === 'pyq_papers';
                 const papers = isPyqTab ? examPapersBundle.pyqPapers : examPapersBundle.modelPapers;
                 const activePaperIdx = isPyqTab ? selectedPyqPaperIdx : selectedModelPaperIdx;
-                const setPaperIdx = isPyqTab ? setSelectedPyqPaperIdx : setSelectedModelPaperIdx;
                 const activePaper = papers[activePaperIdx] || papers[0];
                 if (!activePaper) return null;
 
                 return (
                   <div className="space-y-6">
-                    {/* Selector Pills for Paper Sets / Years */}
-                    <div className="flex flex-wrap gap-2">
-                      {papers.map((p, idx) => {
-                        const isSel = idx === activePaperIdx;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setPaperIdx(idx)}
-                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
-                              isSel
-                                ? 'bg-slate-900 text-white border-slate-900'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            {p.yearOrTerm} ({p.totalMarks}M)
-                          </button>
-                        );
-                      })}
-                    </div>
-
                     {/* Paper Header Card */}
                     <div className="rounded-2xl bg-slate-900 text-white p-5 sm:p-6 space-y-3 border border-slate-800">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1914,6 +2148,65 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
           ) : null}
         </div>
       </section>
+        );
+      })()}
+
+      {/* Compact Local Bookmarks & Recently Viewed Bar (Below Content — 0 Firestore Reads/Writes) */}
+      {(bookmarks.length > 0 || recentItems.length > 0) && (
+        <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-4">
+          {bookmarks.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+                <span>Saved Bookmarks on This Device ({bookmarks.length})</span>
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {bookmarks.slice(0, 6).map((bm) => (
+                  <button
+                    key={bm.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBoard(bm.board);
+                      setSelectedClass(bm.classLevel);
+                      setSelectedSubject(bm.subject as SubjectName);
+                      if (bm.chapterNumber) setSelectedChapterIdx(bm.chapterNumber - 1);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-50/80 hover:bg-amber-100 border border-amber-200 text-[11px] font-semibold text-slate-800 cursor-pointer"
+                  >
+                    {bm.board} · {bm.classLevel} · {bm.subject} — {bm.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentItems.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-black text-slate-600 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span>Recently Viewed Chapters</span>
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {recentItems.slice(0, 6).map((rc) => (
+                  <button
+                    key={rc.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBoard(rc.board);
+                      setSelectedClass(rc.classLevel);
+                      setSelectedSubject(rc.subject as SubjectName);
+                      if (rc.chapterNumber) setSelectedChapterIdx(rc.chapterNumber - 1);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] text-slate-700 cursor-pointer"
+                  >
+                    {rc.board} · {rc.classLevel} · {rc.subject} — {rc.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 };

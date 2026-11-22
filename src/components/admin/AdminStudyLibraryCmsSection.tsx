@@ -23,11 +23,13 @@ import { ALL_BOARDS } from '../../utils/subscriptionAccess';
 import {
   bumpStudyLibraryVersionInFirestore,
   deleteStudyLibraryItemFromFirestore,
+  getAvailableMediumsForBoard,
   loadPaginatedStudyLibraryItemsFromFirestore,
   loadPlatformConfigDetailed,
   saveStudyLibraryItemToFirestore,
   SpecialContentDocument,
   StudyLibraryDynamicItemPayload,
+  StudyMedium,
 } from '../../services/specialContentFirestoreService';
 import { auth, firebaseConfig } from '../../services/firebase';
 import { getOfficialTextbooksForBoardClass } from '../../data/studyLibrary/textbookLibraryData';
@@ -92,6 +94,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
 
   // CMS Filter State
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState<boolean>(false);
   const [searchText, setSearchText] = useState<string>('');
 
   // Form State (Create / Edit)
@@ -100,6 +103,11 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
   const [formBoard, setFormBoard] = useState<EducationBoard>(
     selectedBoardWorkspace !== 'all' ? selectedBoardWorkspace : 'Maharashtra'
   );
+  const availableFormMediums = useMemo<StudyMedium[]>(
+    () => ['All Mediums', ...getAvailableMediumsForBoard(formBoard)],
+    [formBoard]
+  );
+  const [formMedium, setFormMedium] = useState<StudyMedium>('All Mediums');
   const [formClass, setFormClass] = useState<ClassLevel>(
     selectedClassWorkspace !== 'all' ? (selectedClassWorkspace as ClassLevel) : 'Class 5'
   );
@@ -127,6 +135,12 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
       setFormSubject(availableSubjects[0] || 'English');
     }
   }, [availableSubjects, formSubject]);
+
+  useEffect(() => {
+    if (!availableFormMediums.includes(formMedium)) {
+      setFormMedium('All Mediums');
+    }
+  }, [availableFormMediums, formMedium]);
 
   const currentAdminEmail = (auth.currentUser?.email || '').trim().toLowerCase();
   const isVerifiedAdmin =
@@ -222,6 +236,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
   const resetForm = () => {
     setEditingId(null);
     setFormTitle('');
+    setFormMedium('All Mediums');
     setFormChapterNumber('');
     setFormDescription('');
     setFormKeyPoints('');
@@ -235,6 +250,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
     setEditingId(docItem.id);
     setFormTitle(docItem.title || '');
     setFormBoard((docItem.board || p?.board || 'Maharashtra') as EducationBoard);
+    setFormMedium((p?.medium || 'All Mediums') as StudyMedium);
     setFormClass((docItem.classLevel || p?.classLevel || 'Class 5') as ClassLevel);
     setFormSubject(String(docItem.subject || p?.subject || 'English'));
     setFormCategory(
@@ -248,7 +264,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
     setLinkCheck({ checking: false });
     setStatusMessage({
       type: 'info',
-      text: `Editing "${docItem.title}". Save changes to update Firestore & sync student caches.`,
+      text: `Editing original item "${docItem.title}". Saving updates this primary record without creating a duplicate.`,
     });
   };
 
@@ -322,6 +338,42 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
       return;
     }
 
+    // Duplicate prevention: block accidental duplicate title in same Board/Medium/Class/Subject or duplicate external URL
+    const normTitle = cleanTitle.toLowerCase().replace(/\s+/g, ' ');
+    const normUrl = cleanUrl.toLowerCase().replace(/\/+$/, '');
+    const duplicateEntry = items.find((existing) => {
+      if (editingId && existing.id === editingId) return false;
+      const eBoard = existing.board || existing.payload?.board;
+      const eMedium = existing.payload?.medium || 'All Mediums';
+      const eClass = existing.classLevel || existing.payload?.classLevel;
+      const eSubject = existing.subject || existing.payload?.subject;
+      const eTitle = (existing.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const eUrl = (existing.payload?.externalUrl || existing.payload?.videoUrl || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\/+$/, '');
+      const sameTitleInSlot =
+        eTitle === normTitle &&
+        eBoard === formBoard &&
+        eMedium === formMedium &&
+        eClass === formClass &&
+        eSubject === formSubject;
+      const sameUrl = Boolean(normUrl && eUrl && normUrl === eUrl);
+      return sameTitleInSlot || sameUrl;
+    });
+
+    if (duplicateEntry) {
+      setStatusMessage({
+        type: 'error',
+        text: `Duplicate prevented: "${duplicateEntry.title}" already exists for ${
+          duplicateEntry.board || duplicateEntry.payload?.board
+        } · ${duplicateEntry.classLevel || duplicateEntry.payload?.classLevel} · ${
+          duplicateEntry.subject || duplicateEntry.payload?.subject
+        }. Edit the existing item instead of creating a copy.`,
+      });
+      return;
+    }
+
     setSaving(true);
     setStatusMessage(null);
     try {
@@ -338,6 +390,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
 
       const payload: StudyLibraryDynamicItemPayload = {
         board: formBoard,
+        medium: formMedium,
         classLevel: formClass,
         subject: formSubject,
         materialCategory: formCategory,
@@ -462,9 +515,39 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
     }
   };
 
+  const duplicateItemIds = useMemo(() => {
+    const titleSlotCounts = new Map<string, string[]>();
+    const urlCounts = new Map<string, string[]>();
+    for (const it of items) {
+      const b = it.board || it.payload?.board || '';
+      const m = it.payload?.medium || 'All Mediums';
+      const c = it.classLevel || it.payload?.classLevel || '';
+      const s = it.subject || it.payload?.subject || '';
+      const t = (it.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const slotKey = `${b}|${m}|${c}|${s}|${t}`;
+      titleSlotCounts.set(slotKey, [...(titleSlotCounts.get(slotKey) || []), it.id]);
+      const u = (it.payload?.externalUrl || it.payload?.videoUrl || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\/+$/, '');
+      if (u) {
+        urlCounts.set(u, [...(urlCounts.get(u) || []), it.id]);
+      }
+    }
+    const dups = new Set<string>();
+    for (const ids of titleSlotCounts.values()) {
+      if (ids.length > 1) ids.forEach((id) => dups.add(id));
+    }
+    for (const ids of urlCounts.values()) {
+      if (ids.length > 1) ids.forEach((id) => dups.add(id));
+    }
+    return dups;
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     const q = searchText.trim().toLowerCase();
     return items.filter((it) => {
+      if (showDuplicatesOnly && !duplicateItemIds.has(it.id)) return false;
       const b = it.board || it.payload?.board;
       const c = it.classLevel || it.payload?.classLevel;
       const cat = it.materialCategory || it.payload?.materialCategory;
@@ -472,14 +555,22 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
       if (selectedClassWorkspace !== 'all' && c !== selectedClassWorkspace) return false;
       if (filterCategory !== 'all' && cat !== filterCategory) return false;
       if (q) {
-        const blob = `${it.title} ${b || ''} ${c || ''} ${it.subject || ''} ${
-          it.payload?.description || ''
-        }`.toLowerCase();
+        const blob = `${it.title} ${b || ''} ${it.payload?.medium || ''} ${c || ''} ${
+          it.subject || ''
+        } ${it.payload?.description || ''}`.toLowerCase();
         if (!blob.includes(q)) return false;
       }
       return true;
     });
-  }, [items, selectedBoardWorkspace, selectedClassWorkspace, filterCategory, searchText]);
+  }, [
+    items,
+    selectedBoardWorkspace,
+    selectedClassWorkspace,
+    filterCategory,
+    searchText,
+    showDuplicatesOnly,
+    duplicateItemIds,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -597,9 +688,18 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-700">
+                <span className="text-slate-500">Primary Category Path: </span>
+                <span className="font-bold text-slate-900">
+                  {formBoard} &rarr; {formMedium} &rarr; {formClass} &rarr; {formSubject}
+                  {formChapterNumber ? ` → Ch ${formChapterNumber}` : ''} &rarr;{' '}
+                  {MATERIAL_CATEGORIES.find((c) => c.id === formCategory)?.label || formCategory}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Education Board</label>
+                  <label className="block font-bold text-slate-700 mb-1">1. Board</label>
                   <select
                     value={formBoard}
                     onChange={(e) => setFormBoard(e.target.value as EducationBoard)}
@@ -614,7 +714,22 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Class (1–10)</label>
+                  <label className="block font-bold text-slate-700 mb-1">2. Medium</label>
+                  <select
+                    value={formMedium}
+                    onChange={(e) => setFormMedium(e.target.value as StudyMedium)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-900"
+                  >
+                    {availableFormMediums.map((m) => (
+                      <option key={m} value={m}>
+                        {m === 'All Mediums' ? 'All Mediums' : `${m} Medium`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">3. Class (1–10)</label>
                   <select
                     value={formClass}
                     onChange={(e) => setFormClass(e.target.value as ClassLevel)}
@@ -820,6 +935,21 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => setShowDuplicatesOnly((prev) => !prev)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                  showDuplicatesOnly
+                    ? 'bg-rose-600 text-white border-rose-600'
+                    : duplicateItemIds.size > 0
+                    ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                }`}
+              >
+                {duplicateItemIds.size > 0
+                  ? `Duplicates Found (${duplicateItemIds.size})`
+                  : '0 Duplicates'}
+              </button>
             </div>
 
             {loadingItems ? (
@@ -850,7 +980,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
                       className="py-3.5 flex flex-col sm:flex-row sm:items-start justify-between gap-3"
                     >
                       <div className="space-y-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-500">
                           <span
                             className={
                               docItem.published ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'
@@ -860,10 +990,31 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
                           </span>
                           <span aria-hidden="true">·</span>
                           <span>{docItem.board || p?.board}</span>
-                          <span aria-hidden="true">·</span>
+                          <span aria-hidden="true">&rarr;</span>
+                          <span>{p?.medium || 'All Mediums'}</span>
+                          <span aria-hidden="true">&rarr;</span>
                           <span>{docItem.classLevel || p?.classLevel}</span>
-                          <span aria-hidden="true">·</span>
+                          <span aria-hidden="true">&rarr;</span>
                           <span>{docItem.subject || p?.subject}</span>
+                          {p?.chapterNumber ? (
+                            <>
+                              <span aria-hidden="true">&rarr;</span>
+                              <span>Ch {p.chapterNumber}</span>
+                            </>
+                          ) : null}
+                          <span aria-hidden="true">&rarr;</span>
+                          <span className="text-indigo-700 font-bold">
+                            {MATERIAL_CATEGORIES.find(
+                              (c) => c.id === (docItem.materialCategory || p?.materialCategory)
+                            )?.label ||
+                              docItem.materialCategory ||
+                              p?.materialCategory}
+                          </span>
+                          {duplicateItemIds.has(docItem.id) && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-black">
+                              Duplicate Alert
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs sm:text-sm font-extrabold text-slate-900 break-words">
                           {docItem.title}

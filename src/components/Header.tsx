@@ -88,6 +88,9 @@ export const Header: React.FC<HeaderProps> = ({
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClassSwitcher, setShowClassSwitcher] = useState(false);
   const [switcherBoard, setSwitcherBoard] = useState<EducationBoard>(activeBoard);
+  const [mobileSelectedMenuId, setMobileSelectedMenuId] = useState<MainMenuId>(
+    activeMenuId || 'special-learning'
+  );
 
   const navContainerRef = useRef<HTMLDivElement | null>(null);
   const hoverCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +98,12 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     setSwitcherBoard(activeBoard);
   }, [activeBoard, showClassSwitcher]);
+
+  useEffect(() => {
+    if (activeMenuId) {
+      setMobileSelectedMenuId(activeMenuId);
+    }
+  }, [activeMenuId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -706,13 +715,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Desktop Navigation Bar (Direct Main Section Tabs — Clean Sub-Row so top-right Login/Logout never overflows in any preview frame) */}
+      {/* Desktop Navigation Bar (Single Horizontal Row of All Main Section Tabs) */}
       {isLearningRole && (
         <div className="hidden lg:block border-t border-slate-100 bg-slate-50/80">
           <nav
             ref={navContainerRef}
             aria-label="Primary Navigation"
-            className={`${containerWidthClass} px-4 sm:px-6 lg:px-8 py-1.5 flex items-center gap-1.5 flex-wrap`}
+            className={`${containerWidthClass} px-4 sm:px-6 lg:px-8 py-1.5 flex items-center gap-1.5 flex-nowrap overflow-x-auto`}
           >
             {MAIN_NAV_MENUS.map((menu) => {
               const visibleItems = menu.items.filter(
@@ -739,13 +748,13 @@ export const Header: React.FC<HeaderProps> = ({
                       handleTriggerSubAction(menu.defaultActionId);
                     }
                   }}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
                     isSpecialTab
                       ? isActive
-                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                        ? 'bg-amber-500 text-slate-950 shadow-xs ring-2 ring-[#0f2952]/20'
                         : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200 border border-amber-300'
                       : isActive
-                      ? 'text-amber-800 bg-amber-50 border border-amber-200'
+                      ? 'bg-[#0f2952] text-amber-300 shadow-xs border border-[#0f2952]'
                       : 'text-slate-700 hover:text-slate-950 hover:bg-slate-200/60'
                   }`}
                 >
@@ -807,72 +816,113 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Vertical Main Sections with Horizontal Subsections Directly Underneath */}
-          <div className="space-y-3">
-            {MAIN_NAV_MENUS.map((menu, idx) => {
-              const visibleItems = menu.items.filter(
+          {/* Two-Level Horizontal Mobile Navigation: Row 1 = All Main Sections, Row 2 = ONLY Selected Section's Subsections */}
+          {(() => {
+            const visibleMenus = MAIN_NAV_MENUS.filter((menu) =>
+              menu.items.some(
                 (sub) => !sub.sectionVisibilityKey || isSectionVisible(sub.sectionVisibilityKey)
-              );
-              if (visibleItems.length === 0) return null;
-              return (
-                <div
-                  key={menu.id}
-                  className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-display font-black uppercase tracking-wider text-[#0f2952]">
-                      {idx + 1}. {menu.label}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        if (menu.id !== 'account' && onSelectMainSection) {
-                          onSelectMainSection(menu.id);
-                          return;
-                        }
-                        handleTriggerSubAction(menu.defaultActionId);
-                      }}
-                      className="text-[11px] font-extrabold text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Open</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+              )
+            );
+            const activeMobileMenu =
+              visibleMenus.find((m) => m.id === mobileSelectedMenuId) || visibleMenus[0];
+            const activeMobileSubItems = activeMobileMenu
+              ? activeMobileMenu.items.filter(
+                  (sub) => !sub.sectionVisibilityKey || isSectionVisible(sub.sectionVisibilityKey)
+                )
+              : [];
 
-                  {/* Horizontal Scrollable Row of Subsections Directly Below Main Section */}
-                  <div className="flex items-stretch gap-2 overflow-x-auto pb-1.5">
-                    {visibleItems.map((sub) => {
-                      let label = sub.label;
-                      if (currentStudent && sub.id === 'acc-login') {
-                        label = 'My Profile Dashboard';
-                      } else if (currentStudent && sub.id === 'acc-register') {
-                        label = 'Add Board / Class';
-                      }
+            return (
+              <div className="rounded-2xl border-2 border-sky-200 bg-white overflow-hidden">
+                {/* ROW 1 — ALL MAIN SECTIONS HORIZONTALLY */}
+                <div className="bg-sky-50/70 border-b border-sky-200 p-2.5">
+                  <div
+                    role="tablist"
+                    aria-label="Mobile Main Sections"
+                    className="flex items-center gap-2 overflow-x-auto pb-1"
+                  >
+                    {visibleMenus.map((menu) => {
+                      const isSel = activeMobileMenu?.id === menu.id;
                       return (
                         <button
-                          key={sub.id}
+                          key={menu.id}
                           type="button"
-                          onClick={() => handleTriggerSubAction(sub.id)}
-                          className="min-w-[155px] shrink-0 px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200/90 text-left flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+                          role="tab"
+                          aria-selected={isSel}
+                          onClick={() => setMobileSelectedMenuId(menu.id)}
+                          className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-display font-black uppercase tracking-wide border-2 cursor-pointer transition-all ${
+                            isSel
+                              ? 'bg-[#0f2952] text-amber-300 border-amber-400 shadow-xs'
+                              : 'bg-white text-[#0f2952] border-sky-200 hover:bg-sky-50'
+                          }`}
                         >
-                          <div className="min-w-0">
-                            <p className="text-xs font-extrabold text-slate-900 truncate">
-                              {label}
-                            </p>
-                            <p className="text-[10px] font-bold text-amber-800 truncate mt-0.5">
-                              {sub.badgeText || 'Open'}
-                            </p>
-                          </div>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {menu.label}
                         </button>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* ROW 2 — ONLY SELECTED SECTION'S SUBSECTIONS HORIZONTALLY BELOW ROW 1 */}
+                {activeMobileMenu && (
+                  <div className="p-3 bg-white space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
+                        {activeMobileMenu.label} — Subsections ({activeMobileSubItems.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          if (activeMobileMenu.id !== 'account' && onSelectMainSection) {
+                            onSelectMainSection(activeMobileMenu.id);
+                            return;
+                          }
+                          handleTriggerSubAction(activeMobileMenu.defaultActionId);
+                        }}
+                        className="text-[11px] font-extrabold text-amber-800 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <span>Open Section</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div
+                      role="tablist"
+                      aria-label={`${activeMobileMenu.label} Subsections`}
+                      className="flex items-stretch gap-2 overflow-x-auto pb-1.5"
+                    >
+                      {activeMobileSubItems.map((sub) => {
+                        let label = sub.label;
+                        if (currentStudent && sub.id === 'acc-login') {
+                          label = 'My Profile Dashboard';
+                        } else if (currentStudent && sub.id === 'acc-register') {
+                          label = 'Add Board / Class';
+                        }
+                        return (
+                          <button
+                            key={sub.id}
+                            type="button"
+                            onClick={() => handleTriggerSubAction(sub.id)}
+                            className="min-w-[155px] shrink-0 px-3 py-2.5 rounded-xl bg-sky-50/70 hover:bg-amber-50 border-2 border-sky-200 hover:border-[#0f2952] text-left flex items-center justify-between gap-2 cursor-pointer shadow-2xs transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-xs font-extrabold text-[#0f2952] truncate">
+                                {label}
+                              </p>
+                              <p className="text-[10px] font-bold text-amber-800 truncate mt-0.5">
+                                {sub.badgeText || 'Open'}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-3.5 h-3.5 text-[#0f2952] shrink-0" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Account Bottom Row (Profile Shortcut in Mobile Menu) */}
           {currentStudent && (

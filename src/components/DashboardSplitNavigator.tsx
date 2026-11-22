@@ -47,6 +47,7 @@ export const SECTION_BADGE_ICONS: Record<
 
 interface SubPageConsistencyBarProps {
   activeSectionId: ExtendedSectionId;
+  activeSubActionId?: NavSubActionId | null;
   selectedBoard: EducationBoard;
   selectedClass: ClassLevel;
   onSelectSection: (sectionId: ExtendedSectionId) => void;
@@ -57,6 +58,7 @@ interface SubPageConsistencyBarProps {
 
 export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
   activeSectionId,
+  activeSubActionId,
   selectedBoard,
   selectedClass,
   onSelectSection,
@@ -71,6 +73,14 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
     MAIN_NAV_MENUS.find((m) => m.id === effectiveMenuId) || MAIN_NAV_MENUS[0];
   const activeMeta = SECTION_BADGE_ICONS[effectiveMenuId];
   const ActiveIcon = activeMeta.icon;
+
+  // Determine highlighted subsection in Row 2
+  const effectiveSubId: NavSubActionId | undefined =
+    activeSectionId === 'referrals'
+      ? 'acc-referrals'
+      : activeSubActionId && activeMenu.items.some((i) => i.id === activeSubActionId)
+      ? activeSubActionId
+      : activeMenu.items[0]?.id;
 
   const getSubVisual = (subId: NavSubActionId, menuId: MainMenuId) => {
     if (subId === 'acc-referrals') {
@@ -137,92 +147,131 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
   };
 
   return (
-    <div className="mb-6 rounded-3xl bg-white border-2 border-sky-200/90 shadow-md p-3.5 sm:p-4 space-y-3.5">
-      {/* Top Bar: Return to Main Dashboard + Active Class Badge + Main Section Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+    <nav
+      aria-label="Two-Level Horizontal Section Navigation"
+      className="mb-6 rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden"
+    >
+      {/* Top Bar: Return to Main Dashboard + Active Class Badge */}
+      <div className="px-3.5 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 bg-white">
         <button
           type="button"
           onClick={onReturnHome}
-          className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#1d4ed8] text-white font-display font-black text-xs sm:text-sm shadow-sm flex items-center gap-2 cursor-pointer transition-all"
+          className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] hover:from-[#1e3a8a] hover:to-[#1d4ed8] text-white font-display font-black text-xs sm:text-sm shadow-sm flex items-center gap-2 cursor-pointer transition-all"
         >
           <ArrowLeft className="w-4 h-4 shrink-0" />
           <span>Return to Main Dashboard</span>
         </button>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onNavigateTab('all-courses')}
-            className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border-2 border-amber-300 text-amber-950 font-display font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <GraduationCap className="w-4 h-4 text-amber-800 shrink-0" />
-            <span>
-              Active Class: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
-            </span>
-          </button>
+        <button
+          type="button"
+          onClick={() => onNavigateTab('all-courses')}
+          className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border-2 border-amber-300 text-amber-950 font-display font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+        >
+          <GraduationCap className="w-4 h-4 text-amber-800 shrink-0" />
+          <span>
+            Active Class: {getBoardShortLabel(selectedBoard)} &bull; {selectedClass}
+          </span>
+        </button>
+      </div>
+
+      {/* MAIN SECTION TABS — VERTICAL ARRANGEMENT (ALL MAIN SECTIONS TOGETHER) */}
+      <div className="bg-white border-b-2 border-sky-200/80">
+        <div
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label="All Main Sections"
+          className="flex flex-col divide-y divide-slate-200/80"
+        >
+          {MAIN_NAV_MENUS.map((m) => {
+            const isCurr = m.id === effectiveMenuId;
+            const mMeta = SECTION_BADGE_ICONS[m.id];
+            const MIcon = mMeta.icon;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="tab"
+                aria-selected={isCurr}
+                onClick={() => onSelectSection(m.id)}
+                className={`w-full min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-display font-black flex items-center justify-between gap-2.5 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                  isCurr
+                    ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white shadow-inner'
+                    : 'bg-white hover:bg-sky-50/70 text-[#0f2952]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={`w-7 h-7 rounded-lg ${mMeta.badgeBg} ${mMeta.iconColor} flex items-center justify-center shrink-0`}
+                  >
+                    <MIcon className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="uppercase tracking-wide truncate">
+                    {m.label.replace('🎓 ', '')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {isCurr && (
+                    <span className="text-[11px] font-bold text-amber-300">Selected</span>
+                  )}
+                  <ArrowRight
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      isCurr ? 'text-amber-300' : 'text-slate-400'
+                    }`}
+                  />
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Main Section Heading + Horizontal Subsections Directly Underneath */}
-      <div className="space-y-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-2.5">
+      {/* SECOND ROW — SELECTED SECTION'S SUBSECTIONS (STRICTLY BELOW ENTIRE FIRST ROW) */}
+      <div className="px-3.5 sm:px-4 py-3 bg-gradient-to-r from-[#e0f2fe]/70 via-[#f0f9ff] to-[#fef9c3]/40 space-y-2">
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <div className="flex items-center gap-2">
             <span
-              className={`w-8 h-8 rounded-xl ${activeMeta.badgeBg} ${activeMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+              className={`w-6 h-6 rounded-lg ${activeMeta.badgeBg} ${activeMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
             >
-              <ActiveIcon className="w-4 h-4" />
+              <ActiveIcon className="w-3.5 h-3.5" />
             </span>
-            <div>
-              <h2 className="text-sm sm:text-base font-display font-black text-[#0f2952]">
-                {activeMenu.label} — Subsections
-              </h2>
-            </div>
+            <h2 className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
+              {activeMenu.label.replace('🎓 ', '')} — Subsections ({activeMenu.items.length})
+            </h2>
           </div>
-
-          {/* Main Section Switcher Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-            {MAIN_NAV_MENUS.map((m) => {
-              const isCurr = m.id === effectiveMenuId;
-              const mMeta = SECTION_BADGE_ICONS[m.id];
-              const MIcon = mMeta.icon;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onSelectSection(m.id)}
-                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-display font-black whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
-                    isCurr
-                      ? 'bg-[#0f2952] text-white shadow-2xs ring-2 ring-amber-400'
-                      : 'bg-slate-100 hover:bg-amber-50 text-slate-700'
-                  }`}
-                >
-                  <MIcon className="w-3.5 h-3.5 shrink-0" />
-                  <span>{m.label.replace('🎓 ', '')}</span>
-                </button>
-              );
-            })}
-          </div>
+          <span className="text-[11px] font-bold text-slate-600 hidden sm:inline">
+            Selected content displays immediately below
+          </span>
         </div>
 
-        {/* Horizontal Row of Subsections Directly Underneath Main Section */}
-        <div className="flex items-stretch gap-3 overflow-x-auto pb-2 pt-0.5">
+        <div
+          role="tablist"
+          aria-label={`${activeMenu.label.replace('🎓 ', '')} Subsections`}
+          className="flex items-stretch gap-2.5 overflow-x-auto pb-1.5 pt-0.5"
+        >
           {activeMenu.items.map((sub) => {
             const vis = getSubVisual(sub.id, activeMenu.id);
+            const isSubActive = effectiveSubId === sub.id;
             return (
               <button
                 key={sub.id}
                 type="button"
+                role="tab"
+                aria-selected={isSubActive}
                 onClick={() => onTriggerSubAction(sub.id)}
-                className={`min-w-[180px] sm:min-w-[200px] shrink-0 rounded-2xl bg-gradient-to-r ${vis.bg} border-2 ${vis.border} p-2.5 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-2.5 text-left`}
+                className={`min-w-[175px] sm:min-w-[195px] shrink-0 rounded-2xl p-2.5 transition-all cursor-pointer flex items-center gap-2.5 text-left border-2 ${
+                  isSubActive
+                    ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fcd34d] border-[#0f2952] shadow-md ring-2 ring-[#0f2952]/20'
+                    : `bg-white hover:bg-sky-50/90 border-sky-200/90 hover:border-sky-300 shadow-2xs`
+                }`}
               >
                 {vis.emoji ? (
-                  <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 text-lg shadow-2xs">
+                  <span className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 text-base shadow-2xs">
                     {vis.emoji}
                   </span>
                 ) : vis.board ? (
-                  <HeroBoardEmblemIcon board={vis.board} className="w-10 h-10 shrink-0" />
+                  <HeroBoardEmblemIcon board={vis.board} className="w-9 h-9 shrink-0" />
                 ) : (
-                  <span className="w-11 h-11 shrink-0 flex items-center justify-center">
+                  <span className="w-10 h-10 shrink-0 flex items-center justify-center">
                     <SpecialCardIllustration
                       type={vis.ill || 'courses'}
                       className="w-full h-full drop-shadow-xs"
@@ -233,9 +282,15 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
                   <span className="block font-display font-black text-xs text-[#0f2952] leading-tight truncate">
                     {sub.label}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#0f2952]/80 mt-0.5">
-                    <span>{sub.badgeText || 'Open'}</span>
-                    <ArrowRight className="w-2.5 h-2.5" />
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-extrabold mt-1 px-2 py-0.5 rounded-full ${
+                      isSubActive
+                        ? 'bg-[#0f2952] text-amber-300'
+                        : 'bg-sky-100/90 text-[#0f2952]/80'
+                    }`}
+                  >
+                    <span>{isSubActive ? 'Selected' : sub.badgeText || 'Open'}</span>
+                    {!isSubActive && <ArrowRight className="w-2.5 h-2.5" />}
                   </span>
                 </div>
               </button>
@@ -243,6 +298,6 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
           })}
         </div>
       </div>
-    </div>
+    </nav>
   );
 };

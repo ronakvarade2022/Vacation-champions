@@ -33,14 +33,15 @@ export type NavSubActionId =
   | 'sl-creative'
   | 'sl-programs'
   // SECTION 4: STUDY MATERIAL
-  | 'sm-notes'
-  | 'sm-worksheets'
-  | 'sm-summaries'
-  | 'sm-pdfs'
-  | 'sm-question-banks'
-  | 'sm-guides'
-  | 'sm-important-questions'
   | 'sm-textbook-learning'
+  | 'sm-notes'
+  | 'sm-summaries'
+  | 'sm-question-banks'
+  | 'sm-worksheets'
+  | 'sm-pdfs'
+  | 'sm-guides'
+  | 'sm-special-hubs'
+  | 'sm-important-questions'
   // SECTION 5: PRACTICE ZONE
   | 'pz-maths'
   | 'pz-english'
@@ -249,58 +250,58 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
   {
     id: 'study-material',
     label: 'Study Material',
-    defaultActionId: 'sm-notes',
-    whatIsThis: 'Your educational reference library for reading, revision, and worksheets.',
-    whatCanILearn: 'Chapter Notes, Worksheets, Chapter Summaries, Practice PDFs, Question Banks & Study Guides.',
-    whatShouldIClick: 'Choose a material type below, then pick your Subject and Chapter to read or solve.',
+    defaultActionId: 'sm-textbook-learning',
+    whatIsThis: '100% Free academic reference library arranged Board → Medium → Class → Subject → Chapter.',
+    whatCanILearn: 'Official Textbooks, Chapter Notes, Short Revision, 9-Format Q&A Bank, Model & PYQ Papers, Chapter Tests, Video Lessons & Special Hubs.',
+    whatShouldIClick: 'Choose a material type in sequence below, then select your Board, Medium, Class, Subject and Chapter.',
     items: [
       {
+        id: 'sm-textbook-learning',
+        label: '1. Textbooks & Syllabus',
+        description: 'Official Balbharati, NCERT & CISCE textbooks for Classes 1 to 10 across all mediums',
+        badgeText: '100% Free',
+      },
+      {
         id: 'sm-notes',
-        label: 'Notes',
-        description: 'Detailed chapter-wise concept explanations, definitions & key points',
+        label: '2. Chapter Study Notes',
+        description: 'Detailed chapter explanations, definitions, formulas & solved walkthrough examples',
         badgeText: 'Chapter Notes',
       },
       {
-        id: 'sm-worksheets',
-        label: 'Worksheets',
-        description: 'Subject-wise & class-wise reference worksheets with model answers',
-        badgeText: 'All Classes',
-      },
-      {
         id: 'sm-summaries',
-        label: 'Chapter Summaries',
-        description: 'Quick-revision chapter overviews, formulas & key takeaways',
+        label: '3. Short Revision Sheets',
+        description: 'One-page exam summary sheets, memory tricks & self-revision checklists',
         badgeText: 'Fast Revision',
       },
       {
-        id: 'sm-pdfs',
-        label: 'Practice PDFs',
-        description: 'Printable chapter revision sheets & structured study handouts',
-        badgeText: 'Printable',
+        id: 'sm-question-banks',
+        label: '4. Important Q&A Bank',
+        description: '9-format solved textbook & board exam questions with marking scheme tips',
+        badgeText: '9 Formats',
       },
       {
-        id: 'sm-question-banks',
-        label: 'Question Banks',
-        description: 'Solved textbook & important board questions with step-by-step answers',
-        badgeText: 'Solved Q&A',
+        id: 'sm-worksheets',
+        label: '5. Worksheets (Reference)',
+        description: 'Direct link to interactive class-wise & subject-wise worksheets (original module)',
+        badgeText: 'All Classes',
+      },
+      {
+        id: 'sm-pdfs',
+        label: '6. Model & PYQ Papers',
+        description: 'Board-pattern model question papers, previous year papers & A4 printable sheets',
+        badgeText: 'Exam Papers',
       },
       {
         id: 'sm-guides',
-        label: 'Study Guides',
-        description: 'Subject-wise preparation strategies, marking schemes & study checklists',
-        badgeText: 'Exam Tips',
+        label: '7. Chapter Tests & Videos',
+        description: 'Interactive 10-MCQ chapter tests with auto-grading & curated DIKSHA video lessons',
+        badgeText: 'Tests & Videos',
       },
       {
-        id: 'sm-important-questions',
-        label: 'Important Questions',
-        description: 'High-weightage board & school exam questions for every chapter',
-        badgeText: 'Must Revise',
-      },
-      {
-        id: 'sm-textbook-learning',
-        label: 'Textbook Learning',
-        description: 'Structured chapter-by-chapter textbook companion & concept guide',
-        badgeText: 'Textbook',
+        id: 'sm-special-hubs',
+        label: '8. Special Academic Hubs',
+        description: 'Math Formulas, 12 SVG Science Diagrams, English Grammar & Scholarship/Olympiad Hub',
+        badgeText: '4 Hubs',
       },
     ],
   },

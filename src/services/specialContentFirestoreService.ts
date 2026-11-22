@@ -688,8 +688,23 @@ export async function deleteSpecialContentItemFromFirestore(id: string): Promise
  */
 const STUDY_LIB_CACHE_PREFIX = 'msz_study_lib_page_v1_';
 
+export type StudyMedium = 'All Mediums' | 'English' | 'Marathi' | 'Hindi' | 'Semi-English';
+
+export function getAvailableMediumsForBoard(
+  board: EducationBoard
+): Exclude<StudyMedium, 'All Mediums'>[] {
+  if (board === 'Maharashtra') {
+    return ['English', 'Marathi', 'Semi-English', 'Hindi'];
+  }
+  if (board === 'CBSE') {
+    return ['English', 'Hindi'];
+  }
+  return ['English'];
+}
+
 export interface StudyLibraryDynamicItemPayload {
   board: EducationBoard;
+  medium?: StudyMedium;
   classLevel: ClassLevel;
   subject: SubjectName | string;
   materialCategory:
@@ -750,6 +765,7 @@ export async function bumpStudyLibraryVersionInFirestore(): Promise<number> {
 
 export async function loadPaginatedStudyLibraryItemsFromFirestore(params?: {
   board?: EducationBoard;
+  medium?: StudyMedium;
   classLevel?: ClassLevel;
   materialCategory?: string;
   pageSize?: number;
@@ -757,11 +773,23 @@ export async function loadPaginatedStudyLibraryItemsFromFirestore(params?: {
   forceRefresh?: boolean;
 }): Promise<SpecialContentDocument<StudyLibraryDynamicItemPayload>[]> {
   const board = params?.board;
+  const medium = params?.medium;
   const classLevel = params?.classLevel;
   const materialCategory = params?.materialCategory;
   const pageSize = Math.min(Math.max(params?.pageSize || 25, 1), 100);
   const includeDrafts = Boolean(params?.includeDraftsForAdmin);
   const forceRefresh = Boolean(params?.forceRefresh);
+
+  const filterByMedium = (
+    list: SpecialContentDocument<StudyLibraryDynamicItemPayload>[]
+  ): SpecialContentDocument<StudyLibraryDynamicItemPayload>[] => {
+    if (!medium || medium === 'All Mediums') return list;
+    return list.filter((docItem) => {
+      const itemMed = docItem.payload?.medium;
+      if (!itemMed || itemMed === 'All Mediums') return true;
+      return itemMed === medium;
+    });
+  };
 
   const cacheKey = `${STUDY_LIB_CACHE_PREFIX}${board || 'ALL'}_${classLevel || 'ALL'}_${
     materialCategory || 'ALL'
@@ -781,7 +809,7 @@ export async function loadPaginatedStudyLibraryItemsFromFirestore(params?: {
     if (cached && Array.isArray(cached.items)) {
       // If studyLibraryVersion is 0 (no dynamic admin items ever published), or matches currentVersion, return 0-read cached result!
       if (currentVersion === 0 || cached.version === currentVersion) {
-        return cached.items;
+        return filterByMedium(cached.items);
       }
     } else if (currentVersion === 0) {
       // Zero dynamic items have been published by Admin yet -> 0 Firestore reads!
@@ -826,7 +854,7 @@ export async function loadPaginatedStudyLibraryItemsFromFirestore(params?: {
         items,
       });
     }
-    return items;
+    return filterByMedium(items);
   } catch {
     const fallback = readCachedJson<{
       items?: SpecialContentDocument<StudyLibraryDynamicItemPayload>[];
