@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
   CheckCircle2,
   Edit3,
   Eye,
@@ -34,6 +35,7 @@ import {
   TET_CTET_AUDIT_BATCHES,
 } from '../../data/tetCtetAuditTracker';
 import { AdminQuestionErrorReportsSection } from './AdminQuestionErrorReportsSection';
+import { AdminTetCtetStudyNotesManager } from './AdminTetCtetStudyNotesManager';
 
 function formatHhMmSs(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
@@ -43,7 +45,7 @@ function formatHhMmSs(totalSeconds: number): string {
   return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-type AdminTetTab = 'batches' | 'inspector' | 'audit' | 'monitor' | 'error-reports';
+type AdminTetTab = 'batches' | 'study-notes' | 'inspector' | 'audit' | 'monitor' | 'error-reports';
 
 export const AdminTetCtetSection: React.FC = () => {
   const {
@@ -297,6 +299,7 @@ export const AdminTetCtetSection: React.FC = () => {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 p-1 bg-slate-100 rounded-2xl">
           {[
             { id: 'batches' as const, label: '40 Batches Manager (5 Tests/Batch)', icon: RefreshCw },
+            { id: 'study-notes' as const, label: '📚 Study Notes (EN/MR/HI)', icon: BookOpen },
             { id: 'inspector' as const, label: 'Question Inspector & Editor', icon: FileSearch },
             { id: 'audit' as const, label: 'Centralized Automated Audit', icon: ShieldCheck },
             { id: 'monitor' as const, label: `Student Attempts Monitor (${allCandidateAttempts.length})`, icon: Users },
@@ -1169,6 +1172,11 @@ export const AdminTetCtetSection: React.FC = () => {
           SUB-TAB 5: 🚩 QUESTION ERROR REPORTS
           ===================================================================== */}
       {activeTab === 'error-reports' && <AdminQuestionErrorReportsSection />}
+
+      {/* =====================================================================
+          SUB-TAB 6: 📚 TET & CTET TRILINGUAL STUDY NOTES MANAGER
+          ===================================================================== */}
+      {activeTab === 'study-notes' && <AdminTetCtetStudyNotesManager />}
 
       {/* Edit Question Modal */}
       {editingQuestion && (

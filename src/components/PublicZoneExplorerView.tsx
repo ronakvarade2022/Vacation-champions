@@ -17,7 +17,7 @@ import {
   Target,
   TrendingUp,
 } from 'lucide-react';
-import { ClassLevel, EducationBoard, QuizLevel, SubjectName } from '../types';
+import { ClassLevel, EducationBoard, PlanSkuId, QuizLevel, SubjectName } from '../types';
 import { useApp } from '../context/AppContext';
 import { BOARD_META_LIST, getEducationBoardMeta } from '../data/boards/boardMeta';
 import {
@@ -57,7 +57,7 @@ export interface PublicZoneExplorerViewProps {
   onSelectClass: (cls: ClassLevel) => void;
   onOpenDemo: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
   onOpenAuth: (defaultTab: 'login' | 'register') => void;
-  onOpenMembership: (targetClass: ClassLevel, targetBoard: EducationBoard) => void;
+  onOpenMembership: (targetClass: ClassLevel, targetBoard: EducationBoard, planSku?: PlanSkuId) => void;
   onBackHome: () => void;
   onNavigateTab?: (tab: string, subject?: SubjectName, level?: QuizLevel) => void;
 }
@@ -122,12 +122,12 @@ const ZONE_META: Record<
   plans: {
     sectionNumber: 'Section 8 · Plans & Pricing',
     eyebrow: 'Transparent Annual Subscriptions',
-    title: 'Free Learning Programmes, Board Plans (MH · CBSE · ICSE), Special Programmes & Purchased Content',
+    title: 'Free Learning Programmes, Board Plans (MH · CBSE · ICSE), Teacher Plans (TET & CTET) & Purchased Content',
     subtitle:
-      'Compare Free Forever access vs. ₹99 one-time payment for 365 days of complete Board + Class access.',
+      'Compare Free Forever access, ₹99/year Board + Class plans, and TET/CTET Paper 1 & 2 Teacher Exam plans (6 Months & 1 Year).',
     whatIsThis: 'Complete subscription pricing, access duration, included benefits, and your purchased content.',
-    whatCanILearn: 'Free Programmes, Maharashtra Plans, CBSE Plans, ICSE Plans, Special Programmes & Purchased Content.',
-    whatShouldIClick: 'Select your Board & Class below and click Unlock for ₹99 (365 Days) or view your active plans.',
+    whatCanILearn: 'Free Programmes, Maharashtra Plans, CBSE Plans, ICSE Plans, TET & CTET Teacher Plans, Special Programmes & Purchased Content.',
+    whatShouldIClick: 'Select your Board & Class or choose a TET/CTET Teacher Plan below to unlock instantly via Razorpay.',
     accentTheme: 'amber',
   },
 };
@@ -954,6 +954,143 @@ export const PublicZoneExplorerView: React.FC<PublicZoneExplorerViewProps> = ({
                 </button>
               </div>
             ))}
+          </div>
+
+          {/* 3B. Teacher Plans – TET & CTET (Paper 1 & 2) Official Pricing */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 border-2 border-indigo-500/40 shadow-lg space-y-5 text-white">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <span className="inline-block px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 text-rose-200 text-[11px] font-black uppercase tracking-wider">
+                  Teacher Plans – Choose Your Perfect Plan
+                </span>
+                <h3 className="text-xl sm:text-2xl font-display font-black text-white">
+                  TET &amp; CTET (Paper 1 &amp; 2) Exam Prep Plans
+                </h3>
+                <p className="text-xs sm:text-sm text-indigo-100/90">
+                  Full 150-Question CBT Mock Tests, Verified Study Notes (English, Marathi, Hindi) &amp; Detailed Analytics. One-time payment, zero auto-renewal.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerTab('tet-ctet')}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-extrabold text-xs cursor-pointer shrink-0"
+              >
+                Try 1 TET &amp; 1 CTET Free Demo →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* TET Paper 1 & 2 */}
+              <div className="rounded-2xl bg-white text-slate-900 border-2 border-blue-400 p-5 flex flex-col justify-between space-y-4 shadow-sm">
+                <div className="space-y-1.5">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-black uppercase tracking-wider">
+                    MAHA TET Exam
+                  </span>
+                  <h4 className="font-display font-black text-lg text-blue-950">
+                    TET (Paper 1 &amp; 2)
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    100 Full Mock Tests (Paper 1 &amp; 2) + Trilingual Verified TET Study Notes.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(selectedClass, selectedBoard, 'TET_6M')}
+                    className="rounded-xl border-2 border-blue-200 hover:border-blue-500 bg-blue-50/70 hover:bg-blue-50 p-3 text-center transition-all cursor-pointer"
+                  >
+                    <span className="block text-[11px] font-black uppercase text-blue-900">6 Months</span>
+                    <span className="block text-xs font-bold text-slate-500 line-through mt-0.5">₹399</span>
+                    <span className="block text-2xl font-display font-black text-rose-600 leading-tight">₹199</span>
+                    <span className="block text-[10px] font-extrabold text-blue-800 mt-1">180 Days · Enroll</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(selectedClass, selectedBoard, 'TET_1Y')}
+                    className="rounded-xl border-2 border-blue-400 hover:border-blue-600 bg-amber-50/80 hover:bg-amber-50 p-3 text-center transition-all cursor-pointer"
+                  >
+                    <span className="block text-[11px] font-black uppercase text-blue-900">1 Year</span>
+                    <span className="block text-xs font-bold text-slate-500 line-through mt-0.5">₹599</span>
+                    <span className="block text-2xl font-display font-black text-rose-600 leading-tight">₹299</span>
+                    <span className="block text-[10px] font-extrabold text-blue-800 mt-1">365 Days · Enroll</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* CTET Paper 1 & 2 */}
+              <div className="rounded-2xl bg-white text-slate-900 border-2 border-emerald-400 p-5 flex flex-col justify-between space-y-4 shadow-sm">
+                <div className="space-y-1.5">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black uppercase tracking-wider">
+                    CBSE CTET Exam
+                  </span>
+                  <h4 className="font-display font-black text-lg text-emerald-950">
+                    CTET (Paper 1 &amp; 2)
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    100 Full Mock Tests (Paper 1 &amp; 2) + Trilingual Verified CTET Study Notes.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(selectedClass, selectedBoard, 'CTET_6M')}
+                    className="rounded-xl border-2 border-emerald-200 hover:border-emerald-500 bg-emerald-50/70 hover:bg-emerald-50 p-3 text-center transition-all cursor-pointer"
+                  >
+                    <span className="block text-[11px] font-black uppercase text-emerald-900">6 Months</span>
+                    <span className="block text-xs font-bold text-slate-500 line-through mt-0.5">₹399</span>
+                    <span className="block text-2xl font-display font-black text-rose-600 leading-tight">₹199</span>
+                    <span className="block text-[10px] font-extrabold text-emerald-800 mt-1">180 Days · Enroll</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(selectedClass, selectedBoard, 'CTET_1Y')}
+                    className="rounded-xl border-2 border-emerald-400 hover:border-emerald-600 bg-amber-50/80 hover:bg-amber-50 p-3 text-center transition-all cursor-pointer"
+                  >
+                    <span className="block text-[11px] font-black uppercase text-emerald-900">1 Year</span>
+                    <span className="block text-xs font-bold text-slate-500 line-through mt-0.5">₹599</span>
+                    <span className="block text-2xl font-display font-black text-rose-600 leading-tight">₹299</span>
+                    <span className="block text-[10px] font-extrabold text-emerald-800 mt-1">365 Days · Enroll</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Combo Offer: TET Paper 1 & 2 + CTET Paper 1 & 2 */}
+              <div className="rounded-2xl bg-gradient-to-b from-purple-50 via-white to-amber-50 text-slate-900 border-2 border-purple-500 p-5 flex flex-col justify-between space-y-4 shadow-md">
+                <div className="space-y-1.5">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-black uppercase tracking-wider">
+                    Best Value · Combo Offer
+                  </span>
+                  <h4 className="font-display font-black text-lg text-purple-950">
+                    TET Paper 1 &amp; 2 + CTET Paper 1 &amp; 2
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    All 200 Mock Tests (30,000 Qs) + Complete TET &amp; CTET Trilingual Study Notes.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(selectedClass, selectedBoard, 'TET_CTET_COMBO_6M')}
+                    className="rounded-xl border-2 border-purple-300 hover:border-purple-600 bg-purple-50 hover:bg-purple-100/70 p-3 text-center transition-all cursor-pointer"
+                  >
+                    <span className="block text-[11px] font-black uppercase text-purple-900">6 Months</span>
+                    <span className="block text-xs font-bold text-slate-500 line-through mt-0.5">₹699</span>
+                    <span className="block text-2xl font-display font-black text-rose-600 leading-tight">₹349</span>
+                    <span className="block text-[10px] font-extrabold text-purple-800 mt-1">180 Days · Enroll</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership(selectedClass, selectedBoard, 'TET_CTET_COMBO_1Y')}
+                    className="rounded-xl border-2 border-amber-500 hover:border-amber-600 bg-amber-100/80 hover:bg-amber-100 p-3 text-center transition-all cursor-pointer"
+                  >
+                    <span className="block text-[11px] font-black uppercase text-purple-900">1 Year</span>
+                    <span className="block text-xs font-bold text-slate-500 line-through mt-0.5">₹999</span>
+                    <span className="block text-2xl font-display font-black text-rose-600 leading-tight">₹499</span>
+                    <span className="block text-[10px] font-extrabold text-amber-900 mt-1">365 Days · Enroll</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 4. Purchased Content (Active Subscriptions on Student Account) */}

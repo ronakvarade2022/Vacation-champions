@@ -110,7 +110,8 @@ function addDaysIst(dateStr, days) {
   return `${y}-${m}-${d}`;
 }
 
-function computeNetlifySubscriptionDates(now = new Date(), existingExpiresAt = null) {
+function computeNetlifySubscriptionDates(now = new Date(), existingExpiresAt = null, validityDays = PAID_SUBSCRIPTION_VALIDITY_DAYS) {
+  const effectiveValidityDays = Number(validityDays) > 0 ? Number(validityDays) : PAID_SUBSCRIPTION_VALIDITY_DAYS;
   const purchasedDateIst = formatIstDateString(now);
   let baseDateIst = purchasedDateIst;
   if (existingExpiresAt) {
@@ -119,7 +120,7 @@ function computeNetlifySubscriptionDates(now = new Date(), existingExpiresAt = n
       baseDateIst = parsedExp;
     }
   }
-  const expiryDateIst = addDaysIst(baseDateIst, PAID_SUBSCRIPTION_VALIDITY_DAYS);
+  const expiryDateIst = addDaysIst(baseDateIst, effectiveValidityDays);
   const startMs = Date.parse(`${purchasedDateIst}T00:00:00Z`);
   const endMs = Date.parse(`${expiryDateIst}T00:00:00Z`);
   const daysRemaining = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
@@ -127,7 +128,7 @@ function computeNetlifySubscriptionDates(now = new Date(), existingExpiresAt = n
     startDateIso: purchasedDateIst,
     expiryDateIso: expiryDateIst,
     daysRemaining,
-    validityDays: PAID_SUBSCRIPTION_VALIDITY_DAYS
+    validityDays: effectiveValidityDays
   };
 }
 
@@ -264,28 +265,38 @@ function parseNetlifyBoardClassKey(rawKey) {
 }
 
 const NETLIFY_PLAN_CATALOG = {
-  BOARD_CLASS: { sku: 'BOARD_CLASS', title: 'Board & Class Annual Plan (Classes 1–10)', amountInr: 99, amountPaise: 9900, validityDays: 365, unlockedCategories: [] },
-  SCHOLARSHIP_4TH: { sku: 'SCHOLARSHIP_4TH', title: '4th Std MSCE Scholarship Plan (PSE)', amountInr: 99, amountPaise: 9900, validityDays: 365, unlockedCategories: ['scholarship_4th'] },
-  SCHOLARSHIP_7TH: { sku: 'SCHOLARSHIP_7TH', title: '7th Std MSCE Scholarship Plan (UPS)', amountInr: 99, amountPaise: 9900, validityDays: 365, unlockedCategories: ['scholarship_7th'] },
-  MAHA_TET: { sku: 'MAHA_TET', title: 'MAHA TET Complete Plan (Paper 1 & Paper 2)', amountInr: 149, amountPaise: 14900, validityDays: 365, unlockedCategories: ['maha_tet'] },
-  CTET_PAPER_1: { sku: 'CTET_PAPER_1', title: 'CTET Paper 1 Complete Plan (Classes 1–5)', amountInr: 149, amountPaise: 14900, validityDays: 365, unlockedCategories: ['ctet_paper_1'] },
-  CTET_PAPER_2: { sku: 'CTET_PAPER_2', title: 'CTET Paper 2 Complete Plan (Classes 6–8)', amountInr: 149, amountPaise: 14900, validityDays: 365, unlockedCategories: ['ctet_paper_2'] },
-  SCHOLARSHIP_COMBO: { sku: 'SCHOLARSHIP_COMBO', title: '4th + 7th Scholarship Combined Plan', amountInr: 149, amountPaise: 14900, validityDays: 365, unlockedCategories: ['scholarship_4th', 'scholarship_7th'] },
-  CTET_COMBO: { sku: 'CTET_COMBO', title: 'CTET Paper 1 + Paper 2 Combo Plan', amountInr: 229, amountPaise: 22900, validityDays: 365, unlockedCategories: ['ctet_paper_1', 'ctet_paper_2'] },
-  TET_CTET_COMBO: { sku: 'TET_CTET_COMBO', title: 'All TET + CTET Master Combo (MAHA TET + CTET P1 & P2)', amountInr: 299, amountPaise: 29900, validityDays: 365, unlockedCategories: ['maha_tet', 'ctet_paper_1', 'ctet_paper_2'] },
-  TEACHER_ALL_ACCESS: { sku: 'TEACHER_ALL_ACCESS', title: 'All-in-One Educator & Academy Bundle', amountInr: 499, amountPaise: 49900, validityDays: 365, unlockedCategories: ['all_classes', 'scholarship_4th', 'scholarship_7th', 'maha_tet', 'ctet_paper_1', 'ctet_paper_2'] }
+  BOARD_CLASS: { sku: 'BOARD_CLASS', title: 'Board & Class Annual Plan (Classes 1–10)', originalAmountInr: 199, amountInr: 99, amountPaise: 9900, validityDays: 365, validityLabel: '12 Months (1 Year)', unlockedCategories: [] },
+  TET_6M: { sku: 'TET_6M', title: 'TET (Paper 1 & 2) – 6 Months', originalAmountInr: 399, amountInr: 199, amountPaise: 19900, validityDays: 180, validityLabel: '6 Months', unlockedCategories: ['maha_tet'] },
+  CTET_6M: { sku: 'CTET_6M', title: 'CTET (Paper 1 & 2) – 6 Months', originalAmountInr: 399, amountInr: 199, amountPaise: 19900, validityDays: 180, validityLabel: '6 Months', unlockedCategories: ['ctet_paper_1', 'ctet_paper_2'] },
+  TET_CTET_COMBO_6M: { sku: 'TET_CTET_COMBO_6M', title: 'TET + CTET Combo (Paper 1 & 2) – 6 Months', originalAmountInr: 699, amountInr: 349, amountPaise: 34900, validityDays: 180, validityLabel: '6 Months', unlockedCategories: ['maha_tet', 'ctet_paper_1', 'ctet_paper_2'] },
+  TET_1Y: { sku: 'TET_1Y', title: 'TET (Paper 1 & 2) – 1 Year', originalAmountInr: 599, amountInr: 299, amountPaise: 29900, validityDays: 365, validityLabel: '1 Year', unlockedCategories: ['maha_tet'] },
+  CTET_1Y: { sku: 'CTET_1Y', title: 'CTET (Paper 1 & 2) – 1 Year', originalAmountInr: 599, amountInr: 299, amountPaise: 29900, validityDays: 365, validityLabel: '1 Year', unlockedCategories: ['ctet_paper_1', 'ctet_paper_2'] },
+  TET_CTET_COMBO_1Y: { sku: 'TET_CTET_COMBO_1Y', title: 'TET + CTET Combo (Paper 1 & 2) – 1 Year', originalAmountInr: 999, amountInr: 499, amountPaise: 49900, validityDays: 365, validityLabel: '1 Year', unlockedCategories: ['maha_tet', 'ctet_paper_1', 'ctet_paper_2'] },
+  SCHOLARSHIP_COMBO: { sku: 'SCHOLARSHIP_COMBO', title: 'Scholarship Combo – Class 4 + Class 7', originalAmountInr: 199, amountInr: 99, amountPaise: 9900, validityDays: 365, validityLabel: '12 Months', unlockedCategories: ['scholarship_4th', 'scholarship_7th'] }
 };
 
 function resolveNetlifyPlanSku(rawSku, rawPlanId, amountPaiseOrInr) {
   const c1 = String(rawSku || '').trim().toUpperCase();
   if (NETLIFY_PLAN_CATALOG[c1]) return c1;
+  if (c1 === 'MAHA_TET') return 'TET_1Y';
+  if (c1 === 'CTET_PAPER_1' || c1 === 'CTET_PAPER_2' || c1 === 'CTET_COMBO') return 'CTET_1Y';
+  if (c1 === 'TET_CTET_COMBO' || c1 === 'TEACHER_ALL_ACCESS') return 'TET_CTET_COMBO_1Y';
+  if (c1 === 'SCHOLARSHIP_4TH' || c1 === 'SCHOLARSHIP_7TH') return 'SCHOLARSHIP_COMBO';
+
   const c2 = String(rawPlanId || '').trim().toUpperCase();
   if (NETLIFY_PLAN_CATALOG[c2]) return c2;
+  if (c2 === 'MAHA_TET') return 'TET_1Y';
+  if (c2 === 'CTET_PAPER_1' || c2 === 'CTET_PAPER_2' || c2 === 'CTET_COMBO') return 'CTET_1Y';
+  if (c2 === 'TET_CTET_COMBO' || c2 === 'TEACHER_ALL_ACCESS') return 'TET_CTET_COMBO_1Y';
+  if (c2 === 'SCHOLARSHIP_4TH' || c2 === 'SCHOLARSHIP_7TH') return 'SCHOLARSHIP_COMBO';
+
   if (typeof amountPaiseOrInr === 'number' && amountPaiseOrInr > 0) {
     const inr = amountPaiseOrInr >= 5000 ? Math.round(amountPaiseOrInr / 100) : Math.round(amountPaiseOrInr);
-    if (inr === 499) return 'TEACHER_ALL_ACCESS';
-    if (inr === 299) return 'TET_CTET_COMBO';
-    if (inr === 229) return 'CTET_COMBO';
+    if (inr === 499) return 'TET_CTET_COMBO_1Y';
+    if (inr === 349) return 'TET_CTET_COMBO_6M';
+    if (inr === 299) return 'TET_1Y';
+    if (inr === 199) return 'TET_6M';
+    if (inr === 99) return 'BOARD_CLASS';
   }
   return 'BOARD_CLASS';
 }
@@ -791,7 +802,7 @@ export async function handler(event) {
           ? normalizedClass
             ? `PREMIUM PLAN (${normalizedBoard} • ${normalizedClass}) – ₹${amountInRupees} – 365 Days`
             : `PREMIUM PLAN (${normalizedBoard}) – ₹${amountInRupees} – 365 Days (1 Year)`
-          : `${planItem.title} – ₹${amountInRupees} – 365 Days (1 Year)`;
+          : `${planItem.title} – ₹${amountInRupees} – ${planItem.validityDays} Days (${planItem.validityLabel})`;
       const authHeader = 'Basic ' + Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString('base64');
 
       const qrRes = await fetch('https://api.razorpay.com/v1/payments/qr_codes', {
@@ -931,11 +942,11 @@ export async function handler(event) {
           ? existingStudentDoc?.classSubscriptions?.[targetKey]?.expiresAt ||
             (resolvedBoard === 'Maharashtra' ? existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt : undefined)
           : undefined;
-        const dates = computeNetlifySubscriptionDates(now, isCategoryPlan ? existingCatExpiry : existingClassExpiry);
+        const dates = computeNetlifySubscriptionDates(now, isCategoryPlan ? existingCatExpiry : existingClassExpiry, planItem.validityDays);
         const startDateIso = dates.startDateIso;
         const expiryDateIso = dates.expiryDateIso;
         const planTitle = isCategoryPlan
-          ? `${planItem.title} – ₹${amountRupees} – 365 Days (1 Year)`
+          ? `${planItem.title} – ₹${amountRupees} – ${planItem.validityDays} Days (${planItem.validityLabel})`
           : `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹${amountRupees} – 365 Days (1 Year)`;
         const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
 
@@ -1337,7 +1348,8 @@ export async function handler(event) {
         now,
         isCategoryPlan
           ? existingCatExpiry
-          : existingClassExpiry || (!existingStudentDoc?.classSubscriptions ? (currentExpiresAt || existingStudentDoc?.planExpiresAt) : undefined)
+          : existingClassExpiry || (!existingStudentDoc?.classSubscriptions ? (currentExpiresAt || existingStudentDoc?.planExpiresAt) : undefined),
+        planItem.validityDays
       );
       const startDateIso = dates.startDateIso;
       const expiryDateIso = dates.expiryDateIso;
@@ -1345,7 +1357,7 @@ export async function handler(event) {
 
       const verifiedAmount = planItem.amountInr;
       const planTitle = isCategoryPlan
-        ? `${planItem.title} – ₹${verifiedAmount} – 365 Days (1 Year)`
+        ? `${planItem.title} – ₹${verifiedAmount} – ${planItem.validityDays} Days (${planItem.validityLabel})`
         : `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹${verifiedAmount} – 365 Days (1 Year)`;
       const subscriptionTier = 'premium';
       const receiptNumber = `REC-VC-${Date.now().toString().slice(-6)}`;
@@ -1695,12 +1707,12 @@ export async function handler(event) {
             ? existingStudentDoc?.classSubscriptions?.[targetKey]?.expiresAt ||
               (resolvedBoard === 'Maharashtra' ? existingStudentDoc?.classSubscriptions?.[resolvedClass]?.expiresAt : undefined)
             : undefined;
-          const dates = computeNetlifySubscriptionDates(now, isCategoryPlan ? existingCatExpiry : existingClassExpiry);
+          const dates = computeNetlifySubscriptionDates(now, isCategoryPlan ? existingCatExpiry : existingClassExpiry, planItem.validityDays);
           const startDateIso = dates.startDateIso;
           const expiryDateIso = dates.expiryDateIso;
           const amountInr = planItem.amountInr;
           const planTitle = isCategoryPlan
-            ? `${planItem.title} – ₹${amountInr} – 365 Days (1 Year)`
+            ? `${planItem.title} – ₹${amountInr} – ${planItem.validityDays} Days (${planItem.validityLabel})`
             : `PREMIUM PLAN (${resolvedBoard} • ${resolvedClass}) – ₹${amountInr} – 365 Days (1 Year)`;
 
           if (isCategoryPlan) {

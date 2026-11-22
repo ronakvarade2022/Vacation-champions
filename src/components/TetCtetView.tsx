@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileText,
   GraduationCap,
   Layers,
   Lock,
@@ -18,6 +19,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { PlanSkuId } from '../types';
 import { TetCtetModuleId } from '../types/tetCtet';
+import type { TetCtetNoteExam, TetCtetNotePaper } from '../data/tetCtetNotes';
 import {
   TET_CTET_MODULE_LIST,
   TET_CTET_TOTAL_MOCKS,
@@ -32,6 +34,10 @@ import { SectionLoadingFallback } from './SectionLoadingFallback';
 
 const TetCtetModuleView = lazyWithRetry(() =>
   import('./TetCtetModuleView').then((m) => ({ default: m.TetCtetModuleView }))
+);
+
+const TetCtetStudyNotesView = lazyWithRetry(() =>
+  import('./TetCtetStudyNotesView').then((m) => ({ default: m.TetCtetStudyNotesView }))
 );
 
 const TetCtetEmblemSvg: React.FC<{ className?: string }> = ({ className = 'w-16 h-16' }) => (
@@ -69,6 +75,10 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
   const { currentStudent, tetCtetAttempts, tetCtetBatches } = useApp();
   const [selectedModule, setSelectedModule] = useState<TetCtetModuleId | null>(null);
   const [initialSubTab, setInitialSubTab] = useState<TetCtetModuleSubTab>('mock-tests');
+  const [studyNotesPreset, setStudyNotesPreset] = useState<{
+    exam: TetCtetNoteExam;
+    paper: TetCtetNotePaper;
+  } | null>(null);
   const [activeDemoTestId, setActiveDemoTestId] = useState<
     'demo_tet' | 'demo_tet_p2' | 'demo_ctet' | 'demo_ctet_p2' | null
   >(null);
@@ -78,8 +88,15 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
   const ctetP2Info = getCategorySubscriptionInfo(currentStudent, 'ctet_paper_2');
 
   const openModule = (moduleId: TetCtetModuleId, subTab: TetCtetModuleSubTab = 'mock-tests') => {
+    setStudyNotesPreset(null);
     setInitialSubTab(subTab);
     setSelectedModule(moduleId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openStudyNotes = (exam: TetCtetNoteExam, paper: TetCtetNotePaper) => {
+    setSelectedModule(null);
+    setStudyNotesPreset({ exam, paper });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -104,6 +121,27 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
         onExit={() => setActiveDemoTestId(null)}
         onOpenMembership={(planSku) => onOpenMembership?.(planSku)}
       />
+    );
+  }
+
+  if (studyNotesPreset) {
+    return (
+      <Suspense
+        fallback={
+          <SectionLoadingFallback
+            label="Loading TET & CTET trilingual study notes..."
+            onReturnHome={() => setStudyNotesPreset(null)}
+          />
+        }
+      >
+        <div className="max-w-7xl mx-auto pb-12">
+          <TetCtetStudyNotesView
+            initialExam={studyNotesPreset.exam}
+            initialPaper={studyNotesPreset.paper}
+            onBack={() => setStudyNotesPreset(null)}
+          />
+        </div>
+      </Suspense>
     );
   }
 
@@ -240,6 +278,78 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
       </section>
 
       {/* =====================================================================
+          COMPLETE TET & CTET TRILINGUAL STUDY NOTES (ENGLISH · मराठी · हिन्दी)
+          ===================================================================== */}
+      <section
+        aria-label="Complete TET and CTET Study Notes in English, Marathi and Hindi"
+        className="rounded-3xl bg-gradient-to-br from-emerald-950 via-teal-900 to-slate-900 text-white p-6 sm:p-7 border border-emerald-500/30 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+      >
+        <div className="space-y-2 max-w-2xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
+              Official Syllabus Study Notes · Free Access
+            </span>
+            <span className="text-xs font-bold text-emerald-200">
+              English · मराठी (Marathi) · हिन्दी (Hindi)
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-display font-black text-white">
+            Complete TET &amp; CTET Trilingual Study Notes (Paper I &amp; Paper II)
+          </h2>
+          <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed">
+            Comprehensive, exam-oriented study notes aligned strictly to CBSE CTET (ctet.nic.in) &amp; MSCE Pune MAHA TET (mahatet.in) official syllabi across CDP, Language I, Language II, Mathematics, EVS, Science &amp; Social Studies — complete with revision checklists &amp; original topic practice MCQs.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => openStudyNotes('CTET', 'PAPER_1')}
+            className="px-4 py-2.5 rounded-2xl bg-white hover:bg-emerald-50 text-slate-950 font-display font-black text-xs cursor-pointer shadow-sm transition flex items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-purple-700 shrink-0" />
+              <span>CTET Paper I Notes (I–V)</span>
+            </span>
+            <ArrowRight className="w-4 h-4 shrink-0 text-slate-600" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openStudyNotes('CTET', 'PAPER_2')}
+            className="px-4 py-2.5 rounded-2xl bg-white hover:bg-emerald-50 text-slate-950 font-display font-black text-xs cursor-pointer shadow-sm transition flex items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-violet-700 shrink-0" />
+              <span>CTET Paper II Notes (VI–VIII)</span>
+            </span>
+            <ArrowRight className="w-4 h-4 shrink-0 text-slate-600" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openStudyNotes('MAHA_TET', 'PAPER_1')}
+            className="px-4 py-2.5 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-display font-black text-xs cursor-pointer shadow-sm transition flex items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-slate-900 shrink-0" />
+              <span>MAHA TET Paper I Notes</span>
+            </span>
+            <ArrowRight className="w-4 h-4 shrink-0 text-slate-900" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openStudyNotes('MAHA_TET', 'PAPER_2')}
+            className="px-4 py-2.5 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-display font-black text-xs cursor-pointer shadow-sm transition flex items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-slate-900 shrink-0" />
+              <span>MAHA TET Paper II Notes</span>
+            </span>
+            <ArrowRight className="w-4 h-4 shrink-0 text-slate-900" />
+          </button>
+        </div>
+      </section>
+
+      {/* =====================================================================
           TWO LARGE PROMINENT EXAMINATION CARDS: MAHA TET & CTET
           ===================================================================== */}
       <section aria-label="MAHA TET and CTET Examination Cards" className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
@@ -269,8 +379,13 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
               ) : (
                 <>
                   <span className="font-bold text-blue-950 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Mock Test 01 Free Preview · 6M: ₹199 | 1 Year: ₹299</span>
+                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Mock 01 Free · 6M: <span className="line-through text-slate-400">₹399</span>{' '}
+                      <strong className="text-blue-950">₹199</strong> | 1Y:{' '}
+                      <span className="line-through text-slate-400">₹599</span>{' '}
+                      <strong className="text-blue-950">₹299</strong>
+                    </span>
                   </span>
                   {onOpenMembership && (
                     <div className="flex items-center gap-1.5">
@@ -280,7 +395,9 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
                         className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer flex items-center gap-1"
                       >
                         <Crown className="w-3 h-3" />
-                        <span>TET 6M (₹199)</span>
+                        <span>
+                          TET 6M <span className="line-through opacity-70 font-bold">₹399</span> ₹199
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -288,7 +405,9 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
                         className="px-2.5 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-black text-[11px] cursor-pointer flex items-center gap-1"
                       >
                         <Crown className="w-3 h-3" />
-                        <span>TET 1Y (₹299)</span>
+                        <span>
+                          TET 1Y <span className="line-through opacity-75 font-bold">₹599</span> ₹299
+                        </span>
                       </button>
                     </div>
                   )}
@@ -338,30 +457,38 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 onClick={() => openModule('MAHA_TET_P1', 'mock-tests')}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <ClipboardList className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                <span>Mock Test Series</span>
+                <span>Mock Series</span>
               </button>
               <button
                 type="button"
                 onClick={() => openModule('MAHA_TET_P1', 'subject-practice')}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <BookOpen className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                <span>Subject Practice</span>
+                <span>Practice</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openStudyNotes('MAHA_TET', 'PAPER_1')}
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+              >
+                <FileText className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Study Notes</span>
               </button>
               <button
                 type="button"
                 onClick={() => openModule('MAHA_TET_P1', 'syllabus')}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <BookMarked className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                <span>Complete Syllabus</span>
+                <span>Syllabus</span>
               </button>
             </div>
           </div>
@@ -387,10 +514,10 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
             <div className="p-3 rounded-2xl bg-purple-50 border border-purple-200 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex flex-wrap items-center gap-2 font-bold text-purple-950">
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${ctetP1Info.isPaidActive ? 'bg-emerald-100 text-emerald-800' : 'bg-white border border-purple-200 text-purple-900'}`}>
-                  P1: {ctetP1Info.isPaidActive ? 'Active ✓' : 'Mock 01 Free · From ₹199'}
+                  P1: {ctetP1Info.isPaidActive ? 'Active ✓' : 'Mock 01 Free'}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${ctetP2Info.isPaidActive ? 'bg-emerald-100 text-emerald-800' : 'bg-white border border-purple-200 text-purple-900'}`}>
-                  P2: {ctetP2Info.isPaidActive ? 'Active ✓' : 'Mock 01 Free · From ₹199'}
+                  P2: {ctetP2Info.isPaidActive ? 'Active ✓' : 'Mock 01 Free'}
                 </span>
               </div>
               {(!ctetP1Info.isPaidActive || !ctetP2Info.isPaidActive) && onOpenMembership && (
@@ -400,14 +527,14 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
                     onClick={() => onOpenMembership('CTET_6M')}
                     className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-black text-[11px] cursor-pointer"
                   >
-                    CTET 6M (₹199)
+                    CTET 6M <span className="line-through opacity-75 font-bold">₹399</span> ₹199
                   </button>
                   <button
                     type="button"
                     onClick={() => onOpenMembership('CTET_1Y')}
                     className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer"
                   >
-                    CTET 1Y (₹299)
+                    CTET 1Y <span className="line-through opacity-70 font-bold">₹599</span> ₹299
                   </button>
                 </div>
               )}
@@ -455,30 +582,38 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 onClick={() => openModule('CTET_P1', 'mock-tests')}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <ClipboardList className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                <span>Mock Test Series</span>
+                <span>Mock Series</span>
               </button>
               <button
                 type="button"
                 onClick={() => openModule('CTET_P1', 'subject-practice')}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <BookOpen className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                <span>Subject Practice</span>
+                <span>Practice</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openStudyNotes('CTET', 'PAPER_1')}
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+              >
+                <FileText className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Study Notes</span>
               </button>
               <button
                 type="button"
                 onClick={() => openModule('CTET_P1', 'syllabus')}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+                className="min-h-[42px] px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <BookMarked className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                <span>Complete Syllabus</span>
+                <span>Syllabus</span>
               </button>
             </div>
           </div>
@@ -574,32 +709,107 @@ export const TetCtetView: React.FC<TetCtetViewProps> = ({
           })}
         </div>
 
-        {/* Combined Teacher Packs Callout */}
-        {onOpenMembership && (!mahaTetInfo.isPaidActive || !ctetP1Info.isPaidActive || !ctetP2Info.isPaidActive) && (
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div>
-              <p className="font-display font-black text-sm text-amber-300">
-                Save 50% with TET + CTET Master Combo Plans
-              </p>
-              <p className="text-indigo-100 mt-0.5">
-                Complete access to all 200 Mock Tests across MAHA TET (P1 &amp; P2) and CTET (P1 &amp; P2) with detailed bilingual explanations.
-              </p>
+        {/* Teacher Plans — Exact Official Pricing Matrix (TET, CTET & Combo Offer) */}
+        {onOpenMembership && (
+          <div className="rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 space-y-4 border border-indigo-700/40">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider text-amber-300">
+                  Teacher Plans – Choose Your Perfect Plan (50% Off)
+                </p>
+                <h3 className="text-base sm:text-lg font-display font-black text-white mt-0.5">
+                  TET (Paper 1 &amp; 2) · CTET (Paper 1 &amp; 2) · Combo Offer
+                </h3>
+              </div>
+              <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200">
+                100% Verified Official Pricing · Zero Hidden Fees
+              </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => onOpenMembership('TET_CTET_COMBO_6M')}
-                className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black cursor-pointer shadow-xs"
-              >
-                TET + CTET 6M (₹349)
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenMembership('TET_CTET_COMBO_1Y')}
-                className="px-3.5 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black cursor-pointer shadow-xs"
-              >
-                TET + CTET 1 Year (₹499)
-              </button>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {/* TET (Paper 1 & 2) */}
+              <div className="rounded-2xl bg-white/10 border border-blue-400/30 p-4 space-y-3">
+                <div className="text-center">
+                  <div className="text-sm font-display font-black text-blue-200">TET (Paper 1 &amp; 2)</div>
+                  <div className="text-[11px] text-slate-300">100 Full Mocks · 15,000 Qs · Study Notes</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('TET_6M')}
+                    className="rounded-xl bg-white hover:bg-blue-50 text-slate-900 p-2.5 text-center cursor-pointer transition shadow-xs"
+                  >
+                    <div className="text-[10px] font-extrabold uppercase text-blue-700">6 Months</div>
+                    <div className="text-xs font-bold text-slate-400 line-through mt-0.5">₹399</div>
+                    <div className="text-lg font-black text-rose-600 leading-tight">₹199</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('TET_1Y')}
+                    className="rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 p-2.5 text-center cursor-pointer transition shadow-xs"
+                  >
+                    <div className="text-[10px] font-extrabold uppercase text-blue-950">1 Year</div>
+                    <div className="text-xs font-bold text-slate-600 line-through mt-0.5">₹599</div>
+                    <div className="text-lg font-black text-rose-700 leading-tight">₹299</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* CTET (Paper 1 & 2) */}
+              <div className="rounded-2xl bg-white/10 border border-emerald-400/30 p-4 space-y-3">
+                <div className="text-center">
+                  <div className="text-sm font-display font-black text-emerald-200">CTET (Paper 1 &amp; 2)</div>
+                  <div className="text-[11px] text-slate-300">100 Full Mocks · 15,000 Qs · Study Notes</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('CTET_6M')}
+                    className="rounded-xl bg-white hover:bg-emerald-50 text-slate-900 p-2.5 text-center cursor-pointer transition shadow-xs"
+                  >
+                    <div className="text-[10px] font-extrabold uppercase text-emerald-700">6 Months</div>
+                    <div className="text-xs font-bold text-slate-400 line-through mt-0.5">₹399</div>
+                    <div className="text-lg font-black text-rose-600 leading-tight">₹199</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('CTET_1Y')}
+                    className="rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 p-2.5 text-center cursor-pointer transition shadow-xs"
+                  >
+                    <div className="text-[10px] font-extrabold uppercase text-emerald-950">1 Year</div>
+                    <div className="text-xs font-bold text-slate-600 line-through mt-0.5">₹599</div>
+                    <div className="text-lg font-black text-rose-700 leading-tight">₹299</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Combo Offer (TET Paper 1 & 2 + CTET Paper 1 & 2) */}
+              <div className="rounded-2xl bg-gradient-to-br from-purple-700/60 to-indigo-700/60 border border-purple-300/40 p-4 space-y-3">
+                <div className="text-center">
+                  <div className="text-sm font-display font-black text-amber-300">Combo Offer (TET + CTET)</div>
+                  <div className="text-[11px] text-purple-100">TET Paper 1 &amp; 2 + CTET Paper 1 &amp; 2 (200 Mocks)</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('TET_CTET_COMBO_6M')}
+                    className="rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 p-2.5 text-center cursor-pointer transition shadow-xs"
+                  >
+                    <div className="text-[10px] font-extrabold uppercase text-purple-950">6 Months</div>
+                    <div className="text-xs font-bold text-slate-700 line-through mt-0.5">₹699</div>
+                    <div className="text-lg font-black text-rose-700 leading-tight">₹349</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('TET_CTET_COMBO_1Y')}
+                    className="rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 p-2.5 text-center cursor-pointer transition shadow-xs"
+                  >
+                    <div className="text-[10px] font-extrabold uppercase text-slate-950">1 Year</div>
+                    <div className="text-xs font-bold text-slate-700 line-through mt-0.5">₹999</div>
+                    <div className="text-lg font-black text-rose-700 leading-tight">₹499</div>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

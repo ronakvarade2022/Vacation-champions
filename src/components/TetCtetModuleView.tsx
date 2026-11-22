@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Clock,
   Compass,
+  FileText,
   Filter,
   GraduationCap,
   History,
@@ -62,6 +63,10 @@ const TetCtetExamSimulator = lazyWithRetry(() =>
   import('./TetCtetExamSimulator').then((m) => ({ default: m.TetCtetExamSimulator }))
 );
 
+const TetCtetStudyNotesView = lazyWithRetry(() =>
+  import('./TetCtetStudyNotesView').then((m) => ({ default: m.TetCtetStudyNotesView }))
+);
+
 function formatHhMmSs(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const hrs = Math.floor(safe / 3600);
@@ -72,6 +77,7 @@ function formatHhMmSs(totalSeconds: number): string {
 
 export type TetCtetModuleSubTab =
   | 'mock-tests'
+  | 'study-notes'
   | 'subject-practice'
   | 'topic-practice'
   | 'revision'
@@ -103,6 +109,7 @@ const SUB_TABS: Array<{
   icon: React.FC<{ className?: string }>;
 }> = [
   { id: 'mock-tests', label: '50 Mock Tests', icon: ClipboardList },
+  { id: 'study-notes', label: 'Study Notes (EN/MR/HI)', icon: FileText },
   { id: 'subject-practice', label: 'Subject Practice', icon: BookOpen },
   { id: 'topic-practice', label: 'Topic Practice', icon: Compass },
   { id: 'revision', label: 'Revision Tests', icon: RefreshCw },
@@ -620,14 +627,24 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
                     className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer flex items-center gap-1"
                   >
                     <Crown className="w-3.5 h-3.5" />
-                    <span>Unlock {categoryLabel} (From ₹199)</span>
+                    <span>
+                      Unlock {categoryLabel} (6M <span className="line-through opacity-70">₹399</span> ₹199 · 1Y{' '}
+                      <span className="line-through opacity-70">₹599</span> ₹299)
+                    </span>
                   </button>
                   <button
                     type="button"
                     onClick={() => onOpenMembership('TET_CTET_COMBO_6M')}
                     className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold cursor-pointer"
                   >
-                    TET + CTET Combo (₹349)
+                    Combo 6M <span className="line-through opacity-75">₹699</span> ₹349
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('TET_CTET_COMBO_1Y')}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                  >
+                    Combo 1Y <span className="line-through opacity-75">₹999</span> ₹499
                   </button>
                 </>
               )}
@@ -1856,6 +1873,28 @@ export const TetCtetModuleView: React.FC<TetCtetModuleViewProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* =====================================================================
+          SUB-TAB: TRILINGUAL STUDY NOTES (ENGLISH · MARATHI · HINDI)
+          ===================================================================== */}
+      {activeSubTab === 'study-notes' && (
+        <Suspense
+          fallback={<SectionLoadingFallback label="Loading trilingual TET & CTET study notes..." />}
+        >
+          <TetCtetStudyNotesView
+            embeddedInModule
+            initialExam={modMeta.exam}
+            initialPaper={modMeta.paper === 1 ? 'PAPER_1' : 'PAPER_2'}
+            initialLanguage={
+              activeMedium === 'Marathi'
+                ? 'Marathi'
+                : activeMedium === 'Hindi'
+                  ? 'Hindi'
+                  : 'English'
+            }
+          />
+        </Suspense>
       )}
     </div>
   );

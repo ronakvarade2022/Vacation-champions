@@ -670,7 +670,7 @@ export interface PaymentTransaction {
   planSku?: PlanSkuId;
   activatedCategories?: CategoryId[];
   planTitle: string;
-  amount: number; // 99, 149, 229, 299, or 499
+  amount: number; // 99, 199, 299, 349, or 499
   currency: 'INR';
   orderId: string;
   paymentId: string;

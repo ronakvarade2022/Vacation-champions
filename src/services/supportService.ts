@@ -39,8 +39,8 @@ export const DEFAULT_FAQS: FaqItem[] = [
     id: 'faq-1',
     category: 'Plans & Pricing',
     question: 'What are the subscription plans available on MyStudyZone?',
-    answer: 'We offer two straightforward plans:\n1. FREE PLAN – ₹0 – Lifetime: Includes 2 Demo Worksheets (English & Mathematics for your registered class), English & Mathematics quizzes, Brain Puzzles, and Sudoku.\n2. PREMIUM PLAN – ₹99 – 1 Year (365 Days): Complete class-wise access to all school curriculum subjects, worksheets, 45+ audio moral stories, Chhatrapati Shivaji Maharaj 50 chapters, Drawing Studio, Cricket Quiz Arena, 4th & 7th Std Maharashtra Scholarship, Future AI Skills, and ₹5 referral cashback wallet.',
-    tags: ['pricing', 'subscription', '99', 'plans', '365 days', '1 year']
+    answer: 'We offer transparent, one-time plans:\n1. FREE PLAN – ₹0 – Lifetime: Includes 2 Demo Worksheets (English & Mathematics for your registered class), English & Mathematics quizzes, Brain Puzzles, Sudoku, and 1 TET & 1 CTET Full-Length Free Demo Mock Test.\n2. SCHOOL PREMIUM PLAN – ₹99 – 1 Year (365 Days): Complete class-wise access to all school curriculum subjects, worksheets, 45+ audio moral stories, Chhatrapati Shivaji Maharaj 50 chapters, Drawing Studio, Cricket Quiz Arena, 4th & 7th Std Maharashtra Scholarship, Future AI Skills, and ₹5 referral cashback wallet.\n3. TEACHER PLANS – TET & CTET (Paper 1 & 2):\n   • TET (Paper 1 & 2): 6 Months ₹199 (MRP ₹399) | 1 Year ₹299 (MRP ₹599)\n   • CTET (Paper 1 & 2): 6 Months ₹199 (MRP ₹399) | 1 Year ₹299 (MRP ₹599)\n   • Combo Offer (TET Paper 1 & 2 + CTET Paper 1 & 2): 6 Months ₹349 (MRP ₹699) | 1 Year ₹499 (MRP ₹999)',
+    tags: ['pricing', 'subscription', '99', '199', '299', '349', '499', 'tet', 'ctet', 'plans', '365 days', '1 year', '6 months']
   },
   {
     id: 'faq-2',

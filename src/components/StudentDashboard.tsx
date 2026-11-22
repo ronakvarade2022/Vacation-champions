@@ -456,7 +456,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   : allClassesActive
                   ? `${getActivatedBoardClassesList(currentStudent).length} Class Plan(s) Active`
                   : 'Free Demo Only',
-                priceLabel: '₹99/Class · ₹499 All',
+                priceLabel: '₹99 / Board & Class',
                 sku: 'BOARD_CLASS',
                 targetTab: 'all-courses',
               }
@@ -505,7 +505,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: tetInfo.isPaidActive
                 ? `Unlocked (${tetInfo.daysRemainingDisplay})`
                 : 'Preview Mock 01 Free • Locked',
-              priceLabel: '6M ₹199 | 1Y ₹299',
+              priceLabel: '6M ₹199 (MRP ₹399) | 1Y ₹299 (MRP ₹599)',
               sku: 'TET_1Y',
               targetTab: 'tet-ctet',
             },
@@ -520,7 +520,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: ctet1Info.isPaidActive
                 ? `Unlocked (${ctet1Info.daysRemainingDisplay})`
                 : 'Preview Mock 01 Free • Locked',
-              priceLabel: '6M ₹199 | 1Y ₹299',
+              priceLabel: '6M ₹199 (MRP ₹399) | 1Y ₹299 (MRP ₹599)',
               sku: 'CTET_1Y',
               targetTab: 'tet-ctet',
             },
@@ -535,7 +535,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               statusText: ctet2Info.isPaidActive
                 ? `Unlocked (${ctet2Info.daysRemainingDisplay})`
                 : 'Preview Mock 01 Free • Locked',
-              priceLabel: '6M ₹199 | 1Y ₹299',
+              priceLabel: '6M ₹199 (MRP ₹399) | 1Y ₹299 (MRP ₹599)',
               sku: 'CTET_1Y',
               targetTab: 'tet-ctet',
             },
@@ -609,7 +609,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       className="px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Award className="w-3.5 h-3.5" />
-                      <span>TET + CTET 6M (₹349)</span>
+                      <span>
+                        TET + CTET 6M <span className="line-through opacity-75 font-bold">₹699</span> ₹349
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -624,7 +626,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Award className="w-3.5 h-3.5" />
-                      <span>TET + CTET 1 Year (₹499)</span>
+                      <span>
+                        TET + CTET 1Y <span className="line-through opacity-75 font-bold">₹999</span> ₹499
+                      </span>
                     </button>
                   </div>
                 )}

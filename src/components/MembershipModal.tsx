@@ -837,20 +837,33 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
               {/* TET & CTET PLANS (6 MONTHS & 1 YEAR) */}
               {planGroupTab === 'tet_ctet' && (
                 <div className="space-y-4">
-                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <div>
-                      <p className="font-black text-indigo-950">
-                        Teacher Eligibility Test Plans: MAHA TET &amp; CTET
-                      </p>
-                      <p className="text-slate-600 font-medium">
-                        Choose 6 Months or 1 Year validity. All plans include official CBT mock test simulators, detailed explanations &amp; bilingual questions.
-                      </p>
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-black text-indigo-950">
+                          Teacher Plans – Choose Your Perfect Plan (MAHA TET &amp; CTET)
+                        </p>
+                        <p className="text-slate-600 font-medium">
+                          Choose 6 Months (180 Days) or 1 Year (365 Days) validity. Includes Paper 1 &amp; 2 CBT mock tests, trilingual study notes &amp; detailed solutions.
+                        </p>
+                      </div>
+                      {currentStudent && (
+                        <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200">
+                          Account: {currentStudent.name} ({currentStudent.accountRole === 'teacher' ? 'Teacher' : currentStudent.classLevel})
+                        </span>
+                      )}
                     </div>
-                    {currentStudent && (
-                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200">
-                        Account: {currentStudent.name} ({currentStudent.accountRole === 'teacher' ? 'Teacher' : currentStudent.classLevel})
+                    <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-indigo-200/70 text-[11px] font-bold text-slate-700">
+                      <span className="px-2 py-0.5 rounded-lg bg-white border border-blue-200">
+                        TET (P1&amp;2): 6M <span className="line-through text-slate-400">₹399</span> <strong className="text-blue-800">₹199</strong> · 1Y <span className="line-through text-slate-400">₹599</span> <strong className="text-blue-800">₹299</strong>
                       </span>
-                    )}
+                      <span className="px-2 py-0.5 rounded-lg bg-white border border-emerald-200">
+                        CTET (P1&amp;2): 6M <span className="line-through text-slate-400">₹399</span> <strong className="text-emerald-800">₹199</strong> · 1Y <span className="line-through text-slate-400">₹599</span> <strong className="text-emerald-800">₹299</strong>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-lg bg-white border border-purple-200">
+                        Combo Offer: 6M <span className="line-through text-slate-400">₹699</span> <strong className="text-purple-800">₹349</strong> · 1Y <span className="line-through text-slate-400">₹999</span> <strong className="text-purple-800">₹499</strong>
+                      </span>
+                    </div>
                   </div>
 
                   {/* Duration Toggle: 6 Months vs 1 Year */}
@@ -1732,7 +1745,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex justify-between">
                   <span className="text-slate-400">Activated Plan:</span>
                   <span className="font-bold text-indigo-700">
-                    {txCatalog.shortTitle} (₹{txAmount} – 365 Days)
+                    {txCatalog.shortTitle} (₹{txAmount} – {txCatalog.validityDays} Days / {txCatalog.validityLabel})
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1748,7 +1761,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                 <div className="flex justify-between">
                   <span className="text-slate-400">Valid Until (Expiry Date IST):</span>
                   <span className="font-bold text-emerald-700">
-                    {expiryDateStr || lastTransaction.membershipExpiryDate || '365 Days (1 Year)'} ({daysRemainingNum} Days Remaining)
+                    {expiryDateStr || lastTransaction.membershipExpiryDate || `${txCatalog.validityDays} Days (${txCatalog.validityLabel})`} ({daysRemainingNum} Days Remaining)
                   </span>
                 </div>
               </div>

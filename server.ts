@@ -1095,7 +1095,7 @@ app.post('/api/razorpay/webhook', async (req: Request, res: Response) => {
           activatedCategories: webhookPlanItem.unlockedCategories,
           planTitle:
             firestoreUpdateResult?.planLabel ||
-            `${webhookPlanItem.title} – ₹${verifiedAmount} – 365 Days (1 Year)`,
+            `${webhookPlanItem.title} – ₹${verifiedAmount} – ${webhookPlanItem.validityDays} Days (${webhookPlanItem.validityLabel})`,
           amount: verifiedAmount,
           currency: 'INR',
           orderId,

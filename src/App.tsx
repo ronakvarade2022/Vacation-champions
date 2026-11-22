@@ -1147,8 +1147,8 @@ const AppContent: React.FC = () => {
               onSelectClass={setPublicClass}
               onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
               onOpenAuth={(tab) => openAuthModalWithTab(tab)}
-              onOpenMembership={(targetClass, targetBoard) =>
-                openMembershipWithPlan('premium', targetClass, targetBoard)
+              onOpenMembership={(targetClass, targetBoard, planSku) =>
+                openMembershipWithPlan('premium', targetClass, targetBoard, planSku)
               }
               onNavigateTab={handleNavigateTab}
               onBackHome={() => {
@@ -1557,7 +1557,9 @@ const AppContent: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs shadow-md cursor-pointer transition-all"
                           >
                             <Award className="w-4 h-4" />
-                            <span>TET + CTET Combo 1 Year (₹499)</span>
+                            <span>
+                              TET + CTET Combo 1 Year (<span className="line-through opacity-75">₹999</span> ₹499)
+                            </span>
                           </button>
                         )}
                       </div>

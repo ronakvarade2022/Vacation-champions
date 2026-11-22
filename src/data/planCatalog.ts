@@ -113,9 +113,9 @@ export const PLAN_CATALOG: Record<
   // Plan 1: TET – 6 Months
   TET_6M: {
     sku: 'TET_6M',
-    title: 'TET – 6 Months',
+    title: 'TET (Paper 1 & 2) – 6 Months',
     shortTitle: 'TET (6 Months)',
-    subtitle: 'MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets',
+    subtitle: 'MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Study Notes, Subject Drills & Revision Sets',
     originalAmountInr: 399,
     amountInr: 199,
     amountPaise: 19900,
@@ -140,7 +140,7 @@ export const PLAN_CATALOG: Record<
   // Plan 2: CTET – 6 Months
   CTET_6M: {
     sku: 'CTET_6M',
-    title: 'CTET – 6 Months',
+    title: 'CTET (Paper 1 & 2) – 6 Months',
     shortTitle: 'CTET (6 Months)',
     subtitle: 'CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)',
     originalAmountInr: 399,
@@ -167,8 +167,8 @@ export const PLAN_CATALOG: Record<
   // Plan 3: TET + CTET COMBO – 6 Months
   TET_CTET_COMBO_6M: {
     sku: 'TET_CTET_COMBO_6M',
-    title: 'TET + CTET COMBO – 6 Months',
-    shortTitle: 'TET + CTET (6M)',
+    title: 'Combo Offer: TET + CTET (Paper 1 & 2) – 6 Months',
+    shortTitle: 'TET + CTET Combo (6M)',
     subtitle: 'Combined access to MAHA TET (P1+P2) and CTET (P1+P2) – 200 Mock Tests',
     originalAmountInr: 699,
     amountInr: 349,
@@ -195,9 +195,9 @@ export const PLAN_CATALOG: Record<
   // Plan 4: TET – 1 Year
   TET_1Y: {
     sku: 'TET_1Y',
-    title: 'TET – 1 Year',
+    title: 'TET (Paper 1 & 2) – 1 Year',
     shortTitle: 'TET (1 Year)',
-    subtitle: 'MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets',
+    subtitle: 'MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Study Notes, Subject Drills & Revision Sets',
     originalAmountInr: 599,
     amountInr: 299,
     amountPaise: 29900,
@@ -205,24 +205,24 @@ export const PLAN_CATALOG: Record<
     discountBadge: 'SAVE 50%',
     validityDays: 365,
     validityMonths: 12,
-    validityLabel: '12 Months',
+    validityLabel: '1 Year',
     unlockedCategories: ['maha_tet'],
     isCombo: false,
     requiresBoardClass: false,
     audience: 'teacher',
-    badge: '12 Months (1 Year)',
+    badge: '1 Year Plan',
     highlights: [
       '50 Paper 1 + 50 Paper 2 Full Mock Exams (15,000 Questions)',
       'MSCE Pune Syllabus, Topic Drills & PYQ Simulators',
       'Marathi, English, Hindi & Urdu Mediums',
-      '365 Days (12 Months) Full Validity',
+      '365 Days (1 Year) Full Validity',
     ],
   },
 
   // Plan 5: CTET – 1 Year
   CTET_1Y: {
     sku: 'CTET_1Y',
-    title: 'CTET – 1 Year',
+    title: 'CTET (Paper 1 & 2) – 1 Year',
     shortTitle: 'CTET (1 Year)',
     subtitle: 'CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)',
     originalAmountInr: 599,
@@ -232,25 +232,25 @@ export const PLAN_CATALOG: Record<
     discountBadge: 'SAVE 50%',
     validityDays: 365,
     validityMonths: 12,
-    validityLabel: '12 Months',
+    validityLabel: '1 Year',
     unlockedCategories: ['ctet_paper_1', 'ctet_paper_2'],
     isCombo: false,
     requiresBoardClass: false,
     audience: 'teacher',
-    badge: '12 Months (1 Year)',
+    badge: '1 Year Plan',
     highlights: [
       '50 Paper 1 + 50 Paper 2 CBT Mock Examinations (15,000 Questions)',
       'CBSE Competency Patterns, Pedagogy Drills & Weak-Area Revision',
       'Both Math/Science & Social Studies Streams Included',
-      '365 Days (12 Months) Full Validity',
+      '365 Days (1 Year) Full Validity',
     ],
   },
 
   // Plan 6: TET + CTET COMBO – 1 Year
   TET_CTET_COMBO_1Y: {
     sku: 'TET_CTET_COMBO_1Y',
-    title: 'TET + CTET COMBO – 1 Year',
-    shortTitle: 'TET + CTET (1 Year)',
+    title: 'Combo Offer: TET + CTET (Paper 1 & 2) – 1 Year',
+    shortTitle: 'TET + CTET Combo (1Y)',
     subtitle: 'All 200 Teacher Eligibility Mock Tests across MAHA TET & CTET Papers 1 & 2',
     originalAmountInr: 999,
     amountInr: 499,
