@@ -93,32 +93,31 @@ export const AnnualPlanTab: React.FC<AnnualPlanTabProps> = ({
     <div className="space-y-6">
       {/* Curriculum Source Transparency & Admin Review Notice */}
       {isPlanningUnits ? (
-        showCurriculumReviewNotice && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50/70 px-4 py-3.5 text-slate-800">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-sm">
-                  <p className="font-semibold text-amber-950">
-                    Curriculum-Based Planning Units — Pending Admin Verification
-                  </p>
-                  <p className="text-xs text-amber-900 leading-relaxed">
-                    Official chapter-by-chapter textbook lists are not yet independently verified for{' '}
-                    <span className="font-semibold">
-                      {curriculum.board} · {curriculum.classLevel} · {curriculum.subject}
-                    </span>
-                    . Units below are clearly labeled as MyStudyZone Curriculum-Based Planning Units
-                    (not official textbook chapters) and are flagged for Administrator review. All
-                    teaching methodologies, activities, and outcomes are original MyStudyZone content.
-                  </p>
-                </div>
-              </div>
-              <div className="text-xs font-medium text-amber-900 whitespace-nowrap shrink-0 tabular-nums">
-                {curriculum.units.length} Planning Units
+        <div className="rounded-xl border border-amber-300 bg-amber-50/70 px-4 py-3.5 text-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-sm">
+                <p className="font-semibold text-amber-950">
+                  PENDING VERIFICATION — No Invented Chapters Generated
+                </p>
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  Official chapter-by-chapter textbook index verification is currently{' '}
+                  <span className="font-semibold">PENDING VERIFICATION</span> for{' '}
+                  <span className="font-semibold">
+                    {curriculum.board} · {curriculum.classLevel} · {curriculum.subject}
+                  </span>
+                  . In accordance with strict syllabus verification rules, MyStudyZone never invents
+                  or substitutes generic chapters for pending subjects. Select a verified subject
+                  from the Subject dropdown to generate Annual, Monthly, and Daily Lesson Plans.
+                </p>
               </div>
             </div>
+            <div className="text-xs font-semibold text-amber-900 whitespace-nowrap shrink-0 tabular-nums">
+              PENDING VERIFICATION (0 Chapters)
+            </div>
           </div>
-        )
+        </div>
       ) : (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 text-slate-800">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -267,6 +266,20 @@ export const AnnualPlanTab: React.FC<AnnualPlanTabProps> = ({
 
         {/* Desktop Table & Mobile Responsive Rows */}
         <div className="divide-y divide-slate-200">
+          {visibleChapters.length === 0 ? (
+            <div className="p-8 text-center space-y-2">
+              <p className="text-sm font-semibold text-amber-900">
+                PENDING VERIFICATION — 0 Verified Textbook Chapters
+              </p>
+              <p className="text-xs text-slate-600 max-w-xl mx-auto">
+                No chapters or lesson plans are generated for{' '}
+                <span className="font-semibold">
+                  {curriculum.board} · {curriculum.classLevel} · {curriculum.subject}
+                </span>{' '}
+                until its official textbook chapter index is verified.
+              </p>
+            </div>
+          ) : null}
           {visibleChapters.map((ch) => {
             const isExpanded = expandedUnitId === ch.unitId;
             return (

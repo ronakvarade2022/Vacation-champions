@@ -8,6 +8,7 @@ import {
   EducationBoard,
   SubjectName,
 } from '../../types';
+import type { InstructionMedium } from '../../types/lessonPlanner';
 import {
   getClassCurriculumMeta,
   getSubjectMeta,
@@ -612,10 +613,27 @@ function buildChapterQABank(
 export function getStudyMaterialsForSubject(
   board: EducationBoard,
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): ChapterStudyMaterial[] {
-  const chapters = getRichChaptersForSubject(board, classLevel, subject);
-  const officialTextbook = getOfficialTextbookForSubject(board, classLevel, subject);
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (chapters.length === 0) {
+    return [];
+  }
+  const officialTextbook = getOfficialTextbookForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
   const classMeta = getClassCurriculumMeta(classLevel, board);
   const subjMeta = getSubjectMeta(subject, board);
 

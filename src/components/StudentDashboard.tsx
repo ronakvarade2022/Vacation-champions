@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { inspectHistoricalStudentProgress, mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
 import { CategoryId, ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel } from '../types';
 import { calculateLevel } from '../data/badgesData';
 import {
@@ -83,7 +84,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   if (!currentStudent) return null;
 
   const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel, activeBoard);
-  const completedWorksheetsCount = (currentStudent.completedWorksheetIds || []).filter((wsId) => {
+  const historicalSummary = inspectHistoricalStudentProgress(currentStudent);
+  const completedWorksheetsCount = mergePreservedCompletionIds(
+    currentStudent.completedWorksheetIds || [],
+    historicalSummary.preservedHistoricalWorksheetIds
+  ).filter((wsId) => {
     const parsed = parseBoardAndClassFromWorksheetId(wsId);
     if (!parsed.classLevel) return true;
     const boardMatch = !parsed.board || parsed.board === activeBoard;

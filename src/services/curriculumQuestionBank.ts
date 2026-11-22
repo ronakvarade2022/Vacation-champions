@@ -1,6 +1,9 @@
 import { ClassLevel, EducationBoard, SubjectName, QuizLevel, QuizQuestion, QuestionType } from '../types';
+import type { InstructionMedium } from '../types/lessonPlanner';
 import { normalizeQuestionText } from './questionBankService';
 import { randomizeQuizQuestions } from './answerRandomizerService';
+import { isVerifiedSyllabusPipelineEnabled } from '../data/verifiedSyllabus/syllabusFeatureFlags';
+import { getEffectiveSyllabusForConsumer } from './centralSyllabusService';
 import { getPart1SubjectQuestions, RawQuizSpec } from '../data/questions/subject40BankPart1';
 import { getPart2SubjectQuestions } from '../data/questions/subject40BankPart2';
 import { getPart3SubjectQuestions } from '../data/questions/subject40BankPart3';
@@ -172,13 +175,31 @@ export function getCurriculumQuestionsForLevel(
   classLevel: ClassLevel,
   subject: SubjectName,
   level: QuizLevel,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): QuizQuestion[] {
   const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 4;
   const subjCode = SUBJECT_CODES[subject] || subject.substring(0, 3).toUpperCase();
   const difficulty = LEVEL_DIFFICULTIES[level];
   const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
   const boardIdPrefix = normalizedBoard === 'Maharashtra' ? '' : `${normalizedBoard}-`;
+  const useVerifiedPipeline = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
+
+  let verifiedChapters: string[] | null = null;
+  if (useVerifiedPipeline) {
+    const resolution = getEffectiveSyllabusForConsumer({
+      board: normalizedBoard,
+      classLevel,
+      subject,
+      medium,
+      useVerifiedPipelineOverride: true,
+    });
+    if (resolution.mode !== 'central_verified' || resolution.chapterTitles.length === 0) {
+      return [];
+    }
+    verifiedChapters = resolution.chapterTitles;
+  }
 
   const specs: RawQuizSpec[] =
     normalizedBoard === 'CBSE'
@@ -187,9 +208,19 @@ export function getCurriculumQuestionsForLevel(
         ? getIcseSubjectQuestions(classLevel, subject, level)
         : ensureStrict40UniqueQuestionsForClassSubject(classLevel, subject, level);
 
-  const questions: QuizQuestion[] = specs.slice(0, 10).map((spec, i) => {
+  const slicedSpecs = specs.slice(0, 10);
+  const questions: QuizQuestion[] = slicedSpecs.map((spec, i) => {
     const qType = TEN_QUESTION_PATTERNS[i % TEN_QUESTION_PATTERNS.length];
     const qId = `VC-${boardIdPrefix}C${cNum}-${subjCode}-L${level}-Q${i + 1}`;
+    const alignedTopic =
+      verifiedChapters && verifiedChapters.length > 0
+        ? verifiedChapters[
+            Math.min(
+              verifiedChapters.length - 1,
+              Math.floor((i * verifiedChapters.length) / Math.max(1, slicedSpecs.length))
+            )
+          ]
+        : spec.topic;
 
     return {
       id: qId,
@@ -197,7 +228,7 @@ export function getCurriculumQuestionsForLevel(
       classLevel,
       subject,
       level,
-      topic: spec.topic,
+      topic: alignedTopic,
       questionType: qType,
       questionText: spec.text,
       normalizedHash: normalizeQuestionText(spec.text),

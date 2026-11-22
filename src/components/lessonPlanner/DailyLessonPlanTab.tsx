@@ -268,7 +268,21 @@ export const DailyLessonPlanTab: React.FC<DailyLessonPlanTabProps> = ({
       </div>
 
       {/* Daily Lesson Diary List */}
-      {visibleLessons.length === 0 ? (
+      {plan.curriculum.curriculumSourceType !== 'verified_board_chapters' ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-8 text-center space-y-2">
+          <p className="text-sm font-semibold text-amber-950">
+            PENDING VERIFICATION — No Daily Lesson Plans Generated
+          </p>
+          <p className="text-xs text-amber-900 max-w-xl mx-auto">
+            Official textbook chapter index verification is currently{' '}
+            <span className="font-semibold">PENDING VERIFICATION</span> for{' '}
+            <span className="font-semibold">
+              {plan.curriculum.board} · {plan.curriculum.classLevel} · {plan.curriculum.subject}
+            </span>
+            . Invented chapters are never generated for pending subjects.
+          </p>
+        </div>
+      ) : visibleLessons.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center space-y-2">
           <p className="text-sm font-semibold text-slate-800">
             No daily lessons match your current filter.

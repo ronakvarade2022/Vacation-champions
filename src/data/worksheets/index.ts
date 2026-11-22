@@ -1,5 +1,7 @@
 import { ClassLevel, EducationBoard } from '../../types';
+import type { InstructionMedium } from '../../types/lessonPlanner';
 import { ALL_10_CLASSES } from '../classCurriculumConfig';
+import { isVerifiedSyllabusPipelineEnabled } from '../verifiedSyllabus/syllabusFeatureFlags';
 import type { OnlineWorksheet } from './types';
 import { buildAll23NewWorksheetsForClass } from './builders/worksheetFactory';
 import { buildMhC1C2NewWorksheets } from './mhC1C2';
@@ -70,12 +72,15 @@ function getSeedPairWorksheets(board: EducationBoard, cNum: number): OnlineWorks
 
 export function getNew23WorksheetsForClass(
   classLevel: string,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
   const cNum = parseInt(String(classLevel).replace('Class ', ''), 10) || 1;
   const safeClass = (`Class ${Math.min(10, Math.max(1, cNum))}`) as ClassLevel;
-  const cacheKey = `${normalizedBoard}__${safeClass}`;
+  const flagEnabled = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
+  const cacheKey = `${flagEnabled ? 'central' : 'legacy'}__${medium || 'default'}__${normalizedBoard}__${safeClass}`;
 
   const cached = expandedClassCache.get(cacheKey);
   if (cached) return cached;
@@ -86,7 +91,9 @@ export function getNew23WorksheetsForClass(
   const fullClassSheets = buildAll23NewWorksheetsForClass(
     normalizedBoard,
     safeClass,
-    seedForClass
+    seedForClass,
+    medium,
+    useVerifiedPipelineOverride
   );
   expandedClassCache.set(cacheKey, fullClassSheets);
   return fullClassSheets;
@@ -95,11 +102,16 @@ export function getNew23WorksheetsForClass(
 export function getNew23WorksheetsForClassAndSubject(
   classLevel: string,
   subject: string,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
-  return getNew23WorksheetsForClass(classLevel, board).filter(
-    (ws) => ws.subject === subject
-  );
+  return getNew23WorksheetsForClass(
+    classLevel,
+    board,
+    medium,
+    useVerifiedPipelineOverride
+  ).filter((ws) => ws.subject === subject);
 }
 
 let cachedAllNewWorksheets: OnlineWorksheet[] | null = null;

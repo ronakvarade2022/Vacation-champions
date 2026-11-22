@@ -36,8 +36,27 @@ export const MonthlyPlanTab: React.FC<MonthlyPlanTabProps> = ({
     );
   }
 
+  const isPendingVerification =
+    curriculum.curriculumSourceType !== 'verified_board_chapters';
+
   return (
     <div className="space-y-6">
+      {isPendingVerification && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/70 px-4 py-3 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="font-semibold">PENDING VERIFICATION:</span> Official textbook chapter
+            index for{' '}
+            <span className="font-semibold">
+              {curriculum.board} · {curriculum.classLevel} · {curriculum.subject}
+            </span>{' '}
+            is pending verification. No invented chapters are scheduled in the monthly plan.
+          </div>
+          <span className="font-semibold text-amber-900 whitespace-nowrap">
+            0 Verified Chapters
+          </span>
+        </div>
+      )}
+
       {/* Month Selector Strip */}
       <div className="rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex items-center justify-between gap-2 mb-2.5 px-1">

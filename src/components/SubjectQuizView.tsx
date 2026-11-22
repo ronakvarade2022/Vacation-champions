@@ -35,6 +35,9 @@ import {
 } from '../utils/subscriptionAccess';
 import { PlanUpgradePromptModal } from './PlanUpgradePromptModal';
 import { ReportQuestionModal } from './ReportQuestionModal';
+import type { InstructionMedium } from '../types/lessonPlanner';
+import { getAvailableMediumsForBoard } from '../services/specialContentFirestoreService';
+import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
 import {
   ALL_10_CLASSES,
   getSubjectsForClass,
@@ -122,8 +125,27 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     fetchClassSubjectLevelQuestionsAsync,
     getSubjectLevelProgress,
     submitQuizAttempt,
-    switchActiveBoardAndClass
+    switchActiveBoardAndClass,
+    updateStudentMedium
   } = useApp();
+
+  const availableMediums = React.useMemo(
+    () => getAvailableMediumsForBoard(activeBoard),
+    [activeBoard]
+  );
+  const [selectedMedium, setSelectedMedium] = useState<InstructionMedium>(
+    () => (currentStudent?.medium as InstructionMedium) || 'English'
+  );
+  useEffect(() => {
+    if (currentStudent?.medium && availableMediums.includes(currentStudent.medium as any)) {
+      setSelectedMedium(currentStudent.medium);
+    }
+  }, [currentStudent?.id, currentStudent?.medium, availableMediums]);
+  useEffect(() => {
+    if (!availableMediums.includes(selectedMedium as any)) {
+      setSelectedMedium((availableMediums[0] as InstructionMedium) || 'English');
+    }
+  }, [availableMediums, selectedMedium]);
 
   const availableSubjectsForClass = React.useMemo(() => {
     const cls = currentStudent?.classLevel || 'Class 4';
@@ -189,6 +211,17 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
 
   const currentSubjProgress = getSubjectLevelProgress(selectedSubject, currentStudent.classLevel, activeBoard);
   const maxUnlockedLevel = currentSubjProgress.maxUnlockedLevel;
+  const activeSyllabusStatus = React.useMemo(
+    () =>
+      getEffectiveSyllabusForConsumer({
+        board: activeBoard,
+        classLevel: currentStudent.classLevel,
+        subject: selectedSubject,
+        medium: selectedMedium,
+      }),
+    [activeBoard, currentStudent.classLevel, selectedSubject, selectedMedium]
+  );
+  const isPendingVerificationBlocked = activeSyllabusStatus.mode === 'central_pending_blocked';
 
   // Reset subject selection cleanly if activeBoard/classLevel changes and selectedSubject is not in class syllabus
   useEffect(() => {
@@ -275,7 +308,24 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     const requestId = ++activeRequestIdRef.current;
 
     try {
-      const qList = await fetchClassSubjectLevelQuestionsAsync(currentStudent.classLevel, subj, lvl, activeBoard);
+      const qList = await fetchClassSubjectLevelQuestionsAsync(
+        currentStudent.classLevel,
+        subj,
+        lvl,
+        activeBoard,
+        selectedMedium
+      );
+      if (!qList || qList.length === 0) {
+        if (requestId === activeRequestIdRef.current) {
+          setQuestions([]);
+          setIsLoadingSubject(false);
+          setQuizState('idle');
+          setLoadError(
+            `PENDING VERIFICATION: Official textbook chapters and verified quiz bank for ${activeBoard} · ${selectedMedium} Medium · ${currentStudent.classLevel} · ${subj} are currently under verification.`
+          );
+        }
+        return;
+      }
       const randomizedQs = randomizeQuizQuestions(qList, true);
       
       if (requestId === activeRequestIdRef.current) {
@@ -500,6 +550,36 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
           })}
         </div>
 
+        {/* Instruction Medium Selector */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
+            Medium:
+          </span>
+          {availableMediums.map((med) => {
+            const isMedSelected = selectedMedium === med;
+            return (
+              <button
+                key={med}
+                type="button"
+                onClick={() => {
+                  setSelectedMedium(med as InstructionMedium);
+                  updateStudentMedium(med as InstructionMedium);
+                  setQuizState('idle');
+                  setQuestions([]);
+                  setLoadError(null);
+                }}
+                className={`px-3 py-1 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border cursor-pointer ${
+                  isMedSelected
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-50 hover:bg-emerald-50 text-slate-700 border-slate-200'
+                }`}
+              >
+                {med}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Classes 1 to 10 Quick Selector Bar (Multi-Class Switcher & ₹99 Activation) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mr-1 shrink-0">
@@ -617,22 +697,35 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         </div>
       )}
 
-      {/* ERROR / RETRY SCREEN */}
-      {!isLoadingSubject && loadError && (
-        <div className="bg-white rounded-3xl p-8 border border-rose-200 shadow-xs text-center space-y-4">
-          <AlertTriangle className="w-10 h-10 mx-auto text-rose-500" />
-          <h3 className="text-lg font-bold text-slate-900">{loadError}</h3>
-          <button
-            onClick={() => startQuiz(selectedSubject, selectedLevel)}
-            className="px-6 py-2.5 rounded-2xl bg-amber-600 text-white font-bold text-xs shadow-xs hover:bg-amber-700 cursor-pointer"
-          >
-            Retry Loading Questions
-          </button>
+      {/* PENDING VERIFICATION OR ERROR NOTICE */}
+      {!isLoadingSubject && (loadError || isPendingVerificationBlocked) && (
+        <div className="bg-amber-50/90 rounded-3xl p-8 border-2 border-amber-200 shadow-xs text-center space-y-4">
+          <AlertTriangle className="w-10 h-10 mx-auto text-amber-600" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-[11px] font-black uppercase tracking-wider">
+            <span>PENDING VERIFICATION</span>
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">
+            {loadError ||
+              `${activeBoard} · ${selectedMedium} Medium · ${currentStudent.classLevel} · ${selectedSubject}`}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-700 max-w-xl mx-auto leading-relaxed">
+            {activeSyllabusStatus.verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT'
+              ? 'This CISCE / ICSE subject relies on school-selected textbooks without a single common index. No synthetic quizzes are active until verified.'
+              : 'No synthetic quizzes or chapters are served while this Board, Class, Medium, and Subject is pending verification. Select a verified subject or medium above.'}
+          </p>
+          {!isPendingVerificationBlocked && (
+            <button
+              onClick={() => startQuiz(selectedSubject, selectedLevel)}
+              className="px-6 py-2.5 rounded-2xl bg-amber-600 text-white font-bold text-xs shadow-xs hover:bg-amber-700 cursor-pointer"
+            >
+              Retry Loading Questions
+            </button>
+          )}
         </div>
       )}
 
       {/* VISIBLE 4-LEVEL DASHBOARD ROADMAP (Idle View) */}
-      {!isLoadingSubject && !loadError && quizState === 'idle' && (
+      {!isLoadingSubject && !loadError && !isPendingVerificationBlocked && quizState === 'idle' && (
         <div className="space-y-6">
           {/* Subject Banner */}
           <div className={`p-6 sm:p-8 rounded-3xl bg-gradient-to-r ${currentSubjectObj?.bgGradient || 'from-amber-500 to-orange-600'} text-white shadow-lg shadow-orange-500/10 flex flex-col md:flex-row md:items-center justify-between gap-4`}>

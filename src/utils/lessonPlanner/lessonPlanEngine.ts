@@ -1331,11 +1331,14 @@ export function generateThreeTabLessonPlan(
 ): GeneratedThreeTabLessonPlan {
   const baseBoardCal = input.boardCalendar || getDefaultBoardCalendar(input.board);
   const effectiveCalendar = mergeBoardAndSchoolCalendar(baseBoardCal, input.schoolOverride);
+  const requestedCurriculumMedium =
+    input.teacherState?.medium || input.schoolOverride?.medium;
   const curriculum = resolveBoardClassSubjectCurriculum(
     input.board,
     input.classLevel,
     input.subject,
-    effectiveCalendar.textbookEdition
+    effectiveCalendar.textbookEdition,
+    requestedCurriculumMedium
   );
 
   const allowedMediums = getAllowedMediumsForBoard(input.board);

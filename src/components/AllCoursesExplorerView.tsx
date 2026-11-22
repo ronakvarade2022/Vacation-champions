@@ -250,7 +250,12 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
         {filteredSubjects.map((subjectName) => {
           const meta = getSubjectMeta(subjectName, selectedBoard);
           const isFreeSub = FREE_ALLOWED_SUBJECTS.includes(subjectName);
-          const chapters = getStudyMaterialsForSubject(selectedBoard, selectedClass, subjectName);
+          const chapters = getStudyMaterialsForSubject(
+            selectedBoard,
+            selectedClass,
+            subjectName,
+            currentStudent?.medium
+          );
           const isExpanded = expandedSubject === subjectName;
 
           return (
@@ -267,18 +272,23 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                         {subjectName}
                       </h3>
                       <p className="text-[11px] font-bold text-slate-500">
-                        {getBoardShortLabel(selectedBoard)} · {selectedClass} · {chapters.length} Chapters
+                        {getBoardShortLabel(selectedBoard)} · {selectedClass} ·{' '}
+                        {chapters.length > 0 ? `${chapters.length} Chapters` : 'PENDING VERIFICATION'}
                       </p>
                     </div>
                   </div>
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                      isFreeSub || classSubInfo.isPaidActive
+                      chapters.length === 0
+                        ? 'bg-amber-100 text-amber-900'
+                        : isFreeSub || classSubInfo.isPaidActive
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-amber-100 text-amber-900'
                     }`}
                   >
-                    {classSubInfo.isPaidActive
+                    {chapters.length === 0
+                      ? 'Pending'
+                      : classSubInfo.isPaidActive
                       ? 'Unlocked'
                       : isFreeSub
                       ? 'Free Demo'
@@ -298,7 +308,9 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                     className="w-full py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-extrabold text-xs flex items-center justify-between cursor-pointer transition-colors border border-indigo-200/80"
                   >
                     <span>
-                      Chapter-Wise Lessons ({chapters.length} Lessons)
+                      {chapters.length > 0
+                        ? `Chapter-Wise Lessons (${chapters.length} Lessons)`
+                        : 'Chapter-Wise Lessons (Pending Verification)'}
                     </span>
                     {isExpanded ? (
                       <ChevronUp className="w-4 h-4 text-indigo-700" />
@@ -309,35 +321,41 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
 
                   {isExpanded && (
                     <div className="mt-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 max-h-56 overflow-y-auto">
-                      {chapters.map((ch) => (
-                        <div
-                          key={ch.id}
-                          className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-start justify-between gap-2 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-extrabold text-slate-900">
-                              Lesson {ch.chapterNumber}: {ch.chapterTitle}
-                            </p>
-                            <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                              {ch.overview}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onOpenSubjectPractice(
-                                selectedBoard,
-                                selectedClass,
-                                subjectName,
-                                'study-materials'
-                              )
-                            }
-                            className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] shrink-0 cursor-pointer"
-                          >
-                            Open Lesson
-                          </button>
+                      {chapters.length === 0 ? (
+                        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-950">
+                          PENDING VERIFICATION: Official textbook chapters for {getBoardShortLabel(selectedBoard)} · {selectedClass} · {subjectName} are pending verification. No synthetic chapters are displayed.
                         </div>
-                      ))}
+                      ) : (
+                        chapters.map((ch) => (
+                          <div
+                            key={ch.id}
+                            className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-start justify-between gap-2 text-xs"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-extrabold text-slate-900">
+                                Lesson {ch.chapterNumber}: {ch.chapterTitle}
+                              </p>
+                              <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                                {ch.overview}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onOpenSubjectPractice(
+                                  selectedBoard,
+                                  selectedClass,
+                                  subjectName,
+                                  'study-materials'
+                                )
+                              }
+                              className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] shrink-0 cursor-pointer"
+                            >
+                              Open Lesson
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>

@@ -5,7 +5,9 @@ import {
   StudyLibraryExamPaper,
   SubjectName,
 } from '../../types';
+import type { InstructionMedium } from '../../types/lessonPlanner';
 import { getSubjectMeta } from '../classCurriculumConfig';
+import { isVerifiedSyllabusPipelineEnabled } from '../verifiedSyllabus/syllabusFeatureFlags';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 
 /**
@@ -45,10 +47,10 @@ function buildPaperSections(
   isPyq: boolean,
   yearLabel: string
 ): { totalMarks: number; durationLabel: string; patternLabel: string; sections: ExamPaperSection[] } {
-  const ch1 = chapters[0] || `${subject} Fundamentals`;
-  const ch2 = chapters[1] || ch1;
-  const ch3 = chapters[2] || ch1;
-  const ch4 = chapters[chapters.length - 1] || ch2;
+  const ch1 = chapters[0] ?? '';
+  const ch2 = chapters[1] ?? ch1;
+  const ch3 = chapters[2] ?? ch1;
+  const ch4 = chapters[chapters.length - 1] ?? ch2;
 
   const isBoardExamClass = cNum >= 9;
   const totalMarks = isBoardExamClass
@@ -169,11 +171,22 @@ function classNumLabel(cNum: number): string {
 export function getExamPapersForSubject(
   board: EducationBoard,
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): { modelPapers: StudyLibraryExamPaper[]; pyqPapers: StudyLibraryExamPaper[] } {
   const cNum = getClassNum(classLevel);
   const subjMeta = getSubjectMeta(subject, board);
-  const chapters = getRichChaptersForSubject(board, classLevel, subject);
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride) && chapters.length === 0) {
+    return { modelPapers: [], pyqPapers: [] };
+  }
   const portal = getBoardPortalInfo(board);
 
   const modelConfigs = [

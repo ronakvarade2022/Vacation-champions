@@ -35,6 +35,10 @@ import { auth, firebaseConfig } from '../../services/firebase';
 import { getOfficialTextbooksForBoardClass } from '../../data/studyLibrary/textbookLibraryData';
 import { getRichChaptersForSubject } from '../../data/worksheets/builders/chapterCatalog';
 import { SCIENCE_DIAGRAMS_LIST } from '../../data/studyLibrary/specialAcademicHubsData';
+import {
+  CONTENT_PUBLICATION_FREEZE,
+  canPublishStudentLearningContent,
+} from '../../data/contentPublicationFreeze';
 
 interface AdminStudyLibraryCmsSectionProps {
   selectedBoardWorkspace: 'all' | EducationBoard;
@@ -122,7 +126,9 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
   const [formDescription, setFormDescription] = useState<string>('');
   const [formKeyPoints, setFormKeyPoints] = useState<string>('');
   const [formExternalUrl, setFormExternalUrl] = useState<string>('');
-  const [formPublished, setFormPublished] = useState<boolean>(true);
+  const [formPublished, setFormPublished] = useState<boolean>(
+    !CONTENT_PUBLICATION_FREEZE.stopNewUnverifiedPublishing
+  );
   const [linkCheck, setLinkCheck] = useState<LinkVerificationResult>({ checking: false });
 
   // System Health State
@@ -241,7 +247,7 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
     setFormDescription('');
     setFormKeyPoints('');
     setFormExternalUrl('');
-    setFormPublished(true);
+    setFormPublished(!CONTENT_PUBLICATION_FREEZE.stopNewUnverifiedPublishing);
     setLinkCheck({ checking: false });
   };
 
@@ -336,6 +342,24 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
         text: 'External URL must start with https:// or http:// (no local/javascript URLs allowed).',
       });
       return;
+    }
+
+    if (formPublished) {
+      const freezeCheck = canPublishStudentLearningContent({
+        board: formBoard,
+        classLevel: formClass,
+        subject: formSubject,
+        contentKind: 'study_material_item',
+      });
+      if (!freezeCheck.allowed) {
+        setStatusMessage({
+          type: 'error',
+          text:
+            freezeCheck.reason ||
+            'Live publication of unverified study items is paused. Uncheck "Published Live" to save as Draft instead.',
+        });
+        return;
+      }
     }
 
     // Duplicate prevention: block accidental duplicate title in same Board/Medium/Class/Subject or duplicate external URL
@@ -437,13 +461,34 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
     docItem: SpecialContentDocument<StudyLibraryDynamicItemPayload>
   ) => {
     const p = docItem.payload;
+    const nextPublished = !docItem.published;
+    const itemBoard = (docItem.board || p?.board || 'Maharashtra') as EducationBoard;
+    const itemClass = (docItem.classLevel || p?.classLevel || 'Class 5') as ClassLevel;
+    const itemSubject = String(docItem.subject || p?.subject || 'English');
+    if (nextPublished) {
+      const freezeCheck = canPublishStudentLearningContent({
+        board: itemBoard,
+        classLevel: itemClass,
+        subject: itemSubject,
+        contentKind: 'study_material_item',
+      });
+      if (!freezeCheck.allowed) {
+        setStatusMessage({
+          type: 'error',
+          text:
+            freezeCheck.reason ||
+            'Publishing unverified items is paused until central syllabus verification completes.',
+        });
+        return;
+      }
+    }
     const res = await saveStudyLibraryItemToFirestore({
       id: docItem.id,
       title: docItem.title,
-      published: !docItem.published,
-      board: (docItem.board || p?.board || 'Maharashtra') as EducationBoard,
-      classLevel: (docItem.classLevel || p?.classLevel || 'Class 5') as ClassLevel,
-      subject: docItem.subject || p?.subject || 'English',
+      published: nextPublished,
+      board: itemBoard,
+      classLevel: itemClass,
+      subject: itemSubject,
       materialCategory: (docItem.materialCategory ||
         p?.materialCategory ||
         'notes') as StudyLibraryDynamicItemPayload['materialCategory'],
@@ -454,9 +499,14 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
       if (res.version) setLibraryVersion(res.version);
       setStatusMessage({
         type: 'success',
-        text: `"${docItem.title}" is now ${!docItem.published ? 'Published' : 'Unpublished (Draft)'}.`,
+        text: `"${docItem.title}" is now ${nextPublished ? 'Published' : 'Unpublished (Draft)'}.`,
       });
       await loadCmsData();
+    } else if (res.blockedByFreeze && res.errorMessage) {
+      setStatusMessage({
+        type: 'error',
+        text: res.errorMessage,
+      });
     }
   };
 
@@ -802,9 +852,16 @@ export const AdminStudyLibraryCmsSection: React.FC<AdminStudyLibraryCmsSectionPr
                       type="checkbox"
                       checked={formPublished}
                       onChange={(e) => setFormPublished(e.target.checked)}
+                      disabled={
+                        CONTENT_PUBLICATION_FREEZE.stopNewUnverifiedPublishing && !formPublished
+                      }
                       className="rounded"
                     />
-                    <span>Published Live (100% Free)</span>
+                    <span>
+                      {CONTENT_PUBLICATION_FREEZE.stopNewUnverifiedPublishing
+                        ? 'Save as Draft (Live Publish Frozen)'
+                        : 'Published Live (100% Free)'}
+                    </span>
                   </label>
                 </div>
               </div>

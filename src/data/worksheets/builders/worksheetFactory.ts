@@ -1,6 +1,9 @@
 import { ClassLevel, EducationBoard, SubjectName } from '../../../types';
+import type { InstructionMedium } from '../../../types/lessonPlanner';
 import { getSubjectsForClass, getSubjectMeta } from '../../classCurriculumConfig';
 import { getCurriculumQuestionsForLevel } from '../../../services/curriculumQuestionBank';
+import { isVerifiedSyllabusPipelineEnabled } from '../../verifiedSyllabus/syllabusFeatureFlags';
+import { getEffectiveSyllabusForConsumer } from '../../../services/centralSyllabusService';
 import {
   OnlineWorksheet,
   WorksheetItemFormat,
@@ -144,17 +147,58 @@ export function buildComplete23NewWorksheetsForClassSubject(
   classLevel: ClassLevel,
   subject: SubjectName,
   seedHandcraftedForSubject: OnlineWorksheet[],
-  usedIdsInClass: Set<string>
+  usedIdsInClass: Set<string>,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const cNum = getClassNumber(classLevel);
   const boardCode = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'MH';
   const boardPrefix = getBoardSyllabusLabel(board, cNum);
   const subjMeta = getSubjectMeta(subject, board);
-  const chapters = getRichChaptersForSubject(board, classLevel, subject);
+  const useVerifiedPipeline = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
 
-  // Preserve hand-crafted worksheets for this subject first (up to 23), keeping their original IDs intact
-  const result: OnlineWorksheet[] = seedHandcraftedForSubject.slice(0, 23).map((ws, idx) => {
+  if (useVerifiedPipeline) {
+    const resolution = getEffectiveSyllabusForConsumer({
+      board,
+      classLevel,
+      subject,
+      medium,
+      useVerifiedPipelineOverride: true,
+    });
+    if (resolution.mode !== 'central_verified' || resolution.chapterTitles.length === 0) {
+      return [];
+    }
+  }
+
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (chapters.length === 0) {
+    return [];
+  }
+
+  const targetCount = useVerifiedPipeline ? chapters.length : 23;
+
+  // Preserve hand-crafted worksheets for this subject first (preserving original WS-NEW-* IDs intact)
+  const result: OnlineWorksheet[] = seedHandcraftedForSubject.slice(0, targetCount).map((ws, idx) => {
     usedIdsInClass.add(ws.id);
+    if (useVerifiedPipeline) {
+      const verifiedChapter = chapters[idx];
+      return {
+        ...ws,
+        board,
+        classLevel,
+        subject,
+        chapterName: verifiedChapter,
+        topic: verifiedChapter,
+        worksheetCollection: 'new_23',
+        worksheetNumber: idx + 1,
+      };
+    }
     return {
       ...ws,
       board,
@@ -165,23 +209,23 @@ export function buildComplete23NewWorksheetsForClassSubject(
     };
   });
 
-  if (result.length >= 23) {
+  if (result.length >= targetCount) {
     return result;
   }
 
   // Pull the 20 UNUSED questions (indices 5..9 of Levels 1..4) that Existing Set #1/#2 did not use
   const unusedCurriculumPool = [
-    ...getCurriculumQuestionsForLevel(classLevel, subject, 1, board).slice(5, 10),
-    ...getCurriculumQuestionsForLevel(classLevel, subject, 2, board).slice(5, 10),
-    ...getCurriculumQuestionsForLevel(classLevel, subject, 3, board).slice(5, 10),
-    ...getCurriculumQuestionsForLevel(classLevel, subject, 4, board).slice(5, 10),
+    ...getCurriculumQuestionsForLevel(classLevel, subject, 1, board, medium, useVerifiedPipelineOverride).slice(5, 10),
+    ...getCurriculumQuestionsForLevel(classLevel, subject, 2, board, medium, useVerifiedPipelineOverride).slice(5, 10),
+    ...getCurriculumQuestionsForLevel(classLevel, subject, 3, board, medium, useVerifiedPipelineOverride).slice(5, 10),
+    ...getCurriculumQuestionsForLevel(classLevel, subject, 4, board, medium, useVerifiedPipelineOverride).slice(5, 10),
   ];
 
   const subjCode =
     UNIQUE_SUBJ_ID_CODE[subject] ||
     subject.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
 
-  for (let wsNum = result.length + 1; wsNum <= 23; wsNum++) {
+  for (let wsNum = result.length + 1; wsNum <= targetCount; wsNum++) {
     let candidateId = `WS-NEW-${boardCode}-C${cNum}-${subjCode}-${wsNum}`;
     let bump = wsNum;
     while (usedIdsInClass.has(candidateId)) {
@@ -190,8 +234,9 @@ export function buildComplete23NewWorksheetsForClassSubject(
     }
     usedIdsInClass.add(candidateId);
 
-    const chapterName =
-      wsNum <= 19
+    const chapterName = useVerifiedPipeline
+      ? chapters[wsNum - 1]
+      : wsNum <= 19
         ? chapters[(wsNum - 1) % chapters.length]
         : wsNum <= 21
           ? `Multi-Chapter Integration: ${chapters[(wsNum - 1) % chapters.length]} & Revision`
@@ -287,7 +332,9 @@ export function buildComplete23NewWorksheetsForClassSubject(
 export function buildAll23NewWorksheetsForClass(
   board: EducationBoard,
   classLevel: ClassLevel,
-  handcraftedClassSheets: OnlineWorksheet[]
+  handcraftedClassSheets: OnlineWorksheet[],
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const subjects = getSubjectsForClass(classLevel, board);
   const bySubject = new Map<SubjectName, OnlineWorksheet[]>();
@@ -309,7 +356,9 @@ export function buildAll23NewWorksheetsForClass(
         classLevel,
         subj,
         seed,
-        usedIdsInClass
+        usedIdsInClass,
+        medium,
+        useVerifiedPipelineOverride
       )
     );
   }

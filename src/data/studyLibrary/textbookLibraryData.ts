@@ -4,12 +4,15 @@ import {
   OfficialTextbookResource,
   SubjectName,
 } from '../../types';
+import type { InstructionMedium } from '../../types/lessonPlanner';
 import {
   ALL_10_CLASSES,
   getSubjectMeta,
   getSubjectsForClass,
 } from '../classCurriculumConfig';
 import { CBSE_CURRICULUM_BY_CLASS } from '../boards/cbseCurriculumConfig';
+import { isVerifiedSyllabusPipelineEnabled } from '../verifiedSyllabus/syllabusFeatureFlags';
+import { getEffectiveSyllabusForConsumer } from '../../services/centralSyllabusService';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 
 /**
@@ -131,23 +134,50 @@ function getIcseBookTitle(classNum: number, subject: SubjectName): string {
 export function getOfficialTextbookForSubject(
   board: EducationBoard,
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OfficialTextbookResource {
   const classNum = getClassNum(classLevel);
   const subjMeta = getSubjectMeta(subject, board);
-  const chapters = getRichChaptersForSubject(board, classLevel, subject);
+  const useVerifiedPipeline = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
+  const centralResolution = useVerifiedPipeline
+    ? getEffectiveSyllabusForConsumer({
+        board,
+        classLevel,
+        subject,
+        medium,
+        useVerifiedPipelineOverride: true,
+      })
+    : null;
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  const isBlockedPending = Boolean(centralResolution && centralResolution.mode !== 'central_verified');
 
   if (board === 'CBSE') {
+    const defaultTitle = getCbseBookTitle(classLevel, classNum, subject);
     return {
       id: `TB-CBSE-C${classNum}-${subjMeta.shortCode}`,
       board,
       classLevel,
       subject,
-      bookTitle: getCbseBookTitle(classLevel, classNum, subject),
-      publisher: 'National Council of Educational Research and Training (NCERT), New Delhi',
-      editionYear: '2025–2026 Academic Edition (NEP 2020 / NCF-SE Aligned)',
+      bookTitle: isBlockedPending
+        ? `${defaultTitle} [PENDING VERIFICATION]`
+        : centralResolution?.textbookTitle || defaultTitle,
+      publisher:
+        centralResolution?.publisher ||
+        'National Council of Educational Research and Training (NCERT), New Delhi',
+      editionYear: isBlockedPending
+        ? 'PENDING VERIFICATION'
+        : centralResolution?.academicYearEdition ||
+          '2025–2026 Academic Edition (NEP 2020 / NCF-SE Aligned)',
       mediums: subject === 'Marathi' ? ['Marathi'] : subject === 'Hindi' ? ['Hindi'] : ['English', 'Hindi'],
-      officialReadUrl: 'https://ncert.nic.in/textbook.php',
+      officialReadUrl: centralResolution?.officialSourceUrl || 'https://ncert.nic.in/textbook.php',
       officialPortalName: 'NCERT Official e-Textbooks Portal',
       secondaryPortalUrl: 'https://epathshala.nic.in/',
       secondaryPortalName: 'ePathshala / DIKSHA Govt Portal',
@@ -158,16 +188,23 @@ export function getOfficialTextbookForSubject(
   }
 
   if (board === 'ICSE') {
+    const defaultTitle = getIcseBookTitle(classNum, subject);
     return {
       id: `TB-ICSE-C${classNum}-${subjMeta.shortCode}`,
       board,
       classLevel,
       subject,
-      bookTitle: getIcseBookTitle(classNum, subject),
-      publisher: 'Council for the Indian School Certificate Examinations (CISCE), New Delhi',
-      editionYear: '2025–2026 CISCE Academic Regulations & Syllabus',
+      bookTitle: isBlockedPending
+        ? `${defaultTitle} [PENDING VERIFICATION]`
+        : centralResolution?.textbookTitle || defaultTitle,
+      publisher:
+        centralResolution?.publisher ||
+        'Council for the Indian School Certificate Examinations (CISCE), New Delhi',
+      editionYear: isBlockedPending
+        ? 'PENDING VERIFICATION'
+        : centralResolution?.academicYearEdition || '2025–2026 CISCE Academic Regulations & Syllabus',
       mediums: subject === 'Hindi' ? ['Hindi'] : subject === 'Marathi' ? ['Marathi'] : ['English'],
-      officialReadUrl: 'https://cisce.org/publications/',
+      officialReadUrl: centralResolution?.officialSourceUrl || 'https://cisce.org/publications/',
       officialPortalName: 'CISCE Official Publications & Syllabus Hub',
       secondaryPortalUrl: 'https://diksha.gov.in/',
       secondaryPortalName: 'DIKSHA National Digital Infrastructure',
@@ -178,22 +215,28 @@ export function getOfficialTextbookForSubject(
   }
 
   // Default: Maharashtra State Board (MSBSHSE / Balbharati)
+  const defaultTitle = getMaharashtraBookTitle(classNum, subject);
   return {
     id: `TB-MH-C${classNum}-${subjMeta.shortCode}`,
     board: 'Maharashtra',
     classLevel,
     subject,
-    bookTitle: getMaharashtraBookTitle(classNum, subject),
+    bookTitle: isBlockedPending
+      ? `${centralResolution?.textbookTitle || defaultTitle} [PENDING VERIFICATION]`
+      : centralResolution?.textbookTitle || defaultTitle,
     publisher:
+      centralResolution?.publisher ||
       'Maharashtra State Bureau of Textbook Production & Curriculum Research (Balbharati), Pune',
-    editionYear: '2025–2026 MSBSHSE Revised Edition',
+    editionYear: isBlockedPending
+      ? 'PENDING VERIFICATION'
+      : centralResolution?.academicYearEdition || '2025–2026 MSBSHSE Revised Edition',
     mediums:
       subject === 'Marathi'
         ? ['Marathi']
         : subject === 'Hindi'
         ? ['Hindi']
         : ['English', 'Marathi', 'Hindi'],
-    officialReadUrl: 'https://books.ebalbharati.in/',
+    officialReadUrl: centralResolution?.officialSourceUrl || 'https://books.ebalbharati.in/',
     officialPortalName: 'eBalbharati Official Digital Textbook Library',
     secondaryPortalUrl: 'https://diksha.gov.in/maharashtra/',
     secondaryPortalName: 'DIKSHA Maharashtra SCERT Portal',
@@ -205,10 +248,14 @@ export function getOfficialTextbookForSubject(
 
 export function getOfficialTextbooksForBoardClass(
   board: EducationBoard,
-  classLevel: ClassLevel
+  classLevel: ClassLevel,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OfficialTextbookResource[] {
   const subjects = getSubjectsForClass(classLevel, board);
-  return subjects.map((subject) => getOfficialTextbookForSubject(board, classLevel, subject));
+  return subjects.map((subject) =>
+    getOfficialTextbookForSubject(board, classLevel, subject, medium, useVerifiedPipelineOverride)
+  );
 }
 
 export function getAllBoardTextbookSummary(): {

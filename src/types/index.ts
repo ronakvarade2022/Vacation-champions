@@ -92,6 +92,7 @@ export interface StudentProfile {
   email: string;
   board?: EducationBoard;
   classLevel: ClassLevel;
+  medium?: 'English' | 'Marathi' | 'Hindi' | 'Semi-English';
   schoolName?: string;
   parentConsent: boolean;
   points: number;

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConfig';
+import { isVerifiedSyllabusPipelineEnabled } from '../data/verifiedSyllabus/syllabusFeatureFlags';
 import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
 import { getRichChaptersForSubject } from '../data/worksheets/builders/chapterCatalog';
 import {
@@ -66,10 +67,13 @@ interface StudyLibraryGlobalSearchProps {
 
 const BOARDS: EducationBoard[] = ['Maharashtra', 'CBSE', 'ICSE'];
 
-let cachedGlobalIndex: SearchIndexEntry[] | null = null;
+let cachedGlobalIndex: { key: string; entries: SearchIndexEntry[] } | null = null;
 
 function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
-  if (cachedGlobalIndex) return cachedGlobalIndex;
+  const modeKey = isVerifiedSyllabusPipelineEnabled() ? 'central' : 'legacy';
+  if (cachedGlobalIndex && cachedGlobalIndex.key === modeKey) {
+    return cachedGlobalIndex.entries;
+  }
 
   const entries: SearchIndexEntry[] = [];
 
@@ -164,7 +168,7 @@ function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
     });
   }
 
-  cachedGlobalIndex = entries;
+  cachedGlobalIndex = { key: modeKey, entries };
   return entries;
 }
 

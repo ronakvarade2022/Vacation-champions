@@ -45,6 +45,7 @@ import {
 } from '../services/specialContentFirestoreService';
 import { useApp } from '../context/AppContext';
 import { ChapterQAFormat, ClassLevel, EducationBoard, SubjectName } from '../types';
+import type { InstructionMedium } from '../types/lessonPlanner';
 import { BOARD_META_LIST, getEducationBoardMeta } from '../data/boards/boardMeta';
 import {
   ALL_10_CLASSES_META,
@@ -56,6 +57,7 @@ import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbook
 import { getChapterPracticeTest } from '../data/studyLibrary/chapterTestsData';
 import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
 import { getVideoLessonsForSubject } from '../data/studyLibrary/videoLessonsData';
+import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
 import {
   formatStandardOrdinal,
   normalizeBoardValue,
@@ -122,7 +124,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   initialSectionTab,
   onNavigateTab,
 }) => {
-  const { currentStudent, activeBoard } = useApp();
+  const { currentStudent, activeBoard, updateStudentMedium } = useApp();
 
   const [selectedBoard, setSelectedBoard] = useState<EducationBoard>(
     normalizeBoardValue(initialBoard || activeBoard || 'Maharashtra')
@@ -131,7 +133,16 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     () => getAvailableMediumsForBoard(selectedBoard),
     [selectedBoard]
   );
-  const [selectedMedium, setSelectedMedium] = useState<Exclude<StudyMedium, 'All Mediums'>>('English');
+  const [selectedMedium, setSelectedMedium] = useState<Exclude<StudyMedium, 'All Mediums'>>(() => {
+    if (currentStudent?.medium) return currentStudent.medium;
+    return 'English';
+  });
+
+  useEffect(() => {
+    if (currentStudent?.medium && availableMediums.includes(currentStudent.medium)) {
+      setSelectedMedium(currentStudent.medium);
+    }
+  }, [currentStudent?.id, currentStudent?.medium, availableMediums]);
 
   useEffect(() => {
     if (!availableMediums.includes(selectedMedium)) {
@@ -238,24 +249,60 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     }
   }, [subjects, selectedSubject]);
 
+  const effectiveMedium = selectedMedium as InstructionMedium;
+
+  const syllabusResolution = useMemo(
+    () =>
+      getEffectiveSyllabusForConsumer({
+        board: selectedBoard,
+        classLevel: selectedClass,
+        subject: selectedSubject,
+        medium: effectiveMedium,
+      }),
+    [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
+  );
+
   const chapters = useMemo(
-    () => getStudyMaterialsForSubject(selectedBoard, selectedClass, selectedSubject),
-    [selectedBoard, selectedClass, selectedSubject]
+    () =>
+      getStudyMaterialsForSubject(
+        selectedBoard,
+        selectedClass,
+        selectedSubject,
+        effectiveMedium
+      ),
+    [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
   );
 
   const boardClassTextbooks = useMemo(
-    () => getOfficialTextbooksForBoardClass(selectedBoard, selectedClass),
-    [selectedBoard, selectedClass]
+    () =>
+      getOfficialTextbooksForBoardClass(
+        selectedBoard,
+        selectedClass,
+        effectiveMedium
+      ),
+    [selectedBoard, selectedClass, effectiveMedium]
   );
 
   const examPapersBundle = useMemo(
-    () => getExamPapersForSubject(selectedBoard, selectedClass, selectedSubject),
-    [selectedBoard, selectedClass, selectedSubject]
+    () =>
+      getExamPapersForSubject(
+        selectedBoard,
+        selectedClass,
+        selectedSubject,
+        effectiveMedium
+      ),
+    [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
   );
 
   const videoLessons = useMemo(
-    () => getVideoLessonsForSubject(selectedBoard, selectedClass, selectedSubject),
-    [selectedBoard, selectedClass, selectedSubject]
+    () =>
+      getVideoLessonsForSubject(
+        selectedBoard,
+        selectedClass,
+        selectedSubject,
+        effectiveMedium
+      ),
+    [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
   );
 
   const [selectedChapterIdx, setSelectedChapterIdx] = useState<number>(0);
@@ -317,7 +364,8 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
       selectedClass,
       selectedSubject,
       activeChapter.chapterNumber,
-      activeChapter.chapterTitle
+      activeChapter.chapterTitle,
+      effectiveMedium
     );
   }, [
     selectedBoard,
@@ -325,6 +373,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     selectedSubject,
     activeChapter?.chapterNumber,
     activeChapter?.chapterTitle,
+    effectiveMedium,
   ]);
 
   const activeVideoLesson = useMemo(() => {
@@ -544,7 +593,10 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 <button
                   key={med}
                   type="button"
-                  onClick={() => setSelectedMedium(med)}
+                  onClick={() => {
+                    setSelectedMedium(med);
+                    updateStudentMedium(med as InstructionMedium);
+                  }}
                   className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
@@ -565,7 +617,9 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
               3. Select Standard (Class 1 to Class 10)
             </span>
             <span className="text-xs font-bold text-emerald-700">
-              All {chapters.length} Chapters Unlocked Free · {selectedBoard} · {selectedMedium} Medium · {selectedClass}
+              {chapters.length > 0
+                ? `All ${chapters.length} Chapters Unlocked Free · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`
+                : `PENDING VERIFICATION · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
@@ -2145,7 +2199,38 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 </div>
               </div>
             </article>
-          ) : null}
+          ) : isSpecialHubTab ? (
+            <StudyLibrarySpecialHubs
+              mode={activeSectionTab as 'math_hub' | 'science_diagrams' | 'english_grammar' | 'scholarship_olympiad'}
+              selectedBoard={selectedBoard}
+              selectedClass={selectedClass}
+              onNavigateTab={(tab) => onNavigateTab(tab)}
+            />
+          ) : (
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-6 sm:p-8 text-center space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-black uppercase tracking-wider">
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                <span>PENDING VERIFICATION</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-display font-black text-slate-900">
+                {selectedBoard} Board · {selectedMedium} Medium · {selectedClass} · {selectedSubject}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-700 max-w-2xl mx-auto leading-relaxed">
+                {syllabusResolution.verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT'
+                  ? 'This CISCE / ICSE subject uses school-selected private publisher textbooks without one fixed national index. No placeholder chapters are published until verified.'
+                  : 'Official textbook chapter index verification for this Board, Class, Medium, and Subject is currently PENDING VERIFICATION. No synthetic chapters, notes, videos, tests, or exam papers are generated until verified against official board indexes.'}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveSectionTab('math_hub')}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                >
+                  Open Special Academic Hubs
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
         );

@@ -1,5 +1,8 @@
 import { ClassLevel, EducationBoard, SubjectName } from '../../../types';
+import type { InstructionMedium } from '../../../types/lessonPlanner';
 import { getChaptersForBoardClassSubject } from '../../classCurriculumConfig';
+import { isVerifiedSyllabusPipelineEnabled } from '../../verifiedSyllabus/syllabusFeatureFlags';
+import { getEffectiveSyllabusForConsumer } from '../../../services/centralSyllabusService';
 import { WorksheetItemFormat, WorksheetDifficultyLevel } from '../types';
 
 /**
@@ -767,8 +770,21 @@ const EXPANDED_SUBJECT_CHAPTERS: Record<
 export function getRichChaptersForSubject(
   board: EducationBoard,
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): string[] {
+  if (isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride)) {
+    const resolved = getEffectiveSyllabusForConsumer({
+      board,
+      classLevel,
+      subject,
+      medium,
+      useVerifiedPipelineOverride: true,
+    });
+    return resolved.mode === 'central_verified' ? [...resolved.chapterTitles] : [];
+  }
+
   const cNum = getClassNumber(classLevel);
   const band = getStageBand(cNum);
   const baseBoardChaps = getChaptersForBoardClassSubject(board, classLevel, subject) || [];

@@ -1770,7 +1770,8 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                     )}
 
                     {/* 4. Important Q&A Bank */}
-                    {activeSub.id === 'sm-question-banks' && previewChapters[0] && (
+                    {activeSub.id === 'sm-question-banks' && (
+                      previewChapters[0] ? (
                       <div className="space-y-3">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {(previewChapters[0].qaBank || []).slice(0, 4).map((qa) => (
@@ -1795,6 +1796,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                           ))}
                         </div>
                       </div>
+                      ) : (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-950">
+                          PENDING VERIFICATION: Verified Q&amp;A bank for {selectedBoard} · {selectedClass} · {previewSubject} is pending official index verification.
+                        </div>
+                      )
                     )}
 
                     {/* 5. Worksheets Reference */}
@@ -1802,7 +1808,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                       <div className="rounded-2xl bg-indigo-50/70 border border-indigo-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="space-y-1">
                           <span className="text-[11px] font-black uppercase tracking-wider text-indigo-800">
-                            Original Protected Worksheets Studio · 25 Worksheets per Subject
+                            Original Protected Worksheets Studio · Chapter-Verified Practice
                           </span>
                           <p className="text-xs sm:text-sm font-bold text-slate-800">
                             {getBoardShortLabel(selectedBoard)} &bull; {selectedClass} &bull; {previewSubject} interactive chapter worksheets with answer verification.
@@ -1821,6 +1827,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
 
                     {/* 6. Model & PYQ Papers */}
                     {activeSub.id === 'sm-pdfs' && previewExamPapers && (
+                      previewExamPapers.modelPapers.length === 0 && previewExamPapers.pyqPapers.length === 0 ? (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-950">
+                          PENDING VERIFICATION: Model &amp; PYQ papers for {selectedBoard} · {selectedClass} · {previewSubject} are pending verification.
+                        </div>
+                      ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {[
                           ...previewExamPapers.modelPapers.slice(0, 2),
@@ -1850,10 +1861,16 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                           </div>
                         ))}
                       </div>
+                      )
                     )}
 
                     {/* 7. Chapter Tests & Video Lessons */}
                     {activeSub.id === 'sm-guides' && (
+                      previewVideos.length === 0 ? (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-950">
+                          PENDING VERIFICATION: Video guides for {selectedBoard} · {selectedClass} · {previewSubject} are pending verification.
+                        </div>
+                      ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {previewVideos.slice(0, 4).map((vid) => (
                           <div
@@ -1891,6 +1908,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                           </div>
                         ))}
                       </div>
+                      )
                     )}
 
                     {/* 8. Special Academic Hubs */}

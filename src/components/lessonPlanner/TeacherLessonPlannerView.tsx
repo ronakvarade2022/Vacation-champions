@@ -144,14 +144,21 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
     [board, classLevel]
   );
   const [subject, setSubject] = useState<SubjectName>(
-    () => groupedSubjects.allSubjects[0] || 'Mathematics'
+    () =>
+      groupedSubjects.verifiedSubjects[0] ||
+      groupedSubjects.allSubjects[0] ||
+      'Mathematics'
   );
   const [division, setDivision] = useState<string>('Div A');
 
   // Keep subject valid whenever board or class changes
   useEffect(() => {
     if (!groupedSubjects.allSubjects.includes(subject)) {
-      setSubject(groupedSubjects.allSubjects[0] || 'Mathematics');
+      setSubject(
+        groupedSubjects.verifiedSubjects[0] ||
+          groupedSubjects.allSubjects[0] ||
+          'Mathematics'
+      );
     }
   }, [groupedSubjects, subject]);
 
@@ -289,12 +296,6 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
           medium: activeMedium,
         });
       } else {
-        const curriculumMeta = resolveBoardClassSubjectCurriculum(
-          board,
-          classLevel,
-          subject,
-          effectiveBoardCalendar.textbookEdition
-        );
         const allowedMediums = getAllowedMediumsForBoard(board);
         const preferredMedium =
           selectedMediumRef.current && allowedMediums.includes(selectedMediumRef.current)
@@ -305,6 +306,13 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
                 allowedMediums.includes(globalSettings.defaultMediumByBoard[board])
               ? globalSettings.defaultMediumByBoard[board]
               : allowedMediums[0];
+        const curriculumMeta = resolveBoardClassSubjectCurriculum(
+          board,
+          classLevel,
+          subject,
+          effectiveBoardCalendar.textbookEdition,
+          preferredMedium
+        );
         const allowedWeekdays =
           schoolOverride?.workingDaysOfWeek || effectiveBoardCalendar.workingDaysOfWeek;
         const defaultDays = buildDefaultTeachingDays(
@@ -908,20 +916,36 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
             >
               {groupedSubjects.coreBoardSubjects.length > 0 && (
                 <optgroup label="Core Board Subjects">
-                  {groupedSubjects.coreBoardSubjects.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
+                  {groupedSubjects.coreBoardSubjects.map((s) => {
+                    const meta = groupedSubjects.subjectStatusMap[s];
+                    const suffix =
+                      meta?.status === 'PASS'
+                        ? ` (${meta.chapterCount} Verified Chapters)`
+                        : ' [PENDING VERIFICATION]';
+                    return (
+                      <option key={s} value={s}>
+                        {s}
+                        {suffix}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               )}
               {groupedSubjects.combinedEnrichmentSubjects.length > 0 && (
                 <optgroup label="Combined / Enrichment Subjects">
-                  {groupedSubjects.combinedEnrichmentSubjects.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
+                  {groupedSubjects.combinedEnrichmentSubjects.map((s) => {
+                    const meta = groupedSubjects.subjectStatusMap[s];
+                    const suffix =
+                      meta?.status === 'PASS'
+                        ? ` (${meta.chapterCount} Verified Chapters)`
+                        : ' [PENDING VERIFICATION]';
+                    return (
+                      <option key={s} value={s}>
+                        {s}
+                        {suffix}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               )}
             </select>
@@ -1142,6 +1166,10 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
                 Open in Daily Lesson Plan →
               </button>
             </>
+          ) : isPlanningUnits ? (
+            <p className="mt-1.5 text-xs font-semibold text-amber-800">
+              PENDING VERIFICATION — No invented chapters scheduled.
+            </p>
           ) : (
             <p className="mt-1.5 text-xs font-semibold text-emerald-700">
               All scheduled lessons completed for this year.

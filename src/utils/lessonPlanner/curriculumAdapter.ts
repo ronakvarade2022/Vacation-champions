@@ -5,18 +5,19 @@ import {
   getSubjectMeta,
   getSubjectsForClass,
 } from '../../data/classCurriculumConfig';
-import { CBSE_CURRICULUM_BY_CLASS } from '../../data/boards/cbseCurriculumConfig';
-import { ICSE_CURRICULUM_BY_CLASS } from '../../data/boards/icseCurriculumConfig';
 import {
   getClassNumber,
-  getRichChaptersForSubject,
   getStageBand,
 } from '../../data/worksheets/builders/chapterCatalog';
 import { getOfficialTextbookForSubject } from '../../data/studyLibrary/textbookLibraryData';
 import { getDefaultPeriodsPerWeekForSubject } from '../../data/lessonPlanner/defaultBoardCalendars';
+import { getVerifiedSubjectSyllabus } from '../../data/lessonPlanner/verifiedSyllabusRegistry';
+import { isVerifiedSyllabusPipelineEnabled } from '../../data/verifiedSyllabus/syllabusFeatureFlags';
+import { getEffectiveSyllabusForConsumer } from '../../services/centralSyllabusService';
 import {
   CurriculumReviewAuditRow,
   CurriculumSourceType,
+  InstructionMedium,
   ResolvedCurriculumSubject,
   ResolvedPlanningUnit,
   SubjectGroupBucket,
@@ -28,8 +29,8 @@ import {
  * Mandatory Guarantees:
  * 1. Never mutates existing MyStudyZone curriculum or textbook registries.
  * 2. Never mixes subjects or syllabi across Maharashtra SSC, CBSE, and ICSE.
- * 3. Never presents fallback or stage-based planning units as official board textbook chapters.
- * 4. Clearly labels unverified subjects as "Curriculum-Based Planning Units" with `needsAdminReview: true`.
+ * 3. Uses ONLY source-verified official textbook chapter indexes from verifiedSyllabusRegistry.ts for PASS subjects.
+ * 4. Keeps all unverified subjects explicitly marked as PENDING VERIFICATION (`needsAdminReview: true`).
  */
 
 const MAHARASHTRA_COMBINED_ENRICHMENT_C9_C10 = new Set<SubjectName>([
@@ -101,44 +102,58 @@ function deriveSubTopicsFromTitle(cleanTitle: string, subject: SubjectName): str
   ];
 }
 
-function getExplicitBoardMappedChapters(
-  board: EducationBoard,
-  classLevel: ClassLevel,
-  subject: SubjectName
-): string[] | null {
-  if (board === 'CBSE') {
-    const mapped = CBSE_CURRICULUM_BY_CLASS[classLevel]?.chaptersBySubject?.[subject];
-    if (mapped && mapped.length > 0) {
-      return [...mapped];
-    }
-    return null;
-  }
-  if (board === 'ICSE') {
-    const mapped = ICSE_CURRICULUM_BY_CLASS[classLevel]?.chaptersBySubject?.[subject];
-    if (mapped && mapped.length > 0) {
-      return [...mapped];
-    }
-    return null;
-  }
-  // Maharashtra State Board registry currently uses stage-banded units across Classes 1–10 rather than
-  // per-class official Balbharati chapter-by-chapter lists; therefore mark transparently as
-  // Curriculum-Based Planning Units until Admin-verified chapter maps are uploaded.
-  return null;
-}
-
 export function getSubjectsForBoardAndClassGrouped(
   board: EducationBoard,
-  classLevel: ClassLevel
+  classLevel: ClassLevel,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): {
   allSubjects: SubjectName[];
   coreBoardSubjects: SubjectName[];
   combinedEnrichmentSubjects: SubjectName[];
+  verifiedSubjects: SubjectName[];
+  pendingSubjects: SubjectName[];
+  subjectStatusMap: Record<string, { status: 'PASS' | 'PENDING'; chapterCount: number }>;
 } {
   const allSubjects = [...getSubjectsForClass(classLevel, board)];
   const coreBoardSubjects: SubjectName[] = [];
   const combinedEnrichmentSubjects: SubjectName[] = [];
+  const verifiedSubjects: SubjectName[] = [];
+  const pendingSubjects: SubjectName[] = [];
+  const subjectStatusMap: Record<string, { status: 'PASS' | 'PENDING'; chapterCount: number }> = {};
+  const useCentral = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
 
   for (const subject of allSubjects) {
+    let isVerified = false;
+    let chapterCount = 0;
+
+    if (useCentral) {
+      const central = getEffectiveSyllabusForConsumer({
+        board,
+        classLevel,
+        subject,
+        medium,
+        useVerifiedPipelineOverride: true,
+      });
+      isVerified = central.mode === 'central_verified' && central.structuredChapters.length > 0;
+      chapterCount = isVerified ? central.structuredChapters.length : 0;
+    } else {
+      const entry = getVerifiedSubjectSyllabus(board, classLevel, subject);
+      isVerified = entry.status === 'PASS' && entry.chapters.length > 0;
+      chapterCount = isVerified ? entry.chapters.length : 0;
+    }
+
+    subjectStatusMap[subject] = {
+      status: isVerified ? 'PASS' : 'PENDING',
+      chapterCount,
+    };
+
+    if (isVerified) {
+      verifiedSubjects.push(subject);
+    } else {
+      pendingSubjects.push(subject);
+    }
+
     if (getSubjectGroupBucket(board, classLevel, subject) === 'combined_enrichment') {
       combinedEnrichmentSubjects.push(subject);
     } else {
@@ -150,6 +165,9 @@ export function getSubjectsForBoardAndClassGrouped(
     allSubjects,
     coreBoardSubjects,
     combinedEnrichmentSubjects,
+    verifiedSubjects,
+    pendingSubjects,
+    subjectStatusMap,
   };
 }
 
@@ -157,52 +175,97 @@ export function resolveBoardClassSubjectCurriculum(
   board: EducationBoard,
   classLevel: ClassLevel,
   subject: SubjectName,
-  textbookEditionOverride?: string
+  textbookEditionOverride?: string,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): ResolvedCurriculumSubject {
   const classNumber = getClassNumber(classLevel);
   const stageBand = getStageBand(classNumber);
   const classMeta = getClassCurriculumMeta(classLevel, board);
   const subjectMeta = getSubjectMeta(subject, board);
-  const textbook = getOfficialTextbookForSubject(board, classLevel, subject);
+  const textbook = getOfficialTextbookForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
   const subjectGroup = getSubjectGroupBucket(board, classLevel, subject);
   const defaultLoad = getDefaultPeriodsPerWeekForSubject(subject, classNumber);
+  const useCentral = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
 
-  const explicitBoardChapters = getExplicitBoardMappedChapters(board, classLevel, subject);
-  const isVerifiedBoardMap = explicitBoardChapters !== null;
+  const centralResolution = useCentral
+    ? getEffectiveSyllabusForConsumer({
+        board,
+        classLevel,
+        subject,
+        medium,
+        useVerifiedPipelineOverride: true,
+      })
+    : null;
+  const legacyEntry = useCentral ? null : getVerifiedSubjectSyllabus(board, classLevel, subject);
+
+  const isVerifiedBoardMap = centralResolution
+    ? centralResolution.mode === 'central_verified' && centralResolution.structuredChapters.length > 0
+    : Boolean(legacyEntry && legacyEntry.status === 'PASS' && legacyEntry.chapters.length > 0);
 
   const curriculumSourceType: CurriculumSourceType = isVerifiedBoardMap
     ? 'verified_board_chapters'
     : 'curriculum_based_planning_units';
 
   const curriculumSourceLabel = isVerifiedBoardMap
-    ? 'Verified Board Curriculum Chapters'
-    : 'Curriculum-Based Planning Units';
+    ? 'Verified Official Textbook Index'
+    : 'PENDING VERIFICATION';
 
-  // When verified board chapters exist, use ONLY those explicit board chapters without silently
-  // mixing fallback stage units. Otherwise use the existing stage-aligned curriculum units clearly
-  // labeled as "Curriculum-Based Planning Units".
-  const rawTitles = isVerifiedBoardMap
-    ? explicitBoardChapters
-    : [...getRichChaptersForSubject(board, classLevel, subject)];
+  const sourceChapters = centralResolution
+    ? centralResolution.structuredChapters
+    : legacyEntry?.chapters || [];
 
-  const halfIdx = Math.ceil(rawTitles.length / 2);
+  // STRICT RULE: Use ONLY verified textbook chapters. Never generate invented chapters for pending subjects.
+  const units: ResolvedPlanningUnit[] = isVerifiedBoardMap
+    ? (() => {
+        const totalChapters = sourceChapters.length;
+        const halfIdx = Math.ceil(totalChapters / 2);
+        return sourceChapters.map((ch, idx) => {
+          const rawTitle = `Chapter ${ch.chapterNumber}: ${ch.chapterTitle}`;
+          const cleanTitle = ch.chapterTitle.trim();
+          const subTopics = deriveSubTopicsFromTitle(cleanTitle, subject);
+          const defaultWeight = Math.min(10, Math.max(2, subTopics.length));
+          return {
+            unitId: `${board.toLowerCase()}_c${classNumber}_${subjectMeta.shortCode.toLowerCase()}_u${ch.chapterNumber}`,
+            unitNumber: ch.chapterNumber,
+            title: rawTitle,
+            cleanTitle,
+            sourceKind: 'board_mapped',
+            defaultWeight,
+            recommendedTerm: idx < halfIdx ? 'Term 1' : 'Term 2',
+            subTopics,
+          };
+        });
+      })()
+    : [];
 
-  const units: ResolvedPlanningUnit[] = rawTitles.map((rawTitle, idx) => {
-    const cleanTitle = cleanUnitDisplayTitle(rawTitle) || rawTitle.trim();
-    const subTopics = deriveSubTopicsFromTitle(cleanTitle, subject);
-    // Slightly higher default weight for multi-topic chapters so pacing feels balanced
-    const defaultWeight = Math.min(10, Math.max(2, subTopics.length));
-    return {
-      unitId: `${board.toLowerCase()}_c${classNumber}_${subjectMeta.shortCode.toLowerCase()}_u${idx + 1}`,
-      unitNumber: idx + 1,
-      title: rawTitle.trim(),
-      cleanTitle,
-      sourceKind: isVerifiedBoardMap ? 'board_mapped' : 'curriculum_planning_unit',
-      defaultWeight,
-      recommendedTerm: idx < halfIdx ? 'Term 1' : 'Term 2',
-      subTopics,
-    };
-  });
+  const resolvedBookTitle = centralResolution
+    ? isVerifiedBoardMap
+      ? centralResolution.textbookTitle
+      : `${textbook.bookTitle.replace(/\s*\[PENDING VERIFICATION\]$/i, '')} [PENDING VERIFICATION]`
+    : isVerifiedBoardMap && legacyEntry
+    ? legacyEntry.textbookTitle
+    : `${textbook.bookTitle} [PENDING VERIFICATION]`;
+
+  const resolvedPublisher = centralResolution
+    ? centralResolution.publisher
+    : isVerifiedBoardMap && legacyEntry
+    ? legacyEntry.publisher
+    : textbook.publisher;
+
+  const resolvedEditionYear =
+    textbookEditionOverride ||
+    (centralResolution
+      ? centralResolution.academicYearEdition
+      : isVerifiedBoardMap && legacyEntry
+      ? legacyEntry.academicYearEdition
+      : textbook.editionYear);
 
   return {
     board,
@@ -218,9 +281,9 @@ export function resolveBoardClassSubjectCurriculum(
     hindiName: subjectMeta.hindiName,
     stageLabel: classMeta.boardStage,
     stageBand,
-    bookTitle: textbook.bookTitle,
-    publisher: textbook.publisher,
-    editionYear: textbookEditionOverride || textbook.editionYear,
+    bookTitle: resolvedBookTitle,
+    publisher: resolvedPublisher,
+    editionYear: resolvedEditionYear,
     syllabusCode: textbook.syllabusCode,
     curriculumSourceType,
     curriculumSourceLabel,

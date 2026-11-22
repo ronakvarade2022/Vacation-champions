@@ -4,6 +4,7 @@ import {
   EducationalVideoLesson,
   SubjectName,
 } from '../../types';
+import type { InstructionMedium } from '../../types/lessonPlanner';
 import { getSubjectMeta } from '../classCurriculumConfig';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 
@@ -27,11 +28,22 @@ function cleanChapterTitle(raw: string): string {
 export function getVideoLessonsForSubject(
   board: EducationBoard,
   classLevel: ClassLevel,
-  subject: SubjectName
+  subject: SubjectName,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): EducationalVideoLesson[] {
   const cNum = getClassNum(classLevel);
   const subjMeta = getSubjectMeta(subject, board);
-  const chapters = getRichChaptersForSubject(board, classLevel, subject);
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (chapters.length === 0) {
+    return [];
+  }
 
   return chapters.map((chapterTitle, idx) => {
     const chapterNumber = idx + 1;

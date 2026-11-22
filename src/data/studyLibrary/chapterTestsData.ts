@@ -5,7 +5,9 @@ import {
   EducationBoard,
   SubjectName,
 } from '../../types';
+import type { InstructionMedium } from '../../types/lessonPlanner';
 import { getSubjectMeta } from '../classCurriculumConfig';
+import { isVerifiedSyllabusPipelineEnabled } from '../verifiedSyllabus/syllabusFeatureFlags';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 
 function getClassNum(classLevel: ClassLevel): number {
@@ -725,13 +727,26 @@ export function getChapterPracticeTest(
   classLevel: ClassLevel,
   subject: SubjectName,
   chapterNumber: number,
-  chapterTitle?: string
-): ChapterPracticeTest {
-  const chapters = getRichChaptersForSubject(board, classLevel, subject);
-  const resolvedTitle =
-    chapterTitle ||
-    chapters[Math.max(0, chapterNumber - 1)] ||
-    `Chapter ${chapterNumber}: ${subject}`;
+  chapterTitle?: string,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
+): ChapterPracticeTest | null {
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  const useVerifiedPipeline = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
+  if (useVerifiedPipeline && chapters.length === 0) {
+    return null;
+  }
+
+  const safeIdx = Math.min(Math.max(0, chapters.length - 1), Math.max(0, chapterNumber - 1));
+  const resolvedTitle = useVerifiedPipeline
+    ? chapters[safeIdx]
+    : chapterTitle || chapters[safeIdx] || `Chapter ${chapterNumber}: ${subject}`;
   const topic = cleanChapterTitle(resolvedTitle);
   const cNum = getClassNum(classLevel);
   const subjMeta = getSubjectMeta(subject, board);

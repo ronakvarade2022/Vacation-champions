@@ -35,6 +35,8 @@ import {
   CustomScholarshipQuestionRecord,
   CustomGkQuestionItem
 } from '../types';
+import type { InstructionMedium } from '../types/lessonPlanner';
+import { mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
 import {
   formatCategoriesListLabel,
   getPlanCatalogItem,
@@ -178,6 +180,10 @@ import {
   auditStudentSubscriptionRecord,
   formatDateIstDisplay
 } from '../utils/subscriptionDateUtils';
+import {
+  canGenerateRuntimeQuizQuestions,
+  canPublishStudentLearningContent,
+} from '../data/contentPublicationFreeze';
 
 export type UserRole = 'student' | 'teacher' | 'admin';
 
@@ -332,7 +338,7 @@ interface AppContextType {
   getSubjectLevelProgress: (subject: SubjectName, classLevelOverride?: ClassLevel, boardOverride?: EducationBoard) => SubjectLevelProgress;
   getUnattemptedQuizQuestions: (classLevel: ClassLevel, subject: SubjectName, board?: EducationBoard) => QuizQuestion[];
   fetchClassSubjectQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, board?: EducationBoard) => Promise<QuizQuestion[]>;
-  fetchClassSubjectLevelQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, level: QuizLevel, board?: EducationBoard) => Promise<QuizQuestion[]>;
+  fetchClassSubjectLevelQuestionsAsync: (classLevel: ClassLevel, subject: SubjectName, level: QuizLevel, board?: EducationBoard, medium?: InstructionMedium) => Promise<QuizQuestion[]>;
   updateQuestionStatus: (questionId: string, status: 'approved' | 'rejected') => void;
   submitQuizAttempt: (attempt: Omit<QuizAttempt, 'id' | 'completedAt'>) => QuizAttempt;
   addNewQuestionWithValidation: (questionData: {
@@ -397,6 +403,7 @@ interface AppContextType {
     maxMarks: number,
     sectionScores: Record<ScholarshipSection, { obtained: number; max: number; correct: number; total: number }>
   ) => Promise<void>;
+  updateStudentMedium: (medium: InstructionMedium) => void;
   updateStudentScholarshipMedium: (medium: MsceMedium) => void;
   recordMsceMockAttempt: (attempt: Omit<MsceMockAttemptRecord, 'id' | 'completedAt'>) => Promise<MsceMockAttemptRecord>;
   publishedMsceMockTests: Record<string, boolean>;
@@ -3090,8 +3097,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (currentStudent) {
-      const completedSet = new Set(currentStudent.completedWorksheetIds || []);
-      completedSet.add(attemptData.worksheetId);
+      const preservedWorksheetIds = mergePreservedCompletionIds(
+        currentStudent.completedWorksheetIds || [],
+        [attemptData.worksheetId]
+      );
       const existingAttempts = currentStudent.worksheetAttempts || [];
       const bonusPoints = Math.max(15, attemptData.obtainedMarks * 2);
 
@@ -3099,7 +3108,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...currentStudent,
         points: currentStudent.points + bonusPoints,
         coins: currentStudent.coins + Math.floor(bonusPoints / 2),
-        completedWorksheetIds: Array.from(completedSet),
+        completedWorksheetIds: preservedWorksheetIds,
         worksheetAttempts: [record, ...existingAttempts],
         lastActiveDate: new Date().toISOString()
       };
@@ -3140,7 +3149,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let updatedQuestions = [...allQuestions];
     const svc = questionBankSvcRef.current;
-    if (svc) {
+    if (svc && canGenerateRuntimeQuizQuestions(resolvedBoard, classLevel, subject)) {
       let counter = 1;
       while (candidatePool.length < 10 && counter <= 35) {
         const freshQuestion = svc.generateClassSpecificCurriculumQuestion(
@@ -3238,9 +3247,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     classLevel: ClassLevel,
     subject: SubjectName,
     level: QuizLevel,
-    board?: EducationBoard
+    board?: EducationBoard,
+    medium?: InstructionMedium
   ): Promise<QuizQuestion[]> => {
     const resolvedBoard = normalizeBoardValue(board || currentStudent?.board || 'Maharashtra');
+    const resolvedMedium = medium || currentStudent?.medium;
     const studentAttempted = currentStudent ? currentStudent.attemptedQuestionIds : [];
     const { svc, mergedQuestions } = await ensureQuestionBankLoaded();
     const basePool = allQuestions.length >= mergedQuestions.length ? allQuestions : mergedQuestions;
@@ -3250,7 +3261,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       level,
       studentAttempted,
       basePool,
-      resolvedBoard
+      resolvedBoard,
+      resolvedMedium
     );
 
     const existingIds = new Set(basePool.map(q => q.id));
@@ -3286,10 +3298,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Update current student points, streak, accuracy, attempted questions, and board+class+subject levels
     if (currentStudent) {
-      const newlyAttempted = Array.from(new Set([
-        ...currentStudent.attemptedQuestionIds,
-        ...newAttempt.questionIds
-      ]));
+      const newlyAttempted = mergePreservedCompletionIds(
+        currentStudent.attemptedQuestionIds || [],
+        newAttempt.questionIds
+      );
 
       const bonusPoints = newAttempt.pointsEarned;
       const updatedPoints = currentStudent.points + bonusPoints;
@@ -3439,6 +3451,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
+    const publishCheck = canPublishStudentLearningContent({
+      board: resolvedBoard,
+      classLevel: questionData.classLevel,
+      subject: questionData.subject,
+      contentKind: 'quiz',
+    });
+
     const uniqueCode = Math.floor(Math.random() * 9000 + 1000);
     const boardTag = resolvedBoard === 'Maharashtra' ? '' : `${resolvedBoard.toUpperCase()}-`;
     const newQuestion: QuizQuestion = {
@@ -3457,7 +3476,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       difficulty: questionData.difficulty || 'medium',
       timesAttempted: 0,
       timesCorrect: 0,
-      status: 'approved',
+      status: publishCheck.allowed ? 'approved' : 'pending',
       author: 'admin',
       createdAt: new Date().toISOString()
     };
@@ -3466,7 +3485,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: true,
-      message: `Question passed global zero-duplication check and was added to the ${resolvedBoard} question bank successfully.`
+      message: publishCheck.allowed
+        ? `Question passed global zero-duplication check and was added to the ${resolvedBoard} question bank successfully.`
+        : `Question saved in PENDING status (not published to students) because new unverified quiz publication is paused pending syllabus verification.`
     };
   };
 
@@ -4230,6 +4251,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const updateStudentMedium = (medium: InstructionMedium) => {
+    try {
+      localStorage.setItem('msz_student_medium', medium);
+    } catch {}
+    if (!currentStudent) return;
+    if (currentStudent.medium === medium) return;
+    const updatedStudent: StudentProfile = {
+      ...currentStudent,
+      medium,
+      lastActiveDate: new Date().toISOString()
+    };
+    setCurrentStudent(updatedStudent);
+    setStudentsList(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+    saveStudentProfileToFirestore(updatedStudent).catch(() => {});
+  };
+
   const updateStudentScholarshipMedium = (medium: MsceMedium) => {
     try {
       localStorage.setItem('vc_scholarship_medium', medium);
@@ -4674,6 +4711,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adminApplyApproved365DayMigration,
 
       recordScholarshipAttempt,
+      updateStudentMedium,
       updateStudentScholarshipMedium,
       updateTeacherSelectedCategories: async (categories: CategoryId[]) => {
         if (!currentStudent) return;

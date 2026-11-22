@@ -22,6 +22,7 @@ import {
   reportFirestoreConnectionStatus,
 } from './firebase';
 import { ClassLevel, EducationBoard, SectionVisibilityConfig, SubjectName } from '../types';
+import { canPublishStudentLearningContent } from '../data/contentPublicationFreeze';
 
 export type SpecialContentType =
   | 'story'
@@ -873,7 +874,22 @@ export async function saveStudyLibraryItemToFirestore(params: {
   materialCategory: StudyLibraryDynamicItemPayload['materialCategory'];
   payload: StudyLibraryDynamicItemPayload;
   createdAt?: string;
-}): Promise<{ success: boolean; version?: number }> {
+}): Promise<{ success: boolean; version?: number; blockedByFreeze?: boolean; errorMessage?: string }> {
+  if (params.published) {
+    const publishCheck = canPublishStudentLearningContent({
+      board: params.board,
+      classLevel: params.classLevel,
+      subject: String(params.subject || ''),
+      contentKind: 'study_material_item',
+    });
+    if (!publishCheck.allowed) {
+      return {
+        success: false,
+        blockedByFreeze: true,
+        errorMessage: publishCheck.reason,
+      };
+    }
+  }
   const safeId = sanitizeFirestoreId(params.id);
   const path = `special_content/${safeId}`;
   try {

@@ -1,6 +1,9 @@
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
+import type { InstructionMedium } from '../types/lessonPlanner';
 import { getSubjectsForClass, getSubjectMeta, ALL_10_CLASSES_META } from './classCurriculumConfig';
 import { getCurriculumQuestionsForLevel } from '../services/curriculumQuestionBank';
+import { isVerifiedSyllabusPipelineEnabled } from './verifiedSyllabus/syllabusFeatureFlags';
+import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
 import {
   getClassDemoWorksheets,
   getClassSpecificWorksheetQuestions
@@ -169,23 +172,47 @@ function selectFormatForSubjectAndIndex(subject: SubjectName, index: number): Wo
 export function getExistingWorksheetsForClassAndSubject(
   classLevel: ClassLevel,
   subject: SubjectName,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const cNum = parseInt(classLevel.replace('Class ', ''), 10) || 4;
   const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
   const boardCode = normalizedBoard === 'CBSE' ? 'CBSE-' : normalizedBoard === 'ICSE' ? 'ICSE-' : '';
   const titlePrefix = normalizedBoard === 'Maharashtra' ? '' : `${normalizedBoard} `;
+  const useVerifiedPipeline = isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride);
+
+  let chapters: [string, string];
+  if (useVerifiedPipeline) {
+    const resolution = getEffectiveSyllabusForConsumer({
+      board: normalizedBoard,
+      classLevel,
+      subject,
+      medium,
+      useVerifiedPipelineOverride: true,
+    });
+    if (resolution.mode !== 'central_verified' || resolution.chapterTitles.length === 0) {
+      return [];
+    }
+    const firstCh = resolution.chapterTitles[0];
+    const secondCh =
+      resolution.chapterTitles.length > 1
+        ? resolution.chapterTitles[resolution.chapterTitles.length - 1]
+        : firstCh;
+    chapters = [firstCh, secondCh];
+  } else {
+    chapters = SUBJECT_CHAPTER_THEMES[subject] || ['Chapter 1: Core Concepts', 'Chapter 2: Advanced Applications'];
+  }
 
   const subjMeta = getSubjectMeta(subject, normalizedBoard);
   const classMeta = ALL_10_CLASSES_META.find(c => c.classLevel === classLevel);
-  const chapters = SUBJECT_CHAPTER_THEMES[subject] || ['Chapter 1: Core Concepts', 'Chapter 2: Advanced Applications'];
   const classDemoIds = getFreeDemoWorksheetIdsForClass(classLevel, normalizedBoard);
 
   // Pull canonical questions from Levels 1-4 for this exact (classLevel, subject, board)
-  const l1 = getCurriculumQuestionsForLevel(classLevel, subject, 1, normalizedBoard);
-  const l2 = getCurriculumQuestionsForLevel(classLevel, subject, 2, normalizedBoard);
-  const l3 = getCurriculumQuestionsForLevel(classLevel, subject, 3, normalizedBoard);
-  const l4 = getCurriculumQuestionsForLevel(classLevel, subject, 4, normalizedBoard);
+  const l1 = getCurriculumQuestionsForLevel(classLevel, subject, 1, normalizedBoard, medium, useVerifiedPipelineOverride);
+  const l2 = getCurriculumQuestionsForLevel(classLevel, subject, 2, normalizedBoard, medium, useVerifiedPipelineOverride);
+  const l3 = getCurriculumQuestionsForLevel(classLevel, subject, 3, normalizedBoard, medium, useVerifiedPipelineOverride);
+  const l4 = getCurriculumQuestionsForLevel(classLevel, subject, 4, normalizedBoard, medium, useVerifiedPipelineOverride);
 
   const ws1Pool = [...l1.slice(0, 5), ...l2.slice(0, 5)];
   const ws2Pool = [...l3.slice(0, 5), ...l4.slice(0, 5)];
@@ -264,33 +291,69 @@ export function getExistingWorksheetsForClassAndSubject(
 export function getWorksheetsForClassAndSubject(
   classLevel: ClassLevel,
   subject: SubjectName,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
-  const existing = getExistingWorksheetsForClassAndSubject(classLevel, subject, normalizedBoard);
-  const additional = getNew23WorksheetsForClassAndSubject(classLevel, subject, normalizedBoard);
+  const existing = getExistingWorksheetsForClassAndSubject(
+    classLevel,
+    subject,
+    normalizedBoard,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  const additional = getNew23WorksheetsForClassAndSubject(
+    classLevel,
+    subject,
+    normalizedBoard,
+    medium,
+    useVerifiedPipelineOverride
+  );
   return [...existing, ...additional];
 }
 
 export function getExistingWorksheetsForClass(
   classLevel: ClassLevel,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const subjects = getSubjectsForClass(classLevel, board);
   const list: OnlineWorksheet[] = [];
   for (const subj of subjects) {
-    list.push(...getExistingWorksheetsForClassAndSubject(classLevel, subj, board));
+    list.push(
+      ...getExistingWorksheetsForClassAndSubject(
+        classLevel,
+        subj,
+        board,
+        medium,
+        useVerifiedPipelineOverride
+      )
+    );
   }
   return list;
 }
 
 export function getAllWorksheetsForClass(
   classLevel: ClassLevel,
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
   const normalizedBoard: EducationBoard = board === 'CBSE' ? 'CBSE' : board === 'ICSE' ? 'ICSE' : 'Maharashtra';
-  const existing = getExistingWorksheetsForClass(classLevel, normalizedBoard);
-  const additional = getNew23WorksheetsForClass(classLevel, normalizedBoard);
+  const existing = getExistingWorksheetsForClass(
+    classLevel,
+    normalizedBoard,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  const additional = getNew23WorksheetsForClass(
+    classLevel,
+    normalizedBoard,
+    medium,
+    useVerifiedPipelineOverride
+  );
   return [...existing, ...additional];
 }
 
@@ -299,12 +362,26 @@ export function getAllWorksheetsForClass(
  */
 export function getFreeDemoWorksheets(
   classLevel: ClassLevel = 'Class 1',
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): OnlineWorksheet[] {
-  const englishDemo = getExistingWorksheetsForClassAndSubject(classLevel, 'English', board)[0];
+  const englishDemo = getExistingWorksheetsForClassAndSubject(
+    classLevel,
+    'English',
+    board,
+    medium,
+    useVerifiedPipelineOverride
+  )[0];
   const mathSubject: SubjectName =
     board === 'Maharashtra' && classLevel === 'Class 10' ? 'Mathematics – Algebra' : 'Mathematics';
-  const mathDemo = getExistingWorksheetsForClassAndSubject(classLevel, mathSubject, board)[0];
+  const mathDemo = getExistingWorksheetsForClassAndSubject(
+    classLevel,
+    mathSubject,
+    board,
+    medium,
+    useVerifiedPipelineOverride
+  )[0];
   return [englishDemo, mathDemo].filter(Boolean);
 }
 

@@ -28,6 +28,10 @@ import {
 } from '../hooks/useExamFullscreen';
 import { useApp } from '../context/AppContext';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
+import type { InstructionMedium } from '../types/lessonPlanner';
+import { getAvailableMediumsForBoard } from '../services/specialContentFirestoreService';
+import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
+import { mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
 import {
   ALL_10_CLASSES,
   ALL_10_CLASSES_META,
@@ -71,11 +75,28 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   onUnlockClick,
   onOpenAuth
 }) => {
-  const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass } = useApp();
+  const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass, updateStudentMedium } = useApp();
 
   const userRegisteredBoard: EducationBoard = initialBoard || activeBoard;
   const userRegisteredClass: ClassLevel = initialClassLevel || currentStudent?.classLevel || 'Class 4';
   const [selectedBoard, setSelectedBoard] = useState<EducationBoard>(userRegisteredBoard);
+  const availableMediums = useMemo(
+    () => getAvailableMediumsForBoard(selectedBoard),
+    [selectedBoard]
+  );
+  const [selectedMedium, setSelectedMedium] = useState<InstructionMedium>(
+    () => (currentStudent?.medium as InstructionMedium) || 'English'
+  );
+  useEffect(() => {
+    if (currentStudent?.medium && availableMediums.includes(currentStudent.medium as any)) {
+      setSelectedMedium(currentStudent.medium);
+    }
+  }, [currentStudent?.id, currentStudent?.medium, availableMediums]);
+  useEffect(() => {
+    if (!availableMediums.includes(selectedMedium as any)) {
+      setSelectedMedium((availableMediums[0] as InstructionMedium) || 'English');
+    }
+  }, [availableMediums, selectedMedium]);
   const [selectedClass, setSelectedClass] = useState<ClassLevel>(userRegisteredClass);
   const [selectedSubject, setSelectedSubject] = useState<SubjectName | 'ALL'>(
     initialSubject || 'ALL'
@@ -95,7 +116,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   useEffect(() => {
     setWsPage(1);
     setShowAllInGrid(false);
-  }, [selectedBoard, selectedClass, selectedSubject, collectionFilter, selectedChapter]);
+  }, [selectedBoard, selectedMedium, selectedClass, selectedSubject, collectionFilter, selectedChapter]);
 
   const selectedClassInfo = useMemo(
     () => getBoardClassSubscriptionInfo(currentStudent, selectedBoard, selectedClass),
@@ -112,8 +133,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     [selectedClass, selectedBoard]
   );
   const freeDemoWorksheets = useMemo(
-    () => getFreeDemoWorksheets(selectedClass, selectedBoard),
-    [selectedClass, selectedBoard]
+    () => getFreeDemoWorksheets(selectedClass, selectedBoard, selectedMedium),
+    [selectedClass, selectedBoard, selectedMedium]
   );
 
   // Keep selectedBoard & selectedClass synced to user's active workspace or explicit deep-link target
@@ -180,10 +201,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
   const subjectScopedWorksheets = useMemo(() => {
     if (effectiveSubject === 'ALL') {
-      return getAllWorksheetsForClass(selectedClass, selectedBoard);
+      return getAllWorksheetsForClass(selectedClass, selectedBoard, selectedMedium);
     }
-    return getWorksheetsForClassAndSubject(selectedClass, effectiveSubject, selectedBoard);
-  }, [selectedClass, effectiveSubject, selectedBoard]);
+    return getWorksheetsForClassAndSubject(selectedClass, effectiveSubject, selectedBoard, selectedMedium);
+  }, [selectedClass, effectiveSubject, selectedBoard, selectedMedium]);
 
   const collectionScopedWorksheets = useMemo(() => {
     if (collectionFilter === 'all') return subjectScopedWorksheets;
@@ -226,7 +247,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   }, [worksheetsList, showAllInGrid, safeWsPage]);
 
   const completedWorksheetIds = useMemo(
-    () => new Set(currentStudent?.completedWorksheetIds || []),
+    () => new Set(mergePreservedCompletionIds(currentStudent?.completedWorksheetIds || [], [])),
     [currentStudent?.completedWorksheetIds]
   );
 
@@ -311,7 +332,10 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
       }
     });
 
-    const percentage = Math.round((obtainedMarks / activeWorksheet.totalMarks) * 100);
+    const percentage =
+      activeWorksheet.totalMarks > 0
+        ? Math.round((obtainedMarks / activeWorksheet.totalMarks) * 100)
+        : 0;
     setIsSubmitted(true);
 
     submitWorksheetAttempt({
@@ -346,7 +370,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   }, [activeWorksheet, selectedAnswers]);
 
   const ownClassWorksheetsSummary = useMemo(() => {
-    const allClassSheets = getAllWorksheetsForClass(selectedClass, selectedBoard);
+    const allClassSheets = getAllWorksheetsForClass(selectedClass, selectedBoard, selectedMedium);
     const ownClassTotal = allClassSheets.length;
     const existingCount = allClassSheets.filter(w => w.worksheetCollection !== 'new_23').length;
     const newCount = allClassSheets.filter(w => w.worksheetCollection === 'new_23').length;
@@ -358,7 +382,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
       freeDemoCount,
       lockedInOwnClassCount: isClassWorksheetsUnlocked ? 0 : Math.max(0, ownClassTotal - freeDemoCount)
     };
-  }, [selectedClass, selectedBoard, selectedClassInfo.isFreeBase, freeDemoWorksheetIds, isClassWorksheetsUnlocked]);
+  }, [selectedClass, selectedBoard, selectedMedium, selectedClassInfo.isFreeBase, freeDemoWorksheetIds, isClassWorksheetsUnlocked]);
 
   // If solving a specific worksheet (strictly verified unlocked or demo worksheet for user's registered board & class)
   if (
@@ -808,7 +832,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
   // Main Worksheets Browser View (All 3 Boards • Standards 1st to 10th & All Subjects)
   const selectedClassMeta = ALL_10_CLASSES_META.find(c => c.classLevel === selectedClass);
-  const classAllWorksheets = getAllWorksheetsForClass(selectedClass, selectedBoard);
+  const classAllWorksheets = getAllWorksheetsForClass(selectedClass, selectedBoard, selectedMedium);
   const classCompletedCount = classAllWorksheets.filter(w => completedWorksheetIds.has(w.id)).length;
   const classTotalWorksheets = classAllWorksheets.length;
   const selectedStandardOrdinal = formatStandardOrdinal(selectedClass);
@@ -1184,6 +1208,33 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             </span>
           </div>
 
+          {/* Instruction Medium Switcher */}
+          <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-100">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+              Medium:
+            </span>
+            {availableMediums.map((med) => {
+              const isMedSelected = selectedMedium === med;
+              return (
+                <button
+                  key={med}
+                  type="button"
+                  onClick={() => {
+                    setSelectedMedium(med as InstructionMedium);
+                    updateStudentMedium(med as InstructionMedium);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
+                    isMedSelected
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-slate-50 hover:bg-emerald-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  {med} Medium
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-indigo-600" />
@@ -1478,7 +1529,30 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           </div>
         )}
 
-        {/* Worksheets Grid */}
+        {/* Worksheets Grid OR Pending Verification State */}
+        {visibleWorksheetsList.length === 0 ? (
+          <div className="rounded-3xl border-2 border-amber-200 bg-amber-50/80 p-8 text-center space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-black uppercase tracking-wider">
+              <Clock className="w-3.5 h-3.5 text-amber-700" />
+              <span>PENDING VERIFICATION</span>
+            </div>
+            <h3 className="text-lg font-display font-black text-slate-900">
+              {selectedBoardLabel} · {selectedMedium} Medium · {selectedClass}
+              {effectiveSubject !== 'ALL' ? ` · ${effectiveSubject}` : ''}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-700 max-w-xl mx-auto leading-relaxed">
+              {effectiveSubject !== 'ALL' &&
+              getEffectiveSyllabusForConsumer({
+                board: selectedBoard,
+                classLevel: selectedClass,
+                subject: effectiveSubject,
+                medium: selectedMedium,
+              }).verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT'
+                ? 'This CISCE / ICSE subject relies on school-selected private publisher textbooks. No synthetic worksheets are displayed until official school textbooks are mapped.'
+                : 'Verified textbook chapter index alignment for this selection is currently PENDING VERIFICATION. No synthetic worksheets are shown until verified.'}
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {visibleWorksheetsList.map(ws => {
             const wsBoard = ws.board || selectedBoard;
@@ -1663,6 +1737,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             );
           })}
         </div>
+        )}
 
         {/* Pagination Footer when viewing All Subjects */}
         {!showAllInGrid && totalWsPages > 1 && (

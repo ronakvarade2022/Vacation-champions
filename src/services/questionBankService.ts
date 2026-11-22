@@ -1,4 +1,5 @@
 import { ClassLevel, EducationBoard, SubjectName, QuizQuestion, QuestionType, QuizLevel } from '../types';
+import type { InstructionMedium } from '../types/lessonPlanner';
 import { CLASS_2_QUESTIONS } from '../data/questions/class2';
 import { CLASS_3_QUESTIONS } from '../data/questions/class3';
 import { CLASS_4_QUESTIONS } from '../data/questions/class4';
@@ -8,6 +9,8 @@ import { CLASS_7_QUESTIONS } from '../data/questions/class7';
 import { CLASS_8_QUESTIONS } from '../data/questions/class8';
 import { generateEntireCurriculumMasterBank, getCurriculumQuestionsForLevel } from './curriculumQuestionBank';
 import { normalizeBoardValue } from '../utils/subscriptionAccess';
+import { canGenerateRuntimeQuizQuestions } from '../data/contentPublicationFreeze';
+import { isVerifiedSyllabusPipelineEnabled } from '../data/verifiedSyllabus/syllabusFeatureFlags';
 
 // Normalizes text for semantic duplicate comparison (strips leading [tag] prefixes so tag spoofing cannot hide duplicates)
 export function normalizeQuestionText(text: string): string {
@@ -385,6 +388,10 @@ export async function getStrictClassSubjectQuestions(
     return candidates.slice(0, 10);
   }
 
+  if (!canGenerateRuntimeQuizQuestions(targetBoard, classLevel, subject)) {
+    return candidates.slice(0, 10);
+  }
+
   const result: QuizQuestion[] = [...candidates];
   let tries = 0;
 
@@ -420,13 +427,25 @@ export async function getStrictClassSubjectLevelQuestions(
   level: QuizLevel,
   attemptedQuestionIds: string[],
   masterDatabase: QuizQuestion[],
-  board: EducationBoard = 'Maharashtra'
+  board: EducationBoard = 'Maharashtra',
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
 ): Promise<QuizQuestion[]> {
   await new Promise(resolve => setTimeout(resolve, 60));
   const targetBoard = normalizeBoardValue(board);
 
   // Always obtain the canonical 10 verified questions for this exact (board, classLevel, subject, level)
-  const canonicalQs = getCurriculumQuestionsForLevel(classLevel, subject, level, targetBoard);
+  const canonicalQs = getCurriculumQuestionsForLevel(
+    classLevel,
+    subject,
+    level,
+    targetBoard,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (isVerifiedSyllabusPipelineEnabled(useVerifiedPipelineOverride) && canonicalQs.length === 0) {
+    return [];
+  }
 
   // Sync canonical questions into masterDatabase if missing or outdated
   for (const q of canonicalQs) {
