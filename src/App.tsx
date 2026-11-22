@@ -105,6 +105,11 @@ const AllCoursesExplorerView = lazyWithRetry(() =>
 const OtherProgramsView = lazyWithRetry(() =>
   import('./components/OtherProgramsView').then((m) => ({ default: m.OtherProgramsView }))
 );
+const TeacherLessonPlannerView = lazyWithRetry(() =>
+  import('./components/lessonPlanner/TeacherLessonPlannerView').then((m) => ({
+    default: m.TeacherLessonPlannerView,
+  }))
+);
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
   <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
@@ -129,7 +134,7 @@ import {
   clearStoredBrowserReferralCodes,
   readActiveUrlReferralCode,
 } from './utils/referralCoding';
-import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, Headphones, Lock, CheckCircle2, RefreshCw, WifiOff } from 'lucide-react';
+import { Trophy, GraduationCap, BookOpen, FileText, Volume2, Activity, Award, Crown, Sparkles, ShieldCheck, ShieldAlert, X, Headphones, Lock, CheckCircle2, RefreshCw, WifiOff, CalendarDays } from 'lucide-react';
 import './firebase';
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -422,11 +427,15 @@ const AppContent: React.FC = () => {
       return;
     }
 
+    if (tab === 'lesson-planner' && (!isTeacherPortal || !currentStudent)) {
+      return;
+    }
+
     const alwaysOpenTabs = new Set([
       'demo', 'demo-mock-tests', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
-      'worksheets', 'study-materials', 'study-material',
+      'worksheets', 'study-materials', 'study-material', 'lesson-planner',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin'
     ]);
@@ -1060,7 +1069,7 @@ const AppContent: React.FC = () => {
           )}
 
         {/* Consistent Sub-Page Two-Level Horizontal Navigation Bar */}
-        {isLearningPortal && currentTab !== 'public-home' && currentTab !== 'dashboard' && (
+        {isLearningPortal && currentTab !== 'public-home' && currentTab !== 'dashboard' && currentTab !== 'lesson-planner' && (
           <SubPageConsistencyBar
             activeSectionId={currentTab === 'referrals' ? 'referrals' : getActiveMenuId()}
             activeSubActionId={
@@ -1670,6 +1679,16 @@ const AppContent: React.FC = () => {
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleNavigateTab('lesson-planner')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'lesson-planner' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <CalendarDays className="w-3.5 h-3.5" />
+                        <span>LESSON PLANNER</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleNavigateTab('worksheets')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
                           currentTab === 'worksheets' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
@@ -1784,6 +1803,15 @@ const AppContent: React.FC = () => {
                   <StudentProfileView
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                     onNavigateTab={(t) => handleNavigateTab(t)}
+                  />
+                )}
+
+                {currentTab === 'lesson-planner' && isTeacherPortal && (
+                  <TeacherLessonPlannerView
+                    currentTeacher={currentStudent}
+                    initialBoard={activeBoard}
+                    initialClass={currentStudent.classLevel}
+                    onReturnOverview={() => handleNavigateTab('dashboard')}
                   />
                 )}
               </>

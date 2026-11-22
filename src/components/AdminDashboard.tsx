@@ -26,6 +26,7 @@ import {
   FileSpreadsheet,
   Layers,
   X,
+  CalendarDays,
 } from 'lucide-react';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import { ALL_ADMIN_CLASSES, ALL_ADMIN_SUBJECTS } from '../utils/adminAnalytics';
@@ -89,12 +90,18 @@ const AdminStudyLibraryCmsSection = lazyWithRetry(() =>
     default: m.AdminStudyLibraryCmsSection,
   }))
 );
+const AdminLessonPlannerSection = lazyWithRetry(() =>
+  import('./admin/AdminLessonPlannerSection').then((m) => ({
+    default: m.AdminLessonPlannerSection,
+  }))
+);
 
 type AdminSectionId =
   | 'students'
   | 'questions'
   | 'worksheets'
   | 'study-library-cms'
+  | 'lesson-planner'
   | 'progression'
   | 'duplicates'
   | 'stories'
@@ -415,6 +422,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('lesson-planner')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'lesson-planner'
+              ? 'bg-teal-700 text-white shadow-xs'
+              : 'text-teal-900 bg-teal-50/70 hover:bg-teal-100'
+          }`}
+        >
+          <CalendarDays className="w-4 h-4" />
+          <span>Lesson Planner &amp; Calendars</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('duplicates')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'duplicates'
@@ -623,6 +642,10 @@ export const AdminDashboard: React.FC = () => {
             selectedBoardWorkspace={selectedBoardWorkspace}
             selectedClassWorkspace={selectedClassWorkspace}
           />
+        )}
+
+        {activeSection === 'lesson-planner' && (
+          <AdminLessonPlannerSection selectedBoardWorkspace={selectedBoardWorkspace} />
         )}
 
         {activeSection === 'duplicates' && (

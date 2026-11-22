@@ -305,6 +305,108 @@
         "updatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "contentType", "title", "published", "payload"]
+    },
+    "AcademicCalendarConfig": {
+      "title": "AcademicCalendarConfig",
+      "description": "Zero-PII global active board academic calendar (mh_active, cbse_active, icse_active) or global lesson planner settings (global_settings).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "isPublicCalendar": { "type": "boolean" },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "academicYear": { "type": "string", "maxLength": 20 },
+        "startDate": { "type": "string", "maxLength": 10 },
+        "reopeningDate": { "type": "string", "maxLength": 10 },
+        "endDate": { "type": "string", "maxLength": 10 },
+        "syllabusCompletionDeadline": { "type": "string", "maxLength": 10 },
+        "workingDaysOfWeek": { "type": "array", "description": "Max 6 weekday numbers (1..6)." },
+        "saturdayRule": { "type": "string", "enum": ["off", "half_day", "full_day", "second_fourth_off"] },
+        "holidays": { "type": "array", "description": "Max 80 holiday items." },
+        "vacations": { "type": "array", "description": "Max 15 vacation ranges." },
+        "examWindows": { "type": "array", "description": "Max 15 exam windows." },
+        "revisionWindows": { "type": "array", "description": "Max 15 revision windows." },
+        "textbookEdition": { "type": "string", "maxLength": 160 },
+        "defaultPeriodMinutes": { "type": "number" },
+        "syllabusRevisionTag": { "type": "string", "maxLength": 60 },
+        "allowTeacherWeightCustomization": { "type": "boolean" },
+        "allowTeacherCalendarCustomization": { "type": "boolean" },
+        "showCurriculumReviewNoticeToTeachers": { "type": "boolean" },
+        "defaultMediumByBoard": { "type": "object" },
+        "version": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "updatedByUid": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "isPublicCalendar", "updatedAt"]
+    },
+    "AcademicYearArchive": {
+      "title": "AcademicYearArchive",
+      "description": "Zero-PII immutable academic-year rollover archive snapshot created atomically by Admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "isArchivedSnapshot": { "type": "boolean" },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "academicYear": { "type": "string", "maxLength": 20 },
+        "calendarSnapshot": { "type": "object" },
+        "summaryStats": { "type": "object" },
+        "archivedAt": { "type": "string", "maxLength": 50 },
+        "archivedByUid": { "type": "string", "maxLength": 128 },
+        "archiveNote": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["id", "isArchivedSnapshot", "board", "academicYear", "calendarSnapshot", "summaryStats", "archivedAt", "archivedByUid"]
+    },
+    "TeacherSchoolCalendar": {
+      "title": "TeacherSchoolCalendar",
+      "description": "Private per-teacher school academic calendar override isolated under /students/{uid}/school_calendars.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherUid": { "type": "string", "maxLength": 128 },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "academicYear": { "type": "string", "maxLength": 20 },
+        "schoolName": { "type": "string", "maxLength": 150 },
+        "medium": { "type": "string", "enum": ["English", "Marathi", "Semi-English", "Hindi"] },
+        "startDate": { "type": "string", "maxLength": 10 },
+        "reopeningDate": { "type": "string", "maxLength": 10 },
+        "endDate": { "type": "string", "maxLength": 10 },
+        "syllabusCompletionDeadline": { "type": "string", "maxLength": 10 },
+        "workingDaysOfWeek": { "type": "array", "description": "Max 6 weekday numbers (1..6)." },
+        "saturdayRule": { "type": "string", "enum": ["off", "half_day", "full_day", "second_fourth_off"] },
+        "holidays": { "type": "array", "description": "Max 80 holiday items." },
+        "vacations": { "type": "array", "description": "Max 15 vacation ranges." },
+        "examWindows": { "type": "array", "description": "Max 15 exam windows." },
+        "revisionWindows": { "type": "array", "description": "Max 15 revision windows." },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "teacherUid", "board", "academicYear", "reopeningDate", "endDate", "syllabusCompletionDeadline", "saturdayRule", "updatedAt"]
+    },
+    "TeacherLessonPlanState": {
+      "title": "TeacherLessonPlanState",
+      "description": "Private per-teacher lesson completion progress, timetable load, outcome attainment, permitted edits, and private remarks.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherUid": { "type": "string", "maxLength": 128 },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "classLevel": { "type": "string", "maxLength": 20 },
+        "subject": { "type": "string", "maxLength": 100 },
+        "academicYear": { "type": "string", "maxLength": 20 },
+        "division": { "type": "string", "maxLength": 30 },
+        "medium": { "type": "string", "enum": ["English", "Marathi", "Semi-English", "Hindi"] },
+        "periodsPerWeek": { "type": "number" },
+        "teachingDays": { "type": "array", "description": "Max 6 weekday numbers." },
+        "completedLessonDates": { "type": "array", "description": "Max 300 ISO dates." },
+        "completedDateLocks": { "type": "object" },
+        "completedChapterIds": { "type": "array", "description": "Max 60 unit IDs." },
+        "chapterWeightOverrides": { "type": "object" },
+        "outcomeStatuses": { "type": "object" },
+        "outcomeNotes": { "type": "object" },
+        "permittedEdits": { "type": "object" },
+        "privateRemarks": { "type": "object" },
+        "shiftAnchorDate": { "type": "string", "maxLength": 10 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "teacherUid", "board", "classLevel", "subject", "academicYear", "division", "medium", "periodsPerWeek", "updatedAt"]
     }
   },
   "firestore": {
@@ -375,6 +477,22 @@
     "/special_content/{itemId}": {
       "schema": { "$ref": "#/entities/SpecialContentItem" },
       "description": "Admin-managed Special Learning stories, scholarship questions, drawings, GK bank, and programs."
+    },
+    "/academic_calendars/{calendarId}": {
+      "schema": { "$ref": "#/entities/AcademicCalendarConfig" },
+      "description": "Global active academic calendars (mh_active, cbse_active, icse_active) and global_settings managed exclusively by Admin."
+    },
+    "/academic_year_archives/{archiveId}": {
+      "schema": { "$ref": "#/entities/AcademicYearArchive" },
+      "description": "Immutable historical academic-year archive snapshots created during Admin UPDATE ACADEMIC YEAR rollover."
+    },
+    "/students/{studentId}/school_calendars/{calendarId}": {
+      "schema": { "$ref": "#/entities/TeacherSchoolCalendar" },
+      "description": "Private per-teacher school academic calendar overrides isolated by authenticated Teacher UID."
+    },
+    "/students/{studentId}/lesson_plans_state/{stateId}": {
+      "schema": { "$ref": "#/entities/TeacherLessonPlanState" },
+      "description": "Private per-teacher progress, timetable load, permitted edits, outcome statuses, and private remarks isolated by authenticated Teacher UID."
     }
   }
 }

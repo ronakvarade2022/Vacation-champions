@@ -44,6 +44,13 @@ service cloud.firestore {
       );
     }
 
+    // Verifies the target /students/{studentId} profile is explicitly a Teacher account (prevents Students from accessing teacher-only Lesson Planner subcollections)
+    function isTeacherAccount(studentId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/students/$(studentId)) &&
+             get(/databases/$(database)/documents/students/$(studentId)).data.get('accountRole', 'student') == 'teacher';
+    }
+
     // Secure Parent-Child Link Verifier
     function isParentOf(studentId) {
       return isSignedIn() &&
@@ -57,6 +64,7 @@ service cloud.firestore {
              !('passwordHash' in data) &&
              !('isAdmin' in data) &&
              !('role' in data) &&
+             (!('accountRole' in data) || (data.accountRole in ['student', 'teacher'])) &&
              (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 100)) &&
              (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
              (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 20)) &&
@@ -165,6 +173,7 @@ service cloud.firestore {
           (isOwner(studentId) || (isSignedIn() && existing().firebaseUid == request.auth.uid)) &&
           incoming().id == existing().id &&
           (!('registeredAt' in existing()) || incoming().registeredAt == existing().registeredAt) &&
+          incoming().get('accountRole', 'student') == existing().get('accountRole', 'student') &&
           (
             (
               incoming().get('classLevel', null) == existing().get('classLevel', null) &&
@@ -263,6 +272,89 @@ service cloud.firestore {
         allow get: if isValidId(studentId) && isValidId(feeId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
         allow list: if isValidId(studentId) && (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
         allow write: if isAdmin();
+      }
+
+      // Additive Subcollection: /students/{studentId}/school_calendars/{calendarId}
+      // Strictly isolated per Teacher UID; Students are denied by isTeacherAccount(studentId).
+      match /school_calendars/{calendarId} {
+        allow get: if isValidId(studentId) && isValidId(calendarId) && (
+          isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+        allow list: if isValidId(studentId) && (
+          isAdmin() || (isSignedIn() && resource.data.teacherUid == request.auth.uid && isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+        allow create: if isValidId(studentId) && isValidId(calendarId) &&
+                         isValidSchoolCalendar(incoming()) &&
+                         incoming().id == calendarId && (
+                           isAdmin() || (
+                             isStudentDocOwner(studentId) &&
+                             isTeacherAccount(studentId) &&
+                             incoming().teacherUid == request.auth.uid
+                           )
+                         );
+        allow update: if isValidId(studentId) && isValidId(calendarId) &&
+                         isValidSchoolCalendar(incoming()) &&
+                         incoming().id == existing().id &&
+                         incoming().teacherUid == existing().teacherUid &&
+                         incoming().board == existing().board &&
+                         incoming().academicYear == existing().academicYear && (
+                           isAdmin() || (
+                             isStudentDocOwner(studentId) &&
+                             isTeacherAccount(studentId) &&
+                             incoming().teacherUid == request.auth.uid &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'schoolName', 'medium', 'startDate', 'reopeningDate', 'endDate',
+                               'syllabusCompletionDeadline', 'workingDaysOfWeek', 'saturdayRule',
+                               'holidays', 'vacations', 'examWindows', 'revisionWindows', 'updatedAt'
+                             ])
+                           )
+                         );
+        allow delete: if isValidId(studentId) && isValidId(calendarId) && (
+          isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+      }
+
+      // Additive Subcollection: /students/{studentId}/lesson_plans_state/{stateId}
+      // Strictly isolated per Teacher UID; Students are denied by isTeacherAccount(studentId).
+      match /lesson_plans_state/{stateId} {
+        allow get: if isValidId(studentId) && isValidId(stateId) && (
+          isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+        allow list: if isValidId(studentId) && (
+          isAdmin() || (isSignedIn() && resource.data.teacherUid == request.auth.uid && isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+        allow create: if isValidId(studentId) && isValidId(stateId) &&
+                         isValidLessonPlanState(incoming()) &&
+                         incoming().id == stateId && (
+                           isAdmin() || (
+                             isStudentDocOwner(studentId) &&
+                             isTeacherAccount(studentId) &&
+                             incoming().teacherUid == request.auth.uid
+                           )
+                         );
+        allow update: if isValidId(studentId) && isValidId(stateId) &&
+                         isValidLessonPlanState(incoming()) &&
+                         incoming().id == existing().id &&
+                         incoming().teacherUid == existing().teacherUid &&
+                         incoming().board == existing().board &&
+                         incoming().classLevel == existing().classLevel &&
+                         incoming().subject == existing().subject &&
+                         incoming().academicYear == existing().academicYear && (
+                           isAdmin() || (
+                             isStudentDocOwner(studentId) &&
+                             isTeacherAccount(studentId) &&
+                             incoming().teacherUid == request.auth.uid &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'division', 'medium', 'periodsPerWeek', 'teachingDays',
+                               'completedLessonDates', 'completedDateLocks', 'completedChapterIds',
+                               'chapterWeightOverrides', 'outcomeStatuses', 'outcomeNotes',
+                               'permittedEdits', 'privateRemarks', 'shiftAnchorDate', 'updatedAt'
+                             ])
+                           )
+                         );
+        allow delete: if isValidId(studentId) && isValidId(stateId) && (
+          isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
       }
     }
 
@@ -519,6 +611,182 @@ service cloud.firestore {
       allow list: if isAdmin() || resource.data.published == true;
       allow create, update: if isValidId(itemId) && isAdmin() && isValidSpecialContentItem(incoming());
       allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // ADDITIVE LESSON PLANNER VALIDATORS & COLLECTIONS (Collections 15–16)
+    // ------------------------------------------------------------------
+
+    // Global Academic Calendar / Settings Schema Validator (Zero-PII)
+    function isValidAcademicCalendar(data) {
+      return data.keys().hasAll(['id', 'isPublicCalendar', 'updatedAt']) &&
+             data.keys().hasOnly([
+               'id', 'isPublicCalendar', 'board', 'academicYear', 'startDate', 'reopeningDate',
+               'endDate', 'syllabusCompletionDeadline', 'workingDaysOfWeek', 'saturdayRule',
+               'holidays', 'vacations', 'examWindows', 'revisionWindows', 'textbookEdition',
+               'defaultPeriodMinutes', 'syllabusRevisionTag', 'allowTeacherWeightCustomization',
+               'allowTeacherCalendarCustomization', 'showCurriculumReviewNoticeToTeachers',
+               'defaultMediumByBoard', 'version', 'updatedAt', 'updatedByUid'
+             ]) &&
+             isValidId(data.id) &&
+             data.isPublicCalendar is bool && data.isPublicCalendar == true &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             (!('board' in data) || (data.board in ['Maharashtra', 'CBSE', 'ICSE'])) &&
+             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 20)) &&
+             (!('startDate' in data) || (data.startDate is string && data.startDate.size() == 10)) &&
+             (!('reopeningDate' in data) || (data.reopeningDate is string && data.reopeningDate.size() == 10)) &&
+             (!('endDate' in data) || (data.endDate is string && data.endDate.size() == 10)) &&
+             (!('syllabusCompletionDeadline' in data) || (data.syllabusCompletionDeadline is string && data.syllabusCompletionDeadline.size() == 10)) &&
+             (!('workingDaysOfWeek' in data) || (data.workingDaysOfWeek is list && data.workingDaysOfWeek.size() >= 1 && data.workingDaysOfWeek.size() <= 6 && data.workingDaysOfWeek[0] is number)) &&
+             (!('saturdayRule' in data) || (data.saturdayRule in ['off', 'half_day', 'full_day', 'second_fourth_off'])) &&
+             (!('holidays' in data) || (data.holidays is list && data.holidays.size() <= 80 && (data.holidays.size() == 0 || data.holidays[0] is map))) &&
+             (!('vacations' in data) || (data.vacations is list && data.vacations.size() <= 15 && (data.vacations.size() == 0 || data.vacations[0] is map))) &&
+             (!('examWindows' in data) || (data.examWindows is list && data.examWindows.size() <= 15 && (data.examWindows.size() == 0 || data.examWindows[0] is map))) &&
+             (!('revisionWindows' in data) || (data.revisionWindows is list && data.revisionWindows.size() <= 15 && (data.revisionWindows.size() == 0 || data.revisionWindows[0] is map))) &&
+             (!('textbookEdition' in data) || (data.textbookEdition is string && data.textbookEdition.size() <= 160)) &&
+             (!('defaultPeriodMinutes' in data) || (data.defaultPeriodMinutes is number && data.defaultPeriodMinutes >= 20 && data.defaultPeriodMinutes <= 90)) &&
+             (!('syllabusRevisionTag' in data) || (data.syllabusRevisionTag is string && data.syllabusRevisionTag.size() <= 60)) &&
+             (!('allowTeacherWeightCustomization' in data) || data.allowTeacherWeightCustomization is bool) &&
+             (!('allowTeacherCalendarCustomization' in data) || data.allowTeacherCalendarCustomization is bool) &&
+             (!('showCurriculumReviewNoticeToTeachers' in data) || data.showCurriculumReviewNoticeToTeachers is bool) &&
+             (!('defaultMediumByBoard' in data) || data.defaultMediumByBoard is map) &&
+             (!('version' in data) || (data.version is number && data.version >= 1)) &&
+             (!('updatedByUid' in data) || (data.updatedByUid is string && data.updatedByUid.size() <= 128));
+    }
+
+    // Immutable Academic Year Archive Schema Validator (Zero-PII)
+    function isValidAcademicYearArchive(data) {
+      return data.keys().hasAll([
+               'id', 'isArchivedSnapshot', 'board', 'academicYear',
+               'calendarSnapshot', 'summaryStats', 'archivedAt', 'archivedByUid'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'isArchivedSnapshot', 'board', 'academicYear',
+               'calendarSnapshot', 'summaryStats', 'archivedAt', 'archivedByUid', 'archiveNote'
+             ]) &&
+             isValidId(data.id) &&
+             data.isArchivedSnapshot is bool && data.isArchivedSnapshot == true &&
+             data.board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+             data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 20 &&
+             data.calendarSnapshot is map &&
+             data.summaryStats is map &&
+             data.archivedAt is string && data.archivedAt.size() > 0 && data.archivedAt.size() <= 50 &&
+             data.archivedByUid is string && data.archivedByUid.size() > 0 && data.archivedByUid.size() <= 128 &&
+             (!('archiveNote' in data) || (data.archiveNote is string && data.archiveNote.size() <= 300)) &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data);
+    }
+
+    // Private Per-Teacher School Calendar Override Schema Validator
+    function isValidSchoolCalendar(data) {
+      return data.keys().hasAll([
+               'id', 'teacherUid', 'board', 'academicYear', 'reopeningDate',
+               'endDate', 'syllabusCompletionDeadline', 'saturdayRule', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'teacherUid', 'board', 'academicYear', 'schoolName', 'medium',
+               'startDate', 'reopeningDate', 'endDate', 'syllabusCompletionDeadline',
+               'workingDaysOfWeek', 'saturdayRule', 'holidays', 'vacations',
+               'examWindows', 'revisionWindows', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             data.teacherUid is string && data.teacherUid.size() > 0 && data.teacherUid.size() <= 128 &&
+             data.board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+             data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 20 &&
+             (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 150)) &&
+             (!('medium' in data) || (data.medium in ['English', 'Marathi', 'Semi-English', 'Hindi'])) &&
+             (!('startDate' in data) || (data.startDate is string && data.startDate.size() == 10)) &&
+             data.reopeningDate is string && data.reopeningDate.size() == 10 &&
+             data.endDate is string && data.endDate.size() == 10 &&
+             data.syllabusCompletionDeadline is string && data.syllabusCompletionDeadline.size() == 10 &&
+             (!('workingDaysOfWeek' in data) || (data.workingDaysOfWeek is list && data.workingDaysOfWeek.size() >= 1 && data.workingDaysOfWeek.size() <= 6 && data.workingDaysOfWeek[0] is number)) &&
+             data.saturdayRule in ['off', 'half_day', 'full_day', 'second_fourth_off'] &&
+             (!('holidays' in data) || (data.holidays is list && data.holidays.size() <= 80 && (data.holidays.size() == 0 || data.holidays[0] is map))) &&
+             (!('vacations' in data) || (data.vacations is list && data.vacations.size() <= 15 && (data.vacations.size() == 0 || data.vacations[0] is map))) &&
+             (!('examWindows' in data) || (data.examWindows is list && data.examWindows.size() <= 15 && (data.examWindows.size() == 0 || data.examWindows[0] is map))) &&
+             (!('revisionWindows' in data) || (data.revisionWindows is list && data.revisionWindows.size() <= 15 && (data.revisionWindows.size() == 0 || data.revisionWindows[0] is map))) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('isAdmin' in data) &&
+             !('role' in data) &&
+             !('passwordHash' in data);
+    }
+
+    // Private Per-Teacher Lesson Plan Progress, Edits & Remarks Schema Validator
+    function isValidLessonPlanState(data) {
+      return data.keys().hasAll([
+               'id', 'teacherUid', 'board', 'classLevel', 'subject',
+               'academicYear', 'division', 'medium', 'periodsPerWeek', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'teacherUid', 'board', 'classLevel', 'subject', 'academicYear',
+               'division', 'medium', 'periodsPerWeek', 'teachingDays',
+               'completedLessonDates', 'completedDateLocks', 'completedChapterIds',
+               'chapterWeightOverrides', 'outcomeStatuses', 'outcomeNotes',
+               'permittedEdits', 'privateRemarks', 'shiftAnchorDate', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             data.teacherUid is string && data.teacherUid.size() > 0 && data.teacherUid.size() <= 128 &&
+             data.board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+             data.classLevel is string && data.classLevel.size() > 0 && data.classLevel.size() <= 20 &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 100 &&
+             data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 20 &&
+             data.division is string && data.division.size() > 0 && data.division.size() <= 30 &&
+             data.medium in ['English', 'Marathi', 'Semi-English', 'Hindi'] &&
+             data.periodsPerWeek is number && data.periodsPerWeek >= 1 && data.periodsPerWeek <= 6 &&
+             (!('teachingDays' in data) || (data.teachingDays is list && data.teachingDays.size() >= 1 && data.teachingDays.size() <= 6 && data.teachingDays[0] is number)) &&
+             (!('completedLessonDates' in data) || (data.completedLessonDates is list && data.completedLessonDates.size() <= 300 && (data.completedLessonDates.size() == 0 || data.completedLessonDates[0] is string))) &&
+             (!('completedDateLocks' in data) || (data.completedDateLocks is map && data.completedDateLocks.size() <= 300)) &&
+             (!('completedChapterIds' in data) || (data.completedChapterIds is list && data.completedChapterIds.size() <= 60 && (data.completedChapterIds.size() == 0 || data.completedChapterIds[0] is string))) &&
+             (!('chapterWeightOverrides' in data) || (data.chapterWeightOverrides is map && data.chapterWeightOverrides.size() <= 60)) &&
+             (!('outcomeStatuses' in data) || (data.outcomeStatuses is map && data.outcomeStatuses.size() <= 180)) &&
+             (!('outcomeNotes' in data) || (data.outcomeNotes is map && data.outcomeNotes.size() <= 180)) &&
+             (!('permittedEdits' in data) || (data.permittedEdits is map && data.permittedEdits.size() <= 300)) &&
+             (!('privateRemarks' in data) || (data.privateRemarks is map && data.privateRemarks.size() <= 300)) &&
+             (!('shiftAnchorDate' in data) || (data.shiftAnchorDate is string && data.shiftAnchorDate.size() <= 10)) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('isAdmin' in data) &&
+             !('role' in data) &&
+             !('passwordHash' in data);
+    }
+
+    // 15. Additive Collection: /academic_calendars/{calendarId}
+    // Restricted strictly to verified Admins (full CRUD) and authorised Teachers (get-only on canonical active docs).
+    match /academic_calendars/{calendarId} {
+      allow get: if isValidId(calendarId) && (
+        isAdmin() || (isSignedIn() && isTeacherAccount(request.auth.uid) && calendarId in ['mh_active', 'cbse_active', 'icse_active', 'global_settings'])
+      );
+      allow list: if isAdmin();
+      allow create: if isValidId(calendarId) &&
+                       isAdmin() &&
+                       isValidAcademicCalendar(incoming()) &&
+                       incoming().id == calendarId;
+      allow update: if isValidId(calendarId) &&
+                       isAdmin() &&
+                       isValidAcademicCalendar(incoming()) &&
+                       incoming().id == existing().id &&
+                       (!('board' in existing()) || incoming().board == existing().board);
+      allow delete: if isValidId(calendarId) && isAdmin();
+    }
+
+    // 16. Additive Collection: /academic_year_archives/{archiveId}
+    // Immutable historical academic-year rollover snapshots (Admin create only; update & delete permanently forbidden).
+    // Read/list restricted strictly to verified Admins and authorised Teachers.
+    match /academic_year_archives/{archiveId} {
+      allow get: if isValidId(archiveId) && (
+        isAdmin() || (isSignedIn() && isTeacherAccount(request.auth.uid) && existing().isArchivedSnapshot == true)
+      );
+      allow list: if isAdmin() || (isSignedIn() && isTeacherAccount(request.auth.uid) && resource.data.isArchivedSnapshot == true);
+      allow create: if isValidId(archiveId) &&
+                       isAdmin() &&
+                       isValidAcademicYearArchive(incoming()) &&
+                       incoming().id == archiveId;
+      allow update, delete: if false;
     }
   }
 }
