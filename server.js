@@ -2391,9 +2391,9 @@ var PLAN_CATALOG = {
   // Plan 1: TET – 6 Months
   TET_6M: {
     sku: "TET_6M",
-    title: "TET \u2013 6 Months",
+    title: "TET (Paper 1 & 2) \u2013 6 Months",
     shortTitle: "TET (6 Months)",
-    subtitle: "MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets",
+    subtitle: "MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Study Notes, Subject Drills & Revision Sets",
     originalAmountInr: 399,
     amountInr: 199,
     amountPaise: 19900,
@@ -2417,7 +2417,7 @@ var PLAN_CATALOG = {
   // Plan 2: CTET – 6 Months
   CTET_6M: {
     sku: "CTET_6M",
-    title: "CTET \u2013 6 Months",
+    title: "CTET (Paper 1 & 2) \u2013 6 Months",
     shortTitle: "CTET (6 Months)",
     subtitle: "CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)",
     originalAmountInr: 399,
@@ -2443,8 +2443,8 @@ var PLAN_CATALOG = {
   // Plan 3: TET + CTET COMBO – 6 Months
   TET_CTET_COMBO_6M: {
     sku: "TET_CTET_COMBO_6M",
-    title: "TET + CTET COMBO \u2013 6 Months",
-    shortTitle: "TET + CTET (6M)",
+    title: "Combo Offer: TET + CTET (Paper 1 & 2) \u2013 6 Months",
+    shortTitle: "TET + CTET Combo (6M)",
     subtitle: "Combined access to MAHA TET (P1+P2) and CTET (P1+P2) \u2013 200 Mock Tests",
     originalAmountInr: 699,
     amountInr: 349,
@@ -2470,9 +2470,9 @@ var PLAN_CATALOG = {
   // Plan 4: TET – 1 Year
   TET_1Y: {
     sku: "TET_1Y",
-    title: "TET \u2013 1 Year",
+    title: "TET (Paper 1 & 2) \u2013 1 Year",
     shortTitle: "TET (1 Year)",
-    subtitle: "MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Subject Drills & Revision Sets",
+    subtitle: "MAHA TET Paper 1 & Paper 2: 100 Full Mocks, Study Notes, Subject Drills & Revision Sets",
     originalAmountInr: 599,
     amountInr: 299,
     amountPaise: 29900,
@@ -2480,23 +2480,23 @@ var PLAN_CATALOG = {
     discountBadge: "SAVE 50%",
     validityDays: 365,
     validityMonths: 12,
-    validityLabel: "12 Months",
+    validityLabel: "1 Year",
     unlockedCategories: ["maha_tet"],
     isCombo: false,
     requiresBoardClass: false,
     audience: "teacher",
-    badge: "12 Months (1 Year)",
+    badge: "1 Year Plan",
     highlights: [
       "50 Paper 1 + 50 Paper 2 Full Mock Exams (15,000 Questions)",
       "MSCE Pune Syllabus, Topic Drills & PYQ Simulators",
       "Marathi, English, Hindi & Urdu Mediums",
-      "365 Days (12 Months) Full Validity"
+      "365 Days (1 Year) Full Validity"
     ]
   },
   // Plan 5: CTET – 1 Year
   CTET_1Y: {
     sku: "CTET_1Y",
-    title: "CTET \u2013 1 Year",
+    title: "CTET (Paper 1 & 2) \u2013 1 Year",
     shortTitle: "CTET (1 Year)",
     subtitle: "CTET Paper 1 & Paper 2: 100 Full CBT Mocks (Math/Science & Social Studies)",
     originalAmountInr: 599,
@@ -2506,24 +2506,24 @@ var PLAN_CATALOG = {
     discountBadge: "SAVE 50%",
     validityDays: 365,
     validityMonths: 12,
-    validityLabel: "12 Months",
+    validityLabel: "1 Year",
     unlockedCategories: ["ctet_paper_1", "ctet_paper_2"],
     isCombo: false,
     requiresBoardClass: false,
     audience: "teacher",
-    badge: "12 Months (1 Year)",
+    badge: "1 Year Plan",
     highlights: [
       "50 Paper 1 + 50 Paper 2 CBT Mock Examinations (15,000 Questions)",
       "CBSE Competency Patterns, Pedagogy Drills & Weak-Area Revision",
       "Both Math/Science & Social Studies Streams Included",
-      "365 Days (12 Months) Full Validity"
+      "365 Days (1 Year) Full Validity"
     ]
   },
   // Plan 6: TET + CTET COMBO – 1 Year
   TET_CTET_COMBO_1Y: {
     sku: "TET_CTET_COMBO_1Y",
-    title: "TET + CTET COMBO \u2013 1 Year",
-    shortTitle: "TET + CTET (1 Year)",
+    title: "Combo Offer: TET + CTET (Paper 1 & 2) \u2013 1 Year",
+    shortTitle: "TET + CTET Combo (1Y)",
     subtitle: "All 200 Teacher Eligibility Mock Tests across MAHA TET & CTET Papers 1 & 2",
     originalAmountInr: 999,
     amountInr: 499,
@@ -4443,9 +4443,9 @@ Click OPEN SYLLABUS & STUDY NOTES below to view your board, class, and subject c
     keywords: ["maharashtra", "cbse", "icse", "subscription plan", "plan details", "free plan", "premium plan", "price", "pricing", "99", "fee", "subscription", "\u092A\u094D\u0932\u093E\u0928", "\u092B\u0940\u0938", "\u092C\u094B\u0930\u094D\u0921"],
     actionIds: () => ["open_all_courses", "open_plans"],
     responses: {
-      en: () => "MyStudyZone covers Classes 1 to 10 across all 3 Education Boards: Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE).\n\u2022 FREE PLAN (\u20B90 Lifetime): 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, and Chapter 1 sample notes.\n\u2022 PREMIUM PLAN (\u20B999 / 365 Days): Full 1-year unlock of all subjects, worksheets, study materials, stories, drawing, cricket GK & AI academy for your selected Board & Class.\n\u2022 Separate plans are also available for Scholarship (4th & 7th) and MAHA TET / CTET.",
-      hi: () => "MyStudyZone \u092A\u0930 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0915\u0947 \u0932\u093F\u090F \u0924\u0940\u0928\u094B\u0902 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0914\u0930 ICSE (CISCE)\u0964\n\u2022 FREE PLAN (\u20B90 \u0932\u093E\u0907\u092B\u091F\u093E\u0907\u092E): 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F, English/Maths \u0915\u094D\u0935\u093F\u091C\u093C, \u092A\u091C\u093C\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0914\u0930 \u0938\u0948\u0902\u092A\u0932 \u0928\u094B\u091F\u094D\u0938\u0964\n\u2022 PREMIUM PLAN (\u20B999 / 365 \u0926\u093F\u0928): \u091A\u0941\u0928\u0947 \u0939\u0941\u090F \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0928\u094B\u091F\u094D\u0938, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0914\u0930 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u092A\u0942\u0930\u0947 1 \u0935\u0930\u094D\u0937 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0932\u0949\u0915\u0964\n\u2022 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A \u0935 TET/CTET \u0915\u0947 \u0932\u093F\u090F \u0905\u0932\u0917 \u092A\u094D\u0932\u093E\u0928 \u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964",
-      mr: () => "MyStudyZone \u0935\u0930 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u0938\u093E\u0920\u0940 \u0924\u093F\u0928\u094D\u0939\u0940 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0930\u093E\u091C\u094D\u092F \u092E\u0902\u0921\u0933, CBSE (NCERT) \u0906\u0923\u093F ICSE (CISCE).\n\u2022 FREE PLAN (\u20B9\u0966 \u0906\u091C\u0940\u0935\u0928): \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, English/Maths \u0915\u094D\u0935\u093F\u091D, \u092A\u091D\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0935 \u0928\u092E\u0941\u0928\u093E \u0928\u094B\u091F\u094D\u0938.\n\u2022 PREMIUM PLAN (\u20B9\u096F\u096F / \u0969\u096C\u096B \u0926\u093F\u0935\u0938): \u0928\u093F\u0935\u0921\u0932\u0947\u0932\u094D\u092F\u093E \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0917\u094B\u0937\u094D\u091F\u0940, \u0921\u094D\u0930\u0949\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0935 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u0967 \u0935\u0930\u094D\u0937\u093E\u0938\u093E\u0920\u0940 \u092A\u0942\u0930\u094D\u0923\u092A\u0923\u0947 \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.\n\u2022 \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 \u0935 TET/CTET \u0938\u093E\u0920\u0940 \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930 \u092A\u094D\u0932\u093E\u0928 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924."
+      en: () => "MyStudyZone covers Classes 1 to 10 across all 3 Education Boards: Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE).\n\u2022 FREE PLAN (\u20B90 Lifetime): 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, and Chapter 1 sample notes.\n\u2022 SCHOOL PREMIUM PLAN (\u20B999 / 365 Days): Full 1-year unlock of all subjects, worksheets, study materials, stories, drawing, cricket GK & AI academy for your selected Board & Class.\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) | 1 Year \u20B9299 (MRP \u20B9599)\n  \u2013 CTET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) | 1 Year \u20B9299 (MRP \u20B9599)\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): 6 Months \u20B9349 (MRP \u20B9699) | 1 Year \u20B9499 (MRP \u20B9999)\n\u2022 Separate Scholarship Combo (Std 4th & 7th) is also available.",
+      hi: () => "MyStudyZone \u092A\u0930 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0915\u0947 \u0932\u093F\u090F \u0924\u0940\u0928\u094B\u0902 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0914\u0930 ICSE (CISCE)\u0964\n\u2022 FREE PLAN (\u20B90 \u0932\u093E\u0907\u092B\u091F\u093E\u0907\u092E): 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F, English/Maths \u0915\u094D\u0935\u093F\u091C\u093C, \u092A\u091C\u093C\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0914\u0930 \u0938\u0948\u0902\u092A\u0932 \u0928\u094B\u091F\u094D\u0938\u0964\n\u2022 SCHOOL PREMIUM PLAN (\u20B999 / 365 \u0926\u093F\u0928): \u091A\u0941\u0928\u0947 \u0939\u0941\u090F \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0928\u094B\u091F\u094D\u0938, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0914\u0930 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u092A\u0942\u0930\u0947 1 \u0935\u0930\u094D\u0937 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0932\u0949\u0915\u0964\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET (Paper 1 & 2): 6 \u092E\u093E\u0939 \u20B9199 (MRP \u20B9399) | 1 \u0935\u0930\u094D\u0937 \u20B9299 (MRP \u20B9599)\n  \u2013 CTET (Paper 1 & 2): 6 \u092E\u093E\u0939 \u20B9199 (MRP \u20B9399) | 1 \u0935\u0930\u094D\u0937 \u20B9299 (MRP \u20B9599)\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): 6 \u092E\u093E\u0939 \u20B9349 (MRP \u20B9699) | 1 \u0935\u0930\u094D\u0937 \u20B9499 (MRP \u20B9999)\n\u2022 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (\u0915\u0915\u094D\u0937\u093E 4 \u0914\u0930 7) \u0915\u0947 \u0932\u093F\u090F \u0905\u0932\u0917 \u092A\u094D\u0932\u093E\u0928 \u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964",
+      mr: () => "MyStudyZone \u0935\u0930 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u0938\u093E\u0920\u0940 \u0924\u093F\u0928\u094D\u0939\u0940 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0930\u093E\u091C\u094D\u092F \u092E\u0902\u0921\u0933, CBSE (NCERT) \u0906\u0923\u093F ICSE (CISCE).\n\u2022 FREE PLAN (\u20B9\u0966 \u0906\u091C\u0940\u0935\u0928): \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, English/Maths \u0915\u094D\u0935\u093F\u091D, \u092A\u091D\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0935 \u0928\u092E\u0941\u0928\u093E \u0928\u094B\u091F\u094D\u0938.\n\u2022 SCHOOL PREMIUM PLAN (\u20B9\u096F\u096F / \u0969\u096C\u096B \u0926\u093F\u0935\u0938): \u0928\u093F\u0935\u0921\u0932\u0947\u0932\u094D\u092F\u093E \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0917\u094B\u0937\u094D\u091F\u0940, \u0921\u094D\u0930\u0949\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0935 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u0967 \u0935\u0930\u094D\u0937\u093E\u0938\u093E\u0920\u0940 \u092A\u0942\u0930\u094D\u0923\u092A\u0923\u0947 \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET (Paper 1 & 2): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0967\u096F\u096F (MRP \u20B9\u0969\u096F\u096F) | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u0968\u096F\u096F (MRP \u20B9\u096B\u096F\u096F)\n  \u2013 CTET (Paper 1 & 2): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0967\u096F\u096F (MRP \u20B9\u0969\u096F\u096F) | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u0968\u096F\u096F (MRP \u20B9\u096B\u096F\u096F)\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0969\u096A\u096F (MRP \u20B9\u096C\u096F\u096F) | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u096A\u096F\u096F (MRP \u20B9\u096F\u096F\u096F)\n\u2022 \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 (\u0907. \u096A \u0925\u0940 \u0935 \u096D \u0935\u0940) \u0938\u093E\u0920\u0940 \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930 \u092A\u094D\u0932\u093E\u0928 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947."
     }
   }
 ];
@@ -4507,7 +4507,7 @@ STRICT RULES \u2014 NEVER VIOLATE:
    - Special Learning Studios: Story World (45+ audio stories in English, Hindi, Marathi), Chhatrapati Shivaji Maharaj Stories (50 audio chapters), Drawing Studio (120+ colouring templates & canvas), Brain Puzzles & Sudoku (4x4, 6x6, 9x9 \u2014 Free Forever), Cricket & GK Hub, AI Learning Academy & Future Skills (8 modules).
    - Exam Prep: 4th Std Scholarship (MSCE PSE) & 7th Std Scholarship (MSCE UPS), MAHA TET (Paper 1 & 2) & CTET (Paper 1 & 2), Free Interactive Visitor Demo & Free Full-Length Demo Mock Tests.
    - Accounts & Portals: Student Registration/Login, Dedicated Teacher Registration/Login (with Teacher Hub for Classes 1\u201310, Worksheets, Study Notes, 4-Level Quizzes, Scholarship, TET/CTET, Stories, Current Affairs), Single-Device Session Protection (with Lost/Damaged Device Recovery in Login modal), Forgot Password email reset, Top-Right Login/Logout button, Refer & Earn (\u20B95 cashback wallet).
-   - Plans: FREE PLAN (\u20B90 Lifetime: 2 Demo Worksheets English & Math for registered class, English & Math quizzes, Brain Puzzles, Sudoku, Chapter 1 sample notes); PREMIUM PLAN (\u20B999 / 365 Days per Board & Class); Scholarship & TET/CTET plans via Razorpay.
+   - Plans: FREE PLAN (\u20B90 Lifetime: 2 Demo Worksheets English & Math for registered class, English & Math quizzes, Brain Puzzles, Sudoku, Chapter 1 sample notes); SCHOOL PREMIUM PLAN (\u20B999 / 365 Days per Board & Class); SCHOLARSHIP COMBO (\u20B999 / 365 Days); TEACHER PLANS \u2013 TET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) & 1 Year \u20B9299 (MRP \u20B9599); CTET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) & 1 Year \u20B9299 (MRP \u20B9599); TET + CTET COMBO (Paper 1 & 2): 6 Months \u20B9349 (MRP \u20B9699) & 1 Year \u20B9499 (MRP \u20B9999) via Razorpay.
 2. NEVER INVENT FEATURES: Never invent live video classes, downloadable worksheet PDFs, 1-on-1 tutors, WhatsApp bots, or non-existent routes/buttons. If asked for something unavailable, politely say it is not available on MyStudyZone.
 3. PRIVACY & SAFETY: NEVER ask users for passwords, OTPs, bank details, or card/UPI PINs. NEVER claim to have automatically fixed an account, reset a password, or activated a plan\u2014always guide the user or set suggestSupportTicket=true so they can submit a Support Request. NEVER disclose admin details or another user's private info.
 4. MULTILINGUAL SUPPORT: Reply fluently in the user's language \u2014 English ('en'), Hindi ('hi'), or Marathi ('mr'), understanding spelling mistakes and Hinglish/Marathi transliteration naturally.
@@ -5667,7 +5667,7 @@ app.post("/api/razorpay/webhook", async (req, res) => {
           planId,
           planSku: resolvedWebhookSku,
           activatedCategories: webhookPlanItem.unlockedCategories,
-          planTitle: firestoreUpdateResult?.planLabel || `${webhookPlanItem.title} \u2013 \u20B9${verifiedAmount} \u2013 365 Days (1 Year)`,
+          planTitle: firestoreUpdateResult?.planLabel || `${webhookPlanItem.title} \u2013 \u20B9${verifiedAmount} \u2013 ${webhookPlanItem.validityDays} Days (${webhookPlanItem.validityLabel})`,
           amount: verifiedAmount,
           currency: "INR",
           orderId,
@@ -7569,6 +7569,83 @@ app.post("/api/support/tickets", async (req, res) => {
       persisted: false,
       error: "Unable to submit your support request right now. Please try again shortly."
     });
+  }
+});
+function isSafeExternalEducationalUrl(rawUrl) {
+  try {
+    const trimmed = String(rawUrl || "").trim();
+    if (!trimmed) return { safe: false, reason: "URL is required." };
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return { safe: false, reason: "Only HTTP/HTTPS educational links are permitted." };
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal") || host === "0.0.0.0" || host === "::1" || host === "[::1]" || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)) {
+      return { safe: false, reason: "Private or local network addresses are not permitted." };
+    }
+    return { safe: true, parsed };
+  } catch {
+    return { safe: false, reason: "Malformed URL format." };
+  }
+}
+app.post("/api/study-library/verify-link", async (req, res) => {
+  const rawUrl = String(req.body?.url || "").trim();
+  const check = isSafeExternalEducationalUrl(rawUrl);
+  if (!check.safe || !check.parsed) {
+    return res.status(400).json({
+      success: false,
+      ok: false,
+      status: 0,
+      url: rawUrl,
+      error: check.reason || "Invalid URL.",
+      checkedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  const targetUrl = check.parsed.toString();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5e3);
+  try {
+    let response = await fetch(targetUrl, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "MyStudyZone-LinkVerifier/1.0 (+https://mystudyzone.in)"
+      }
+    }).catch(() => null);
+    if (!response || response.status === 405 || response.status === 403 || response.status >= 500) {
+      response = await fetch(targetUrl, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "MyStudyZone-LinkVerifier/1.0 (+https://mystudyzone.in)",
+          Range: "bytes=0-1024"
+        }
+      });
+    }
+    const ok = response.status >= 200 && response.status < 400;
+    return res.status(200).json({
+      success: true,
+      ok,
+      status: response.status,
+      url: rawUrl,
+      finalUrl: response.url || targetUrl,
+      contentType: response.headers.get("content-type") || "unknown",
+      checkedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (err) {
+    return res.status(200).json({
+      success: true,
+      ok: false,
+      status: 0,
+      url: rawUrl,
+      finalUrl: targetUrl,
+      error: err?.name === "AbortError" ? "Connection timed out after 5 seconds." : "Unable to reach destination server.",
+      checkedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } finally {
+    clearTimeout(timeoutId);
   }
 });
 async function startServer() {
