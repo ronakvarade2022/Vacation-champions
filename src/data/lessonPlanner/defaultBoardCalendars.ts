@@ -433,8 +433,8 @@ export function getDefaultPeriodsPerWeekForSubject(
 
 export function getAllowedMediumsForBoard(board: EducationBoard): InstructionMedium[] {
   if (board === 'Maharashtra') return ['English', 'Semi-English', 'Marathi', 'Hindi'];
-  if (board === 'CBSE') return ['English', 'Hindi'];
-  return ['English'];
+  if (board === 'CBSE') return ['English', 'Hindi', 'Semi-English', 'Marathi'];
+  return ['English', 'Hindi', 'Semi-English', 'Marathi'];
 }
 
 export function shiftIsoDateByYears(isoDate: string, yearsDelta: number): string {

@@ -174,6 +174,7 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
   const [selectedArchiveId, setSelectedArchiveId] = useState<string>('active');
   const [schoolOverride, setSchoolOverride] = useState<SchoolCalendarOverride | null>(null);
   const [teacherState, setTeacherState] = useState<TeacherLessonPlanState | null>(null);
+  const selectedMediumRef = useRef<InstructionMedium | null>(null);
   const [savedTeachingLoad, setSavedTeachingLoad] = useState<TeacherLessonPlanState[]>([]);
   const [isLoadingPlan, setIsLoadingPlan] = useState<boolean>(false);
 
@@ -278,7 +279,15 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
     }).then((existingState) => {
       if (cancelled) return;
       if (existingState) {
-        setTeacherState(existingState);
+        const allowedMediums = getAllowedMediumsForBoard(board);
+        const activeMedium =
+          selectedMediumRef.current && allowedMediums.includes(selectedMediumRef.current)
+            ? selectedMediumRef.current
+            : existingState.medium;
+        setTeacherState({
+          ...existingState,
+          medium: activeMedium,
+        });
       } else {
         const curriculumMeta = resolveBoardClassSubjectCurriculum(
           board,
@@ -288,7 +297,9 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
         );
         const allowedMediums = getAllowedMediumsForBoard(board);
         const preferredMedium =
-          schoolOverride?.medium && allowedMediums.includes(schoolOverride.medium)
+          selectedMediumRef.current && allowedMediums.includes(selectedMediumRef.current)
+            ? selectedMediumRef.current
+            : schoolOverride?.medium && allowedMediums.includes(schoolOverride.medium)
             ? schoolOverride.medium
             : globalSettings.defaultMediumByBoard[board] &&
                 allowedMediums.includes(globalSettings.defaultMediumByBoard[board])
@@ -381,8 +392,11 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
 
   // 7. Persist Private Teacher State Mutations
   const persistTeacherState = useCallback(
-    async (mutator: (current: TeacherLessonPlanState) => TeacherLessonPlanState) => {
-      if (isArchivedReadOnly) return;
+    async (
+      mutator: (current: TeacherLessonPlanState) => TeacherLessonPlanState,
+      allowInReadOnlyArchive = false
+    ) => {
+      if (isArchivedReadOnly && !allowInReadOnlyArchive) return;
 
       const base: TeacherLessonPlanState =
         teacherState ||
@@ -415,6 +429,8 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
       };
 
       setTeacherState(nextState);
+      if (isArchivedReadOnly) return;
+
       setSaveFeedback({ kind: 'saving', text: 'Saving privately...' });
 
       const result = await saveTeacherLessonPlanState(currentTeacher.id, nextState);
@@ -452,10 +468,14 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
   const effectiveWorkingDays = generatedPlan.effectiveCalendar.workingDaysOfWeek;
 
   const handleMediumChange = (nextMedium: InstructionMedium) => {
-    void persistTeacherState((prev) => ({
-      ...prev,
-      medium: nextMedium,
-    }));
+    selectedMediumRef.current = nextMedium;
+    void persistTeacherState(
+      (prev) => ({
+        ...prev,
+        medium: nextMedium,
+      }),
+      true
+    );
   };
 
   const handlePeriodsPerWeekChange = (nextPeriods: number) => {
