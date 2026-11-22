@@ -6,8 +6,6 @@ import {
   Clock,
   Calendar,
   BookOpen,
-  Award,
-  Trophy,
   User,
   Headphones,
   Gift,
@@ -29,6 +27,12 @@ import {
   Zap,
   HelpCircle,
   Layers,
+  Lock,
+  LogIn,
+  ShieldCheck,
+  UserCheck,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId, NavSubItemConfig } from '../data/navigationConfig';
@@ -70,6 +74,10 @@ interface ReferenceShowcaseSectionsProps {
   onNavigateTab: (tab: string, subSection?: string, subject?: SubjectName) => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
   onOpenAuth: (defaultTab: 'login' | 'register' | 'teacher' | 'admin') => void;
+  onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
+  isAuthenticated?: boolean;
+  currentRole?: 'student' | 'teacher' | 'admin';
+  currentUserName?: string;
   onOpenMembership: (targetClass: ClassLevel, targetBoard: EducationBoard) => void;
   onStartLearningClick: () => void;
   viewMode?: 'auto' | 'desktop';
@@ -77,6 +85,7 @@ interface ReferenceShowcaseSectionsProps {
   progressMetrics: RealStudentProgressMetrics;
   activeMainSection?: MainMenuId;
   onSelectMainSection?: (sectionId: MainMenuId) => void;
+  activeSubActionId?: NavSubActionId;
 }
 
 export const MAIN_SECTION_ICONS: Record<
@@ -169,7 +178,7 @@ export const MAIN_SECTION_ICONS: Record<
     iconColor: 'text-white',
     headerGradient: 'from-[#f3e8ff] via-[#faf5ff] to-[#e0f2fe]',
     borderClass: 'border-purple-300',
-    tagline: 'Profile • Purchases • Support',
+    tagline: 'Profile • Refer & Earn • Help & Support',
     pillEmoji: '👤',
   },
 };
@@ -183,6 +192,7 @@ const DASHBOARD_ACCORDION_MENU_IDS: MainMenuId[] = [
   'exam-zone',
   'performance',
   'plans',
+  'account',
 ];
 
 export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps> = ({
@@ -194,6 +204,10 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   onNavigateTab,
   onMenuAction,
   onOpenAuth,
+  onOpenPanel,
+  isAuthenticated = false,
+  currentRole = 'student',
+  currentUserName,
   onOpenMembership,
   onStartLearningClick,
   viewMode = 'auto',
@@ -201,9 +215,10 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   progressMetrics,
   activeMainSection,
   onSelectMainSection,
+  activeSubActionId,
 }) => {
   const [expandedSectionId, setExpandedSectionId] = useState<MainMenuId>(
-    activeMainSection && activeMainSection !== 'account' ? activeMainSection : 'special-learning'
+    activeMainSection || 'special-learning'
   );
 
   // Helper to build the exact subsection list for any Main Menu (without duplicating or deleting any subsection)
@@ -228,8 +243,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   };
 
   const [selectedSubId, setSelectedSubId] = useState<string>(() => {
-    const initialMenu =
-      activeMainSection && activeMainSection !== 'account' ? activeMainSection : 'special-learning';
+    const initialMenu = activeMainSection || 'special-learning';
     const subs = getSubsectionsForMainMenu(initialMenu);
     return subs[0]?.id || 'sl-drawing';
   });
@@ -247,7 +261,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   }, [selectedBoard, selectedClass, previewSubject]);
 
   useEffect(() => {
-    if (activeMainSection && activeMainSection !== 'account') {
+    if (activeMainSection) {
       setExpandedSectionId(activeMainSection);
       const subs = getSubsectionsForMainMenu(activeMainSection);
       if (subs.length > 0) {
@@ -255,6 +269,34 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       }
     }
   }, [activeMainSection]);
+
+  useEffect(() => {
+    if (!activeSubActionId) return;
+    const matchingGroup = MAIN_NAV_MENUS.find((m) =>
+      m.items.some((item) => item.id === activeSubActionId)
+    );
+    if (matchingGroup) {
+      setExpandedSectionId(matchingGroup.id);
+      setSelectedSubId(activeSubActionId);
+    }
+  }, [activeSubActionId]);
+
+  const handleOpenRolePortal = (
+    panel: 'student' | 'teacher' | 'admin',
+    intent?: 'login' | 'register'
+  ) => {
+    if (onOpenPanel) {
+      onOpenPanel(panel, intent);
+      return;
+    }
+    if (panel === 'teacher') {
+      onOpenAuth('teacher');
+    } else if (panel === 'admin') {
+      onOpenAuth('admin');
+    } else {
+      onOpenAuth(intent === 'register' ? 'register' : 'login');
+    }
+  };
 
   const handleSelectAccordionSection = (sectionId: MainMenuId) => {
     setExpandedSectionId(sectionId);
@@ -380,6 +422,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     cardGradient: string;
     borderClass: string;
   } => {
+    if (subId === 'home-portals') {
+      return {
+        emojiIcon: '🔐',
+        cardGradient: 'from-[#e0e7ff] via-[#dbeafe] to-[#fef3c7]',
+        borderClass: 'border-indigo-400',
+      };
+    }
     if (subId === 'perf-leaderboard') {
       return {
         emojiIcon: '🏆',
@@ -906,7 +955,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {activeSub.id !== 'home-overview' && (
+                    {activeSub.id !== 'home-overview' && activeSub.id !== 'home-portals' && (
                       <button
                         type="button"
                         onClick={handleOpenSelectedSubFullPage}
@@ -1084,6 +1133,135 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         </div>
                       </div>
                     )}
+
+                    {activeSub.id === 'home-portals' && (
+                      <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                            Dedicated Portal Sign-In &amp; Registration
+                          </span>
+                          <span className="text-xs text-slate-600 font-medium">
+                            Protected by Firebase Authentication &amp; Single-Device Session Security
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Student Portal */}
+                          <div className="bg-white rounded-3xl p-5 border border-indigo-200 shadow-xs flex flex-col justify-between space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200">
+                                  <GraduationCap className="w-5 h-5" />
+                                </div>
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-700">
+                                  Classes 1–10 Learners
+                                </span>
+                              </div>
+                              <h4 className="text-base font-display font-extrabold text-slate-900">
+                                Student Portal
+                              </h4>
+                              <p className="text-xs text-slate-600">
+                                Sign in or register to save quiz scores, track progress, and access your unlocked board &amp; class courses.
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRolePortal('student', 'login')}
+                                className="min-h-[40px] px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                              >
+                                <LogIn className="w-3.5 h-3.5" />
+                                <span>
+                                  {isAuthenticated && currentRole === 'student'
+                                    ? 'Open Portal'
+                                    : 'Student Login'}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRolePortal('student', 'register')}
+                                className="min-h-[40px] px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                <span>Register</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Teacher Portal */}
+                          <div className="bg-white rounded-3xl p-5 border border-emerald-200 shadow-xs flex flex-col justify-between space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
+                                  <Users className="w-5 h-5" />
+                                </div>
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">
+                                  Educator Hub
+                                </span>
+                              </div>
+                              <h4 className="text-base font-display font-extrabold text-slate-900">
+                                Teacher Portal
+                              </h4>
+                              <p className="text-xs text-slate-600">
+                                Dedicated educator portal for classroom worksheets, chapter study notes, and solved question banks.
+                              </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRolePortal('teacher', 'login')}
+                                className="w-full min-h-[40px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                                <span>
+                                  {isAuthenticated && currentRole === 'teacher'
+                                    ? `Open Teacher Hub (${currentUserName?.split(' ')[0] || 'Active'})`
+                                    : 'Teacher Login'}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Admin Portal */}
+                          <div className="bg-slate-900 text-white rounded-3xl p-5 border border-slate-700 shadow-xs flex flex-col justify-between space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-400/15 text-amber-300 flex items-center justify-center border border-amber-400/30">
+                                  <ShieldCheck className="w-5 h-5" />
+                                </div>
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1">
+                                  <Lock className="w-3 h-3" />
+                                  <span>Authorized Only</span>
+                                </span>
+                              </div>
+                              <h4 className="text-base font-display font-extrabold text-white">
+                                Admin Portal
+                              </h4>
+                              <p className="text-xs text-slate-300">
+                                Protected control console for managing students, boards, subscriptions, and platform content.
+                              </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-800">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRolePortal('admin', 'login')}
+                                className="w-full min-h-[40px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>
+                                  {isAuthenticated && currentRole === 'admin'
+                                    ? 'Open Admin Console'
+                                    : 'Secure Admin Login'}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1177,6 +1355,43 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                             </button>
                           );
                         })}
+                      </div>
+                    </div>
+
+                    {/* Direct Free Textbooks & Notes Access for Selected Board & Class */}
+                    <div className="rounded-2xl bg-slate-900 text-white p-4 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <span className="text-[11px] font-bold text-emerald-300">
+                          100% Free Forever · Official Textbooks &amp; Chapter Notes
+                        </span>
+                        <p className="text-xs sm:text-sm font-display font-black text-white">
+                          Free Textbooks (382) &amp; Study Material for {getBoardShortLabel(coursesEffectiveBoard)} &bull; {selectedClass}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onSelectBoard) onSelectBoard(coursesEffectiveBoard);
+                            triggerSubAction('sm-textbook-learning');
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Official Textbooks</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onSelectBoard) onSelectBoard(coursesEffectiveBoard);
+                            triggerSubAction('sm-notes');
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/15 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <span>Chapter Notes</span>
+                          <ArrowRight className="w-3.5 h-3.5 text-amber-300" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1383,49 +1598,109 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
 
                     {/* 1. Textbooks & Syllabus */}
                     {activeSub.id === 'sm-textbook-learning' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {previewTextbooks.slice(0, 6).map((tb) => {
-                          const sMeta = getSubjectMeta(tb.subject, selectedBoard);
-                          return (
-                            <div
-                              key={tb.id}
-                              className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between"
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between gap-2 text-[11px] font-black text-[#0f2952]">
-                                  <span>
-                                    {sMeta.icon} {tb.subject}
-                                  </span>
-                                  <span className="text-slate-500">{tb.totalChapters} Chapters</span>
-                                </div>
-                                <p className="text-xs font-bold text-slate-800 leading-snug">
-                                  {tb.bookTitle}
-                                </p>
-                                <p className="text-[11px] text-slate-500">
-                                  {tb.publisher} · {tb.mediums.join(' / ')}
-                                </p>
+                      <div className="space-y-4">
+                        {/* 100% Free Study Material Library Showcase (Relocated into Study Material) */}
+                        <div className="rounded-3xl bg-slate-900 text-white p-5 sm:p-6 border border-slate-800 shadow-sm space-y-4">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="space-y-1.5 max-w-2xl">
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-300">
+                                <span>100% Free Forever</span>
+                                <span aria-hidden="true">·</span>
+                                <span>No Login Required</span>
+                                <span aria-hidden="true">·</span>
+                                <span>Maharashtra · CBSE · ICSE (Classes 1–10)</span>
                               </div>
-                              <div className="flex items-center gap-2 pt-1">
-                                <a
-                                  href={tb.officialReadUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2.5 py-1.5 rounded-lg bg-[#0f2952] hover:bg-blue-900 text-white text-[11px] font-bold inline-flex items-center gap-1"
-                                >
-                                  <span>Official e-Book</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={() => onNavigateTab('study-materials', 'sm-notes', tb.subject)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-300 text-[#0f2952] text-[11px] font-bold cursor-pointer"
-                                >
-                                  Read Notes
-                                </button>
-                              </div>
+                              <h4 className="text-lg sm:text-xl font-display font-black text-white tracking-tight">
+                                MyStudyZone Free Study Material Library
+                              </h4>
+                              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                                Read official textbooks, chapter-wise notes, 1-page revision sheets, 9-format Q&amp;A
+                                banks, 10-MCQ chapter tests, board model papers, previous year papers, video lessons,
+                                and 12 Science SVG diagrams free across Classes 1 to 10.
+                              </p>
                             </div>
-                          );
-                        })}
+
+                            <button
+                              type="button"
+                              onClick={() => triggerSubAction('sm-notes')}
+                              className="px-5 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors shrink-0 whitespace-nowrap"
+                            >
+                              <BookOpen className="w-4 h-4" />
+                              <span>Open Free Study Library</span>
+                              <ArrowRight className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-800">
+                            {[
+                              { label: 'Official Textbooks (382)', action: 'sm-textbook-learning' as NavSubActionId, tab: 'textbooks' },
+                              { label: 'Chapter Notes & Revision', action: 'sm-notes' as NavSubActionId, tab: 'chapter_notes' },
+                              { label: 'Model Papers & PYQs', action: 'sm-pdfs' as NavSubActionId, tab: 'pyq_papers' },
+                              { label: 'Math, Science & Grammar Hubs', action: 'sm-special-hubs' as NavSubActionId, tab: 'science_diagrams' },
+                            ].map((quick) => (
+                              <button
+                                key={quick.tab}
+                                type="button"
+                                onClick={() => {
+                                  if (onMenuAction) {
+                                    onMenuAction(quick.action);
+                                  } else {
+                                    onNavigateTab('study-materials', quick.tab);
+                                  }
+                                }}
+                                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-left text-xs font-bold text-slate-100 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                              >
+                                <span className="truncate">{quick.label}</span>
+                                <ArrowRight className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {previewTextbooks.slice(0, 6).map((tb) => {
+                            const sMeta = getSubjectMeta(tb.subject, selectedBoard);
+                            return (
+                              <div
+                                key={tb.id}
+                                className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between"
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between gap-2 text-[11px] font-black text-[#0f2952]">
+                                    <span>
+                                      {sMeta.icon} {tb.subject}
+                                    </span>
+                                    <span className="text-slate-500">{tb.totalChapters} Chapters</span>
+                                  </div>
+                                  <p className="text-xs font-bold text-slate-800 leading-snug">
+                                    {tb.bookTitle}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {tb.publisher} · {tb.mediums.join(' / ')}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 pt-1">
+                                  <a
+                                    href={tb.officialReadUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1.5 rounded-lg bg-[#0f2952] hover:bg-blue-900 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                                  >
+                                    <span>Official e-Book</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => onNavigateTab('study-materials', 'sm-notes', tb.subject)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-300 text-[#0f2952] text-[11px] font-bold cursor-pointer"
+                                  >
+                                    Read Notes
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
 
@@ -1840,6 +2115,45 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                     </button>
                   </div>
                 )}
+
+                {/* =========================================================
+                    CONTENT FOR SECTION 9: MY ACCOUNT (PROFILE, REFERRALS & HELP)
+                    ========================================================= */}
+                {expandedSectionId === 'account' && (
+                  <div className="rounded-2xl bg-gradient-to-r from-[#f3e8ff]/70 via-white to-[#e0f2fe]/70 border-2 border-purple-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5 max-w-2xl">
+                      <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        {activeSub.id === 'acc-referrals' ? (
+                          <Gift className="w-5 h-5" />
+                        ) : activeSub.id === 'acc-support' ? (
+                          <Headphones className="w-5 h-5" />
+                        ) : (
+                          <User className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-purple-800">
+                          {activeSub.id === 'acc-referrals'
+                            ? 'Refer & Earn Rewards · ₹5 Cashback Per Referral'
+                            : activeSub.id === 'acc-support'
+                            ? '24×7 Student Help Desk & Grievance Support'
+                            : 'Personal Account, Purchases & Class Settings'}
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-[#0f2952] leading-relaxed">
+                          {activeSub.description}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenSelectedSubFullPage}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#0f2952] via-[#4c1d95] to-[#0f2952] hover:brightness-110 text-white font-display font-black text-xs sm:text-sm shadow-sm cursor-pointer shrink-0 flex items-center gap-2"
+                    >
+                      <span>Open {activeSub.label.replace(/^🎁\s*/, '')}</span>
+                      <ArrowRight className="w-4 h-4 text-amber-300" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -2014,98 +2328,6 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
           </div>
         </div>
       </section>
-
-      {/* =====================================================================
-          BOTTOM NAVIGATION BAR WITH PERMANENT 🎁 REFER & EARN TAB
-          ===================================================================== */}
-      <nav aria-label="Bottom Navigation Menu" className="space-y-4 pt-1">
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
-          {[
-            {
-              label: 'My Courses',
-              icon: BookOpen,
-              cardBg: 'from-[#e0f2fe] to-[#bae6fd]',
-              border: 'border-sky-300',
-              iconBg: 'bg-blue-600 text-white',
-              onClick: () => onNavigateTab('all-courses'),
-            },
-            {
-              label: 'Certificates',
-              icon: Award,
-              cardBg: 'from-[#fef3c7] to-[#fde68a]',
-              border: 'border-amber-300',
-              iconBg: 'bg-amber-600 text-white',
-              onClick: () => triggerSubAction('perf-certificates'),
-            },
-            {
-              label: 'Leaderboard',
-              icon: Trophy,
-              cardBg: 'from-[#dcfce7] to-[#bbf7d0]',
-              border: 'border-emerald-300',
-              iconBg: 'bg-emerald-600 text-white',
-              onClick: () => onNavigateTab('leaderboard'),
-            },
-            {
-              label: 'My Account',
-              icon: User,
-              cardBg: 'from-[#f3e8ff] to-[#e9d5ff]',
-              border: 'border-purple-300',
-              iconBg: 'bg-purple-600 text-white',
-              onClick: () => triggerSubAction('acc-profile'),
-            },
-            {
-              label: 'Help & Support',
-              icon: Headphones,
-              cardBg: 'from-[#e0f2fe] to-[#cffafe]',
-              border: 'border-cyan-300',
-              iconBg: 'bg-sky-600 text-white',
-              onClick: () => onNavigateTab('help-support'),
-            },
-            {
-              label: 'More Programs',
-              icon: Gift,
-              cardBg: 'from-[#ffe4e6] to-[#fecdd3]',
-              border: 'border-rose-300',
-              iconBg: 'bg-rose-600 text-white',
-              onClick: () => onNavigateTab('other-programs'),
-            },
-          ].map((item) => {
-            const IconComp = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={item.onClick}
-                className={`rounded-2xl bg-gradient-to-b ${item.cardBg} border-2 ${item.border} p-3.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center`}
-              >
-                <span
-                  className={`w-11 h-11 rounded-2xl ${item.iconBg} flex items-center justify-center shadow-xs`}
-                >
-                  <IconComp className="w-5 h-5" />
-                </span>
-                <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* Permanent 🎁 Refer & Earn Tab in the Bottom Navigation Menu */}
-          <button
-            type="button"
-            onClick={() => onNavigateTab('referrals')}
-            aria-label="Refer & Earn – Open Referral Hub"
-            className="col-span-2 sm:col-span-2 xl:col-span-1 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#fde047] to-[#facc15] border-2 border-amber-500 p-3.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center ring-2 ring-amber-300/60"
-          >
-            <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs text-xl">
-              🎁
-            </span>
-            <span className="font-display font-black text-xs sm:text-sm text-[#0f2952]">
-              Refer &amp; Earn
-            </span>
-          </button>
-        </div>
-      </nav>
 
       {/* Single Motivational Heritage Banner */}
       <section aria-label="Scholarship Champion Banner">

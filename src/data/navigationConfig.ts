@@ -16,6 +16,7 @@ export type NavSubActionId =
   | 'home-overview'
   | 'home-how-it-works'
   | 'home-why-choose-us'
+  | 'home-portals'
   // SECTION 2: COURSES
   | 'course-all'
   | 'course-maharashtra'
@@ -134,6 +135,12 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         label: 'Announcements & Quick Access',
         description: 'Important student updates, certificates, leaderboard & help desk',
       },
+      {
+        id: 'home-portals',
+        label: 'Student, Teacher & Admin Portals',
+        description: 'Dedicated login & registration portals for Students, Teachers & Administrators',
+        badgeText: 'Portal Sign-In',
+      },
     ],
   },
   {
@@ -240,9 +247,9 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
       },
       {
         id: 'sl-creative',
-        label: 'Creative Activities',
-        description: 'Creative writing prompts, art projects & enrichment workshops',
-        badgeText: 'Creative',
+        label: 'More Programs & Creative Activities',
+        description: 'More learning programs, creative writing prompts, art projects & enrichment workshops',
+        badgeText: 'More Programs',
         sectionVisibilityKey: 'creative_activities',
       },
     ],

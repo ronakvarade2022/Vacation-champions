@@ -50,6 +50,8 @@ interface StudentDashboardProps {
   onOpenDemo?: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
   activeMainSection?: MainMenuId;
   onSelectMainSection?: (sectionId: MainMenuId) => void;
+  activeSubActionId?: NavSubActionId;
+  onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -61,6 +63,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onOpenDemo,
   activeMainSection,
   onSelectMainSection,
+  activeSubActionId,
+  onOpenPanel,
 }) => {
   const {
     currentStudent,
@@ -154,6 +158,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         onToggleViewMode={onToggleViewMode}
         activeMainSection={activeMainSection}
         onSelectMainSection={onSelectMainSection}
+        activeSubActionId={activeSubActionId}
+        onOpenPanel={onOpenPanel}
+        isAuthenticated={true}
+        currentRole={currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'}
+        currentUserName={currentStudent.name}
         progressMetrics={{
           isLoggedIn: true,
           studentName: currentStudent.name,
