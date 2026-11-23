@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { DrawingCategory, DrawingTemplate, DrawingSubmission } from '../types';
 import { DRAWING_CATEGORIES } from '../data/drawingsData';
+import { sanitizeSvgMarkup } from '../utils/sanitizeMarkup';
 import { Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -843,7 +844,7 @@ export const DrawingChampionsView: React.FC<DrawingChampionsViewProps> = ({ onOp
                 <div className="h-44 bg-slate-50 p-3 border-b border-slate-100 flex items-center justify-center relative group-hover:bg-amber-50/40 transition-colors">
                   <div
                     className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-                    dangerouslySetInnerHTML={{ __html: template.svgOutline }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeSvgMarkup(template.svgOutline) }}
                   />
                   <div className="absolute inset-0 bg-slate-900/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="bg-amber-600 text-white px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-md flex items-center gap-1">

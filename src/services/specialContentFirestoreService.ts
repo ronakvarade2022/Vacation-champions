@@ -7,6 +7,7 @@ import {
   getDocFromServer,
   getDocs,
   limit,
+  onSnapshot,
   query,
   setDoc,
   where,
@@ -22,6 +23,11 @@ import {
   reportFirestoreConnectionStatus,
 } from './firebase';
 import { ClassLevel, EducationBoard, SectionVisibilityConfig, SubjectName } from '../types';
+import {
+  LiveAnnouncementTickerConfig,
+  sanitizeAnnouncementTickerConfig,
+  writeCachedTickerConfig,
+} from '../types/announcementTicker';
 import { canPublishStudentLearningContent } from '../data/contentPublicationFreeze';
 
 export type SpecialContentType =
@@ -55,6 +61,7 @@ export interface PlatformConfigData {
   };
   sectionVisibility?: Partial<SectionVisibilityConfig>;
   studyLibraryVersion?: number;
+  announcementTicker?: LiveAnnouncementTickerConfig;
 }
 
 export interface PlatformConfigLoadResult {
@@ -138,6 +145,10 @@ function extractPlatformConfigFields(rawData: Record<string, any> | undefined): 
     studyLibraryVersion:
       typeof rawData?.studyLibraryVersion === 'number' && Number.isFinite(rawData.studyLibraryVersion)
         ? rawData.studyLibraryVersion
+        : undefined,
+    announcementTicker:
+      rawData?.announcementTicker && typeof rawData.announcementTicker === 'object'
+        ? sanitizeAnnouncementTickerConfig(rawData.announcementTicker)
         : undefined,
   };
 }
@@ -532,6 +543,80 @@ export async function savePlatformConfigToFirestore(config: {
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
     return { success: false };
+  }
+}
+
+export async function saveAnnouncementTickerConfigToFirestore(
+  tickerConfig: LiveAnnouncementTickerConfig
+): Promise<{ success: boolean }> {
+  const sanitized = sanitizeAnnouncementTickerConfig({
+    ...tickerConfig,
+    updatedAt: new Date().toISOString(),
+  });
+  writeCachedTickerConfig(sanitized);
+
+  const path = 'platform_config/main';
+  try {
+    await ensureFirestoreOnline();
+    const ref = doc(db, 'platform_config', 'main');
+    const payload = stripUndefinedDeep({
+      id: 'main',
+      announcementTicker: sanitized,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(ref, payload, { merge: true });
+    persistPlatformConfigCache(
+      {
+        ...(memPlatformConfigCache?.data || {}),
+        announcementTicker: sanitized,
+      },
+      true
+    );
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    return { success: false };
+  }
+}
+
+export function subscribeAnnouncementTickerConfig(
+  onUpdate: (config: LiveAnnouncementTickerConfig | null) => void
+): () => void {
+  let active = true;
+
+  // Initial REST / cached hydration so even public visitors offline/behind strict proxies get updates
+  void loadPlatformConfigDetailed().then((res) => {
+    if (!active) return;
+    if (res.config?.announcementTicker) {
+      writeCachedTickerConfig(res.config.announcementTicker);
+      onUpdate(res.config.announcementTicker);
+    }
+  });
+
+  try {
+    const ref = doc(db, 'platform_config', 'main');
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (!active || !snap.exists()) return;
+        const fields = extractPlatformConfigFields(snap.data());
+        if (fields.announcementTicker) {
+          writeCachedTickerConfig(fields.announcementTicker);
+          onUpdate(fields.announcementTicker);
+        }
+      },
+      () => {
+        // Silently retain cached/default ticker when offline or rules temporarily unavailable
+      }
+    );
+    return () => {
+      active = false;
+      unsub();
+    };
+  } catch {
+    return () => {
+      active = false;
+    };
   }
 }
 

@@ -68,6 +68,35 @@
   background: #d97706;
 }
 
+/* Live Announcement Ticker (compositor-only transform + reduced-motion accessibility) */
+@keyframes msz-ticker-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.msz-ticker-track {
+  animation-name: msz-ticker-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.msz-ticker-hover-pause:hover .msz-ticker-track,
+.msz-ticker-hover-pause:focus-within .msz-ticker-track {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msz-ticker-track {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 /* Print Specific Styling */
 @media print {
   header, nav, button, footer, .no-print, .worksheet-no-print-zone {

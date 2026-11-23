@@ -27,6 +27,7 @@ import {
   Layers,
   X,
   CalendarDays,
+  Megaphone,
 } from 'lucide-react';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import { ALL_ADMIN_CLASSES, ALL_ADMIN_SUBJECTS } from '../utils/adminAnalytics';
@@ -95,6 +96,11 @@ const AdminLessonPlannerSection = lazyWithRetry(() =>
     default: m.AdminLessonPlannerSection,
   }))
 );
+const AdminAnnouncementsSection = lazyWithRetry(() =>
+  import('./admin/AdminAnnouncementsSection').then((m) => ({
+    default: m.AdminAnnouncementsSection,
+  }))
+);
 
 type AdminSectionId =
   | 'students'
@@ -102,6 +108,7 @@ type AdminSectionId =
   | 'worksheets'
   | 'study-library-cms'
   | 'lesson-planner'
+  | 'announcements'
   | 'progression'
   | 'duplicates'
   | 'stories'
@@ -578,6 +585,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('announcements')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'announcements'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-amber-50'
+          }`}
+        >
+          <Megaphone className="w-4 h-4" />
+          <span>Live Announcement Ticker</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('settings')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'settings'
@@ -726,6 +745,8 @@ export const AdminDashboard: React.FC = () => {
         {activeSection === 'demo-exams' && <AdminDemoExamsSection />}
 
         {activeSection === 'question-error-reports' && <AdminQuestionErrorReportsSection />}
+
+        {activeSection === 'announcements' && <AdminAnnouncementsSection />}
 
         {activeSection === 'settings' && (
           <AdminSettingsSection

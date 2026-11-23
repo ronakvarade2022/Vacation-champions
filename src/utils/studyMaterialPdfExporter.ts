@@ -5,6 +5,7 @@ import {
   SubjectName,
   StudyLibraryExamPaper,
 } from '../types';
+import { sanitizePrintableHtml } from './sanitizeMarkup';
 
 /**
  * Clean A4 PDF Print / Download Exporter STRICTLY Scoped to the Free Study Material Library.
@@ -170,7 +171,7 @@ function printHtmlViaHiddenIframe(documentTitle: string, bodyHtml: string): void
   </style>
 </head>
 <body>
-  ${bodyHtml}
+  ${sanitizePrintableHtml(bodyHtml)}
   <div class="footer-note">
     <span>MyStudyZone Free Study Material Library (mystudyzone.in) — 100% Free Study Resource</span>
     <span>Printed for Personal Study &amp; Classroom Revision</span>

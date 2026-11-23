@@ -60,6 +60,7 @@ export const GrievanceRedressalView: React.FC<GrievanceRedressalViewProps> = ({ 
   const [searchedGrievance, setSearchedGrievance] = useState<GrievanceRecord | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [formError, setFormError] = useState('');
 
   // Student's recent grievances
   const [myGrievances, setMyGrievances] = useState<GrievanceRecord[]>([]);
@@ -85,8 +86,9 @@ export const GrievanceRedressalView: React.FC<GrievanceRedressalViewProps> = ({ 
 
   const handleLodgeGrievance = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!studentName.trim() || !email.trim() || !subject.trim() || !description.trim()) {
-      alert('Please complete all required fields.');
+      setFormError('Please complete all required fields before lodging your grievance.');
       return;
     }
 
@@ -108,7 +110,7 @@ export const GrievanceRedressalView: React.FC<GrievanceRedressalViewProps> = ({ 
       loadMyGrievances();
     } catch (err) {
       console.error('Failed to lodge grievance:', err);
-      alert('Failed to register grievance. Please try again.');
+      setFormError('Failed to register grievance. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -285,6 +287,14 @@ export const GrievanceRedressalView: React.FC<GrievanceRedressalViewProps> = ({ 
               </div>
             ) : (
               <form onSubmit={handleLodgeGrievance} className="space-y-4">
+                {formError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
+                  >
+                    {formError}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700">

@@ -26,9 +26,11 @@
 [[headers]]
   for = "/api/*"
   [headers.values]
-    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Origin = "https://mystudyzone.in"
+    Access-Control-Allow-Credentials = "true"
     Access-Control-Allow-Methods = "GET, POST, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization, X-Razorpay-Signature"
+    Access-Control-Allow-Headers = "Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature"
+    Vary = "Origin"
     Cache-Control = "no-store, no-cache, must-revalidate"
 
 [[headers]]

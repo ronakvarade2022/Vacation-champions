@@ -166,16 +166,50 @@ function getRazorpayInstance(): Razorpay | null {
   return createRazorpayClient();
 }
 
-// 0. CORS & Netlify Function path alias middleware so both /api/* and /.netlify/functions/api/* work seamlessly
+// Trusted CORS origin allowlist (never wildcard '*' on authenticated APIs)
+const STATIC_TRUSTED_ORIGINS = new Set<string>([
+  'https://mystudyzone.in',
+  'https://www.mystudyzone.in',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  ...(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean),
+]);
+
+function resolveTrustedCorsOrigin(rawOrigin?: string | string[]): string | null {
+  const origin = (Array.isArray(rawOrigin) ? rawOrigin[0] : rawOrigin || '').trim().replace(/\/+$/, '');
+  if (!origin) return null;
+  if (STATIC_TRUSTED_ORIGINS.has(origin)) return origin;
+  if (/^https:\/\/ais-(dev|pre)-[a-z0-9-]+\.[a-z0-9-]+\.run\.app$/i.test(origin)) {
+    return origin;
+  }
+  if (/^https:\/\/([a-z0-9-]+--)?[a-z0-9-]+\.netlify\.app$/i.test(origin)) {
+    return origin;
+  }
+  return null;
+}
+
+// 0. Strict Trusted-Origin CORS & Netlify Function path alias middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const rawOrigin = req.headers.origin;
+  const trustedOrigin = resolveTrustedCorsOrigin(rawOrigin);
+  res.setHeader('Vary', 'Origin');
+  if (trustedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', trustedOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature'
   );
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    if (rawOrigin && !trustedOrigin) {
+      return res.status(403).json({ success: false, error: 'Origin not allowed by CORS policy.' });
+    }
+    return res.status(204).end();
   }
   if (req.url.startsWith('/.netlify/functions/api')) {
     req.url = req.url.replace(/^\/\.netlify\/functions\/api/, '/api') || '/api';
@@ -3069,9 +3103,52 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
   }
 });
 
-// 8.2 Get student/teacher subscription status (multi-board & multi-class aware)
+// Reusable Firebase Bearer authentication & student-ownership gate (fail-closed)
+async function verifyStudentOwnershipOrAdmin(
+  req: Request,
+  targetStudentId: string
+): Promise<{ authorized: boolean; statusCode: number; uid?: string; error?: string }> {
+  const cleanTargetId = String(targetStudentId || '').trim();
+  if (!cleanTargetId) {
+    return { authorized: false, statusCode: 400, error: 'studentId is required.' };
+  }
+  const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+  if (!tokenCheck.valid || !tokenCheck.uid) {
+    return {
+      authorized: false,
+      statusCode: tokenCheck.statusCode || 401,
+      error: tokenCheck.error || 'Valid Firebase Authorization Bearer token required.'
+    };
+  }
+  if (tokenCheck.uid === cleanTargetId) {
+    return { authorized: true, statusCode: 200, uid: tokenCheck.uid };
+  }
+  const existingStudent = await serverGetDoc('students', cleanTargetId).catch(() => null);
+  if (existingStudent?.firebaseUid === tokenCheck.uid) {
+    return { authorized: true, statusCode: 200, uid: tokenCheck.uid };
+  }
+  const adminCheck = await verifyAdminRequest(req.headers);
+  if (adminCheck.authorized) {
+    return { authorized: true, statusCode: 200, uid: tokenCheck.uid };
+  }
+  return {
+    authorized: false,
+    statusCode: 403,
+    error: 'Forbidden: Authenticated user does not own this student account.'
+  };
+}
+
+// 8.2 Get student/teacher subscription status (protected by Firebase Bearer auth + student ownership)
 app.get('/api/subscription/status/:studentId', async (req: Request, res: Response) => {
-  const studentId = String(req.params.studentId || '');
+  const studentId = String(req.params.studentId || '').trim();
+  const ownerCheck = await verifyStudentOwnershipOrAdmin(req, studentId);
+  if (!ownerCheck.authorized) {
+    return res.status(ownerCheck.statusCode).json({
+      success: false,
+      error: ownerCheck.error || 'Unauthorized access to subscription status.'
+    });
+  }
+
   const sub = await evaluateServerSubscriptionFromStore(studentId);
   const queryBoard = req.query.board ? normalizeBackendBoard(String(req.query.board)) : null;
   const userBoard = queryBoard || sub.selectedBoard || sub.primaryBoard || 'Maharashtra';
@@ -3133,7 +3210,15 @@ const SERVER_WORKSHEET_UPGRADE_MSG =
 app.post('/api/subscription/verify-access', async (req: Request, res: Response) => {
   const { studentId, feature, categoryId, subject, worksheetId, selectedBoard, board, selectedClass } = req.body || {};
   const cleanStudentId = String(studentId || '').trim();
-  if (cleanStudentId && cleanStudentId !== 'guest' && !cleanStudentId.startsWith('demo_')) {
+  const isGuestOrDemo = !cleanStudentId || cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+  if (!isGuestOrDemo) {
+    const ownerCheck = await verifyStudentOwnershipOrAdmin(req, cleanStudentId);
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.statusCode).json({
+        allowed: false,
+        error: ownerCheck.error || 'Unauthorized access verification request.'
+      });
+    }
     const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
     if (!sessionCheck.valid) {
       return res.status(sessionCheck.statusCode).json({
@@ -3303,8 +3388,17 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
 });
 
 // 8.4 Dedicated Board & Class-Wise Worksheet Access Verification API (Standards 1st to 10th)
+// Protected by Firebase Bearer auth + student ownership verification
 app.get('/api/worksheets/access/:studentId', async (req: Request, res: Response) => {
   const studentId = String(req.params.studentId || '').trim();
+  const ownerCheck = await verifyStudentOwnershipOrAdmin(req, studentId);
+  if (!ownerCheck.authorized) {
+    return res.status(ownerCheck.statusCode).json({
+      success: false,
+      error: ownerCheck.error || 'Unauthorized access to worksheet entitlements.'
+    });
+  }
+
   const queryBoard = req.query.selectedBoard || req.query.board
     ? normalizeBackendBoard(String(req.query.selectedBoard || req.query.board))
     : null;
@@ -3361,6 +3455,18 @@ app.post('/api/worksheets/verify-access', async (req: Request, res: Response) =>
       allowed: false,
       error: 'worksheetId is required.'
     });
+  }
+
+  const isGuestOrDemo = !cleanStudentId || cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+  if (!isGuestOrDemo) {
+    const ownerCheck = await verifyStudentOwnershipOrAdmin(req, cleanStudentId);
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.statusCode).json({
+        success: false,
+        allowed: false,
+        error: ownerCheck.error || 'Unauthorized worksheet access verification.'
+      });
+    }
   }
 
   const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);

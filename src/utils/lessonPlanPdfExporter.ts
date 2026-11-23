@@ -3,6 +3,7 @@ import {
   LessonPlanPdfScope,
 } from '../types/lessonPlanner';
 import { BOARD_DISPLAY_NAMES } from '../data/lessonPlanner/defaultBoardCalendars';
+import { sanitizePrintableHtml } from './sanitizeMarkup';
 
 /**
  * Clean A4 PDF Print / Save-as-PDF Exporter for the MyStudyZone Automatic Teacher Lesson Planner.
@@ -459,7 +460,7 @@ function printLessonPlanHtmlViaHiddenIframe(documentTitle: string, bodyHtml: str
 
   removeExistingPrintArtifacts();
 
-  const innerMarkup = buildPrintableInnerMarkup(bodyHtml);
+  const innerMarkup = sanitizePrintableHtml(buildPrintableInnerMarkup(bodyHtml));
 
   const fullHtml = `<!DOCTYPE html>
 <html lang="en">

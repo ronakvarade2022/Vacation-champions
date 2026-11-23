@@ -16,6 +16,7 @@ import {
   Headphones,
   FileText,
   BookOpen,
+  Calendar,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -208,6 +209,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {currentStudent.accountRole === 'teacher' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('lesson-planner')}
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Teacher Lesson Planner</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('tet-ctet')}
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>TET &amp; CTET Zone</span>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => onNavigateTab('study-materials')}

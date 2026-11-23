@@ -196,17 +196,44 @@ function getResolvedRazorpayCredentials() {
   };
 }
 
+const STATIC_NETLIFY_TRUSTED_ORIGINS = new Set([
+  'https://mystudyzone.in',
+  'https://www.mystudyzone.in',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  ...(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+]);
+
+let currentRequestTrustedOrigin = null;
+
+function resolveTrustedNetlifyOrigin(headers) {
+  const raw = String(headers?.origin || headers?.Origin || '').trim().replace(/\/+$/, '');
+  if (!raw) return null;
+  if (STATIC_NETLIFY_TRUSTED_ORIGINS.has(raw)) return raw;
+  if (/^https:\/\/ais-(dev|pre)-[a-z0-9-]+\.[a-z0-9-]+\.run\.app$/i.test(raw)) return raw;
+  if (/^https:\/\/([a-z0-9-]+--)?[a-z0-9-]+\.netlify\.app$/i.test(raw)) return raw;
+  return null;
+}
+
 function jsonResponse(statusCode, payload) {
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Vary': 'Origin',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers':
+      'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature',
+    'Cache-Control': 'no-store, no-cache, must-revalidate'
+  };
+  if (currentRequestTrustedOrigin) {
+    headers['Access-Control-Allow-Origin'] = currentRequestTrustedOrigin;
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  }
   return {
     statusCode,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers':
-        'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature',
-      'Cache-Control': 'no-store, no-cache, must-revalidate'
-    },
+    headers,
     body: JSON.stringify(payload)
   };
 }
@@ -622,8 +649,14 @@ async function verifyAndCaptureRazorpayPayment(creds, paymentId, expectedAmountP
 }
 
 export async function handler(event) {
+  const rawOrigin = String(event.headers?.origin || event.headers?.Origin || '').trim();
+  currentRequestTrustedOrigin = resolveTrustedNetlifyOrigin(event.headers);
+
   if (event.httpMethod === 'OPTIONS') {
-    return jsonResponse(200, { ok: true });
+    if (rawOrigin && !currentRequestTrustedOrigin) {
+      return jsonResponse(403, { success: false, error: 'Origin not allowed by CORS policy.' });
+    }
+    return jsonResponse(204, { ok: true });
   }
 
   const rawPath =
@@ -2070,9 +2103,60 @@ export async function handler(event) {
     }
   }
 
-  // 7. GET /api/subscription/status/:studentId
+  // Reusable Firebase Bearer auth + student ownership check (mirrors server.ts)
+  async function verifyNetlifyStudentOwnershipOrAdmin(reqEvent, targetStudentId) {
+    const cleanTargetId = String(targetStudentId || '').trim();
+    if (!cleanTargetId) {
+      return { authorized: false, statusCode: 400, error: 'studentId is required.' };
+    }
+    const authHeader = reqEvent.headers?.authorization || reqEvent.headers?.Authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return { authorized: false, statusCode: 401, error: 'Authorization Bearer token required.' };
+    }
+    const token = authHeader.slice(7).trim();
+    if (!token || token.length < 20) {
+      return { authorized: false, statusCode: 401, error: 'Invalid Authorization Bearer token format.' };
+    }
+    const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+    if (!adminAuth) {
+      return {
+        authorized: false,
+        statusCode: 503,
+        error: 'Firebase Admin Auth is not configured on the server to verify authentication tokens.'
+      };
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(token, true);
+      if (decoded.uid === cleanTargetId) {
+        return { authorized: true, statusCode: 200, uid: decoded.uid };
+      }
+      const docData = await getFirestoreDocument('students', cleanTargetId);
+      if (docData?.firebaseUid === decoded.uid) {
+        return { authorized: true, statusCode: 200, uid: decoded.uid };
+      }
+      if (decoded.email?.toLowerCase() === AUTHORIZED_ADMIN_EMAIL && decoded.email_verified) {
+        return { authorized: true, statusCode: 200, uid: decoded.uid };
+      }
+      return {
+        authorized: false,
+        statusCode: 403,
+        error: 'Forbidden: Authenticated user does not own this student account.'
+      };
+    } catch {
+      return { authorized: false, statusCode: 401, error: 'Invalid or expired Firebase ID token.' };
+    }
+  }
+
+  // 7. GET /api/subscription/status/:studentId (Protected by Firebase Bearer auth + ownership check)
   if (method === 'GET' && normalizedPath.startsWith('/subscription/status/')) {
-    const studentId = normalizedPath.replace('/subscription/status/', '');
+    const studentId = normalizedPath.replace('/subscription/status/', '').trim();
+    const ownerCheck = await verifyNetlifyStudentOwnershipOrAdmin(event, studentId);
+    if (!ownerCheck.authorized) {
+      return jsonResponse(ownerCheck.statusCode, {
+        success: false,
+        error: ownerCheck.error || 'Unauthorized access to subscription status.'
+      });
+    }
     const docData = await getFirestoreDocument('students', studentId);
     return jsonResponse(200, {
       success: true,
@@ -2092,6 +2176,89 @@ export async function handler(event) {
         planExpiresAt: docData?.planExpiresAt || null,
         status: 'ACTIVE'
       }
+    });
+  }
+
+  // 7b. GET /api/worksheets/access/:studentId (Synchronized with server.ts, protected by Bearer auth + ownership)
+  if (method === 'GET' && normalizedPath.startsWith('/worksheets/access/')) {
+    const studentId = normalizedPath.replace('/worksheets/access/', '').trim();
+    const ownerCheck = await verifyNetlifyStudentOwnershipOrAdmin(event, studentId);
+    if (!ownerCheck.authorized) {
+      return jsonResponse(ownerCheck.statusCode, {
+        success: false,
+        error: ownerCheck.error || 'Unauthorized access to worksheet entitlements.'
+      });
+    }
+    const docData = await getFirestoreDocument('students', studentId);
+    const selectedBoard = normalizeNetlifyBoard(
+      event.queryStringParameters?.selectedBoard ||
+        event.queryStringParameters?.board ||
+        docData?.board ||
+        docData?.primaryBoard ||
+        'Maharashtra'
+    );
+    const selectedClass =
+      normalizeNetlifyClassLevel(event.queryStringParameters?.selectedClass || docData?.classLevel) ||
+      'Class 1';
+    const boardClassKey = buildNetlifyBoardClassKey(selectedBoard, selectedClass);
+    const activatedClassKeys = Array.isArray(docData?.activatedClassKeys) ? docData.activatedClassKeys : [];
+    const isPremium =
+      docData?.plan === 'premium' ||
+      activatedClassKeys.includes(boardClassKey) ||
+      Boolean(docData?.classSubscriptions?.[boardClassKey]?.status === 'ACTIVE');
+    return jsonResponse(200, {
+      success: true,
+      studentId,
+      selectedBoard,
+      selectedClass,
+      effectivePlan: isPremium ? 'premium' : 'free',
+      isPremium,
+      printingAllowed: false,
+      downloadingAllowed: false,
+      activatedClassKeys
+    });
+  }
+
+  // 7c. POST /api/worksheets/verify-access (Synchronized with server.ts, protected by Bearer auth + ownership)
+  if (method === 'POST' && normalizedPath === '/worksheets/verify-access') {
+    const body = JSON.parse(event.body || '{}');
+    const cleanStudentId = String(body.studentId || '').trim();
+    const cleanWorksheetId = String(body.worksheetId || '').trim();
+    if (!cleanWorksheetId) {
+      return jsonResponse(400, { success: false, allowed: false, error: 'worksheetId is required.' });
+    }
+    const isGuestOrDemo =
+      !cleanStudentId || cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
+    if (!isGuestOrDemo) {
+      const ownerCheck = await verifyNetlifyStudentOwnershipOrAdmin(event, cleanStudentId);
+      if (!ownerCheck.authorized) {
+        return jsonResponse(ownerCheck.statusCode, {
+          success: false,
+          allowed: false,
+          error: ownerCheck.error || 'Unauthorized worksheet access verification.'
+        });
+      }
+    }
+    const docData = !isGuestOrDemo ? await getFirestoreDocument('students', cleanStudentId) : null;
+    const selectedBoard = normalizeNetlifyBoard(body.selectedBoard || body.board || docData?.board || 'Maharashtra');
+    const selectedClass = normalizeNetlifyClassLevel(body.selectedClass || docData?.classLevel) || 'Class 1';
+    const boardClassKey = buildNetlifyBoardClassKey(selectedBoard, selectedClass);
+    const activatedClassKeys = Array.isArray(docData?.activatedClassKeys) ? docData.activatedClassKeys : [];
+    const isPremium =
+      !isGuestOrDemo &&
+      (docData?.plan === 'premium' ||
+        activatedClassKeys.includes(boardClassKey) ||
+        Boolean(docData?.classSubscriptions?.[boardClassKey]?.status === 'ACTIVE'));
+    const isDemoWorksheet = /-1$/i.test(cleanWorksheetId) && /(ENGLISH|MATHEMATICS)/i.test(cleanWorksheetId);
+    const allowed = isPremium || isDemoWorksheet;
+    return jsonResponse(allowed ? 200 : 403, {
+      success: allowed,
+      allowed,
+      studentId: cleanStudentId || 'guest',
+      worksheetId: cleanWorksheetId,
+      selectedBoard,
+      selectedClass,
+      effectivePlan: isPremium ? 'premium' : 'free'
     });
   }
 

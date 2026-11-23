@@ -79,6 +79,8 @@ export const AdminDemoExamsSection: React.FC = () => {
   const [editMarksPerQuestion, setEditMarksPerQuestion] = useState<number>(config.marksPerQuestion);
   const [editPassingPercentage, setEditPassingPercentage] = useState<number>(config.passingPercentage);
   const [configFeedback, setConfigFeedback] = useState<string | null>(null);
+  const [confirmDeleteQuestionId, setConfirmDeleteQuestionId] = useState<string | null>(null);
+  const [confirmResetDefaults, setConfirmResetDefaults] = useState<boolean>(false);
 
   useEffect(() => {
     setEditDurationMinutes(config.durationMinutes);
@@ -188,22 +190,28 @@ export const AdminDemoExamsSection: React.FC = () => {
     setRefreshKey((k) => k + 1);
   };
 
-  // Delete Question
+  // Delete Question (inline two-step confirmation, no window.confirm)
   const handleDeleteQuestion = async (qId: string) => {
-    if (!window.confirm('Are you sure you want to delete this question? Remaining questions will be renumbered.')) {
+    if (confirmDeleteQuestionId !== qId) {
+      setConfirmDeleteQuestionId(qId);
       return;
     }
+    setConfirmDeleteQuestionId(null);
     await demoExamService.deleteQuestion(selectedTestId, qId);
     setRefreshKey((k) => k + 1);
   };
 
-  // Reset to Defaults
+  // Reset to Defaults (inline two-step confirmation, no window.confirm)
   const handleResetToDefaults = async () => {
-    if (!window.confirm('Reset this demo test back to the official default question bank and configuration? Any custom edits will be reverted.')) {
+    if (!confirmResetDefaults) {
+      setConfirmResetDefaults(true);
       return;
     }
+    setConfirmResetDefaults(false);
     await demoExamService.resetToDefaults(selectedTestId);
+    setConfigFeedback('Demo test reset to official defaults.');
     setRefreshKey((k) => k + 1);
+    setTimeout(() => setConfigFeedback(null), 3000);
   };
 
   // Save Config Changes
@@ -240,14 +248,34 @@ export const AdminDemoExamsSection: React.FC = () => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleResetToDefaults}
-          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shrink-0"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset Test to Defaults</span>
-        </button>
+        {confirmResetDefaults ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold text-rose-700">Reset to defaults?</span>
+            <button
+              type="button"
+              onClick={handleResetToDefaults}
+              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
+            >
+              Confirm Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmResetDefaults(false)}
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleResetToDefaults}
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shrink-0"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Test to Defaults</span>
+          </button>
+        )}
       </div>
 
       {/* Test Selector Tabs */}
@@ -451,14 +479,33 @@ export const AdminDemoExamsSection: React.FC = () => {
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteQuestion(q.id)}
-                            title="Delete Question"
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {confirmDeleteQuestionId === q.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteQuestion(q.id)}
+                                className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold cursor-pointer transition-colors"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteQuestionId(null)}
+                                className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteQuestion(q.id)}
+                              title="Delete Question"
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

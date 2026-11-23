@@ -3,6 +3,7 @@ import { Palette, Plus, Trash2 } from 'lucide-react';
 import type { DrawingCategory, DrawingSubmission, DrawingTemplate } from '../../types';
 import { DRAWING_CATEGORIES, ACTIVE_DRAWING_CHALLENGES } from '../../data/drawingsData';
 import { AdminPagination } from './AdminPagination';
+import { sanitizeSvgMarkup } from '../../utils/sanitizeMarkup';
 
 interface DrawingTemplateRowProps {
   tpl: DrawingTemplate;
@@ -16,7 +17,7 @@ const DrawingTemplateRow: React.FC<DrawingTemplateRowProps> = React.memo(
       <td className="py-3 px-4">
         <div
           className="w-16 h-12 bg-white rounded-lg border border-slate-200 p-1 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-          dangerouslySetInnerHTML={{ __html: tpl.svgOutline }}
+          dangerouslySetInnerHTML={{ __html: sanitizeSvgMarkup(tpl.svgOutline) }}
         />
       </td>
       <td className="py-3 px-4">

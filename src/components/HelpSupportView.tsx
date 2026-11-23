@@ -93,12 +93,15 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
     }
   };
 
+  const [formError, setFormError] = useState('');
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFormError('');
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('Screenshot size must be under 2MB.');
+      setFormError('Screenshot size must be under 2MB.');
       return;
     }
 
@@ -111,8 +114,9 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
 
   const handleSubmitTicket = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!studentName.trim() || !email.trim() || !subject.trim() || !description.trim()) {
-      alert('Please fill in all required fields.');
+      setFormError('Please fill in all required fields before submitting.');
       return;
     }
 
@@ -137,7 +141,7 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
       loadMyTickets();
     } catch (err: any) {
       console.error('Error submitting ticket:', err);
-      alert('Failed to submit ticket. Please check connection and retry.');
+      setFormError('Failed to submit ticket. Please check your connection and retry.');
     } finally {
       setIsSubmitting(false);
     }
@@ -314,6 +318,14 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
               </div>
             ) : (
               <form onSubmit={handleSubmitTicket} className="space-y-4">
+                {formError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
+                  >
+                    {formError}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Student Name */}
                   <div className="space-y-1">

@@ -7,6 +7,7 @@ import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
 import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
 import { SectionLoadingFallback } from './components/SectionLoadingFallback';
+import { LiveAnnouncementTicker } from './components/LiveAnnouncementTicker';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
@@ -960,6 +961,28 @@ const AppContent: React.FC = () => {
           setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))
         }
       />
+
+      {/* Live Announcement Ticker across Website, Student Portal & Teacher Portal */}
+      {!(activeRole === 'admin' && currentUser?.role === 'admin') && (
+        <LiveAnnouncementTicker
+          audience={
+            !currentStudent
+              ? 'website'
+              : isTeacherPortal
+              ? 'teachers'
+              : 'students'
+          }
+          onActionNavigate={(target) => {
+            if (target === 'membership') {
+              openMembershipWithPlan('premium', currentStudent?.classLevel || publicClass, activeBoard);
+            } else if (target === 'demo') {
+              openDemoWithTab('overview');
+            } else if (target !== 'none') {
+              handleNavigateTab(target);
+            }
+          }}
+        />
+      )}
 
       {/* Main Content Arena */}
       <main

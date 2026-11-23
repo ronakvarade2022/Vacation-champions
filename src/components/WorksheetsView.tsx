@@ -59,6 +59,7 @@ import {
   WORKSHEET_CLASS_LOCK_MESSAGE
 } from '../utils/subscriptionAccess';
 import { getLocalSessionHeaders } from '../services/deviceSessionService';
+import { auth } from '../services/firebase';
 
 interface WorksheetsViewProps {
   initialClassLevel?: ClassLevel;
@@ -276,11 +277,13 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
 
     // Secondary backend verification check (non-blocking if offline, strict if server responds 403)
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
       const resp = await fetch('/api/worksheets/verify-access', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getLocalSessionHeaders()
+          ...getLocalSessionHeaders(),
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
         },
         body: JSON.stringify({
           studentId: currentStudent?.id || 'guest',
