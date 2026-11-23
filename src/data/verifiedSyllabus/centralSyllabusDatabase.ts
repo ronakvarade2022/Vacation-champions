@@ -15,6 +15,10 @@ import {
   applyStageEReconciliationOverlays,
   STAGE_E_NEW_VERIFIED_ENTRIES_MAP,
 } from './stageEVerifiedEntries';
+import {
+  applyStageFReconciliationOverlays,
+  STAGE_F_NEW_VERIFIED_ENTRIES_MAP,
+} from './stageFVerifiedEntries';
 
 export type CentralVerificationStatus =
   | 'VERIFIED'
@@ -574,6 +578,29 @@ function buildCentralSyllabusRecords(): Record<string, CentralSyllabusEntry> {
           continue;
         }
 
+        const stageFNewVerified = STAGE_F_NEW_VERIFIED_ENTRIES_MAP[entryId];
+        if (stageFNewVerified) {
+          map[entryId] = {
+            entryId,
+            board,
+            classLevel,
+            classNumber,
+            subject,
+            shortCode: subjMeta.shortCode,
+            track: 'OFFICIAL_BOARD_TEXTBOOK',
+            verificationStatus: stageFNewVerified.verificationStatus,
+            textbookTitle: stageFNewVerified.textbookTitle,
+            publisher: stageFNewVerified.publisher,
+            academicYearEdition: stageFNewVerified.academicYearEdition,
+            applicableMediums: stageFNewVerified.applicableMediums,
+            officialSourceUrl: stageFNewVerified.officialSourceUrl,
+            verificationNote: stageFNewVerified.verificationNote,
+            chapters: stageFNewVerified.chapters,
+            mediumVariants: stageFNewVerified.mediumVariants,
+          };
+          continue;
+        }
+
         const isIcseSchoolBook = board === 'ICSE' && !isEnrichment;
         const status: CentralVerificationStatus = isIcseSchoolBook
           ? 'SCHOOL_TEXTBOOK_DEPENDENT'
@@ -608,6 +635,7 @@ function buildCentralSyllabusRecords(): Record<string, CentralSyllabusEntry> {
 
   applyStageDVerifiedOverlays(map);
   applyStageEReconciliationOverlays(map);
+  applyStageFReconciliationOverlays(map);
 
   return map;
 }
