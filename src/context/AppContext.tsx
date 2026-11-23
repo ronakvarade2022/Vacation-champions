@@ -827,7 +827,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [shivajiStories, setShivajiStories] = useState<ShivajiStory[]>(() => {
     try {
       const saved = localStorage.getItem('vc_custom_shivaji_stories');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((s): s is ShivajiStory => Boolean(s && typeof s.id === 'string' && s.title && s.paragraphs))
+        : [];
     } catch {
       return [];
     }
@@ -1059,19 +1062,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if ((scope === 'all' || scope === 'shivaji') && !banksHydratedRef.current.shivaji) {
         if (!bankHydrationPromisesRef.current.shivaji) {
-          bankHydrationPromisesRef.current.shivaji = import('../data/shivajiStoriesData').then(
-            (shivajiMod) => {
+          bankHydrationPromisesRef.current.shivaji = import('../data/shivajiStoriesData')
+            .then((shivajiMod) => {
               builtInShivajiIdsRef.current = new Set(shivajiMod.SHIVAJI_STORIES.map((s) => s.id));
               setShivajiStories((prev) => {
                 const map = new Map<string, ShivajiStory>(
                   shivajiMod.SHIVAJI_STORIES.map((s) => [s.id, { ...s, published: true }])
                 );
-                prev.forEach((item) => map.set(item.id, item));
+                prev.forEach((item) => {
+                  if (item && typeof item.id === 'string' && item.title && item.paragraphs) {
+                    map.set(item.id, item);
+                  }
+                });
                 banksHydratedRef.current.shivaji = true;
                 return Array.from(map.values()).sort((a, b) => a.order - b.order);
               });
-            }
-          );
+            })
+            .catch((err) => {
+              bankHydrationPromisesRef.current.shivaji = undefined;
+              throw err;
+            });
         }
         tasks.push(bankHydrationPromisesRef.current.shivaji);
       }

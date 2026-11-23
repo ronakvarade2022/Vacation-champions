@@ -39,12 +39,32 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
   onOpenMembership,
 }) => {
   const { shivajiStories, currentStudent, ensureContentBankHydrated } = useApp();
-  useEffect(() => {
-    void ensureContentBankHydrated('shivaji');
+  const [isHydrating, setIsHydrating] = useState<boolean>(shivajiStories.length === 0);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+
+  const loadShivajiStories = React.useCallback(async () => {
+    setIsHydrating(true);
+    setHydrationError(null);
+    try {
+      await ensureContentBankHydrated('shivaji');
+    } catch (err) {
+      console.error('Failed to load Shivaji stories:', err);
+      setHydrationError('Could not load the Chhatrapati Shivaji Maharaj stories. Please retry.');
+    } finally {
+      setIsHydrating(false);
+    }
   }, [ensureContentBankHydrated]);
+
+  useEffect(() => {
+    void loadShivajiStories();
+  }, [loadShivajiStories]);
+
   const hasFullAccess = canAccessFeature(currentStudent, 'shivaji').allowed;
   const liveStories = useMemo(
-    () => shivajiStories.filter(s => s.published !== false),
+    () =>
+      shivajiStories.filter(
+        s => s && s.published !== false && s.title && s.paragraphs && s.moral
+      ),
     [shivajiStories]
   );
 
@@ -81,16 +101,16 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
   const activeParagraphRef = useRef<HTMLDivElement | null>(null);
 
   const safeActiveIndex = Math.min(activeStoryIndex, Math.max(0, liveStories.length - 1));
-  const currentStory: ShivajiStory = liveStories[safeActiveIndex] || liveStories[0];
+  const currentStory: ShivajiStory | undefined = liveStories[safeActiveIndex] || liveStories[0];
   const isChapterLocked = !hasFullAccess && safeActiveIndex >= 3;
-  const bodyParagraphs = currentStory?.paragraphs[selectedLanguage] || [];
-  const moralText = currentStory?.moral[selectedLanguage] || '';
+  const bodyParagraphs = currentStory?.paragraphs?.[selectedLanguage] || [];
+  const moralText = currentStory?.moral?.[selectedLanguage] || '';
 
   // Full narration sequence from first word to final word:
   // [0: Story Title, 1..N: Body Paragraphs, N+1: Moral Lesson]
   const getFullNarrationParagraphs = (): string[] => {
     if (!currentStory) return [];
-    const titleText = currentStory.title[selectedLanguage] || '';
+    const titleText = currentStory.title?.[selectedLanguage] || '';
     const moralPrefix =
       selectedLanguage === 'Marathi'
         ? 'या कथेतून शिवरायांची शिकवण: '
@@ -105,12 +125,12 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
-      s.title.English.toLowerCase().includes(q) ||
-      s.title.Marathi.toLowerCase().includes(q) ||
-      s.title.Hindi.toLowerCase().includes(q) ||
-      s.location.toLowerCase().includes(q) ||
-      s.year.toLowerCase().includes(q) ||
-      String(s.order).includes(q)
+      (s.title?.English || '').toLowerCase().includes(q) ||
+      (s.title?.Marathi || '').toLowerCase().includes(q) ||
+      (s.title?.Hindi || '').toLowerCase().includes(q) ||
+      (s.location || '').toLowerCase().includes(q) ||
+      (s.year || '').toLowerCase().includes(q) ||
+      String(s.order ?? '').includes(q)
     );
   });
 
@@ -130,7 +150,7 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
       progressPercent: 0,
       rate: speechRate
     });
-  }, [activeStoryIndex, selectedLanguage]);
+  }, [activeStoryIndex, selectedLanguage, currentStory?.id, bodyParagraphs.length]);
 
   useEffect(() => {
     return () => {
@@ -159,7 +179,9 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
 
   // Start full story narration from a given paragraph index (0 = Title, 1..N = Body, N+1 = Moral)
   const startFromParagraph = (index: number = 0) => {
+    if (!currentStory || isChapterLocked) return;
     const allParas = getFullNarrationParagraphs();
+    if (allParas.length === 0) return;
     speechService.setRate(speechRate);
     speechService.startStoryNarration(
       allParas,
@@ -244,6 +266,61 @@ export const ShivajiStoriesView: React.FC<ShivajiStoriesViewProps> = ({
 
   const completedCount = Object.keys(completedStories).length;
   const activePartNumber = Math.min(activeParaIndex + 1, totalPartsCount);
+
+  if (!currentStory) {
+    return (
+      <div className="max-w-3xl mx-auto my-12 bg-white rounded-3xl p-8 sm:p-10 border border-amber-200 shadow-md text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-600 text-white mx-auto flex items-center justify-center shadow-md">
+          <Crown className="w-7 h-7" />
+        </div>
+        {hydrationError ? (
+          <>
+            <h2 className="text-xl font-display font-extrabold text-slate-900">
+              Unable to Load Shivaji Maharaj Stories
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
+              {hydrationError}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadShivajiStories()}
+              className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs inline-flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry Loading Stories</span>
+            </button>
+          </>
+        ) : isHydrating ? (
+          <>
+            <h2 className="text-xl font-display font-extrabold text-slate-900">
+              छत्रपती शिवाजी महाराज: ऐतिहासिक अमृतकथा लोड होत आहेत...
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600">
+              Loading all 50 chronological stories in Marathi, Hindi, and English...
+            </p>
+            <div className="w-10 h-10 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin mx-auto" />
+          </>
+        ) : (
+          <>
+            <h2 className="text-xl font-display font-extrabold text-slate-900">
+              No Published Shivaji Maharaj Stories Found
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600">
+              Please click below to reload the 50-chapter Chhatrapati Shivaji Maharaj story archive.
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadShivajiStories()}
+              className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs inline-flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Reload Stories</span>
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
