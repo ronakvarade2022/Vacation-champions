@@ -247,6 +247,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => onNavigateTab('additional-curriculum')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Additional Curriculum</span>
+            </button>
+            <button
+              type="button"
               onClick={() => onNavigateTab('profile')}
               className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
             >
@@ -402,6 +410,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               );
             })}
           </div>
+        </div>
+
+        {/* MY STUDYZONE ADDITIONAL CURRICULUM — Strictly Separate Enrichment Track */}
+        <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+              MY STUDYZONE ADDITIONAL CURRICULUM · Supplementary Enrichment
+            </p>
+            <h3 className="text-sm font-display font-black text-slate-900">
+              10 Skill &amp; Enrichment Subjects for {getBoardShortLabel(activeBoard)} · {currentStudent.classLevel}
+            </h3>
+            <p className="text-xs text-slate-600">
+              General Knowledge · Logical Reasoning · Moral Education · Computer Knowledge · Vocabulary &amp; Grammar · Drawing · Environmental Awareness · Life Skills · General Science Activities · Financial &amp; Digital Literacy — kept strictly separate from official board textbooks.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('additional-curriculum')}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 self-start sm:self-auto whitespace-nowrap"
+          >
+            <span>Open Additional Curriculum</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Role-Scoped Categories & Paid Access Overview */}

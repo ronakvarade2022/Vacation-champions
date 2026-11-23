@@ -61,12 +61,27 @@ import { AnnualPlanTab } from './AnnualPlanTab';
 import { MonthlyPlanTab } from './MonthlyPlanTab';
 import { DailyLessonPlanTab } from './DailyLessonPlanTab';
 import { SchoolCalendarDrawer } from './SchoolCalendarDrawer';
+import { ADDITIONAL_CURRICULUM_LABEL } from '../../types/additionalCurriculum';
+import {
+  createTeacherAdditionalAssignment,
+  getAllAdditionalChapters,
+  getAllAdditionalSubjects,
+  getLocalizedChapterTitle,
+  getLocalizedSubjectName,
+  listTeacherAdditionalAssignments,
+} from '../../services/additionalCurriculumService';
 
 interface TeacherLessonPlannerViewProps {
   currentTeacher: StudentProfile;
   initialBoard: EducationBoard;
   initialClass: ClassLevel;
   onReturnOverview: () => void;
+  onOpenAdditionalCurriculum?: (ctx: {
+    board?: EducationBoard;
+    classLevel?: ClassLevel;
+    medium?: InstructionMedium;
+    subjectId?: string;
+  }) => void;
 }
 
 const BOARDS: EducationBoard[] = ['Maharashtra', 'CBSE', 'ICSE'];
@@ -135,6 +150,7 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
   initialBoard,
   initialClass,
   onReturnOverview,
+  onOpenAdditionalCurriculum,
 }) => {
   // 1. Primary Classroom Context
   const [board, setBoard] = useState<EducationBoard>(initialBoard || 'Maharashtra');
@@ -194,6 +210,9 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
   }>({ kind: 'idle' });
   const [isPdfMenuOpen, setIsPdfMenuOpen] = useState<boolean>(false);
   const [includePrivateRemarksInPdf, setIncludePrivateRemarksInPdf] = useState<boolean>(false);
+  const [isSupplementaryPanelOpen, setIsSupplementaryPanelOpen] = useState<boolean>(false);
+  const [assignedAdditionalIds, setAssignedAdditionalIds] = useState<Record<string, boolean>>({});
+  const [supplementaryAssignNotice, setSupplementaryAssignNotice] = useState<string>('');
   const pdfMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Close PDF dropdown on outside click
@@ -728,6 +747,63 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
     Object.keys(teacherState?.chapterWeightOverrides || {}).length > 0;
   const canCustomizeSchoolCalendar =
     globalSettings.allowTeacherCalendarCustomization && !isArchivedReadOnly;
+
+  const supplementarySubjectsForContext = useMemo(
+    () =>
+      getAllAdditionalSubjects({
+        board,
+        medium: generatedPlan.medium,
+        includeUnpublished: false,
+      }),
+    [board, generatedPlan.medium]
+  );
+
+  const supplementaryChaptersForContext = useMemo(() => {
+    const allowedSubjectIds = new Set(supplementarySubjectsForContext.map((s) => s.id));
+    return getAllAdditionalChapters({
+      classLevel,
+      includeUnpublished: false,
+    }).filter((ch) => allowedSubjectIds.has(ch.subjectId));
+  }, [classLevel, supplementarySubjectsForContext]);
+
+  useEffect(() => {
+    const existing = listTeacherAdditionalAssignments({
+      board,
+      classLevel,
+    });
+    const map: Record<string, boolean> = {};
+    existing.forEach((a) => {
+      if (a.status === 'ACTIVE' && a.teacherId === currentTeacher.id) {
+        map[a.chapterId] = true;
+      }
+    });
+    setAssignedAdditionalIds(map);
+  }, [currentTeacher.id, board, classLevel]);
+
+  const handleQuickAssignSupplementary = (
+    chapterId: string,
+    subjectId: string,
+    chapterTitle: string
+  ) => {
+    const dueDateIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    createTeacherAdditionalAssignment({
+      teacherId: currentTeacher.id,
+      teacherName: currentTeacher.name,
+      board,
+      classLevel,
+      medium: generatedPlan.medium,
+      division,
+      subjectId,
+      chapterId,
+      chapterTitle,
+      dueDate: dueDateIso,
+      teacherNote: `Assigned via Teacher Lesson Planner (${division})`,
+    });
+    setAssignedAdditionalIds((prev) => ({ ...prev, [chapterId]: true }));
+    setSupplementaryAssignNotice(
+      `Assigned "${chapterTitle}" (${classLevel} · ${division}) to student supplementary track.`
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-5 space-y-5">
@@ -1269,6 +1345,119 @@ export const TeacherLessonPlannerView: React.FC<TeacherLessonPlannerViewProps> =
           onPrintDailyPdf={(mk) => triggerPdfPrint('daily', mk)}
         />
       )}
+
+      {/* Strictly Separate Supplementary Enrichment Planning Panel (Never mixed into official board plans) */}
+      <section className="rounded-xl border border-indigo-200 bg-white overflow-hidden">
+        <div className="p-4 sm:p-5 bg-indigo-50/50 flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+              {ADDITIONAL_CURRICULUM_LABEL} · Separate From Official Board Schedule
+            </p>
+            <h2 className="text-sm sm:text-base font-display font-bold text-slate-900">
+              Supplementary Enrichment Planning ({board} · {classLevel} · {generatedPlan.medium} Medium)
+            </h2>
+            <p className="text-xs text-slate-600 tabular-nums">
+              {supplementarySubjectsForContext.length} subjects · {supplementaryChaptersForContext.length} enrichment chapters available for classroom activities &amp; homework assignments.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {onOpenAdditionalCurriculum && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenAdditionalCurriculum({
+                    board,
+                    classLevel,
+                    medium: generatedPlan.medium,
+                  })
+                }
+                className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+              >
+                Open Full Additional Curriculum Workspace
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsSupplementaryPanelOpen((prev) => !prev)}
+              className="px-3 py-2 rounded-lg border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-900 text-xs font-semibold cursor-pointer whitespace-nowrap"
+            >
+              {isSupplementaryPanelOpen ? 'Hide Enrichment List' : 'Plan & Assign Chapters'}
+            </button>
+          </div>
+        </div>
+
+        {isSupplementaryPanelOpen && (
+          <div className="p-4 sm:p-5 border-t border-indigo-100 space-y-3">
+            {supplementaryAssignNotice && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                {supplementaryAssignNotice}
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {supplementaryChaptersForContext.map((ch) => {
+                const subj = supplementarySubjectsForContext.find((s) => s.id === ch.subjectId);
+                const localizedSubj = subj
+                  ? getLocalizedSubjectName(subj, generatedPlan.medium)
+                  : ch.subjectId;
+                const localizedTitle = getLocalizedChapterTitle(ch, generatedPlan.medium);
+                const isAssigned = Boolean(assignedAdditionalIds[ch.chapterId]);
+                return (
+                  <div
+                    key={ch.chapterId}
+                    className="rounded-lg border border-slate-200 p-3.5 flex flex-col justify-between gap-2.5 bg-slate-50/40"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold text-indigo-700">
+                        {localizedSubj} · Ch. {ch.chapterNumber} · {ch.materials.teacherGuidance.suggestedPeriods} period(s)
+                      </p>
+                      <h3 className="text-sm font-bold text-slate-900">{localizedTitle}</h3>
+                      <p className="text-xs text-slate-600 line-clamp-2">
+                        {ch.materials.teacherGuidance.classroomStrategy}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                      <span className="text-[11px] text-slate-500 tabular-nums">
+                        {ch.materials.practiceWorksheet.items.length} worksheet tasks · {ch.materials.mcqQuiz.length} MCQs
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {onOpenAdditionalCurriculum && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onOpenAdditionalCurriculum({
+                                board,
+                                classLevel,
+                                medium: generatedPlan.medium,
+                                subjectId: ch.subjectId,
+                              })
+                            }
+                            className="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 cursor-pointer"
+                          >
+                            Preview
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleQuickAssignSupplementary(ch.chapterId, ch.subjectId, localizedTitle)
+                          }
+                          className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer ${
+                            isAssigned
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                          }`}
+                        >
+                          {isAssigned ? 'Assigned ✓' : `Assign to ${division}`}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Private Per-Teacher School Calendar Customiser Drawer */}
       <SchoolCalendarDrawer

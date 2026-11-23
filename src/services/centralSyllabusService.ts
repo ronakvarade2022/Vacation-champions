@@ -24,6 +24,8 @@ export interface BoardSummaryBucket {
   board: EducationBoard;
   totalEntries: number;
   verifiedCount: number;
+  integratedCount: number;
+  notPublishedAsStandaloneCount: number;
   outdatedRebuildCount: number;
   schoolDependentCount: number;
   pendingCount: number;
@@ -35,6 +37,8 @@ export interface CentralSyllabusSummaryStats {
   featureFlagEnabled: boolean;
   totalEntries: number;
   verifiedCount: number;
+  integratedCount: number;
+  notPublishedAsStandaloneCount: number;
   outdatedRebuildCount: number;
   schoolDependentCount: number;
   pendingCount: number;
@@ -51,9 +55,55 @@ export interface EffectiveSyllabusResolution {
   publisher: string;
   academicYearEdition: string;
   officialSourceUrl: string;
+  verificationNote?: string;
+  integratedParentEntryIds?: string[];
+  integratedParentLabel?: string;
   chapterTitles: string[];
   structuredChapters: CentralChapterItem[];
   mediumVariantApplied?: CentralMediumVariant;
+}
+
+export interface SyllabusStatusPresentation {
+  badgeLabel: string;
+  message: string;
+}
+
+export function getSyllabusStatusPresentation(
+  resolution: Pick<
+    EffectiveSyllabusResolution,
+    'verificationStatus' | 'integratedParentLabel' | 'verificationNote'
+  >
+): SyllabusStatusPresentation {
+  switch (resolution.verificationStatus) {
+    case 'INTEGRATED_INTO_PARENT':
+      return {
+        badgeLabel: 'INTEGRATED SUBJECT',
+        message: resolution.integratedParentLabel
+          ? `Covered under verified parent textbook: ${resolution.integratedParentLabel}. Open the verified parent subject to access official chapters (no duplicate or synthetic chapters are generated here).`
+          : resolution.verificationNote ||
+            'This subject is integrated into an already-verified parent textbook. No duplicate or synthetic chapters are generated.',
+      };
+    case 'NOT_PUBLISHED_AS_STANDALONE':
+      return {
+        badgeLabel: 'NO STANDALONE TEXTBOOK',
+        message:
+          resolution.verificationNote ||
+          'No standalone official board textbook is published for this Board, Class, Medium, and Subject. No synthetic chapters or content are generated.',
+      };
+    case 'SCHOOL_TEXTBOOK_DEPENDENT':
+      return {
+        badgeLabel: 'SCHOOL TEXTBOOK DEPENDENT',
+        message:
+          'This CISCE / ICSE subject relies on school-selected private publisher textbooks without a single common national index. No synthetic chapters or worksheets are published.',
+      };
+    default:
+      return {
+        badgeLabel: 'PENDING VERIFICATION',
+        message:
+          resolution.verificationNote ||
+          'Official textbook chapter index verification for this selection is pending. No synthetic chapters, quizzes, or worksheets are generated until verified.',
+      };
+  }
 }
 
 export function makeCentralSyllabusKey(
@@ -134,6 +184,8 @@ export function getCentralSyllabusSummaryStats(): CentralSyllabusSummaryStats {
       board,
       totalEntries: 0,
       verifiedCount: 0,
+      integratedCount: 0,
+      notPublishedAsStandaloneCount: 0,
       outdatedRebuildCount: 0,
       schoolDependentCount: 0,
       pendingCount: 0,
@@ -142,6 +194,8 @@ export function getCentralSyllabusSummaryStats(): CentralSyllabusSummaryStats {
   }
 
   let verifiedCount = 0;
+  let integratedCount = 0;
+  let notPublishedAsStandaloneCount = 0;
   let outdatedRebuildCount = 0;
   let schoolDependentCount = 0;
   let pendingCount = 0;
@@ -156,6 +210,12 @@ export function getCentralSyllabusSummaryStats(): CentralSyllabusSummaryStats {
       bucket.verifiedCount += 1;
       totalVerifiedChapters += entry.chapters.length;
       bucket.verifiedChapterCount += entry.chapters.length;
+    } else if (entry.verificationStatus === 'INTEGRATED_INTO_PARENT') {
+      integratedCount += 1;
+      bucket.integratedCount += 1;
+    } else if (entry.verificationStatus === 'NOT_PUBLISHED_AS_STANDALONE') {
+      notPublishedAsStandaloneCount += 1;
+      bucket.notPublishedAsStandaloneCount += 1;
     } else if (entry.verificationStatus === 'OUTDATED_REBUILD_REQUIRED') {
       outdatedRebuildCount += 1;
       bucket.outdatedRebuildCount += 1;
@@ -173,6 +233,8 @@ export function getCentralSyllabusSummaryStats(): CentralSyllabusSummaryStats {
     featureFlagEnabled: isVerifiedSyllabusPipelineEnabled(),
     totalEntries: CENTRAL_SYLLABUS_ENTRIES.length,
     verifiedCount,
+    integratedCount,
+    notPublishedAsStandaloneCount,
     outdatedRebuildCount,
     schoolDependentCount,
     pendingCount,
@@ -250,6 +312,13 @@ export function getEffectiveSyllabusForConsumer(params: {
     publisher: variant ? variant.publisher : entry.publisher,
     academicYearEdition: variant ? variant.academicYearEdition : entry.academicYearEdition,
     officialSourceUrl: variant ? variant.officialSourceUrl : entry.officialSourceUrl,
+    verificationNote: variant ? variant.verificationNote : entry.verificationNote,
+    ...(entry.integratedParentEntryIds
+      ? { integratedParentEntryIds: [...entry.integratedParentEntryIds] }
+      : {}),
+    ...(entry.integratedParentLabel
+      ? { integratedParentLabel: entry.integratedParentLabel }
+      : {}),
     chapterTitles: effectiveChapters.map((c) => c.chapterTitle),
     structuredChapters: [...effectiveChapters],
     ...(variant ? { mediumVariantApplied: variant } : {}),

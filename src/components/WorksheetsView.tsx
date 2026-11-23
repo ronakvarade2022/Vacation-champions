@@ -30,7 +30,12 @@ import { useApp } from '../context/AppContext';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import type { InstructionMedium } from '../types/lessonPlanner';
 import { getAvailableMediumsForBoard } from '../services/specialContentFirestoreService';
-import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
+import {
+  getEffectiveSyllabusForConsumer,
+  getSyllabusStatusPresentation,
+} from '../services/centralSyllabusService';
+import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
 import { mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
 import {
   ALL_10_CLASSES,
@@ -67,6 +72,12 @@ interface WorksheetsViewProps {
   initialSubject?: SubjectName;
   onUnlockClick?: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
   onOpenAuth?: (defaultTab?: 'login' | 'register') => void;
+  onOpenAdditionalCurriculum?: (ctx: {
+    board?: EducationBoard;
+    classLevel?: ClassLevel;
+    medium?: InstructionMedium;
+    subjectId?: string;
+  }) => void;
 }
 
 export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
@@ -74,7 +85,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   initialBoard,
   initialSubject,
   onUnlockClick,
-  onOpenAuth
+  onOpenAuth,
+  onOpenAdditionalCurriculum,
 }) => {
   const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass, updateStudentMedium } = useApp();
 
@@ -1537,23 +1549,73 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           <div className="rounded-3xl border-2 border-amber-200 bg-amber-50/80 p-8 text-center space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-black uppercase tracking-wider">
               <Clock className="w-3.5 h-3.5 text-amber-700" />
-              <span>PENDING VERIFICATION</span>
+              <span>
+                {effectiveSubject !== 'ALL'
+                  ? getSyllabusStatusPresentation(
+                      getEffectiveSyllabusForConsumer({
+                        board: selectedBoard,
+                        classLevel: selectedClass,
+                        subject: effectiveSubject,
+                        medium: selectedMedium,
+                      })
+                    ).badgeLabel
+                  : 'NO VERIFIED WORKSHEETS'}
+              </span>
             </div>
             <h3 className="text-lg font-display font-black text-slate-900">
               {selectedBoardLabel} · {selectedMedium} Medium · {selectedClass}
               {effectiveSubject !== 'ALL' ? ` · ${effectiveSubject}` : ''}
             </h3>
             <p className="text-xs sm:text-sm text-slate-700 max-w-xl mx-auto leading-relaxed">
-              {effectiveSubject !== 'ALL' &&
-              getEffectiveSyllabusForConsumer({
-                board: selectedBoard,
-                classLevel: selectedClass,
-                subject: effectiveSubject,
-                medium: selectedMedium,
-              }).verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT'
-                ? 'This CISCE / ICSE subject relies on school-selected private publisher textbooks. No synthetic worksheets are displayed until official school textbooks are mapped.'
-                : 'Verified textbook chapter index alignment for this selection is currently PENDING VERIFICATION. No synthetic worksheets are shown until verified.'}
+              {effectiveSubject !== 'ALL'
+                ? getSyllabusStatusPresentation(
+                    getEffectiveSyllabusForConsumer({
+                      board: selectedBoard,
+                      classLevel: selectedClass,
+                      subject: effectiveSubject,
+                      medium: selectedMedium,
+                    })
+                  ).message
+                : 'No verified standalone worksheets are available for this selection. Choose a verified subject to practice.'}
             </p>
+            {effectiveSubject !== 'ALL' &&
+              onOpenAdditionalCurriculum &&
+              (() => {
+                const effRes = getEffectiveSyllabusForConsumer({
+                  board: selectedBoard,
+                  classLevel: selectedClass,
+                  subject: effectiveSubject,
+                  medium: selectedMedium,
+                });
+                if (effRes.verificationStatus !== 'NOT_PUBLISHED_AS_STANDALONE') return null;
+                const matchedAddSubj = resolveAdditionalSubjectForBlockedEntry(
+                  effectiveSubject,
+                  selectedBoard,
+                  selectedMedium
+                );
+                if (!matchedAddSubj) return null;
+                return (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenAdditionalCurriculum({
+                          board: selectedBoard,
+                          classLevel: selectedClass,
+                          medium: selectedMedium,
+                          subjectId: matchedAddSubj.id,
+                        })
+                      }
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      <span>
+                        Explore {matchedAddSubj.name} in {ADDITIONAL_CURRICULUM_LABEL}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })()}
           </div>
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

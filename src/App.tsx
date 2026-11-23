@@ -111,11 +111,17 @@ const TeacherLessonPlannerView = lazyWithRetry(() =>
     default: m.TeacherLessonPlannerView,
   }))
 );
+const AdditionalCurriculumView = lazyWithRetry(() =>
+  import('./components/AdditionalCurriculumView').then((m) => ({
+    default: m.AdditionalCurriculumView,
+  }))
+);
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
   <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
 );
 import { ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
+import type { InstructionMedium } from './types/lessonPlanner';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationConfig';
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
 import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
@@ -215,6 +221,23 @@ const AppContent: React.FC = () => {
   const [studyInitialSectionTab, setStudyInitialSectionTab] = useState<
     StudyLibrarySectionTab | undefined
   >(undefined);
+  const [additionalCurriculumContext, setAdditionalCurriculumContext] = useState<{
+    board?: EducationBoard;
+    classLevel?: ClassLevel;
+    medium?: InstructionMedium;
+    subjectId?: string;
+  } | null>(null);
+
+  const openAdditionalCurriculum = (ctx?: {
+    board?: EducationBoard;
+    classLevel?: ClassLevel;
+    medium?: InstructionMedium;
+    subjectId?: string;
+  }) => {
+    setAdditionalCurriculumContext(ctx || null);
+    setCurrentTab('additional-curriculum');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleSelectDashboardSection = (sectionId: MainMenuId) => {
     setDashboardMainSection(sectionId);
@@ -436,7 +459,7 @@ const AppContent: React.FC = () => {
       'demo', 'demo-mock-tests', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
-      'worksheets', 'study-materials', 'study-material', 'lesson-planner',
+      'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'additional-curriculum',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin'
     ]);
@@ -1362,6 +1385,7 @@ const AppContent: React.FC = () => {
               onUnlockClick={(targetClass, targetBoard) =>
                 openMembershipWithPlan('premium', targetClass, targetBoard)
               }
+              onOpenAdditionalCurriculum={openAdditionalCurriculum}
             />
           ) : currentTab === 'study-materials' ? (
             <StudyMaterialsView
@@ -1373,6 +1397,33 @@ const AppContent: React.FC = () => {
               onOpenMembership={(plan, targetClass, targetBoard) =>
                 openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)
               }
+              onOpenAdditionalCurriculum={openAdditionalCurriculum}
+            />
+          ) : currentTab === 'additional-curriculum' ? (
+            <AdditionalCurriculumView
+              initialBoard={
+                additionalCurriculumContext?.board ||
+                (currentStudent ? activeBoard : publicBoard)
+              }
+              initialClass={
+                additionalCurriculumContext?.classLevel ||
+                currentStudent?.classLevel ||
+                publicClass
+              }
+              initialMedium={
+                additionalCurriculumContext?.medium ||
+                (currentStudent?.medium as InstructionMedium | undefined) ||
+                'English'
+              }
+              initialSubjectId={additionalCurriculumContext?.subjectId}
+              portalMode={isTeacherPortal ? 'teacher' : 'student'}
+              userId={currentStudent?.id || 'guest-student'}
+              userName={currentStudent?.name || (isTeacherPortal ? 'Teacher' : 'Student')}
+              onBack={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
           ) : (['scholarship', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku', 'future-skills', 'ai-academy'] as const).includes(currentTab as 'scholarship') ? (
             (() => {
@@ -1712,6 +1763,16 @@ const AppContent: React.FC = () => {
                       </button>
                       <button
                         type="button"
+                        onClick={() => openAdditionalCurriculum({ board: activeBoard, classLevel: currentStudent.classLevel, medium: currentStudent.medium as InstructionMedium | undefined })}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'additional-curriculum' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Additional Curriculum</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleNavigateTab('worksheets')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
                           currentTab === 'worksheets' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
@@ -1815,6 +1876,7 @@ const AppContent: React.FC = () => {
                     initialSubject={quizInitialSubject}
                     initialLevel={quizInitialLevel}
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
+                    onOpenAdditionalCurriculum={openAdditionalCurriculum}
                   />
                 )}
 
@@ -1835,6 +1897,7 @@ const AppContent: React.FC = () => {
                     initialBoard={activeBoard}
                     initialClass={currentStudent.classLevel}
                     onReturnOverview={() => handleNavigateTab('dashboard')}
+                    onOpenAdditionalCurriculum={openAdditionalCurriculum}
                   />
                 )}
               </>

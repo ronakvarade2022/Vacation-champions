@@ -11,9 +11,15 @@ import {
   applyStageDVerifiedOverlays,
   STAGE_D_NEW_VERIFIED_ENTRIES_MAP,
 } from './stageDVerifiedEntries';
+import {
+  applyStageEReconciliationOverlays,
+  STAGE_E_NEW_VERIFIED_ENTRIES_MAP,
+} from './stageEVerifiedEntries';
 
 export type CentralVerificationStatus =
   | 'VERIFIED'
+  | 'INTEGRATED_INTO_PARENT'
+  | 'NOT_PUBLISHED_AS_STANDALONE'
   | 'OUTDATED_REBUILD_REQUIRED'
   | 'PENDING_VERIFICATION'
   | 'SCHOOL_TEXTBOOK_DEPENDENT';
@@ -69,6 +75,8 @@ export interface CentralSyllabusEntry {
   verificationNote: string;
   rebuildReason?: string;
   targetReplacementBook?: string;
+  integratedParentEntryIds?: string[];
+  integratedParentLabel?: string;
   chapters: CentralChapterItem[];
   mediumVariants: CentralMediumVariant[];
 }
@@ -543,6 +551,29 @@ function buildCentralSyllabusRecords(): Record<string, CentralSyllabusEntry> {
           continue;
         }
 
+        const stageENewVerified = STAGE_E_NEW_VERIFIED_ENTRIES_MAP[entryId];
+        if (stageENewVerified) {
+          map[entryId] = {
+            entryId,
+            board,
+            classLevel,
+            classNumber,
+            subject,
+            shortCode: subjMeta.shortCode,
+            track: 'OFFICIAL_BOARD_TEXTBOOK',
+            verificationStatus: stageENewVerified.verificationStatus,
+            textbookTitle: stageENewVerified.textbookTitle,
+            publisher: stageENewVerified.publisher,
+            academicYearEdition: stageENewVerified.academicYearEdition,
+            applicableMediums: stageENewVerified.applicableMediums,
+            officialSourceUrl: stageENewVerified.officialSourceUrl,
+            verificationNote: stageENewVerified.verificationNote,
+            chapters: stageENewVerified.chapters,
+            mediumVariants: stageENewVerified.mediumVariants,
+          };
+          continue;
+        }
+
         const isIcseSchoolBook = board === 'ICSE' && !isEnrichment;
         const status: CentralVerificationStatus = isIcseSchoolBook
           ? 'SCHOOL_TEXTBOOK_DEPENDENT'
@@ -576,6 +607,7 @@ function buildCentralSyllabusRecords(): Record<string, CentralSyllabusEntry> {
   }
 
   applyStageDVerifiedOverlays(map);
+  applyStageEReconciliationOverlays(map);
 
   return map;
 }

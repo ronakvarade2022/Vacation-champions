@@ -1013,7 +1013,7 @@ export function applyStageDVerifiedOverlays(map: Record<string, CentralSyllabusE
 
     if (ENRICHMENT_SUBJECTS.has(entry.subject)) {
       if (entry.subject === 'Drawing and Creative Activities') {
-        entry.verificationNote = `Officially blocked (Non-Textbook Enrichment): No standalone NCERT, CISCE, or 2026 NEP Balbharati textbook index exists for ${entry.board} ${entry.classLevel} Drawing and Creative Activities (Balbharati "Play, Do, Learn" is an integrated activity workbook, not a chaptered textbook).`;
+        entry.verificationNote = `Officially blocked (Non-Textbook Enrichment): No standalone NCERT or CISCE textbook index exists for ${entry.board} ${entry.classLevel} Drawing and Creative Activities (NCERT Arts "Bansuri" begins at Class 3; CISCE prescribes no mandatory board art textbook for Class 1).`;
       } else {
         entry.verificationNote = `Officially blocked (Non-Textbook Enrichment): Neither ${entry.board} nor its official textbook authority (NCERT / Balbharati / CISCE) publishes a standalone textbook for ${entry.classLevel} ${entry.subject}. Kept blocked to avoid synthetic or private-publisher chapters.`;
       }

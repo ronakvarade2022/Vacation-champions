@@ -57,7 +57,12 @@ import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbook
 import { getChapterPracticeTest } from '../data/studyLibrary/chapterTestsData';
 import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
 import { getVideoLessonsForSubject } from '../data/studyLibrary/videoLessonsData';
-import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
+import {
+  getEffectiveSyllabusForConsumer,
+  getSyllabusStatusPresentation,
+} from '../services/centralSyllabusService';
+import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
 import {
   formatStandardOrdinal,
   normalizeBoardValue,
@@ -102,6 +107,12 @@ interface StudyMaterialsViewProps {
     targetClass?: ClassLevel,
     targetBoard?: EducationBoard
   ) => void;
+  onOpenAdditionalCurriculum?: (ctx: {
+    board?: EducationBoard;
+    classLevel?: ClassLevel;
+    medium?: InstructionMedium;
+    subjectId?: string;
+  }) => void;
 }
 
 const QA_FORMAT_FILTERS: { id: 'all' | ChapterQAFormat; label: string }[] = [
@@ -123,6 +134,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   initialSubject,
   initialSectionTab,
   onNavigateTab,
+  onOpenAdditionalCurriculum,
 }) => {
   const { currentStudent, activeBoard, updateStudentMedium } = useApp();
 
@@ -2210,21 +2222,48 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
             <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-6 sm:p-8 text-center space-y-3">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-black uppercase tracking-wider">
                 <Clock className="w-3.5 h-3.5 text-amber-700" />
-                <span>PENDING VERIFICATION</span>
+                <span>{getSyllabusStatusPresentation(syllabusResolution).badgeLabel}</span>
               </div>
               <h3 className="text-lg sm:text-xl font-display font-black text-slate-900">
                 {selectedBoard} Board · {selectedMedium} Medium · {selectedClass} · {selectedSubject}
               </h3>
               <p className="text-xs sm:text-sm text-slate-700 max-w-2xl mx-auto leading-relaxed">
-                {syllabusResolution.verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT'
-                  ? 'This CISCE / ICSE subject uses school-selected private publisher textbooks without one fixed national index. No placeholder chapters are published until verified.'
-                  : 'Official textbook chapter index verification for this Board, Class, Medium, and Subject is currently PENDING VERIFICATION. No synthetic chapters, notes, videos, tests, or exam papers are generated until verified against official board indexes.'}
+                {getSyllabusStatusPresentation(syllabusResolution).message}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                {onOpenAdditionalCurriculum &&
+                  syllabusResolution.verificationStatus === 'NOT_PUBLISHED_AS_STANDALONE' &&
+                  (() => {
+                    const matchedAddSubj = resolveAdditionalSubjectForBlockedEntry(
+                      selectedSubject,
+                      selectedBoard,
+                      selectedMedium
+                    );
+                    if (!matchedAddSubj) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenAdditionalCurriculum({
+                            board: selectedBoard,
+                            classLevel: selectedClass,
+                            medium: selectedMedium,
+                            subjectId: matchedAddSubj.id,
+                          })
+                        }
+                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <span>
+                          Explore {matchedAddSubj.name} in {ADDITIONAL_CURRICULUM_LABEL}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    );
+                  })()}
                 <button
                   type="button"
                   onClick={() => setActiveSectionTab('math_hub')}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
                 >
                   Open Special Academic Hubs
                 </button>

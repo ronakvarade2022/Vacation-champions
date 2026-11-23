@@ -101,12 +101,18 @@ const AdminAnnouncementsSection = lazyWithRetry(() =>
     default: m.AdminAnnouncementsSection,
   }))
 );
+const AdminAdditionalCurriculumSection = lazyWithRetry(() =>
+  import('./admin/AdminAdditionalCurriculumSection').then((m) => ({
+    default: m.AdminAdditionalCurriculumSection,
+  }))
+);
 
 type AdminSectionId =
   | 'students'
   | 'questions'
   | 'worksheets'
   | 'study-library-cms'
+  | 'additional-curriculum'
   | 'lesson-planner'
   | 'announcements'
   | 'progression'
@@ -429,6 +435,18 @@ export const AdminDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('additional-curriculum')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+            activeSection === 'additional-curriculum'
+              ? 'bg-indigo-700 text-white shadow-xs'
+              : 'text-indigo-900 bg-indigo-50/70 hover:bg-indigo-100'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Additional Curriculum CMS</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('lesson-planner')}
           className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
             activeSection === 'lesson-planner'
@@ -662,6 +680,8 @@ export const AdminDashboard: React.FC = () => {
             selectedClassWorkspace={selectedClassWorkspace}
           />
         )}
+
+        {activeSection === 'additional-curriculum' && <AdminAdditionalCurriculumSection />}
 
         {activeSection === 'lesson-planner' && (
           <AdminLessonPlannerSection selectedBoardWorkspace={selectedBoardWorkspace} />

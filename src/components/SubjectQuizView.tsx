@@ -37,7 +37,12 @@ import { PlanUpgradePromptModal } from './PlanUpgradePromptModal';
 import { ReportQuestionModal } from './ReportQuestionModal';
 import type { InstructionMedium } from '../types/lessonPlanner';
 import { getAvailableMediumsForBoard } from '../services/specialContentFirestoreService';
-import { getEffectiveSyllabusForConsumer } from '../services/centralSyllabusService';
+import {
+  getEffectiveSyllabusForConsumer,
+  getSyllabusStatusPresentation,
+} from '../services/centralSyllabusService';
+import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
 import {
   ALL_10_CLASSES,
   getSubjectsForClass,
@@ -48,6 +53,12 @@ interface SubjectQuizViewProps {
   initialSubject?: SubjectName;
   initialLevel?: QuizLevel;
   onOpenMembership?: (plan?: 'basic' | 'premium', targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
+  onOpenAdditionalCurriculum?: (ctx: {
+    board?: EducationBoard;
+    classLevel?: ClassLevel;
+    medium?: InstructionMedium;
+    subjectId?: string;
+  }) => void;
 }
 
 const QUESTION_FORMAT_LABELS: Record<string, { label: string; badgeColor: string }> = {
@@ -116,7 +127,8 @@ const LEVEL_CARDS_META: LevelCardMeta[] = [
 export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({ 
   initialSubject = 'Mathematics',
   initialLevel = 1,
-  onOpenMembership
+  onOpenMembership,
+  onOpenAdditionalCurriculum,
 }) => {
   const { 
     currentStudent, 
@@ -702,17 +714,45 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         <div className="bg-amber-50/90 rounded-3xl p-8 border-2 border-amber-200 shadow-xs text-center space-y-4">
           <AlertTriangle className="w-10 h-10 mx-auto text-amber-600" />
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-[11px] font-black uppercase tracking-wider">
-            <span>PENDING VERIFICATION</span>
+            <span>{getSyllabusStatusPresentation(activeSyllabusStatus).badgeLabel}</span>
           </div>
           <h3 className="text-lg font-bold text-slate-900">
             {loadError ||
               `${activeBoard} · ${selectedMedium} Medium · ${currentStudent.classLevel} · ${selectedSubject}`}
           </h3>
           <p className="text-xs sm:text-sm text-slate-700 max-w-xl mx-auto leading-relaxed">
-            {activeSyllabusStatus.verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT'
-              ? 'This CISCE / ICSE subject relies on school-selected textbooks without a single common index. No synthetic quizzes are active until verified.'
-              : 'No synthetic quizzes or chapters are served while this Board, Class, Medium, and Subject is pending verification. Select a verified subject or medium above.'}
+            {getSyllabusStatusPresentation(activeSyllabusStatus).message}
           </p>
+          {isPendingVerificationBlocked &&
+            onOpenAdditionalCurriculum &&
+            activeSyllabusStatus.verificationStatus === 'NOT_PUBLISHED_AS_STANDALONE' &&
+            (() => {
+              const matchedAddSubj = resolveAdditionalSubjectForBlockedEntry(
+                selectedSubject,
+                activeBoard,
+                selectedMedium
+              );
+              if (!matchedAddSubj) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenAdditionalCurriculum({
+                      board: activeBoard,
+                      classLevel: currentStudent.classLevel,
+                      medium: selectedMedium,
+                      subjectId: matchedAddSubj.id,
+                    })
+                  }
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
+                >
+                  <span>
+                    Explore {matchedAddSubj.name} in {ADDITIONAL_CURRICULUM_LABEL}
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              );
+            })()}
           {!isPendingVerificationBlocked && (
             <button
               onClick={() => startQuiz(selectedSubject, selectedLevel)}

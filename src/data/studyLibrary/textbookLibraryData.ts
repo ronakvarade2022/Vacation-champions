@@ -12,7 +12,10 @@ import {
 } from '../classCurriculumConfig';
 import { CBSE_CURRICULUM_BY_CLASS } from '../boards/cbseCurriculumConfig';
 import { isVerifiedSyllabusPipelineEnabled } from '../verifiedSyllabus/syllabusFeatureFlags';
-import { getEffectiveSyllabusForConsumer } from '../../services/centralSyllabusService';
+import {
+  getEffectiveSyllabusForConsumer,
+  getSyllabusStatusPresentation,
+} from '../../services/centralSyllabusService';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 
 /**
@@ -158,6 +161,9 @@ export function getOfficialTextbookForSubject(
     useVerifiedPipelineOverride
   );
   const isBlockedPending = Boolean(centralResolution && centralResolution.mode !== 'central_verified');
+  const blockedBadgeLabel = centralResolution
+    ? getSyllabusStatusPresentation(centralResolution).badgeLabel
+    : 'PENDING VERIFICATION';
 
   if (board === 'CBSE') {
     const defaultTitle = getCbseBookTitle(classLevel, classNum, subject);
@@ -167,13 +173,13 @@ export function getOfficialTextbookForSubject(
       classLevel,
       subject,
       bookTitle: isBlockedPending
-        ? `${defaultTitle} [PENDING VERIFICATION]`
+        ? `${defaultTitle} [${blockedBadgeLabel}]`
         : centralResolution?.textbookTitle || defaultTitle,
       publisher:
         centralResolution?.publisher ||
         'National Council of Educational Research and Training (NCERT), New Delhi',
       editionYear: isBlockedPending
-        ? 'PENDING VERIFICATION'
+        ? blockedBadgeLabel
         : centralResolution?.academicYearEdition ||
           '2025–2026 Academic Edition (NEP 2020 / NCF-SE Aligned)',
       mediums: subject === 'Marathi' ? ['Marathi'] : subject === 'Hindi' ? ['Hindi'] : ['English', 'Hindi'],
@@ -195,13 +201,13 @@ export function getOfficialTextbookForSubject(
       classLevel,
       subject,
       bookTitle: isBlockedPending
-        ? `${defaultTitle} [PENDING VERIFICATION]`
+        ? `${defaultTitle} [${blockedBadgeLabel}]`
         : centralResolution?.textbookTitle || defaultTitle,
       publisher:
         centralResolution?.publisher ||
         'Council for the Indian School Certificate Examinations (CISCE), New Delhi',
       editionYear: isBlockedPending
-        ? 'PENDING VERIFICATION'
+        ? blockedBadgeLabel
         : centralResolution?.academicYearEdition || '2025–2026 CISCE Academic Regulations & Syllabus',
       mediums: subject === 'Hindi' ? ['Hindi'] : subject === 'Marathi' ? ['Marathi'] : ['English'],
       officialReadUrl: centralResolution?.officialSourceUrl || 'https://cisce.org/publications/',
@@ -222,13 +228,13 @@ export function getOfficialTextbookForSubject(
     classLevel,
     subject,
     bookTitle: isBlockedPending
-      ? `${centralResolution?.textbookTitle || defaultTitle} [PENDING VERIFICATION]`
+      ? `${centralResolution?.textbookTitle || defaultTitle} [${blockedBadgeLabel}]`
       : centralResolution?.textbookTitle || defaultTitle,
     publisher:
       centralResolution?.publisher ||
       'Maharashtra State Bureau of Textbook Production & Curriculum Research (Balbharati), Pune',
     editionYear: isBlockedPending
-      ? 'PENDING VERIFICATION'
+      ? blockedBadgeLabel
       : centralResolution?.academicYearEdition || '2025–2026 MSBSHSE Revised Edition',
     mediums:
       subject === 'Marathi'
