@@ -54,6 +54,7 @@ import {
   ScholarshipChampionBannerSvg,
   HeroBoardEmblemIcon,
 } from './DashboardIllustrations';
+import { QuickStudyZoneIconBar, type QuickLearningNavId } from './OneLineIconNavBar';
 
 export interface RealStudentProgressMetrics {
   isLoggedIn: boolean;
@@ -722,6 +723,54 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       </section>
 
       {/* =====================================================================
+          ICON-BASED ONE-LINE LEARNING NAVIGATION BAR
+          📚 Subjects | 📖 Chapters | 📄 Study Notes | 📝 Worksheets | ✍️ Practice Q&A | ❓ MCQs | 📋 Tests | 🗂️ Previous Papers | 🏆 Results | 🌟 Additional Curriculum
+          ===================================================================== */}
+      <QuickStudyZoneIconBar
+        activeItem={
+          expandedSectionId === 'courses'
+            ? 'subjects'
+            : expandedSectionId === 'study-material'
+            ? 'notes'
+            : expandedSectionId === 'practice-zone'
+            ? 'mcqs'
+            : expandedSectionId === 'exam-zone'
+            ? 'tests'
+            : expandedSectionId === 'performance'
+            ? 'results'
+            : 'subjects'
+        }
+        board={selectedBoard}
+        classLevel={selectedClass}
+        counts={{
+          subjects: currentSubjects.length,
+        }}
+        onNavigate={(target: QuickLearningNavId) => {
+          if (target === 'subjects') {
+            onNavigateTab('all-courses');
+          } else if (target === 'chapters') {
+            triggerSubAction('sm-textbook-learning');
+          } else if (target === 'notes') {
+            triggerSubAction('sm-notes');
+          } else if (target === 'worksheets') {
+            triggerSubAction('pz-worksheets');
+          } else if (target === 'practice_questions') {
+            triggerSubAction('sm-question-banks');
+          } else if (target === 'mcqs') {
+            triggerSubAction('sm-guides');
+          } else if (target === 'tests') {
+            triggerSubAction('ez-chapter-tests');
+          } else if (target === 'previous_papers') {
+            triggerSubAction('sm-pdfs');
+          } else if (target === 'results') {
+            triggerSubAction('perf-results');
+          } else if (target === 'additional_curriculum') {
+            triggerSubAction('sl-additional-curriculum');
+          }
+        }}
+      />
+
+      {/* =====================================================================
           TWO-LEVEL HORIZONTAL SECTION & SUBSECTION NAVIGATION SYSTEM
           LEVEL 1 (FIRST ROW): ALL Main Section Tabs together horizontally
           LEVEL 2 (SECOND ROW): ONLY the Selected Section's Subsections horizontally
@@ -756,9 +805,9 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
             className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden"
           >
             {/* ---------------------------------------------------------------
-                MAIN SECTION TABS – VERTICAL ARRANGEMENT (ALL MAIN SECTIONS TOGETHER)
+                ROW 1: ALL MAIN SECTION TABS – VERTICAL STACKED
                 --------------------------------------------------------------- */}
-            <div className="border-b-2 border-sky-200/80 bg-white">
+            <div className="border-b border-sky-200/80 bg-slate-50/90">
               <div
                 role="tablist"
                 aria-orientation="vertical"
@@ -782,20 +831,20 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                       aria-selected={isSelected}
                       aria-controls="second-row-subsections"
                       onClick={() => handleSelectAccordionSection(menu.id)}
-                      className={`w-full min-h-[46px] px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                      className={`w-full min-h-[46px] px-3.5 sm:px-5 py-2.5 flex items-center justify-between gap-3 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
                         isSelected
-                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white shadow-inner'
-                          : 'bg-white hover:bg-sky-50/70 text-[#0f2952]'
+                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 border-l-amber-400 shadow-xs'
+                          : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                         <span
-                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
                         >
-                          <IconComp className="w-4 h-4 sm:w-5 sm:h-5" />
+                          <IconComp className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                         </span>
                         <span
-                          className={`font-display font-black text-xs sm:text-sm md:text-base tracking-wide uppercase truncate ${
+                          className={`font-display font-black text-xs sm:text-sm tracking-wide uppercase truncate ${
                             isSelected ? 'text-white' : 'text-[#0f2952]'
                           }`}
                         >
@@ -803,16 +852,14 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        <span
-                          className={`hidden sm:inline text-xs font-bold ${
-                            isSelected ? 'text-amber-300' : 'text-slate-500'
-                          }`}
-                        >
-                          {isSelected ? 'Selected' : meta.tagline}
-                        </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isSelected && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[10px] uppercase tracking-wider hidden sm:inline-block">
+                            Selected
+                          </span>
+                        )}
                         <ArrowRight
-                          className={`w-4 h-4 shrink-0 transition-transform ${
+                          className={`w-4 h-4 transition-transform ${
                             isSelected ? 'text-amber-300 translate-x-0.5' : 'text-slate-400'
                           }`}
                         />
@@ -824,30 +871,30 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
             </div>
 
             {/* ---------------------------------------------------------------
-                SECOND ROW – SELECTED SECTION'S SUBSECTIONS (STRICTLY BELOW ROW 1)
+                ROW 2: SELECTED SECTION'S SUBSECTIONS – HORIZONTAL ONE-LINE ICON BAR
                 --------------------------------------------------------------- */}
             <div
               id="second-row-subsections"
-              className="bg-gradient-to-r from-[#e0f2fe]/80 via-[#f0f9ff] to-[#fef9c3]/50 border-b-2 border-sky-200/90 px-3 sm:px-4 py-3 space-y-2.5"
+              className="bg-gradient-to-r from-[#e0f2fe]/80 via-[#f0f9ff] to-[#fef9c3]/50 border-b-2 border-sky-200/90 px-3 sm:px-4 py-2.5 space-y-2"
             >
               {/* Fixed Section Context Strip */}
               <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white px-3.5 py-1 rounded-full shadow-2xs">
+                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white px-3 py-1 rounded-full shadow-2xs">
                   <span className="text-sm leading-none">{activeSectionMeta.pillEmoji}</span>
-                  <h2 className="text-xs sm:text-sm font-display font-black tracking-tight">
-                    {activeMenuGroup.label.replace('🎓 ', '')} — Subsections ({activeSubsections.length})
+                  <h2 className="text-xs font-display font-black tracking-tight">
+                    {activeMenuGroup.label.replace('🎓 ', '')} — Options ({activeSubsections.length})
                   </h2>
                 </div>
-                <span className="text-[11px] sm:text-xs font-display font-extrabold italic text-[#0f2952]">
+                <span className="text-[11px] sm:text-xs font-display font-extrabold text-[#0f2952]">
                   {activeSectionMeta.tagline}
                 </span>
               </div>
 
-              {/* Horizontal Scrollable Row of ONLY Selected Section's Subsections */}
+              {/* Horizontal Scrollable One-Line Icon Row of ONLY Selected Section's Subsections */}
               <div
                 role="tablist"
                 aria-label={`${activeMenuGroup.label.replace('🎓 ', '')} Subsections`}
-                className="flex items-stretch gap-2.5 overflow-x-auto pb-1.5 pt-0.5"
+                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar"
               >
                 {activeSubsections.map((sub) => {
                   const isSubSelected = activeSub?.id === sub.id;
@@ -871,43 +918,41 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                           onSelectBoard('ICSE');
                         }
                       }}
-                      className={`shrink-0 min-w-[168px] sm:min-w-[190px] max-w-[240px] rounded-2xl p-2.5 transition-all cursor-pointer flex items-center gap-2.5 text-left border-2 ${
+                      className={`shrink-0 whitespace-nowrap min-h-[42px] rounded-xl px-3 py-1.5 transition-all cursor-pointer flex items-center gap-2 text-left border-2 ${
                         isSubSelected
-                          ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fcd34d] border-[#0f2952] shadow-md ring-2 ring-[#0f2952]/20'
+                          ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fcd34d] border-[#0f2952] shadow-xs ring-1 ring-[#0f2952]/20'
                           : 'bg-white hover:bg-sky-50/90 border-sky-200/90 hover:border-sky-300 shadow-2xs'
                       }`}
                     >
-                      <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                      <div className="w-7 h-7 shrink-0 flex items-center justify-center">
                         {vis.emojiIcon ? (
-                          <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-2xs text-lg">
+                          <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-2xs text-xs">
                             {vis.emojiIcon}
                           </span>
                         ) : vis.boardEmblem ? (
                           <HeroBoardEmblemIcon
                             board={vis.boardEmblem}
-                            className="w-9 h-9 drop-shadow-xs"
+                            className="w-6 h-6 drop-shadow-2xs"
                           />
                         ) : (
                           <SpecialCardIllustration
                             type={vis.illustrationType || 'courses'}
-                            className="w-full h-full drop-shadow-xs"
+                            className="w-full h-full drop-shadow-2xs"
                           />
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="block font-display font-black text-xs text-[#0f2952] leading-tight truncate">
-                          {sub.label}
-                        </span>
-                        <span
-                          className={`inline-block text-[10px] font-extrabold mt-1 px-2 py-0.5 rounded-full ${
-                            isSubSelected
-                              ? 'bg-[#0f2952] text-amber-300'
-                              : 'bg-sky-100/90 text-[#0f2952]/80'
-                          }`}
-                        >
-                          {isSubSelected ? 'Selected' : sub.badgeText || 'View'}
-                        </span>
-                      </div>
+                      <span className="font-display font-black text-xs text-[#0f2952] leading-tight">
+                        {sub.label}
+                      </span>
+                      <span
+                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          isSubSelected
+                            ? 'bg-[#0f2952] text-amber-300'
+                            : 'bg-sky-100/90 text-[#0f2952]/80'
+                        }`}
+                      >
+                        {isSubSelected ? 'Selected' : sub.badgeText || 'Open'}
+                      </span>
                     </button>
                   );
                 })}

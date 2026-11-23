@@ -43,6 +43,7 @@ import {
   toggleTeacherAssignmentStatus,
 } from '../services/additionalCurriculumService';
 import { subscribeAdditionalCurriculumChanges } from '../services/additionalCurriculumPersistence';
+import { QuickStudyZoneIconBar } from './OneLineIconNavBar';
 
 type WorkspaceMode = 'notes' | 'worksheet' | 'quiz' | 'revision' | 'teacher';
 
@@ -55,6 +56,7 @@ export interface AdditionalCurriculumViewProps {
   userId?: string;
   userName?: string;
   onBack?: () => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
 export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> = ({
@@ -66,6 +68,7 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
   userId = 'guest-student',
   userName = 'Student',
   onBack,
+  onNavigateTab,
 }) => {
   const [board, setBoard] = useState<EducationBoard>(initialBoard);
   const [classLevel, setClassLevel] = useState<ClassLevel>(initialClass);
@@ -321,6 +324,31 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Horizontal One-Line Icon Quick Navigation Bar */}
+        <QuickStudyZoneIconBar
+          activeItem="additional_curriculum"
+          onOpenSubjects={() => (onNavigateTab ? onNavigateTab('all-courses') : onBack?.())}
+          onOpenChapters={() => (onNavigateTab ? onNavigateTab('study-materials') : onBack?.())}
+          onOpenWorksheets={() => {
+            setActiveTab('worksheet');
+          }}
+          onOpenNotes={() => {
+            setActiveTab('notes');
+          }}
+          onOpenPracticeQuestions={() => {
+            setActiveTab('revision');
+          }}
+          onOpenMcqs={() => {
+            setActiveTab('quiz');
+          }}
+          onOpenTests={() => (onNavigateTab ? onNavigateTab('study-materials') : setActiveTab('quiz'))}
+          onOpenPreviousPapers={() => (onNavigateTab ? onNavigateTab('study-materials') : onBack?.())}
+          onOpenResults={() => (onNavigateTab ? onNavigateTab('certificates') : onBack?.())}
+          onOpenAdditionalCurriculum={() => {
+            window.scrollTo({ top: 180, behavior: 'smooth' });
+          }}
+        />
+
         {/* Hierarchy Selector Bar: Board -> Class -> Medium */}
         <section className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -611,36 +639,38 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
                     </span>
                   </div>
 
-                  {/* Workspace Segmented Navigation */}
-                  <div className="mt-5 flex flex-wrap gap-1.5 border-t border-slate-100 pt-4">
+                  {/* Workspace Horizontal One-Line Icon Navigation */}
+                  <div className="mt-5 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-t border-slate-100 pt-4">
                     {(
                       [
-                        { id: 'notes', label: 'Study Notes', icon: BookOpen },
-                        { id: 'worksheet', label: 'Practice Worksheet', icon: FileText },
-                        { id: 'quiz', label: `MCQ Quiz (${activeChapter.materials.mcqQuiz.length})`, icon: ClipboardCheck },
-                        { id: 'revision', label: 'Short Answers & Revision', icon: HelpCircle },
+                        { id: 'notes', emoji: '📄', label: '1. Study Notes & Activities', icon: BookOpen },
+                        { id: 'worksheet', emoji: '📝', label: '2. Practice Worksheet', icon: FileText },
+                        { id: 'quiz', emoji: '❓', label: `3. MCQ Quiz (${activeChapter.materials.mcqQuiz.length})`, icon: ClipboardCheck },
+                        { id: 'revision', emoji: '✍️', label: '4. Short Answers & Revision', icon: HelpCircle },
                         {
                           id: 'teacher',
-                          label: portalMode === 'teacher' ? 'Teacher Guide & Assign' : 'Teacher Guidance',
+                          emoji: '🎓',
+                          label: portalMode === 'teacher' ? '5. Teacher Guide & Assign' : '5. Teacher Guidance',
                           icon: GraduationCap,
                         },
                       ] as const
                     ).map((tab) => {
-                      const Icon = tab.icon;
                       const isActive = activeTab === tab.id;
                       return (
                         <button
                           key={tab.id}
                           type="button"
                           onClick={() => setActiveTab(tab.id)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-colors ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-extrabold whitespace-nowrap shrink-0 transition-all border cursor-pointer ${
                             isActive
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-900 hover:border-indigo-200'
                           }`}
                         >
-                          <Icon className="w-4 h-4 shrink-0" />
-                          {tab.label}
+                          <span className="text-sm leading-none" aria-hidden="true">
+                            {tab.emoji}
+                          </span>
+                          <span>{tab.label}</span>
                         </button>
                       );
                     })}

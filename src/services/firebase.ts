@@ -20,8 +20,6 @@ import {
 import {
   getFirestore,
   initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   memoryLocalCache,
   disableNetwork,
   enableNetwork,
@@ -88,25 +86,12 @@ function initFirestoreInstance() {
       app,
       {
         experimentalForceLongPolling: true,
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager(),
-        }),
+        localCache: memoryLocalCache(),
       },
       firebaseConfig.firestoreDatabaseId
     );
   } catch {
-    try {
-      return initializeFirestore(
-        app,
-        {
-          experimentalForceLongPolling: true,
-          localCache: memoryLocalCache(),
-        },
-        firebaseConfig.firestoreDatabaseId
-      );
-    } catch {
-      return getFirestore(app, firebaseConfig.firestoreDatabaseId);
-    }
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
   }
 }
 

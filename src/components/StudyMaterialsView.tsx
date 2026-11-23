@@ -29,6 +29,11 @@ import {
 } from 'lucide-react';
 import { StudyLibrarySpecialHubs } from './StudyLibrarySpecialHubs';
 import {
+  QuickStudyZoneIconBar,
+  SubjectMaterialSequenceBar,
+  type QuickLearningNavId,
+} from './OneLineIconNavBar';
+import {
   GlobalSearchJumpTarget,
   StudyLibraryGlobalSearch,
 } from './StudyLibraryGlobalSearch';
@@ -337,6 +342,21 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     setTestSubmitted(false);
   }, [selectedBoard, selectedClass, selectedSubject]);
 
+  // If a subject has 0 verified chapters (e.g. non-standalone or school-specific blocked),
+  // ensure no empty chapter-dependent tab remains selected.
+  useEffect(() => {
+    if (
+      chapters.length === 0 &&
+      activeSectionTab !== 'textbooks' &&
+      activeSectionTab !== 'math_hub' &&
+      activeSectionTab !== 'science_diagrams' &&
+      activeSectionTab !== 'english_grammar' &&
+      activeSectionTab !== 'scholarship_olympiad'
+    ) {
+      setActiveSectionTab('textbooks');
+    }
+  }, [chapters.length, activeSectionTab]);
+
   const handleGlobalSearchJump = (target: GlobalSearchJumpTarget) => {
     if (target.board) setSelectedBoard(target.board);
     if (target.classLevel) setSelectedClass(target.classLevel);
@@ -549,6 +569,62 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
         onJumpToResult={handleGlobalSearchJump}
       />
 
+      {/* Icon-Based One-Line Quick Navigation Bar across all learning material types */}
+      <QuickStudyZoneIconBar
+        activeItem={
+          activeSectionTab === 'textbooks' || activeSectionTab === 'video_lessons'
+            ? 'chapters'
+            : activeSectionTab === 'chapter_notes' || activeSectionTab === 'short_revision'
+            ? 'notes'
+            : activeSectionTab === 'worksheets_ref'
+            ? 'worksheets'
+            : activeSectionTab === 'qa_bank'
+            ? 'practice_questions'
+            : activeSectionTab === 'chapter_test'
+            ? 'mcqs'
+            : activeSectionTab === 'model_papers'
+            ? 'tests'
+            : activeSectionTab === 'pyq_papers'
+            ? 'previous_papers'
+            : 'results'
+        }
+        board={selectedBoard}
+        classLevel={selectedClass}
+        subject={selectedSubject}
+        counts={{
+          subjects: subjects.length,
+          chapters: chapters.length,
+          notes: chapters.length,
+          mcqs: chapters.length > 0 ? 10 : 0,
+          tests: examPapersBundle.modelPapers.length,
+          previousPapers: examPapersBundle.pyqPapers.length,
+        }}
+        onNavigate={(target: QuickLearningNavId, studyTab?: StudyLibrarySectionTab) => {
+          if (target === 'subjects') {
+            onNavigateTab('all-courses', selectedSubject);
+          } else if (target === 'worksheets') {
+            onNavigateTab('worksheets', selectedSubject);
+          } else if (target === 'mcqs') {
+            if (chapters.length > 0) setActiveSectionTab('chapter_test');
+            else onNavigateTab('quizzes', selectedSubject);
+          } else if (target === 'results') {
+            setActiveSectionTab('math_hub');
+          } else if (target === 'additional_curriculum') {
+            if (onOpenAdditionalCurriculum) {
+              onOpenAdditionalCurriculum({
+                board: selectedBoard,
+                classLevel: selectedClass,
+                medium: effectiveMedium,
+              });
+            } else {
+              onNavigateTab('additional-curriculum');
+            }
+          } else if (studyTab) {
+            setActiveSectionTab(studyTab);
+          }
+        }}
+      />
+
       {/* =====================================================================
           STRICT ACADEMIC HIERARCHY CONTROLS (PARTS 4, 5 & 6):
           1. Board -> 2. Medium -> 3. Class (1-10) -> 4. Subject -> 5. Chapter
@@ -711,166 +787,23 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
 
         return (
           <section className="bg-white rounded-2xl border-2 border-slate-200 shadow-xs overflow-hidden">
-            {/* FIRST ROW — ALL 10 MAIN MATERIAL TYPE TABS (SINGLE HORIZONTAL ROW) */}
-            <div className="bg-slate-50 border-b-2 border-slate-200 px-3.5 sm:px-4 pt-3.5 pb-2.5 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
-                  Study Material Sections
-                </span>
-                <span className="text-[11px] font-bold text-indigo-700">
-                  {selectedBoard} &rarr; {selectedMedium} &rarr; {selectedClass} &rarr; {selectedSubject}
-                </span>
-              </div>
-
-              <div
-                role="tablist"
-                aria-label="Study Material Main Sections"
-                className="flex items-center gap-2 overflow-x-auto pb-1.5"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'textbooks'}
-                  onClick={() => setActiveSectionTab('textbooks')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'textbooks'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <Library className="w-3.5 h-3.5" />
-                  <span>1. Textbooks ({boardClassTextbooks.length})</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'chapter_notes'}
-                  onClick={() => setActiveSectionTab('chapter_notes')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'chapter_notes'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>2. Study Notes ({chapters.length})</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'short_revision'}
-                  onClick={() => setActiveSectionTab('short_revision')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'short_revision'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>3. Short Revision</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'qa_bank'}
-                  onClick={() => setActiveSectionTab('qa_bank')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'qa_bank'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  <span>4. Q&amp;A Bank (9 Formats)</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'worksheets_ref'}
-                  onClick={() => setActiveSectionTab('worksheets_ref')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'worksheets_ref'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>5. Worksheets</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'model_papers'}
-                  onClick={() => setActiveSectionTab('model_papers')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'model_papers'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <Award className="w-3.5 h-3.5" />
-                  <span>6. Model Papers ({examPapersBundle.modelPapers.length})</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'pyq_papers'}
-                  onClick={() => setActiveSectionTab('pyq_papers')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'pyq_papers'
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  <span>7. Previous Year Papers ({examPapersBundle.pyqPapers.length})</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'chapter_test'}
-                  onClick={() => setActiveSectionTab('chapter_test')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'chapter_test'
-                      ? 'bg-emerald-700 text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-emerald-50/80 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                  }`}
-                >
-                  <ClipboardList className="w-3.5 h-3.5" />
-                  <span>8. Chapter Test (10 MCQs)</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSectionTab === 'video_lessons'}
-                  onClick={() => setActiveSectionTab('video_lessons')}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    activeSectionTab === 'video_lessons'
-                      ? 'bg-rose-700 text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-rose-50/80 text-rose-900 border-rose-200 hover:bg-rose-100'
-                  }`}
-                >
-                  <PlayCircle className="w-3.5 h-3.5" />
-                  <span>9. Video Lessons ({videoLessons.length})</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={isSpecialHubTab}
-                  onClick={() => {
-                    if (!isSpecialHubTab) setActiveSectionTab('math_hub');
-                  }}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border-2 ${
-                    isSpecialHubTab
-                      ? 'bg-[#0f2952] text-white border-amber-400 shadow-sm ring-2 ring-amber-300/60'
-                      : 'bg-amber-50 text-amber-950 border-amber-200 hover:bg-amber-100'
-                  }`}
-                >
-                  <Trophy className="w-3.5 h-3.5" />
-                  <span>10. Special Hubs (4)</span>
-                </button>
-              </div>
-            </div>
+            {/* FIRST ROW — 10-STEP STRUCTURED SUBJECT LEARNING SEQUENCE (ONE-LINE ICON NAVIGATION) */}
+            <SubjectMaterialSequenceBar
+              activeTab={activeSectionTab}
+              onSelectTab={(nextTab) => setActiveSectionTab(nextTab)}
+              counts={{
+                hasChapters: chapters.length > 0,
+                chaptersCount: chapters.length,
+                textbooksCount: boardClassTextbooks.length,
+                videosCount: videoLessons.length,
+                modelPapersCount: examPapersBundle.modelPapers.length,
+                pyqPapersCount: examPapersBundle.pyqPapers.length,
+              }}
+              subjectName={selectedSubject}
+              boardLabel={`${selectedBoard} Board`}
+              classLabel={selectedClass}
+              mediumLabel={`${selectedMedium} Medium`}
+            />
 
             {/* SECOND ROW — ONLY THE SELECTED MATERIAL SECTION'S SUBSECTIONS (HORIZONTAL, STRICTLY BELOW ROW 1) */}
             <div className="bg-sky-50/60 border-b-2 border-slate-200 px-3.5 sm:px-4 py-3 space-y-2">
@@ -1331,9 +1264,167 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 </div>
               )}
 
-              {/* TAB A: OFFICIAL TEXTBOOK LIBRARY */}
+              {/* TAB 1: SUBJECT OVERVIEW, ORDERED CHAPTERS SEQUENCE & OFFICIAL TEXTBOOK LIBRARY */}
               {activeSectionTab === 'textbooks' && (
                 <div className="space-y-6">
+                  {/* 1A. Subject Overview & Material Availability Summary */}
+                  <div className="rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/40 to-amber-50/40 border border-slate-200 p-5 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <span className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-2xl shadow-2xs shrink-0">
+                          {subjectMeta.icon}
+                        </span>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                              {getSyllabusStatusPresentation(syllabusResolution).badgeLabel}
+                            </span>
+                            <span className="text-xs font-bold text-slate-600">
+                              {selectedBoard} Board &bull; {selectedMedium} Medium &bull; {selectedClass}
+                            </span>
+                          </div>
+                          <h3 className="text-lg sm:text-xl font-display font-black text-slate-900">
+                            {selectedSubject} — Subject Overview &amp; Ordered Syllabus
+                          </h3>
+                          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            {subjectMeta.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-center shrink-0">
+                        <div className="px-3 py-2 rounded-xl bg-white border border-slate-200">
+                          <span className="block text-base font-display font-black text-indigo-700 tabular-nums">
+                            {chapters.length}
+                          </span>
+                          <span className="block text-[10px] font-bold text-slate-500">
+                            Chapters
+                          </span>
+                        </div>
+                        <div className="px-3 py-2 rounded-xl bg-white border border-slate-200">
+                          <span className="block text-base font-display font-black text-emerald-700 tabular-nums">
+                            {examPapersBundle.modelPapers.length + examPapersBundle.pyqPapers.length}
+                          </span>
+                          <span className="block text-[10px] font-bold text-slate-500">
+                            Exam Papers
+                          </span>
+                        </div>
+                        <div className="px-3 py-2 rounded-xl bg-white border border-slate-200">
+                          <span className="block text-base font-display font-black text-amber-700 tabular-nums">
+                            {chapters.length * 10}
+                          </span>
+                          <span className="block text-[10px] font-bold text-slate-500">
+                            Chapter MCQs
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 1B. Complete Ordered Chapter-wise Sequence Table (Chapters 1 to N) */}
+                    {chapters.length > 0 && (
+                      <div className="space-y-2.5 pt-3 border-t border-slate-200/80">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h4 className="text-xs font-display font-black uppercase tracking-wider text-[#0f2952]">
+                            Ordered Chapters &amp; Chapter-wise Learning Materials ({chapters.length} Chapters)
+                          </h4>
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            Click any material icon on a chapter row to open immediately
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-96 overflow-y-auto pr-1">
+                          {chapters.map((ch, idx) => {
+                            const isActiveCh = idx === selectedChapterIdx;
+                            return (
+                              <div
+                                key={ch.id}
+                                className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
+                                  isActiveCh
+                                    ? 'bg-amber-50/70 border-amber-400 shadow-2xs'
+                                    : 'bg-white border-slate-200 hover:border-indigo-300'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <span className="text-[10px] font-mono font-black uppercase tracking-wider text-indigo-700">
+                                      Chapter {String(ch.chapterNumber).padStart(2, '0')}
+                                    </span>
+                                    <h5 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
+                                      {ch.chapterTitle}
+                                    </h5>
+                                  </div>
+                                  {isActiveCh && (
+                                    <span className="px-2 py-0.5 rounded-full bg-[#0f2952] text-amber-300 text-[10px] font-black shrink-0">
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* One-Line Icon Action Buttons for this Chapter */}
+                                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('chapter_notes');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>📄</span>
+                                    <span>Notes</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('short_revision');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>🎓</span>
+                                    <span>Revision</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('qa_bank');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>✍️</span>
+                                    <span>Practice Q&amp;A</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('chapter_test');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>❓</span>
+                                    <span>10 MCQs</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('video_lessons');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>📖</span>
+                                    <span>Video</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   {activeTextbook && (
                     <div className="rounded-2xl bg-slate-900 text-white p-6 space-y-4 border border-slate-800">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2146,17 +2237,76 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 </div>
               )}
 
-              {/* TABS I, J, K, L: SPECIAL ACADEMIC HUBS (PHASE 4) */}
+              {/* TAB 10: PROGRESS, RESULTS & SPECIAL ACADEMIC HUBS */}
               {(activeSectionTab === 'math_hub' ||
                 activeSectionTab === 'science_diagrams' ||
                 activeSectionTab === 'english_grammar' ||
                 activeSectionTab === 'scholarship_olympiad') && (
-                <StudyLibrarySpecialHubs
-                  mode={activeSectionTab}
-                  selectedBoard={selectedBoard}
-                  selectedClass={selectedClass}
-                  onNavigateTab={(tab) => onNavigateTab(tab)}
-                />
+                <div className="space-y-6">
+                  {/* Subject Progress & Results Summary Card */}
+                  <div className="rounded-2xl bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 text-white p-5 sm:p-6 border border-indigo-400/30 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">
+                          Step 10 · Subject Progress &amp; Results Summary
+                        </span>
+                        <h3 className="text-lg sm:text-xl font-display font-black text-white">
+                          {selectedBoard} · {selectedClass} · {selectedSubject} Mastery
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab('certificates')}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer flex items-center gap-1.5 self-start sm:self-center"
+                      >
+                        <Trophy className="w-3.5 h-3.5" />
+                        <span>View Certificates &amp; Full Report Card</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-3.5 rounded-xl bg-white/10 border border-white/15">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-200">
+                          Verified Chapters
+                        </span>
+                        <span className="text-xl font-display font-black text-white tabular-nums">
+                          {chapters.length}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white/10 border border-white/15">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+                          Chapter Tests Taken
+                        </span>
+                        <span className="text-xl font-display font-black text-emerald-300 tabular-nums">
+                          {Object.keys(chapterTestBestResults).length}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white/10 border border-white/15">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                          Checklist Items Done
+                        </span>
+                        <span className="text-xl font-display font-black text-amber-300 tabular-nums">
+                          {Object.values(checkedItems).filter(Boolean).length}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white/10 border border-white/15">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-purple-200">
+                          Saved Bookmarks
+                        </span>
+                        <span className="text-xl font-display font-black text-purple-200 tabular-nums">
+                          {bookmarks.length}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <StudyLibrarySpecialHubs
+                    mode={activeSectionTab}
+                    selectedBoard={selectedBoard}
+                    selectedClass={selectedClass}
+                    onNavigateTab={(tab) => onNavigateTab(tab)}
+                  />
+                </div>
               )}
 
               {/* Footer Next Actions */}

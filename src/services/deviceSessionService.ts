@@ -827,18 +827,26 @@ export function subscribeToUserDeviceSession(
   userId: string,
   onRemoteUpdate: (record: DeviceSessionRecord) => void
 ): Unsubscribe {
-  const ref = doc(db, 'device_sessions', userId);
-  return onSnapshot(
-    ref,
-    (snap) => {
-      if (snap.exists()) {
-        onRemoteUpdate(snap.data() as DeviceSessionRecord);
+  const cleanId = String(userId || '').trim();
+  if (!cleanId || !auth.currentUser || auth.currentUser.uid !== cleanId) {
+    return () => {};
+  }
+  try {
+    const ref = doc(db, 'device_sessions', cleanId);
+    return onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          onRemoteUpdate(snap.data() as DeviceSessionRecord);
+        }
+      },
+      () => {
+        // Ignore transient listener errors
       }
-    },
-    () => {
-      // Ignore transient listener errors
-    }
-  );
+    );
+  } catch {
+    return () => {};
+  }
 }
 
 export async function fetchAllDeviceSessionsForAdmin(

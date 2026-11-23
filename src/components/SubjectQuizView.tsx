@@ -48,6 +48,8 @@ import {
   getSubjectsForClass,
   getSubjectMeta
 } from '../data/classCurriculumConfig';
+import { QuickStudyZoneIconBar } from './OneLineIconNavBar';
+import type { StudyLibrarySectionTab } from './StudyMaterialsView';
 
 interface SubjectQuizViewProps {
   initialSubject?: SubjectName;
@@ -59,6 +61,13 @@ interface SubjectQuizViewProps {
     medium?: InstructionMedium;
     subjectId?: string;
   }) => void;
+  onNavigateTab?: (tab: string, subjectParam?: SubjectName) => void;
+  onNavigateStudyMaterial?: (
+    board: EducationBoard,
+    classLevel: ClassLevel,
+    subject: SubjectName,
+    tab: StudyLibrarySectionTab
+  ) => void;
 }
 
 const QUESTION_FORMAT_LABELS: Record<string, { label: string; badgeColor: string }> = {
@@ -129,6 +138,8 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
   initialLevel = 1,
   onOpenMembership,
   onOpenAdditionalCurriculum,
+  onNavigateTab,
+  onNavigateStudyMaterial,
 }) => {
   const { 
     currentStudent, 
@@ -486,6 +497,64 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-16">
+      {/* Horizontal One-Line Icon Quick Navigation Bar */}
+      {quizState === 'idle' && (
+        <QuickStudyZoneIconBar
+          activeItem="mcqs"
+          onOpenSubjects={() => onNavigateTab?.('all-courses')}
+          onOpenChapters={() => {
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(activeBoard, currentStudent.classLevel, selectedSubject, 'video_lessons');
+            } else {
+              onNavigateTab?.('study-materials', selectedSubject);
+            }
+          }}
+          onOpenWorksheets={() => onNavigateTab?.('worksheets', selectedSubject)}
+          onOpenNotes={() => {
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(activeBoard, currentStudent.classLevel, selectedSubject, 'chapter_notes');
+            } else {
+              onNavigateTab?.('study-materials', selectedSubject);
+            }
+          }}
+          onOpenPracticeQuestions={() => {
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(activeBoard, currentStudent.classLevel, selectedSubject, 'qa_bank');
+            } else {
+              onNavigateTab?.('study-materials', selectedSubject);
+            }
+          }}
+          onOpenMcqs={() => {
+            window.scrollTo({ top: 180, behavior: 'smooth' });
+          }}
+          onOpenTests={() => {
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(activeBoard, currentStudent.classLevel, selectedSubject, 'model_papers');
+            } else {
+              onNavigateTab?.('study-materials', selectedSubject);
+            }
+          }}
+          onOpenPreviousPapers={() => {
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(activeBoard, currentStudent.classLevel, selectedSubject, 'pyq_papers');
+            } else {
+              onNavigateTab?.('study-materials', selectedSubject);
+            }
+          }}
+          onOpenResults={() => onNavigateTab?.('certificates')}
+          onOpenAdditionalCurriculum={
+            onOpenAdditionalCurriculum
+              ? () =>
+                  onOpenAdditionalCurriculum({
+                    board: activeBoard,
+                    classLevel: currentStudent.classLevel,
+                    medium: selectedMedium,
+                  })
+              : undefined
+          }
+        />
+      )}
+
       {/* Class 1 to 10 & Subject Selector Header */}
       <div className="bg-white rounded-3xl p-6 border border-amber-200/80 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

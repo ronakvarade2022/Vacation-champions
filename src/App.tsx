@@ -1254,6 +1254,25 @@ const AppContent: React.FC = () => {
                   return;
                 }
                 if (tab === 'worksheets' || tab === 'study-materials') {
+                  if (tab === 'study-materials' && subSection) {
+                    const subTabMap: Record<string, StudyLibrarySectionTab> = {
+                      textbooks: 'textbooks',
+                      chapter_notes: 'chapter_notes',
+                      short_revision: 'short_revision',
+                      qa_bank: 'qa_bank',
+                      chapter_test: 'chapter_test',
+                      model_papers: 'model_papers',
+                      pyq_papers: 'pyq_papers',
+                      video_lessons: 'video_lessons',
+                      math_hub: 'math_hub',
+                      science_diagrams: 'science_diagrams',
+                      english_grammar: 'english_grammar',
+                      scholarship_olympiad: 'scholarship_olympiad',
+                    };
+                    if (subTabMap[subSection]) {
+                      setStudyInitialSectionTab(subTabMap[subSection]);
+                    }
+                  }
                   handleNavigateTab(tab, subject);
                   return;
                 }
@@ -1337,7 +1356,7 @@ const AppContent: React.FC = () => {
               selectedClass={publicClass}
               onSelectBoard={setPublicBoard}
               onSelectClass={setPublicClass}
-              onOpenSubjectPractice={(board, cls, subj, mode) => {
+              onOpenSubjectPractice={(board, cls, subj, mode, studyTab) => {
                 setPublicBoard(board);
                 setPublicClass(cls);
                 if (mode === 'worksheets') {
@@ -1352,6 +1371,7 @@ const AppContent: React.FC = () => {
                   setStudyInitialBoard(board);
                   setStudyInitialClass(cls);
                   setQuizInitialSubject(subj);
+                  setStudyInitialSectionTab(studyTab || 'textbooks');
                   setCurrentTab('study-materials');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                   return;
@@ -1365,6 +1385,8 @@ const AppContent: React.FC = () => {
               onOpenMembership={(targetClass, targetBoard) =>
                 openMembershipWithPlan('premium', targetClass, targetBoard)
               }
+              onNavigateTab={handleNavigateTab}
+              onOpenAdditionalCurriculum={openAdditionalCurriculum}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
@@ -1397,6 +1419,15 @@ const AppContent: React.FC = () => {
                 openMembershipWithPlan('premium', targetClass, targetBoard)
               }
               onOpenAdditionalCurriculum={openAdditionalCurriculum}
+              onNavigateTab={handleNavigateTab}
+              onNavigateStudyMaterial={(board, cls, subj, studyTab) => {
+                setStudyInitialBoard(board);
+                setStudyInitialClass(cls);
+                setQuizInitialSubject(subj);
+                setStudyInitialSectionTab(studyTab);
+                setCurrentTab('study-materials');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
           ) : currentTab === 'study-materials' ? (
             <StudyMaterialsView
@@ -1430,6 +1461,7 @@ const AppContent: React.FC = () => {
               portalMode={isTeacherPortal ? 'teacher' : 'student'}
               userId={currentStudent?.id || 'guest-student'}
               userName={currentStudent?.name || (isTeacherPortal ? 'Teacher' : 'Student')}
+              onNavigateTab={handleNavigateTab}
               onBack={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
@@ -1888,6 +1920,15 @@ const AppContent: React.FC = () => {
                     initialLevel={quizInitialLevel}
                     onOpenMembership={(plan, targetClass, targetBoard) => openMembershipWithPlan(plan || 'premium', targetClass, targetBoard)}
                     onOpenAdditionalCurriculum={openAdditionalCurriculum}
+                    onNavigateTab={handleNavigateTab}
+                    onNavigateStudyMaterial={(board, cls, subj, studyTab) => {
+                      setStudyInitialBoard(board);
+                      setStudyInitialClass(cls);
+                      setQuizInitialSubject(subj);
+                      setStudyInitialSectionTab(studyTab);
+                      setCurrentTab('study-materials');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                   />
                 )}
 

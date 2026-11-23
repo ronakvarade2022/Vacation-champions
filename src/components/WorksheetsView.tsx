@@ -65,6 +65,8 @@ import {
 } from '../utils/subscriptionAccess';
 import { getLocalSessionHeaders } from '../services/deviceSessionService';
 import { auth } from '../services/firebase';
+import { QuickStudyZoneIconBar } from './OneLineIconNavBar';
+import type { StudyLibrarySectionTab } from './StudyMaterialsView';
 
 interface WorksheetsViewProps {
   initialClassLevel?: ClassLevel;
@@ -78,6 +80,13 @@ interface WorksheetsViewProps {
     medium?: InstructionMedium;
     subjectId?: string;
   }) => void;
+  onNavigateTab?: (tab: string, subjectParam?: SubjectName) => void;
+  onNavigateStudyMaterial?: (
+    board: EducationBoard,
+    classLevel: ClassLevel,
+    subject: SubjectName,
+    tab: StudyLibrarySectionTab
+  ) => void;
 }
 
 export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
@@ -87,6 +96,8 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   onUnlockClick,
   onOpenAuth,
   onOpenAdditionalCurriculum,
+  onNavigateTab,
+  onNavigateStudyMaterial,
 }) => {
   const { currentStudent, activeBoard, submitWorksheetAttempt, switchActiveBoardAndClass, updateStudentMedium } = useApp();
 
@@ -948,6 +959,88 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Horizontal One-Line Icon Quick Navigation Bar */}
+        <QuickStudyZoneIconBar
+          activeItem="worksheets"
+          onOpenSubjects={() => onNavigateTab?.('all-courses')}
+          onOpenChapters={() => {
+            const targetSubj =
+              selectedSubject !== 'ALL'
+                ? selectedSubject
+                : (getSubjectsForClass(selectedClass, selectedBoard)[0] as SubjectName);
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(selectedBoard, selectedClass, targetSubj, 'video_lessons');
+            } else {
+              onNavigateTab?.('study-materials', targetSubj);
+            }
+          }}
+          onOpenWorksheets={() => {
+            window.scrollTo({ top: 320, behavior: 'smooth' });
+          }}
+          onOpenNotes={() => {
+            const targetSubj =
+              selectedSubject !== 'ALL'
+                ? selectedSubject
+                : (getSubjectsForClass(selectedClass, selectedBoard)[0] as SubjectName);
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(selectedBoard, selectedClass, targetSubj, 'chapter_notes');
+            } else {
+              onNavigateTab?.('study-materials', targetSubj);
+            }
+          }}
+          onOpenPracticeQuestions={() => {
+            const targetSubj =
+              selectedSubject !== 'ALL'
+                ? selectedSubject
+                : (getSubjectsForClass(selectedClass, selectedBoard)[0] as SubjectName);
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(selectedBoard, selectedClass, targetSubj, 'qa_bank');
+            } else {
+              onNavigateTab?.('study-materials', targetSubj);
+            }
+          }}
+          onOpenMcqs={() => {
+            const targetSubj =
+              selectedSubject !== 'ALL'
+                ? selectedSubject
+                : (getSubjectsForClass(selectedClass, selectedBoard)[0] as SubjectName);
+            onNavigateTab?.('quizzes', targetSubj);
+          }}
+          onOpenTests={() => {
+            const targetSubj =
+              selectedSubject !== 'ALL'
+                ? selectedSubject
+                : (getSubjectsForClass(selectedClass, selectedBoard)[0] as SubjectName);
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(selectedBoard, selectedClass, targetSubj, 'model_papers');
+            } else {
+              onNavigateTab?.('study-materials', targetSubj);
+            }
+          }}
+          onOpenPreviousPapers={() => {
+            const targetSubj =
+              selectedSubject !== 'ALL'
+                ? selectedSubject
+                : (getSubjectsForClass(selectedClass, selectedBoard)[0] as SubjectName);
+            if (onNavigateStudyMaterial) {
+              onNavigateStudyMaterial(selectedBoard, selectedClass, targetSubj, 'pyq_papers');
+            } else {
+              onNavigateTab?.('study-materials', targetSubj);
+            }
+          }}
+          onOpenResults={() => onNavigateTab?.('certificates')}
+          onOpenAdditionalCurriculum={
+            onOpenAdditionalCurriculum
+              ? () =>
+                  onOpenAdditionalCurriculum({
+                    board: selectedBoard,
+                    classLevel: selectedClass,
+                    medium: selectedMedium,
+                  })
+              : undefined
+          }
+        />
 
         {securityNotice && (
           <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex items-center justify-between gap-4 text-rose-900">

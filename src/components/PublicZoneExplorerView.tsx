@@ -40,6 +40,7 @@ import {
 import { SpecialCardIllustration } from './DashboardIllustrations';
 import { SectionOrientationGuide } from './SectionOrientationGuide';
 import { StudentMasteryChart } from './StudentMasteryChart';
+import { QuickStudyZoneIconBar } from './OneLineIconNavBar';
 
 export type ExplorerZoneType =
   | 'study-material'
@@ -313,6 +314,31 @@ export const PublicZoneExplorerView: React.FC<PublicZoneExplorerViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Horizontal One-Line Icon Quick Navigation Bar */}
+      <QuickStudyZoneIconBar
+        activeItem={
+          zone === 'study-material'
+            ? 'notes'
+            : zone === 'practice-zone'
+            ? 'mcqs'
+            : zone === 'exam-zone'
+            ? 'tests'
+            : zone === 'performance'
+            ? 'results'
+            : undefined
+        }
+        onOpenSubjects={() => triggerTab('all-courses')}
+        onOpenChapters={() => triggerTab('study-materials', effectiveSubject)}
+        onOpenWorksheets={() => triggerTab('worksheets', effectiveSubject)}
+        onOpenNotes={() => triggerTab('study-materials', effectiveSubject)}
+        onOpenPracticeQuestions={() => triggerTab('study-materials', effectiveSubject)}
+        onOpenMcqs={() => triggerTab('quizzes', effectiveSubject)}
+        onOpenTests={() => triggerTab('study-materials', effectiveSubject)}
+        onOpenPreviousPapers={() => triggerTab('study-materials', effectiveSubject)}
+        onOpenResults={() => triggerTab('certificates')}
+        onOpenAdditionalCurriculum={() => triggerTab('additional-curriculum')}
+      />
 
       {/* 3-Question Orientation Guide */}
       <SectionOrientationGuide

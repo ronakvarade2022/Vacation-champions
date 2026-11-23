@@ -7,7 +7,6 @@ import {
   getDocFromServer,
   getDocs,
   limit,
-  onSnapshot,
   query,
   setDoc,
   where,
@@ -24,7 +23,9 @@ import {
 } from './firebase';
 import { ClassLevel, EducationBoard, SectionVisibilityConfig, SubjectName } from '../types';
 import {
+  LIVE_TICKER_STORAGE_KEY,
   LiveAnnouncementTickerConfig,
+  readCachedTickerConfig,
   sanitizeAnnouncementTickerConfig,
   writeCachedTickerConfig,
 } from '../types/announcementTicker';
@@ -546,6 +547,36 @@ export async function savePlatformConfigToFirestore(config: {
   }
 }
 
+const TICKER_BROADCAST_CHANNEL = 'msz_announcement_ticker_sync_v1';
+const TICKER_CUSTOM_EVENT = 'msz:announcement-ticker-updated';
+const tickerSubscribers = new Set<(config: LiveAnnouncementTickerConfig | null) => void>();
+
+function notifyTickerSubscribers(config: LiveAnnouncementTickerConfig | null): void {
+  tickerSubscribers.forEach((cb) => {
+    try {
+      cb(config);
+    } catch {
+      // Ignore subscriber errors
+    }
+  });
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent(TICKER_CUSTOM_EVENT, { detail: config }));
+    } catch {
+      // Ignore custom event errors
+    }
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel(TICKER_BROADCAST_CHANNEL);
+        bc.postMessage({ type: 'TICKER_UPDATED', config });
+        bc.close();
+      }
+    } catch {
+      // Ignore BroadcastChannel errors
+    }
+  }
+}
+
 export async function saveAnnouncementTickerConfigToFirestore(
   tickerConfig: LiveAnnouncementTickerConfig
 ): Promise<{ success: boolean }> {
@@ -554,6 +585,7 @@ export async function saveAnnouncementTickerConfigToFirestore(
     updatedAt: new Date().toISOString(),
   });
   writeCachedTickerConfig(sanitized);
+  notifyTickerSubscribers(sanitized);
 
   const path = 'platform_config/main';
   try {
@@ -583,41 +615,79 @@ export function subscribeAnnouncementTickerConfig(
   onUpdate: (config: LiveAnnouncementTickerConfig | null) => void
 ): () => void {
   let active = true;
+  tickerSubscribers.add(onUpdate);
 
-  // Initial REST / cached hydration so even public visitors offline/behind strict proxies get updates
-  void loadPlatformConfigDetailed().then((res) => {
-    if (!active) return;
-    if (res.config?.announcementTicker) {
-      writeCachedTickerConfig(res.config.announcementTicker);
-      onUpdate(res.config.announcementTicker);
-    }
-  });
-
-  try {
-    const ref = doc(db, 'platform_config', 'main');
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (!active || !snap.exists()) return;
-        const fields = extractPlatformConfigFields(snap.data());
-        if (fields.announcementTicker) {
-          writeCachedTickerConfig(fields.announcementTicker);
-          onUpdate(fields.announcementTicker);
-        }
-      },
-      () => {
-        // Silently retain cached/default ticker when offline or rules temporarily unavailable
+  const pullLatestTicker = (forceRefresh = false) => {
+    void loadPlatformConfigDetailed({ forceRefresh }).then((res) => {
+      if (!active) return;
+      if (res.config?.announcementTicker) {
+        writeCachedTickerConfig(res.config.announcementTicker);
+        onUpdate(res.config.announcementTicker);
       }
-    );
-    return () => {
-      active = false;
-      unsub();
-    };
-  } catch {
-    return () => {
-      active = false;
-    };
+    });
+  };
+
+  // Initial load from cache/server/REST fallback without opening a concurrent watch target
+  pullLatestTicker(false);
+
+  let bc: BroadcastChannel | null = null;
+  if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+    try {
+      bc = new BroadcastChannel(TICKER_BROADCAST_CHANNEL);
+      bc.onmessage = (ev) => {
+        if (!active) return;
+        const incoming = ev?.data?.config;
+        if (incoming) {
+          const sanitized = sanitizeAnnouncementTickerConfig(incoming);
+          writeCachedTickerConfig(sanitized);
+          onUpdate(sanitized);
+        }
+      };
+    } catch {
+      bc = null;
+    }
   }
+
+  const onStorage = (e: StorageEvent) => {
+    if (!active) return;
+    if (e.key === LIVE_TICKER_STORAGE_KEY || e.key === PLATFORM_CFG_PERSISTENT_KEY) {
+      const cached = readCachedTickerConfig();
+      if (cached) {
+        onUpdate(cached);
+      }
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', onStorage);
+  }
+
+  const pollInterval =
+    typeof window !== 'undefined'
+      ? window.setInterval(() => {
+          if (active && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
+            pullLatestTicker(true);
+          }
+        }, 60_000)
+      : null;
+
+  return () => {
+    active = false;
+    tickerSubscribers.delete(onUpdate);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', onStorage);
+    }
+    if (pollInterval !== null && typeof window !== 'undefined') {
+      window.clearInterval(pollInterval);
+    }
+    if (bc) {
+      try {
+        bc.close();
+      } catch {
+        // Ignore close errors
+      }
+    }
+  };
 }
 
 export async function loadPublishedSpecialContentFromFirestore(

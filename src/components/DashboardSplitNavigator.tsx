@@ -174,8 +174,8 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
         </button>
       </div>
 
-      {/* MAIN SECTION TABS — VERTICAL ARRANGEMENT (ALL MAIN SECTIONS TOGETHER) */}
-      <div className="bg-white border-b-2 border-sky-200/80">
+      {/* ROW 1: ALL MAIN SECTION TABS — VERTICAL STACKED */}
+      <div className="bg-slate-50/90 border-b border-sky-200/80">
         <div
           role="tablist"
           aria-orientation="vertical"
@@ -193,29 +193,31 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
                 role="tab"
                 aria-selected={isCurr}
                 onClick={() => onSelectSection(m.id)}
-                className={`w-full min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-display font-black flex items-center justify-between gap-2.5 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                className={`w-full min-h-[44px] px-3.5 sm:px-5 py-2.5 text-xs sm:text-sm font-display font-black flex items-center justify-between gap-3 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
                   isCurr
-                    ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white shadow-inner'
-                    : 'bg-white hover:bg-sky-50/70 text-[#0f2952]'
+                    ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 border-l-amber-400 shadow-xs'
+                    : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span
-                    className={`w-7 h-7 rounded-lg ${mMeta.badgeBg} ${mMeta.iconColor} flex items-center justify-center shrink-0`}
+                    className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg ${mMeta.badgeBg} ${mMeta.iconColor} flex items-center justify-center shrink-0`}
                   >
-                    <MIcon className="w-3.5 h-3.5" />
+                    <MIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </span>
-                  <span className="uppercase tracking-wide truncate">
+                  <span className="truncate uppercase tracking-wide">
                     {m.label.replace('🎓 ', '')}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {isCurr && (
-                    <span className="text-[11px] font-bold text-amber-300">Selected</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[9px] uppercase tracking-wider hidden sm:inline-block">
+                      Selected
+                    </span>
                   )}
                   <ArrowRight
-                    className={`w-3.5 h-3.5 shrink-0 ${
-                      isCurr ? 'text-amber-300' : 'text-slate-400'
+                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform ${
+                      isCurr ? 'text-amber-300 translate-x-0.5' : 'text-slate-400'
                     }`}
                   />
                 </div>
@@ -225,28 +227,28 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
         </div>
       </div>
 
-      {/* SECOND ROW — SELECTED SECTION'S SUBSECTIONS (STRICTLY BELOW ENTIRE FIRST ROW) */}
-      <div className="px-3.5 sm:px-4 py-3 bg-gradient-to-r from-[#e0f2fe]/70 via-[#f0f9ff] to-[#fef9c3]/40 space-y-2">
+      {/* ROW 2: SELECTED SECTION'S SUBSECTIONS — HORIZONTAL ONE-LINE ICON NAVIGATION */}
+      <div className="px-3 sm:px-4 py-2.5 bg-gradient-to-r from-[#e0f2fe]/60 via-[#f0f9ff] to-[#fef9c3]/40 space-y-1.5">
         <div className="flex items-center justify-between gap-2 px-0.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span
-              className={`w-6 h-6 rounded-lg ${activeMeta.badgeBg} ${activeMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+              className={`w-5 h-5 rounded-md ${activeMeta.badgeBg} ${activeMeta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
             >
-              <ActiveIcon className="w-3.5 h-3.5" />
+              <ActiveIcon className="w-3 h-3" />
             </span>
-            <h2 className="text-xs sm:text-sm font-display font-black text-[#0f2952]">
-              {activeMenu.label.replace('🎓 ', '')} — Subsections ({activeMenu.items.length})
+            <h2 className="text-[11px] sm:text-xs font-display font-black uppercase tracking-wider text-[#0f2952]">
+              {activeMenu.label.replace('🎓 ', '')} Options ({activeMenu.items.length})
             </h2>
           </div>
-          <span className="text-[11px] font-bold text-slate-600 hidden sm:inline">
-            Selected content displays immediately below
+          <span className="text-[10px] sm:text-[11px] font-bold text-slate-600 hidden sm:inline">
+            Click any option to open directly
           </span>
         </div>
 
         <div
           role="tablist"
           aria-label={`${activeMenu.label.replace('🎓 ', '')} Subsections`}
-          className="flex items-stretch gap-2.5 overflow-x-auto pb-1.5 pt-0.5"
+          className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar"
         >
           {activeMenu.items.map((sub) => {
             const vis = getSubVisual(sub.id, activeMenu.id);
@@ -258,41 +260,40 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
                 role="tab"
                 aria-selected={isSubActive}
                 onClick={() => onTriggerSubAction(sub.id)}
-                className={`min-w-[175px] sm:min-w-[195px] shrink-0 rounded-2xl p-2.5 transition-all cursor-pointer flex items-center gap-2.5 text-left border-2 ${
+                className={`shrink-0 whitespace-nowrap min-h-[40px] px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-left border-2 ${
                   isSubActive
-                    ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fcd34d] border-[#0f2952] shadow-md ring-2 ring-[#0f2952]/20'
-                    : `bg-white hover:bg-sky-50/90 border-sky-200/90 hover:border-sky-300 shadow-2xs`
+                    ? 'bg-gradient-to-r from-[#fef3c7] via-[#fde68a] to-[#fcd34d] border-[#0f2952] shadow-xs ring-1 ring-[#0f2952]/20'
+                    : 'bg-white hover:bg-sky-50/90 border-sky-200/90 hover:border-sky-300 shadow-2xs'
                 }`}
               >
                 {vis.emoji ? (
-                  <span className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 text-base shadow-2xs">
+                  <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 text-xs shadow-2xs">
                     {vis.emoji}
                   </span>
                 ) : vis.board ? (
-                  <HeroBoardEmblemIcon board={vis.board} className="w-9 h-9 shrink-0" />
+                  <HeroBoardEmblemIcon board={vis.board} className="w-6 h-6 shrink-0" />
                 ) : (
-                  <span className="w-10 h-10 shrink-0 flex items-center justify-center">
+                  <span className="w-6 h-6 shrink-0 flex items-center justify-center">
                     <SpecialCardIllustration
                       type={vis.ill || 'courses'}
-                      className="w-full h-full drop-shadow-xs"
+                      className="w-full h-full drop-shadow-2xs"
                     />
                   </span>
                 )}
-                <div className="min-w-0 flex-1">
-                  <span className="block font-display font-black text-xs text-[#0f2952] leading-tight truncate">
-                    {sub.label}
-                  </span>
+                <span className="font-display font-black text-xs text-[#0f2952] leading-tight">
+                  {sub.label}
+                </span>
+                {sub.badgeText && (
                   <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-extrabold mt-1 px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
                       isSubActive
                         ? 'bg-[#0f2952] text-amber-300'
                         : 'bg-sky-100/90 text-[#0f2952]/80'
                     }`}
                   >
-                    <span>{isSubActive ? 'Selected' : sub.badgeText || 'Open'}</span>
-                    {!isSubActive && <ArrowRight className="w-2.5 h-2.5" />}
+                    {sub.badgeText}
                   </span>
-                </div>
+                )}
               </button>
             );
           })}
