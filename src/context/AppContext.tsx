@@ -16,6 +16,7 @@ import {
   ClassLevel, 
   SubjectName,
   EducationBoard,
+  BoardClassKey,
   QuestionType,
   QuizLevel,
   SubjectLevelProgress,
@@ -164,6 +165,7 @@ import {
   getActivatedBoardClassesList,
   getActivatedClassesList,
   getBoardDisplayName,
+  getBoardShortLabel,
   getClassSubscriptionInfo,
   getPremiumActivatedBannerMessage,
   getPrimaryBaseBoard,
@@ -327,6 +329,7 @@ interface AppContextType {
   adminPromoteOrCorrectClass: (studentId: string, newClass: ClassLevel, reason: string, adminName?: string) => { success: boolean; message: string };
   switchActiveClass: (targetClass: ClassLevel, targetBoard?: EducationBoard) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
   switchActiveBoardAndClass: (targetBoard: EducationBoard, targetClass: ClassLevel) => Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }>;
+  activateAdditionalBoardClass: (targetBoard: EducationBoard, targetClass: ClassLevel, switchAfterActivate?: boolean) => Promise<{ success: boolean; message: string }>;
   promoteOrUpdateStudentClass: (newClass: ClassLevel, reason?: string) => { success: boolean; message: string };
   updateStudentClass: (newClass: ClassLevel) => void;
   updateTeacherSelectedCategories: (categories: CategoryId[]) => Promise<void>;
@@ -739,6 +742,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sanitizeReferralCode(safeParsed.referralCode) ||
           generateUniqueStudentReferralCode(safeParsed.id, safeParsed.name);
         const resolvedBoard = normalizeBoardValue(safeParsed.board || 'Maharashtra');
+        let extraLocalActivatedKeys: BoardClassKey[] = [];
+        try {
+          const rawLocalKeys = localStorage.getItem(`msz_activated_board_classes_${safeParsed.id}`);
+          if (rawLocalKeys) {
+            const parsedLocalKeys = JSON.parse(rawLocalKeys);
+            if (Array.isArray(parsedLocalKeys)) {
+              extraLocalActivatedKeys = parsedLocalKeys;
+            }
+          }
+        } catch {}
+        const mergedInitialActivatedKeys = Array.from(
+          new Set<BoardClassKey>([
+            ...(Array.isArray(safeParsed.activatedClassKeys) ? safeParsed.activatedClassKeys : []),
+            ...extraLocalActivatedKeys,
+          ])
+        );
         return {
           ...safeParsed,
           accountRole: safeParsed.accountRole || 'student',
@@ -757,9 +776,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           activatedClasses: Array.isArray(safeParsed.activatedClasses)
             ? safeParsed.activatedClasses
             : undefined,
-          activatedClassKeys: Array.isArray(safeParsed.activatedClassKeys)
-            ? safeParsed.activatedClassKeys
-            : undefined,
+          activatedClassKeys:
+            mergedInitialActivatedKeys.length > 0 ? mergedInitialActivatedKeys : undefined,
           classSubscriptions: safeParsed.classSubscriptions || undefined,
           activatedCategoryKeys: Array.isArray(safeParsed.activatedCategoryKeys)
             ? safeParsed.activatedCategoryKeys
@@ -1698,14 +1716,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           fbSub.categorySubscriptions || profile.categorySubscriptions
             ? { ...(profile.categorySubscriptions || {}), ...(fbSub.categorySubscriptions || {}) }
             : undefined;
-        const mergedActivatedClasses =
-          fbSub.activatedClasses && fbSub.activatedClasses.length > 0
-            ? fbSub.activatedClasses
-            : profile.activatedClasses;
-        const mergedActivatedKeys =
-          fbSub.activatedClassKeys && fbSub.activatedClassKeys.length > 0
-            ? fbSub.activatedClassKeys
-            : profile.activatedClassKeys;
+        const mergedActivatedClasses = Array.from(
+          new Set([
+            ...(profile.activatedClasses || []),
+            ...(fbSub.activatedClasses || []),
+          ])
+        );
+        const mergedActivatedKeys = Array.from(
+          new Set([
+            ...(profile.activatedClassKeys || []),
+            ...(fbSub.activatedClassKeys || []),
+          ])
+        );
         const mergedActivatedCategoryKeys = Array.from(
           new Set([
             ...(profile.activatedCategoryKeys || []),
@@ -3045,6 +3067,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<{ success: boolean; message: string; needsPurchase?: boolean; needsRenewal?: boolean }> => {
     const resolvedBoard = normalizeBoardValue(targetBoard || currentStudent?.board || 'Maharashtra');
     return switchActiveBoardAndClass(resolvedBoard, targetClass);
+  };
+
+  // Activate an additional Board & Class for the signed-in student while keeping original registered board & class active
+  const activateAdditionalBoardClass = async (
+    targetBoard: EducationBoard,
+    targetClass: ClassLevel,
+    switchAfterActivate = true
+  ): Promise<{ success: boolean; message: string }> => {
+    if (!currentStudent) {
+      return { success: false, message: 'Please sign in first.' };
+    }
+    if (!verifyLocalDeviceBeforeProtectedAction()) {
+      return { success: false, message: SINGLE_DEVICE_BLOCK_MESSAGE };
+    }
+
+    const resolvedBoard = normalizeBoardValue(targetBoard || currentStudent.board || 'Maharashtra');
+    const normalizedTarget = normalizeClassLevelValue(targetClass) || currentStudent.classLevel;
+    const baseBoard = normalizeBoardValue(currentStudent.primaryBoard || currentStudent.board || 'Maharashtra');
+    const baseClass =
+      normalizeClassLevelValue(currentStudent.primaryClassLevel) ||
+      normalizeClassLevelValue(currentStudent.classLevel) ||
+      'Class 1';
+
+    const targetKey = buildBoardClassKey(resolvedBoard, normalizedTarget);
+    const baseKey = buildBoardClassKey(baseBoard, baseClass);
+
+    const existingKeys = Array.isArray(currentStudent.activatedClassKeys)
+      ? currentStudent.activatedClassKeys
+      : [];
+    const mergedKeys = Array.from(new Set<BoardClassKey>([...existingKeys, baseKey, targetKey]));
+
+    const existingClasses = Array.isArray(currentStudent.activatedClasses)
+      ? currentStudent.activatedClasses
+      : [];
+    const mergedClasses =
+      resolvedBoard === 'Maharashtra'
+        ? Array.from(new Set<ClassLevel>([...existingClasses, normalizedTarget]))
+        : existingClasses;
+
+    const updatedStudent: StudentProfile = {
+      ...currentStudent,
+      primaryBoard: baseBoard,
+      primaryClassLevel: baseClass,
+      board: switchAfterActivate ? resolvedBoard : normalizeBoardValue(currentStudent.board || baseBoard),
+      classLevel: switchAfterActivate ? normalizedTarget : currentStudent.classLevel,
+      activatedClassKeys: mergedKeys,
+      activatedClasses: mergedClasses.length > 0 ? mergedClasses : currentStudent.activatedClasses,
+      lastActiveDate: new Date().toISOString(),
+    };
+
+    setCurrentStudent(updatedStudent);
+    setStudentsList((prev) => prev.map((s) => (s.id === updatedStudent.id ? updatedStudent : s)));
+    if (switchAfterActivate) {
+      setCurrentUser((prev) =>
+        prev ? { ...prev, board: resolvedBoard, classLevel: normalizedTarget } : prev
+      );
+    }
+
+    try {
+      const storageKey = `msz_activated_board_classes_${updatedStudent.id}`;
+      localStorage.setItem(storageKey, JSON.stringify(mergedKeys));
+    } catch {}
+
+    addNotification(
+      `Activated ${getBoardShortLabel(resolvedBoard)} • ${normalizedTarget} ✅`,
+      `${getBoardDisplayName(resolvedBoard)} • Standard ${formatStandardOrdinal(normalizedTarget)} (${normalizedTarget}) is now active alongside your registered ${getBoardShortLabel(baseBoard)} • ${baseClass}.`,
+      'achievement'
+    );
+
+    return {
+      success: true,
+      message: `${getBoardDisplayName(resolvedBoard)} • ${normalizedTarget} activated successfully.`,
+    };
   };
 
   // Synchronous wrapper for class switching: unlocks ONLY if already purchased/active or base Free class
@@ -4677,6 +4772,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adminPromoteOrCorrectClass,
       switchActiveClass,
       switchActiveBoardAndClass,
+      activateAdditionalBoardClass,
       promoteOrUpdateStudentClass,
       updateStudentClass,
       submitWorksheetAttempt,

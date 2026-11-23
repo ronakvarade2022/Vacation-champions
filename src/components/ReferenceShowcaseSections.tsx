@@ -87,6 +87,8 @@ interface ReferenceShowcaseSectionsProps {
   activeMainSection?: MainMenuId;
   onSelectMainSection?: (sectionId: MainMenuId) => void;
   activeSubActionId?: NavSubActionId;
+  activatedBoards?: EducationBoard[];
+  getActivatedClassesForBoard?: (board: EducationBoard) => ClassLevel[];
 }
 
 export const MAIN_SECTION_ICONS: Record<
@@ -217,6 +219,8 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   activeMainSection,
   onSelectMainSection,
   activeSubActionId,
+  activatedBoards,
+  getActivatedClassesForBoard,
 }) => {
   const [expandedSectionId, setExpandedSectionId] = useState<MainMenuId>(
     activeMainSection || 'special-learning'
@@ -229,6 +233,15 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     const group =
       MAIN_NAV_MENUS.find((m) => m.id === sectionId) ||
       MAIN_NAV_MENUS.find((m) => m.id === 'special-learning')!;
+    if (sectionId === 'courses' && isAuthenticated && activatedBoards && activatedBoards.length > 0) {
+      return group.items.filter((sub) => {
+        if (sub.id === 'course-maharashtra') return activatedBoards.includes('Maharashtra');
+        if (sub.id === 'course-cbse') return activatedBoards.includes('CBSE');
+        if (sub.id === 'course-icse') return activatedBoards.includes('ICSE');
+        if (sub.id === 'course-all') return activatedBoards.length > 1;
+        return true;
+      });
+    }
     if (sectionId === 'performance') {
       return [
         ...group.items,
@@ -1324,52 +1337,62 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                     ========================================================= */}
                 {expandedSectionId === 'courses' && (
                   <div className="space-y-4">
-                    {/* Class-Wise Horizontal Selector (Updates subjects in place without forced redirect) */}
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                        <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
-                          Select Class ({getBoardShortLabel(coursesEffectiveBoard)} — Classes 1 to 10)
-                        </span>
-                        <span className="text-[11px] font-bold text-sky-700">
-                          Active Class: {selectedClass}
-                        </span>
-                      </div>
-                      <div className="flex items-stretch gap-2 overflow-x-auto pb-1.5">
-                        {ALL_10_CLASSES.map((cls) => {
-                          const clsMeta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
-                          const isCurrentClass = selectedClass === cls;
-                          return (
-                            <button
-                              key={cls}
-                              type="button"
-                              onClick={() => {
-                                if (onSelectClass) onSelectClass(cls);
-                              }}
-                              className={`min-w-[104px] shrink-0 px-3 py-2 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                                isCurrentClass
-                                  ? 'bg-gradient-to-r from-[#0f2952] to-[#1d4ed8] text-white border-amber-400 shadow-sm'
-                                  : 'bg-sky-50/80 hover:bg-amber-50 text-[#0f2952] border-sky-200 hover:border-amber-300'
-                              }`}
-                            >
-                              <div>
-                                <span className="block font-display font-black text-xs leading-tight">
-                                  {cls}
-                                </span>
-                                <span
-                                  className={`block text-[10px] font-bold mt-0.5 ${
-                                    isCurrentClass ? 'text-amber-300' : 'text-slate-500'
+                    {/* Class-Wise Horizontal Selector (Shows only activated classes for signed-in student, or Classes 1–10 for public visitors) */}
+                    {(() => {
+                      const visibleCourseClasses =
+                        isAuthenticated && getActivatedClassesForBoard
+                          ? getActivatedClassesForBoard(coursesEffectiveBoard)
+                          : ALL_10_CLASSES;
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                            <span className="text-[11px] font-display font-black uppercase tracking-wider text-[#0f2952]">
+                              {isAuthenticated && getActivatedClassesForBoard
+                                ? `Your Active Class${visibleCourseClasses.length > 1 ? 'es' : ''} (${getBoardShortLabel(coursesEffectiveBoard)})`
+                                : `Select Class (${getBoardShortLabel(coursesEffectiveBoard)} — Classes 1 to 10)`}
+                            </span>
+                            <span className="text-[11px] font-bold text-sky-700">
+                              Active Class: {selectedClass}
+                            </span>
+                          </div>
+                          <div className="flex items-stretch gap-2 overflow-x-auto pb-1.5">
+                            {visibleCourseClasses.map((cls) => {
+                              const clsMeta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
+                              const isCurrentClass = selectedClass === cls;
+                              return (
+                                <button
+                                  key={cls}
+                                  type="button"
+                                  onClick={() => {
+                                    if (onSelectClass) onSelectClass(cls);
+                                  }}
+                                  className={`min-w-[104px] shrink-0 px-3 py-2 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                    isCurrentClass
+                                      ? 'bg-gradient-to-r from-[#0f2952] to-[#1d4ed8] text-white border-amber-400 shadow-sm'
+                                      : 'bg-sky-50/80 hover:bg-amber-50 text-[#0f2952] border-sky-200 hover:border-amber-300'
                                   }`}
                                 >
-                                  {coursesEffectiveBoard === 'Maharashtra'
-                                    ? clsMeta?.marathiLabel
-                                    : clsMeta?.shortLabel}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                                  <div>
+                                    <span className="block font-display font-black text-xs leading-tight">
+                                      {cls}
+                                    </span>
+                                    <span
+                                      className={`block text-[10px] font-bold mt-0.5 ${
+                                        isCurrentClass ? 'text-amber-300' : 'text-slate-500'
+                                      }`}
+                                    >
+                                      {coursesEffectiveBoard === 'Maharashtra'
+                                        ? clsMeta?.marathiLabel
+                                        : clsMeta?.shortLabel}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Subject Cards for Selected Board & Class */}
                     <div className="space-y-2">

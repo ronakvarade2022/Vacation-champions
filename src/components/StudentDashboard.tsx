@@ -23,6 +23,10 @@ import {
   getActivatedBoardClassesList,
   getBoardShortLabel,
   getCategorySubscriptionInfo,
+  getPrimaryBaseBoard,
+  getPrimaryBaseClass,
+  getStudentActivatedBoards,
+  getStudentActivatedClassesForBoard,
   getStudentPlanInfo,
   getVisibleExamCategoriesForStudent,
   hasCategoryAccess,
@@ -74,15 +78,21 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     allAttempts,
     getSubjectLevelProgress,
     switchActiveBoardAndClass,
+    activateAdditionalBoardClass,
     updateTeacherSelectedCategories,
   } = useApp();
   const [selectedCurriculumBoard, setSelectedCurriculumBoard] = useState<EducationBoard>(activeBoard);
+  const [showAddBoardClassSelector, setShowAddBoardClassSelector] = useState(false);
 
   useEffect(() => {
     setSelectedCurriculumBoard(activeBoard);
   }, [activeBoard]);
 
   if (!currentStudent) return null;
+
+  const activatedBoardsForStudent = getStudentActivatedBoards(currentStudent);
+  const registeredBaseBoard = getPrimaryBaseBoard(currentStudent);
+  const registeredBaseClass = getPrimaryBaseClass(currentStudent);
 
   const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel, activeBoard);
   const historicalSummary = inspectHistoricalStudentProgress(currentStudent);
@@ -169,6 +179,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         isAuthenticated={true}
         currentRole={currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'}
         currentUserName={currentStudent.name}
+        activatedBoards={activatedBoardsForStudent}
+        getActivatedClassesForBoard={(b) => getStudentActivatedClassesForBoard(currentStudent, b)}
         progressMetrics={{
           isLoggedIn: true,
           studentName: currentStudent.name,
@@ -284,133 +296,197 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
         </div>
 
-        {/* Switch Board & Class (1 to 10) */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
-              <GraduationCap className="w-4 h-4 text-indigo-600" />
-              <span>Switch Your Active Board &amp; Class Workspace:</span>
-            </span>
-            <span className="text-slate-500 font-medium hidden sm:inline">
-              Click any unlocked class to switch immediately
-            </span>
-          </div>
+        {/* Switch Board & Class (Shows only registered & activated boards/classes by default; allows expanding to activate additional board/class) */}
+        {(() => {
+          const visibleBoardMetaList = showAddBoardClassSelector
+            ? BOARD_META_LIST
+            : BOARD_META_LIST.filter((bm) => activatedBoardsForStudent.includes(bm.id));
+          const activeClassesForSelectedBoard = getStudentActivatedClassesForBoard(
+            currentStudent,
+            selectedCurriculumBoard
+          );
+          const visibleClassesList = showAddBoardClassSelector
+            ? ALL_10_CLASSES
+            : activeClassesForSelectedBoard;
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {BOARD_META_LIST.map((bm) => {
-              const isTabBoard = selectedCurriculumBoard === bm.id;
-              const paidCountOnBoard = ALL_10_CLASSES.filter(
-                (c) => getBoardClassSubscriptionInfo(currentStudent, bm.id, c).isPaidActive
-              ).length;
-              return (
+          return (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-indigo-600" />
+                  <span>
+                    {showAddBoardClassSelector
+                      ? 'Activate or Switch Any Board & Class (Maharashtra · CBSE · ICSE):'
+                      : `Your Active Board & Class Workspace (Registered: ${getBoardShortLabel(registeredBaseBoard)} · ${registeredBaseClass}):`}
+                  </span>
+                </span>
                 <button
-                  key={bm.id}
                   type="button"
-                  onClick={() => setSelectedCurriculumBoard(bm.id)}
-                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                    isTabBoard
-                      ? `bg-gradient-to-r ${bm.gradient} text-white border-transparent shadow-sm`
-                      : 'bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-800'
-                  }`}
+                  data-testid="dashboard-toggle-activate-board-class-btn"
+                  onClick={() => setShowAddBoardClassSelector((prev) => !prev)}
+                  className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-black text-[11px] cursor-pointer transition-colors"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xl shrink-0">{bm.icon}</span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-black truncate">{bm.shortLabel}</div>
-                      <div
-                        className={`text-[10px] font-bold truncate ${
-                          isTabBoard ? 'text-white/85' : 'text-slate-500'
-                        }`}
-                      >
-                        {bm.badgeText}
-                      </div>
-                    </div>
-                  </div>
-                  {paidCountOnBoard > 0 && (
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                        isTabBoard ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+                  {showAddBoardClassSelector
+                    ? 'Hide Inactive Boards & Classes'
+                    : '+ Activate Another Board or Class'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {visibleBoardMetaList.map((bm) => {
+                  const isTabBoard = selectedCurriculumBoard === bm.id;
+                  const activeCountOnBoard = getStudentActivatedClassesForBoard(
+                    currentStudent,
+                    bm.id
+                  ).length;
+                  const paidCountOnBoard = ALL_10_CLASSES.filter(
+                    (c) => getBoardClassSubscriptionInfo(currentStudent, bm.id, c).isPaidActive
+                  ).length;
+                  const isBoardActivated = activatedBoardsForStudent.includes(bm.id);
+                  return (
+                    <button
+                      key={bm.id}
+                      type="button"
+                      data-testid={`dashboard-board-card-${bm.id}`}
+                      onClick={() => {
+                        setSelectedCurriculumBoard(bm.id);
+                        const classesOnBoard = getStudentActivatedClassesForBoard(
+                          currentStudent,
+                          bm.id
+                        );
+                        if (!showAddBoardClassSelector && classesOnBoard.length > 0) {
+                          const targetCls = classesOnBoard.includes(currentStudent.classLevel)
+                            ? currentStudent.classLevel
+                            : classesOnBoard[0];
+                          void switchActiveBoardAndClass(bm.id, targetCls);
+                        }
+                      }}
+                      className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        isTabBoard
+                          ? `bg-gradient-to-r ${bm.gradient} text-white border-transparent shadow-sm`
+                          : 'bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-800'
                       }`}
                     >
-                      {paidCountOnBoard} Paid
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xl shrink-0">{bm.icon}</span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-black truncate">{bm.shortLabel}</div>
+                          <div
+                            className={`text-[10px] font-bold truncate ${
+                              isTabBoard ? 'text-white/85' : 'text-slate-500'
+                            }`}
+                          >
+                            {bm.id === registeredBaseBoard
+                              ? `Registered (${registeredBaseClass})`
+                              : isBoardActivated
+                                ? `${activeCountOnBoard} Active Class${activeCountOnBoard === 1 ? '' : 'es'}`
+                                : bm.badgeText}
+                          </div>
+                        </div>
+                      </div>
+                      {paidCountOnBoard > 0 ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                            isTabBoard ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {paidCountOnBoard} Paid
+                        </span>
+                      ) : isBoardActivated ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                            isTabBoard ? 'bg-white/25 text-white' : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
+                          Active
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
-            {ALL_10_CLASSES.map((cls) => {
-              const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
-              const isSelected =
-                activeBoard === selectedCurriculumBoard && currentStudent.classLevel === cls;
-              const cInfo = getBoardClassSubscriptionInfo(
-                currentStudent,
-                selectedCurriculumBoard,
-                cls
-              );
+              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+                {visibleClassesList.map((cls) => {
+                  const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
+                  const isSelected =
+                    activeBoard === selectedCurriculumBoard && currentStudent.classLevel === cls;
+                  const cInfo = getBoardClassSubscriptionInfo(
+                    currentStudent,
+                    selectedCurriculumBoard,
+                    cls
+                  );
+                  const isOriginalRegistered =
+                    selectedCurriculumBoard === registeredBaseBoard && cls === registeredBaseClass;
 
-              let cardStyle =
-                'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200 hover:border-amber-300 cursor-pointer';
-              if (isSelected) {
-                cardStyle =
-                  'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md cursor-default';
-              } else if (cInfo.isPaidActive) {
-                cardStyle =
-                  'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-400 cursor-pointer';
-              } else if (cInfo.isFreeBase) {
-                cardStyle =
-                  'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-300 cursor-pointer';
-              }
+                  let cardStyle =
+                    'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200 hover:border-amber-300 cursor-pointer';
+                  if (isSelected) {
+                    cardStyle =
+                      'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md cursor-default';
+                  } else if (cInfo.isPaidActive) {
+                    cardStyle =
+                      'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-400 cursor-pointer';
+                  } else if (cInfo.isAccessible) {
+                    cardStyle =
+                      'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-300 cursor-pointer';
+                  }
 
-              return (
-                <button
-                  key={`${selectedCurriculumBoard}_${cls}`}
-                  type="button"
-                  onClick={() => {
-                    if (cInfo.isAccessible) {
-                      if (!isSelected) {
-                        void switchActiveBoardAndClass(selectedCurriculumBoard, cls);
-                      }
-                    } else {
-                      onOpenMembership('premium', cls, selectedCurriculumBoard, 'BOARD_CLASS');
-                    }
-                  }}
-                  className={`p-2.5 rounded-2xl border text-center transition-all relative ${cardStyle}`}
-                >
-                  {isSelected ? (
-                    <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black uppercase">
-                      Active
-                    </span>
-                  ) : cInfo.isPaidActive ? (
-                    <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase">
-                      Paid
-                    </span>
-                  ) : cInfo.isFreeBase ? (
-                    <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[9px] font-black uppercase">
-                      Free
-                    </span>
-                  ) : (
-                    <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold uppercase flex items-center gap-0.5">
-                      <Lock className="w-2.5 h-2.5" /> ₹99
-                    </span>
-                  )}
-                  <div className="text-xs font-black">{cls}</div>
-                  <div
-                    className={`text-[10px] font-bold mt-0.5 ${
-                      isSelected ? 'text-indigo-100' : 'text-slate-500'
-                    }`}
-                  >
-                    {selectedCurriculumBoard === 'Maharashtra'
-                      ? meta?.marathiLabel
-                      : getBoardShortLabel(selectedCurriculumBoard)}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+                  return (
+                    <button
+                      key={`${selectedCurriculumBoard}_${cls}`}
+                      type="button"
+                      data-testid={`dashboard-class-card-${selectedCurriculumBoard}-${cls.replace(/\s+/g, '')}`}
+                      onClick={() => {
+                        if (cInfo.isAccessible) {
+                          if (!isSelected) {
+                            void switchActiveBoardAndClass(selectedCurriculumBoard, cls);
+                          }
+                        } else {
+                          void activateAdditionalBoardClass(selectedCurriculumBoard, cls, true);
+                          setShowAddBoardClassSelector(false);
+                        }
+                      }}
+                      className={`p-2.5 rounded-2xl border text-center transition-all relative ${cardStyle}`}
+                    >
+                      {isSelected ? (
+                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black uppercase">
+                          Active
+                        </span>
+                      ) : cInfo.isPaidActive ? (
+                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase">
+                          Paid
+                        </span>
+                      ) : isOriginalRegistered ? (
+                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+                          Registered
+                        </span>
+                      ) : cInfo.isAccessible ? (
+                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[9px] font-black uppercase">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold uppercase flex items-center gap-0.5">
+                          + Activate
+                        </span>
+                      )}
+                      <div className="text-xs font-black">{cls}</div>
+                      <div
+                        className={`text-[10px] font-bold mt-0.5 ${
+                          isSelected ? 'text-indigo-100' : 'text-slate-500'
+                        }`}
+                      >
+                        {selectedCurriculumBoard === 'Maharashtra'
+                          ? meta?.marathiLabel
+                          : getBoardShortLabel(selectedCurriculumBoard)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* MY STUDYZONE ADDITIONAL CURRICULUM — Strictly Separate Enrichment Track */}
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">

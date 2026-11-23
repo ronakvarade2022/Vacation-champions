@@ -40,6 +40,10 @@ import {
   getAccessibleBoardClassesList,
   getBoardShortLabel,
   getClassSubscriptionInfo,
+  getPrimaryBaseBoard,
+  getPrimaryBaseClass,
+  getStudentActivatedBoards,
+  getStudentActivatedClassesForBoard,
   getStudentPlanInfo,
 } from '../utils/subscriptionAccess';
 import { BrandBookCapLogo } from './DashboardIllustrations';
@@ -78,6 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
     switchRole,
     currentStudent,
     switchActiveClass,
+    activateAdditionalBoardClass,
     notifications,
     markNotificationAsRead,
     isSectionVisible,
@@ -89,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showClassSwitcher, setShowClassSwitcher] = useState(false);
-  const [switcherBoard, setSwitcherBoard] = useState<EducationBoard>(activeBoard);
+  const [switcherBoard, setSwitcherBoard] = useState<EducationBoard | null>(activeBoard);
   const [mobileSelectedMenuId, setMobileSelectedMenuId] = useState<MainMenuId>(
     activeMenuId || 'special-learning'
   );
@@ -280,27 +285,31 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions Area (Always keeps Login/Logout button visible in mobile & desktop preview frames) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Signed-in Active Board & Class Switcher Pill (Visible on Tablet & Desktop) */}
+          {/* Signed-in Active Board & Class Switcher Pill (Visible on Mobile, Tablet & Desktop) */}
           {isLearningRole &&
             currentStudent &&
             (() => {
               const accessiblePairs = getAccessibleBoardClassesList(currentStudent);
+              const activatedBoards = getStudentActivatedBoards(currentStudent);
+              const registeredBaseBoard = getPrimaryBaseBoard(currentStudent);
+              const registeredBaseClass = getPrimaryBaseClass(currentStudent);
               return (
-                <div className="relative hidden sm:block">
+                <div className="relative">
                   <button
                     type="button"
+                    data-testid="header-board-class-switcher-btn"
                     onClick={() => {
                       setShowClassSwitcher(!showClassSwitcher);
                       setShowNotifications(false);
                       setShowProfileDropdown(false);
                     }}
                     className="flex items-center gap-1 sm:gap-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 sm:px-2.5 py-1.5 rounded-xl cursor-pointer transition-colors"
-                    title={`Active Class: ${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel} (${accessiblePairs.length} unlocked)`}
+                    title={`Active Class: ${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel} (${accessiblePairs.length} active)`}
                   >
                     <GraduationCap className="w-3.5 h-3.5 text-amber-800 shrink-0" />
                     <span className="text-[10px] sm:text-xs font-extrabold text-amber-950 whitespace-nowrap">
                       <span className="hidden sm:inline">Active Class: {getBoardShortLabel(activeBoard)} · </span>
-                      <span className="sm:hidden">Active: </span>
+                      <span className="sm:hidden">{getBoardShortLabel(activeBoard)} · </span>
                       {currentStudent.classLevel}
                     </span>
                     <ChevronDown className="w-3 h-3 text-amber-800 shrink-0" />
@@ -312,14 +321,14 @@ export const Header: React.FC<HeaderProps> = ({
                         className="fixed inset-0 z-40"
                         onClick={() => setShowClassSwitcher(false)}
                       />
-                      <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-sm sm:w-80 mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-16 sm:top-auto sm:mt-2 max-w-sm sm:w-88 mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
                         <div className="bg-amber-50 px-3.5 py-2.5 border-b border-amber-200 flex items-center justify-between">
                           <div>
                             <p className="text-xs font-black text-amber-950">
-                              Board &amp; Class Switcher (1st–10th)
+                              Board &amp; Class Switcher (Maharashtra · CBSE · ICSE)
                             </p>
                             <p className="text-[10px] text-slate-600 font-medium">
-                              Switch unlocked board/class or activate ₹99/yr
+                              Registered: {getBoardShortLabel(registeredBaseBoard)} · {registeredBaseClass} (Always Active)
                             </p>
                           </div>
                           <button
@@ -331,82 +340,184 @@ export const Header: React.FC<HeaderProps> = ({
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-1 p-2 bg-slate-50 border-b border-slate-100">
-                          {ALL_BOARDS.map((b) => {
-                            const isSel = switcherBoard === b;
-                            return (
-                              <button
-                                key={b}
-                                type="button"
-                                onClick={() => setSwitcherBoard(b)}
-                                className={`py-1.5 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                                  isSel
-                                    ? 'bg-slate-900 text-white shadow-xs'
-                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-amber-50'
-                                }`}
-                              >
-                                {getBoardShortLabel(b)}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div className="p-2.5 grid grid-cols-2 gap-1.5 max-h-72 overflow-y-auto">
-                          {ALL_CLASS_LEVELS.map((cls) => {
-                            const cInfo = getClassSubscriptionInfo(
-                              currentStudent,
-                              cls,
-                              undefined,
-                              switcherBoard
-                            );
-                            const isCurrent =
-                              currentStudent.classLevel === cls && activeBoard === switcherBoard;
-                            return (
-                              <button
-                                key={cls}
-                                type="button"
-                                onClick={async () => {
-                                  setShowClassSwitcher(false);
-                                  if (cInfo.isAccessible) {
-                                    await switchActiveClass(cls, switcherBoard);
-                                  } else {
-                                    onOpenMembership(cls, switcherBoard);
-                                  }
-                                }}
-                                className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                                  isCurrent
-                                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
-                                    : cInfo.isPaidActive
-                                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-300'
-                                      : cInfo.isFreeBase
-                                        ? 'bg-white hover:bg-indigo-50 text-slate-800 border-indigo-300'
-                                        : cInfo.isExpired
-                                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-300'
-                                          : 'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-black">{cls}</span>
-                                  {!cInfo.isAccessible && (
-                                    <Lock className="w-3 h-3 text-amber-600" />
-                                  )}
-                                </div>
-                                <span
-                                  className={`text-[9px] font-bold block truncate ${
-                                    isCurrent ? 'text-indigo-100' : 'text-slate-500'
+                        {/* Quick Switch Section: Student's Activated Boards & Classes */}
+                        <div className="px-3 py-2 bg-indigo-50/60 border-b border-indigo-100 space-y-1.5">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-indigo-950">
+                            Your Activated Boards &amp; Classes ({accessiblePairs.length})
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {accessiblePairs.map((pair) => {
+                              const isCurrentActive =
+                                pair.board === activeBoard &&
+                                pair.classLevel === currentStudent.classLevel;
+                              const isOriginalRegistered =
+                                pair.board === registeredBaseBoard &&
+                                pair.classLevel === registeredBaseClass;
+                              return (
+                                <button
+                                  key={pair.boardClassKey}
+                                  type="button"
+                                  data-testid={`header-active-pair-${pair.board}-${pair.classLevel.replace(/\s+/g, '')}`}
+                                  onClick={async () => {
+                                    setShowClassSwitcher(false);
+                                    await switchActiveClass(pair.classLevel, pair.board);
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all cursor-pointer flex items-center gap-1 ${
+                                    isCurrentActive
+                                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                                      : 'bg-white hover:bg-indigo-50 text-slate-800 border-indigo-200'
                                   }`}
                                 >
-                                  {isCurrent
-                                    ? 'Active Now'
-                                    : cInfo.isPaidActive
-                                      ? `${cInfo.daysRemaining}d left`
-                                      : cInfo.isFreeBase
-                                        ? 'Free Base'
-                                        : cInfo.isExpired
-                                          ? 'Expired • Renew'
-                                          : 'Unlock ₹99'}
-                                </span>
-                              </button>
+                                  <span>
+                                    {getBoardShortLabel(pair.board)} · {pair.classLevel}
+                                  </span>
+                                  {isOriginalRegistered && (
+                                    <span
+                                      className={`px-1 py-0.2 rounded text-[8px] font-extrabold ${
+                                        isCurrentActive
+                                          ? 'bg-amber-400 text-slate-950'
+                                          : 'bg-amber-100 text-amber-900'
+                                      }`}
+                                    >
+                                      Registered
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* All 3 Boards Accordion: Inactive boards hidden/collapsed by default, expandable to view Classes 1–10 */}
+                        <div className="p-2.5 space-y-2 max-h-80 overflow-y-auto">
+                          {ALL_BOARDS.map((b) => {
+                            const isExpanded = switcherBoard === b;
+                            const isBoardActivated = activatedBoards.includes(b);
+                            const activatedClassesForB = getStudentActivatedClassesForBoard(
+                              currentStudent,
+                              b
+                            );
+                            return (
+                              <div
+                                key={b}
+                                className={`rounded-xl border transition-all overflow-hidden ${
+                                  isExpanded
+                                    ? 'border-slate-300 bg-white shadow-2xs'
+                                    : 'border-slate-200 bg-slate-50/80'
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  data-testid={`header-board-accordion-${b}`}
+                                  onClick={() => setSwitcherBoard(isExpanded ? null : b)}
+                                  className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left cursor-pointer hover:bg-amber-50/60 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-xs font-black text-slate-900">
+                                      {getBoardShortLabel(b)} Board
+                                    </span>
+                                    {b === registeredBaseBoard && (
+                                      <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black">
+                                        Registered
+                                      </span>
+                                    )}
+                                    {isBoardActivated ? (
+                                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[9px] font-black">
+                                        Active ({activatedClassesForB.length})
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold">
+                                        Collapsed
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span className="text-[10px] font-bold text-slate-500">
+                                      {isExpanded ? 'Hide Classes' : 'Expand Classes'}
+                                    </span>
+                                    <ChevronDown
+                                      className={`w-3.5 h-3.5 text-slate-600 transition-transform ${
+                                        isExpanded ? 'rotate-180' : ''
+                                      }`}
+                                    />
+                                  </div>
+                                </button>
+
+                                {isExpanded && (
+                                  <div className="p-2 border-t border-slate-100 bg-white grid grid-cols-2 gap-1.5">
+                                    {ALL_CLASS_LEVELS.map((cls) => {
+                                      const cInfo = getClassSubscriptionInfo(
+                                        currentStudent,
+                                        cls,
+                                        undefined,
+                                        b
+                                      );
+                                      const isCurrent =
+                                        currentStudent.classLevel === cls && activeBoard === b;
+                                      const isOriginalReg =
+                                        b === registeredBaseBoard && cls === registeredBaseClass;
+                                      return (
+                                        <button
+                                          key={cls}
+                                          type="button"
+                                          data-testid={`header-class-btn-${b}-${cls.replace(/\s+/g, '')}`}
+                                          onClick={async () => {
+                                            setShowClassSwitcher(false);
+                                            if (cInfo.isAccessible) {
+                                              await switchActiveClass(cls, b);
+                                            } else {
+                                              await activateAdditionalBoardClass(b, cls, true);
+                                            }
+                                          }}
+                                          className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                                            isCurrent
+                                              ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                                              : cInfo.isPaidActive
+                                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-300'
+                                                : cInfo.isAccessible
+                                                  ? 'bg-indigo-50/70 hover:bg-indigo-100 text-slate-900 border-indigo-300'
+                                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200'
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-black">{cls}</span>
+                                            {cInfo.isAccessible ? (
+                                              <span
+                                                className={`text-[8px] font-black px-1.5 py-0.2 rounded-full ${
+                                                  isCurrent
+                                                    ? 'bg-amber-400 text-slate-950'
+                                                    : 'bg-emerald-600 text-white'
+                                                }`}
+                                              >
+                                                {isCurrent ? 'Viewing' : 'Active'}
+                                              </span>
+                                            ) : (
+                                              <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                                + Activate
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span
+                                            className={`text-[9px] font-bold block truncate mt-0.5 ${
+                                              isCurrent ? 'text-indigo-100' : 'text-slate-500'
+                                            }`}
+                                          >
+                                            {isCurrent
+                                              ? 'Current Workspace'
+                                              : isOriginalReg
+                                                ? 'Registered Class (Switch)'
+                                                : cInfo.isPaidActive
+                                                  ? `Premium (${cInfo.daysRemaining}d left)`
+                                                  : cInfo.isAccessible
+                                                    ? 'Activated · Click to Switch'
+                                                    : 'Click to Activate Class'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
@@ -416,11 +527,14 @@ export const Header: React.FC<HeaderProps> = ({
                             type="button"
                             onClick={() => {
                               setShowClassSwitcher(false);
-                              onOpenMembership(currentStudent.classLevel, switcherBoard);
+                              onOpenMembership(
+                                currentStudent.classLevel,
+                                switcherBoard || activeBoard
+                              );
                             }}
                             className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer shadow-xs"
                           >
-                            + Activate / Renew Board &amp; Class (₹99)
+                            + Upgrade Full Premium Plan (₹99 / 365 Days)
                           </button>
                         </div>
                       </div>

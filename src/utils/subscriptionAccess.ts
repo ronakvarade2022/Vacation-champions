@@ -762,6 +762,35 @@ export function getBoardClassSubscriptionInfo(
     };
   }
 
+  // Student-activated additional board & class workspace (via activatedClassKeys or classSubscriptions)
+  const isStudentWorkspaceActivated =
+    (Array.isArray(student.activatedClassKeys) && student.activatedClassKeys.includes(boardClassKey)) ||
+    (b === 'Maharashtra' &&
+      Array.isArray(student.activatedClasses) &&
+      student.activatedClasses.includes(normalizedTarget)) ||
+    Boolean(record && record.status === 'ACTIVE');
+
+  if (isStudentWorkspaceActivated) {
+    return {
+      board: b,
+      boardClassKey,
+      classLevel: normalizedTarget,
+      status: 'ACTIVE_FREE',
+      isPaidActive: false,
+      isFreeBase: true,
+      isExpired: false,
+      isLocked: false,
+      isAccessible: true,
+      isExpiringToday: false,
+      purchasedDateIso: student.registeredAt ? formatDateIstDisplay(student.registeredAt) : null,
+      purchasedDisplay: 'Activated Workspace',
+      expiryDateIso: null,
+      expiryDisplay: 'Active on Account',
+      daysRemaining: null,
+      daysRemainingDisplay: 'Active Workspace',
+    };
+  }
+
   return {
     board: b,
     boardClassKey,
@@ -838,6 +867,59 @@ export function getAccessibleBoardClassesList(
     }
   }
   return items;
+}
+
+/**
+ * Returns only the boards that are currently activated for the student
+ * (always includes the student's original registered board, current active board,
+ * and any additional board where the student has activated at least one class).
+ */
+export function getStudentActivatedBoards(
+  student: StudentProfile | null | undefined,
+  referenceNow?: Date | string | number
+): EducationBoard[] {
+  if (!student) return ['Maharashtra'];
+  const baseBoard = getPrimaryBaseBoard(student);
+  const currentBoard = normalizeBoardValue(student.board || baseBoard);
+  const accessible = getAccessibleBoardClassesList(student, referenceNow);
+  const boardSet = new Set<EducationBoard>([baseBoard, currentBoard]);
+  for (const item of accessible) {
+    boardSet.add(item.board);
+  }
+  return ALL_BOARDS.filter((b) => boardSet.has(b));
+}
+
+/**
+ * Returns only the classes that are currently activated for the student under a given board
+ * (includes the original registered class on the registered board, the current active class
+ * on the active board, and any additional activated classes on that board).
+ */
+export function getStudentActivatedClassesForBoard(
+  student: StudentProfile | null | undefined,
+  board: EducationBoard,
+  referenceNow?: Date | string | number
+): ClassLevel[] {
+  if (!student) return ['Class 1'];
+  const targetBoard = normalizeBoardValue(board);
+  const baseBoard = getPrimaryBaseBoard(student);
+  const baseClass = getPrimaryBaseClass(student);
+  const currentBoard = normalizeBoardValue(student.board || baseBoard);
+  const currentClass = normalizeClassLevelValue(student.classLevel) || baseClass;
+
+  const classSet = new Set<ClassLevel>();
+  if (targetBoard === baseBoard) {
+    classSet.add(baseClass);
+  }
+  if (targetBoard === currentBoard) {
+    classSet.add(currentClass);
+  }
+  for (const cls of ALL_CLASS_LEVELS) {
+    const info = getBoardClassSubscriptionInfo(student, targetBoard, cls, referenceNow);
+    if (info.isAccessible) {
+      classSet.add(cls);
+    }
+  }
+  return ALL_CLASS_LEVELS.filter((cls) => classSet.has(cls));
 }
 
 export function getActivatedClassesList(
