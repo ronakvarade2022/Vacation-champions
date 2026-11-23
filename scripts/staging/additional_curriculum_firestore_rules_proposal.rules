@@ -1,0 +1,97 @@
+// ============================================================================
+// STAGING PROPOSAL ONLY — DO NOT AUTO-DEPLOY WITHOUT EXPLICIT USER APPROVAL
+// Additive Firestore Security Rules for MY STUDYZONE ADDITIONAL CURRICULUM
+//
+// Zero changes to existing production collections (students, attempts,
+// transactions, lesson_plans_state, school_calendars, platform_config, etc.).
+// Append these blocks inside `match /databases/{database}/documents { ... }`
+// and inside `match /students/{studentId} { ... }` after Admin review.
+// ============================================================================
+
+// --- 1. Inside `match /students/{studentId}` (Strict Owner Isolation) ---
+// Subcollection: /students/{studentId}/additional_progress/{chapterId}
+match /additional_progress/{chapterId} {
+  allow get: if isValidId(studentId) && isValidId(chapterId) &&
+    (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+  allow list: if isValidId(studentId) &&
+    (isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin());
+  allow create, update: if isValidId(studentId) && isValidId(chapterId) &&
+    (isStudentDocOwner(studentId) || isAdmin()) &&
+    incoming().keys().hasAll([
+      'studentId', 'chapterId', 'subjectId', 'classLevel', 'board', 'medium',
+      'notesCompleted', 'worksheetCompleted', 'quizCompleted', 'bestQuizScore',
+      'quizTotal', 'lastUpdatedAt'
+    ]) &&
+    incoming().keys().hasOnly([
+      'studentId', 'chapterId', 'subjectId', 'classLevel', 'board', 'medium',
+      'notesCompleted', 'worksheetCompleted', 'quizCompleted', 'bestQuizScore',
+      'quizTotal', 'lastUpdatedAt'
+    ]) &&
+    incoming().studentId == studentId &&
+    incoming().chapterId == chapterId &&
+    incoming().board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+    incoming().medium in ['English', 'Marathi', 'Hindi', 'Semi-English'] &&
+    incoming().notesCompleted is bool &&
+    incoming().worksheetCompleted is bool &&
+    incoming().quizCompleted is bool &&
+    incoming().bestQuizScore is number && incoming().bestQuizScore >= 0 &&
+    incoming().quizTotal is number && incoming().quizTotal >= 0 &&
+    incoming().bestQuizScore <= incoming().quizTotal;
+  allow delete: if isAdmin();
+}
+
+// --- 2. Top-Level Additive Collections (Zero-PII Supplementary CMS & Assignments) ---
+
+// Collection 17: /additional_curriculum_subjects/{subjectId}
+match /additional_curriculum_subjects/{subjectId} {
+  allow get: if isValidId(subjectId) && (isAdmin() || existing().isPublished == true);
+  allow list: if isAdmin() || resource.data.isPublished == true;
+  allow create, update: if isValidId(subjectId) && isAdmin() &&
+    incoming().id == subjectId &&
+    incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 120 &&
+    incoming().isPublished is bool &&
+    !('email' in incoming()) && !('mobile' in incoming()) && !('passwordHash' in incoming());
+  allow delete: if isAdmin();
+}
+
+// Collection 18: /additional_curriculum_chapters/{chapterId}
+match /additional_curriculum_chapters/{chapterId} {
+  allow get: if isValidId(chapterId) && (isAdmin() || existing().workflowStatus == 'PUBLISHED');
+  allow list: if isAdmin() || resource.data.workflowStatus == 'PUBLISHED';
+  allow create, update: if isValidId(chapterId) && isAdmin() &&
+    incoming().chapterId == chapterId &&
+    incoming().curriculumLabel == 'MY STUDYZONE ADDITIONAL CURRICULUM' &&
+    incoming().workflowStatus in ['DRAFT', 'UNDER_REVIEW', 'APPROVED', 'PUBLISHED', 'UNPUBLISHED'] &&
+    incoming().title is string && incoming().title.size() > 0 && incoming().title.size() <= 200 &&
+    !('email' in incoming()) && !('mobile' in incoming()) && !('passwordHash' in incoming());
+  allow delete: if isAdmin();
+}
+
+// Collection 19: /additional_curriculum_assignments/{assignmentId}
+match /additional_curriculum_assignments/{assignmentId} {
+  allow get, list: if isSignedIn();
+  allow create: if isValidId(assignmentId) && (
+    isAdmin() || (
+      isSignedIn() &&
+      incoming().teacherUid == request.auth.uid &&
+      isTeacherAccount(incoming().teacherId) &&
+      isStudentDocOwner(incoming().teacherId)
+    )
+  ) &&
+    incoming().assignmentId == assignmentId &&
+    incoming().board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+    incoming().medium in ['English', 'Marathi', 'Hindi', 'Semi-English'] &&
+    incoming().status in ['ACTIVE', 'COMPLETED'] &&
+    incoming().teacherNote is string && incoming().teacherNote.size() <= 500;
+  allow update: if isValidId(assignmentId) && (
+    isAdmin() || (
+      isSignedIn() &&
+      existing().teacherUid == request.auth.uid &&
+      incoming().teacherUid == existing().teacherUid &&
+      incoming().assignmentId == existing().assignmentId
+    )
+  );
+  allow delete: if isValidId(assignmentId) && (
+    isAdmin() || (isSignedIn() && existing().teacherUid == request.auth.uid)
+  );
+}

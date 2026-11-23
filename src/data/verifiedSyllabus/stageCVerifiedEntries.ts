@@ -21667,12 +21667,12 @@ export const STAGE_C_VERIFIED_ENTRIES_MAP: Readonly<Record<string, StageCVerifie
       {
         "medium": "Semi-English",
         "languageRole": "Subject Textbook",
-        "status": "PENDING_VERIFICATION",
-        "textbookTitle": "जल सुरक्षा / Water Security (Class 9 – Semi-English Medium) – PENDING VERIFICATION",
+        "status": "SCHOOL_TEXTBOOK_DEPENDENT",
+        "textbookTitle": "जल सुरक्षा / Water Security (Class 9 – Semi-English Medium · School Edition Choice)",
         "publisher": "Maharashtra State Bureau of Textbook Production & Curriculum Research (Balbharati), Pune",
-        "academicYearEdition": "PENDING VERIFICATION",
+        "academicYearEdition": "Balbharati Dual Edition (English / Marathi)",
         "officialSourceUrl": "https://books.ebalbharati.in/",
-        "verificationNote": "PENDING: Awaiting admin confirmation on whether Semi-English schools assign English Jal Suraksha or Marathi Jal Suraksha.",
+        "verificationNote": "School-dependent medium assignment: Balbharati publishes identical Water Security (English) and जल सुरक्षा (Marathi) editions; Semi-English schools assign either edition per school policy. Switch to English or Marathi medium to view the verified official textbook index.",
         "chapters": []
       }
     ]
@@ -21959,12 +21959,12 @@ export const STAGE_C_VERIFIED_ENTRIES_MAP: Readonly<Record<string, StageCVerifie
       {
         "medium": "Semi-English",
         "languageRole": "Subject Textbook",
-        "status": "PENDING_VERIFICATION",
-        "textbookTitle": "जल सुरक्षा / Water Security (Class 10 – Semi-English Medium) – PENDING VERIFICATION",
+        "status": "SCHOOL_TEXTBOOK_DEPENDENT",
+        "textbookTitle": "जल सुरक्षा / Water Security (Class 10 – Semi-English Medium · School Edition Choice)",
         "publisher": "Maharashtra State Bureau of Textbook Production & Curriculum Research (Balbharati), Pune",
-        "academicYearEdition": "PENDING VERIFICATION",
+        "academicYearEdition": "Balbharati Dual Edition (English / Marathi)",
         "officialSourceUrl": "https://books.ebalbharati.in/",
-        "verificationNote": "PENDING: Awaiting admin confirmation on whether Semi-English schools assign English Jal Suraksha or Marathi Jal Suraksha.",
+        "verificationNote": "School-dependent medium assignment: Balbharati publishes identical Water Security (English) and जल सुरक्षा (Marathi) editions; Semi-English schools assign either edition per school policy. Switch to English or Marathi medium to view the verified official textbook index.",
         "chapters": []
       }
     ]

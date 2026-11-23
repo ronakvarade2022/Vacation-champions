@@ -332,6 +332,8 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       onNavigateTab('cricket');
     } else if (actionId === 'sl-ai-academy') {
       onNavigateTab('future-skills');
+    } else if (actionId === 'sl-additional-curriculum') {
+      onNavigateTab('additional-curriculum');
     } else if (actionId === 'sl-creative' || actionId === 'sl-programs') {
       onNavigateTab('other-programs');
     } else if (actionId === 'pz-puzzles' || actionId === 'pz-memory') {
@@ -518,6 +520,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         illustrationType: 'ai',
         cardGradient: 'from-[#f5d0fe] via-[#e879f9] to-[#c084fc]',
         borderClass: 'border-[#9333ea]/40',
+      };
+    }
+    if (subId === 'sl-additional-curriculum') {
+      return {
+        illustrationType: 'writing',
+        cardGradient: 'from-[#e0e7ff] via-[#c7d2fe] to-[#a5b4fc]',
+        borderClass: 'border-[#4f46e5]/40',
       };
     }
     if (subId === 'sl-creative') {
@@ -1508,6 +1517,19 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         { label: 'Track', value: 'Future Tech' },
                       ],
                       cta: 'Open AI Learning Academy',
+                    },
+                    'sl-additional-curriculum': {
+                      highlights: [
+                        '10 original enrichment subjects (GK, Logical Reasoning, Moral Education, Computer Knowledge, Vocabulary, Drawing, Environmental Awareness, Life Skills, General Science Activities & Financial/Digital Literacy)',
+                        '200 class-wise chapters (Classes 1–10), 200 interactive practice worksheets & 800 unique MCQs across English, Marathi, Hindi & Semi-English mediums',
+                        'Clearly labeled MY STUDYZONE ADDITIONAL CURRICULUM — strictly separate from official Maharashtra, CBSE & ICSE board textbooks',
+                      ],
+                      stats: [
+                        { label: 'Subjects', value: '10 Enrichment' },
+                        { label: 'Chapters', value: '200 (Cls 1–10)' },
+                        { label: 'Practice', value: '800 MCQs' },
+                      ],
+                      cta: 'Open Additional Curriculum',
                     },
                     'sl-creative': {
                       highlights: [

@@ -1,12 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
+  Download,
   Eye,
   EyeOff,
   Layers,
   Plus,
   RotateCcw,
   ShieldCheck,
+  Upload,
 } from 'lucide-react';
 import type { ClassLevel, EducationBoard } from '../../types';
 import type { InstructionMedium } from '../../types/lessonPlanner';
@@ -29,6 +31,12 @@ import {
   upsertAdditionalChapter,
   upsertAdditionalSubject,
 } from '../../services/additionalCurriculumService';
+import {
+  exportAdditionalCurriculumSnapshot,
+  getAdditionalCurriculumStorageStatus,
+  importAdditionalCurriculumSnapshot,
+  subscribeAdditionalCurriculumChanges,
+} from '../../services/additionalCurriculumPersistence';
 
 type AdminSubTab = 'overview' | 'subjects' | 'chapters';
 
@@ -45,6 +53,13 @@ export const AdminAdditionalCurriculumSection: React.FC = () => {
   const [subTab, setSubTab] = useState<AdminSubTab>('overview');
   const [version, setVersion] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    return subscribeAdditionalCurriculumChanges(() => {
+      setVersion((v) => v + 1);
+    });
+  }, []);
 
   // Filters for Chapters tab
   const [filterSubjectId, setFilterSubjectId] = useState<string>('ALL');
@@ -113,9 +128,46 @@ export const AdminAdditionalCurriculumSection: React.FC = () => {
     return counts;
   }, [allChapters]);
 
+  const storageStatus = useMemo(() => {
+    void version;
+    return getAdditionalCurriculumStorageStatus();
+  }, [version]);
+
   const bump = (msg: string) => {
     setVersion((v) => v + 1);
     setFeedback(msg);
+  };
+
+  const handleExportBackup = () => {
+    const snapshot = exportAdditionalCurriculumSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mystudyzone-additional-curriculum-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setFeedback(
+      `Exported CMS backup JSON (${Object.keys(snapshot.adminOverlay.subjectOverrides).length} subject override(s), ${Object.keys(snapshot.adminOverlay.chapterOverrides).length} chapter draft/override(s), ${snapshot.teacherAssignments.length} teacher assignment(s)).`
+    );
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = importAdditionalCurriculumSnapshot(String(reader.result || ''));
+      if (result.success) {
+        bump(result.message);
+      } else {
+        setFeedback(result.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleToggleSubjectPublished = (subj: AdditionalSubjectDefinition) => {
@@ -335,17 +387,54 @@ export const AdminAdditionalCurriculumSection: React.FC = () => {
               Manage supplementary subjects, class-wise chapters (Classes 1–10), language mediums, and Review → Approve → Publish controls. Official board syllabus records remain 100% isolated and read-only here.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              resetAdditionalCurriculumAdminOverrides();
-              bump('Restored default Additional Curriculum catalog & publication states.');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset Custom Overrides
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFileChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 whitespace-nowrap cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CMS Backup</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import Backup</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                resetAdditionalCurriculumAdminOverrides();
+                bump('Restored default Additional Curriculum catalog & publication states.');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset Custom Overrides
+            </button>
+          </div>
+        </div>
+
+        {/* Isolated Persistence Status Strip */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 tabular-nums">
+          <span>
+            Persistence: <strong className="text-slate-900">Isolated Local + Real-Time Cross-Tab Sync</strong>
+            {' · '}
+            {storageStatus.customSubjectsCount} subject override(s) · {storageStatus.customChaptersCount} chapter draft(s) · {storageStatus.teacherAssignmentsCount} teacher assignment(s)
+          </span>
+          <span className="text-slate-500">
+            Cloud Firestore sync staged (awaiting additive rules approval · zero impact on live collections)
+          </span>
         </div>
 
         {/* Sub-tab navigation */}

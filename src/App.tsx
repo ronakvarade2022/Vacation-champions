@@ -153,6 +153,7 @@ const FEATURE_TITLES: Record<string, string> = {
   'tet-ctet': 'TET & CTET Exam Preparation (200 Mock Tests)',
   'future-skills': 'AI Learning Academy & Future Skills',
   'ai-academy': 'AI Learning Academy & Future Skills',
+  'additional-curriculum': 'MY STUDYZONE ADDITIONAL CURRICULUM (10 Subjects · Classes 1–10)',
   certificates: 'Official Champion Certificates & Leaderboard',
   leaderboard: 'Official Champion Certificates & Leaderboard',
   referrals: 'Learn • Share • Grow • Earn Referral Hub',
@@ -721,6 +722,14 @@ const AppContent: React.FC = () => {
         handleNavigateTab('future-skills');
         return;
       }
+      case 'sl-additional-curriculum': {
+        openAdditionalCurriculum({
+          board: currentStudent ? activeBoard : publicBoard,
+          classLevel: currentStudent?.classLevel || publicClass,
+          medium: (currentStudent?.medium as InstructionMedium | undefined) || 'English',
+        });
+        return;
+      }
       case 'sl-creative':
       case 'sl-programs': {
         handleNavigateTab('other-programs');
@@ -1134,6 +1143,8 @@ const AppContent: React.FC = () => {
                 ? 'sl-gk'
                 : currentTab === 'future-skills' || currentTab === 'ai-academy'
                 ? 'sl-ai-academy'
+                : currentTab === 'additional-curriculum'
+                ? 'sl-additional-curriculum'
                 : currentTab === 'other-programs'
                 ? 'sl-creative'
                 : currentTab === 'worksheets'

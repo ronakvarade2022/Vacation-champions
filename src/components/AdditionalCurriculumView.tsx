@@ -42,6 +42,7 @@ import {
   recordAdditionalQuizAttempt,
   toggleTeacherAssignmentStatus,
 } from '../services/additionalCurriculumService';
+import { subscribeAdditionalCurriculumChanges } from '../services/additionalCurriculumPersistence';
 
 type WorkspaceMode = 'notes' | 'worksheet' | 'quiz' | 'revision' | 'teacher';
 
@@ -99,6 +100,7 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
   const [teacherNote, setTeacherNote] = useState('');
   const [assignmentNotice, setAssignmentNotice] = useState<string | null>(null);
   const [assignmentsVersion, setAssignmentsVersion] = useState(0);
+  const [cmsVersion, setCmsVersion] = useState(0);
 
   // Sync external initial selections if parent passes deep link (e.g. from blocked non-standalone banner)
   useEffect(() => {
@@ -123,10 +125,10 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
     setMedium((prev) => normalizeMediumForBoard(nextBoard, prev));
   };
 
-  const publishedSubjects = useMemo<AdditionalSubjectDefinition[]>(
-    () => getAllAdditionalSubjects({ board, medium, includeUnpublished: false }),
-    [board, medium]
-  );
+  const publishedSubjects = useMemo<AdditionalSubjectDefinition[]>(() => {
+    void cmsVersion;
+    return getAllAdditionalSubjects({ board, medium, includeUnpublished: false });
+  }, [board, medium, cmsVersion]);
 
   // Keep selectedSubjectId valid
   useEffect(() => {
@@ -142,6 +144,7 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
   );
 
   const chaptersForSelection = useMemo<AdditionalChapterRecord[]>(() => {
+    void cmsVersion;
     if (!activeSubject) return [];
     return getAllAdditionalChapters({
       board,
@@ -150,7 +153,7 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
       subjectId: activeSubject.id,
       includeUnpublished: false,
     });
-  }, [board, classLevel, medium, activeSubject]);
+  }, [board, classLevel, medium, activeSubject, cmsVersion]);
 
   useEffect(() => {
     if (chaptersForSelection.length === 0) {
@@ -176,6 +179,20 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
     setRevealedShortAnswers({});
     setAssignmentNotice(null);
   }, [activeChapter?.chapterId]);
+
+  useEffect(() => {
+    return subscribeAdditionalCurriculumChanges((scope) => {
+      if (scope === 'admin_cms' || scope === 'all') {
+        setCmsVersion((v) => v + 1);
+      }
+      if (scope === 'assignments' || scope === 'all') {
+        setAssignmentsVersion((v) => v + 1);
+      }
+      if (scope === 'progress' || scope === 'all') {
+        setProgressVersion((v) => v + 1);
+      }
+    });
+  }, []);
 
   const progressMap = useMemo(() => {
     void progressVersion;
@@ -411,30 +428,52 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
               </span>
             </div>
             <div className="mt-2 divide-y divide-indigo-100">
-              {classAssignments.slice(0, 3).map((asn) => (
-                <div key={asn.assignmentId} className="py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-900">
-                  <div>
-                    <span className="font-semibold">{asn.chapterTitle}</span>
-                    <span className="text-indigo-400 mx-1.5">·</span>
-                    <span>Div {asn.division}</span>
-                    <span className="text-indigo-400 mx-1.5">·</span>
-                    <span>Due {asn.dueDate}</span>
-                    <span className="text-indigo-400 mx-1.5">·</span>
-                    <span className="text-indigo-700">{asn.teacherNote}</span>
+              {classAssignments.slice(0, 4).map((asn) => {
+                const prog = progressMap[asn.chapterId];
+                const completedTasks =
+                  (prog?.notesCompleted ? 1 : 0) +
+                  (prog?.worksheetCompleted ? 1 : 0) +
+                  (prog?.quizCompleted ? 1 : 0);
+                const isDoneByStudent = completedTasks === 3;
+                const quizPct =
+                  prog && prog.quizTotal > 0
+                    ? Math.round((prog.bestQuizScore / prog.quizTotal) * 100)
+                    : null;
+                return (
+                  <div key={asn.assignmentId} className="py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-900">
+                    <div>
+                      <span className="font-semibold">{asn.chapterTitle}</span>
+                      <span className="text-indigo-400 mx-1.5">·</span>
+                      <span>Div {asn.division}</span>
+                      <span className="text-indigo-400 mx-1.5">·</span>
+                      <span>Due {asn.dueDate}</span>
+                      <span className="text-indigo-400 mx-1.5">·</span>
+                      <span className={isDoneByStudent ? 'font-semibold text-emerald-700' : 'text-indigo-700 tabular-nums'}>
+                        {isDoneByStudent
+                          ? `Completed ✓${quizPct !== null ? ` (${quizPct}% quiz)` : ''}`
+                          : `${completedTasks}/3 tasks done`}
+                      </span>
+                      {asn.teacherNote && (
+                        <>
+                          <span className="text-indigo-400 mx-1.5">·</span>
+                          <span className="text-indigo-700">{asn.teacherNote}</span>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSubjectId(asn.subjectId);
+                        setSelectedChapterId(asn.chapterId);
+                        setActiveTab(prog?.notesCompleted && !prog?.worksheetCompleted ? 'worksheet' : prog?.worksheetCompleted && !prog?.quizCompleted ? 'quiz' : 'notes');
+                      }}
+                      className="text-indigo-700 font-semibold hover:underline whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      {isDoneByStudent ? 'Review Chapter' : 'Continue Assignment →'}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSubjectId(asn.subjectId);
-                      setSelectedChapterId(asn.chapterId);
-                      setActiveTab('notes');
-                    }}
-                    className="text-indigo-700 font-semibold hover:underline whitespace-nowrap shrink-0"
-                  >
-                    Open Chapter
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

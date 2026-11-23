@@ -31,6 +31,7 @@ export type NavSubActionId =
   | 'sl-tet-ctet'
   | 'sl-gk'
   | 'sl-ai-academy'
+  | 'sl-additional-curriculum'
   | 'sl-creative'
   | 'sl-programs'
   // SECTION 4: STUDY MATERIAL
@@ -244,6 +245,12 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         description: '8 modules & 24 interactive lessons on Artificial Intelligence & Coding',
         badgeText: 'Future Tech',
         sectionVisibilityKey: 'future_skills',
+      },
+      {
+        id: 'sl-additional-curriculum',
+        label: 'Additional Curriculum (10 Subjects)',
+        description: 'MY STUDYZONE ADDITIONAL CURRICULUM: 200 enrichment chapters, worksheets & 800 MCQs (Classes 1–10)',
+        badgeText: '10 Subjects',
       },
       {
         id: 'sl-creative',

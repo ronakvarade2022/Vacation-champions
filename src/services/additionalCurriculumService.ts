@@ -19,10 +19,21 @@ import {
   DEFAULT_ADDITIONAL_CHAPTERS,
   findAdditionalSubjectForNonStandaloneName,
 } from '../data/additionalCurriculum/additionalCurriculumRegistry';
+import {
+  ADDITIONAL_ADMIN_STORAGE_KEY,
+  ADDITIONAL_ASSIGNMENTS_STORAGE_KEY,
+  ADDITIONAL_PROGRESS_STORAGE_KEY,
+  broadcastAdditionalCurriculumChange,
+  deleteTeacherAssignmentFromCloud,
+  syncAdditionalChapterToCloud,
+  syncAdditionalSubjectToCloud,
+  syncStudentAdditionalProgressToCloud,
+  syncTeacherAssignmentToCloud,
+} from './additionalCurriculumPersistence';
 
-const ADMIN_OVERRIDES_STORAGE_KEY = 'msz_additional_curriculum_admin_v1';
-const TEACHER_ASSIGNMENTS_STORAGE_KEY = 'msz_additional_teacher_assignments_v1';
-const STUDENT_PROGRESS_STORAGE_KEY = 'msz_additional_student_progress_v1';
+const ADMIN_OVERRIDES_STORAGE_KEY = ADDITIONAL_ADMIN_STORAGE_KEY;
+const TEACHER_ASSIGNMENTS_STORAGE_KEY = ADDITIONAL_ASSIGNMENTS_STORAGE_KEY;
+const STUDENT_PROGRESS_STORAGE_KEY = ADDITIONAL_PROGRESS_STORAGE_KEY;
 
 interface AdditionalCurriculumAdminOverlay {
   subjectOverrides: Record<string, AdditionalSubjectDefinition>;
@@ -58,6 +69,7 @@ function writeAdminOverlay(overlay: AdditionalCurriculumAdminOverlay): void {
   if (!hasLocalStorage()) return;
   try {
     window.localStorage.setItem(ADMIN_OVERRIDES_STORAGE_KEY, JSON.stringify(overlay));
+    broadcastAdditionalCurriculumChange('admin_cms');
   } catch {
     // Ignore quota errors gracefully
   }
@@ -213,6 +225,7 @@ export function upsertAdditionalSubject(subject: AdditionalSubjectDefinition): A
   };
   overlay.subjectOverrides[normalized.id] = normalized;
   writeAdminOverlay(overlay);
+  void syncAdditionalSubjectToCloud(normalized).catch(() => {});
   return normalized;
 }
 
@@ -225,6 +238,7 @@ export function upsertAdditionalChapter(chapter: AdditionalChapterRecord): Addit
   };
   overlay.chapterOverrides[normalized.chapterId] = normalized;
   writeAdminOverlay(overlay);
+  void syncAdditionalChapterToCloud(normalized).catch(() => {});
   return normalized;
 }
 
@@ -247,6 +261,7 @@ export function resetAdditionalCurriculumAdminOverrides(): void {
   if (!hasLocalStorage()) return;
   try {
     window.localStorage.removeItem(ADMIN_OVERRIDES_STORAGE_KEY);
+    broadcastAdditionalCurriculumChange('admin_cms');
   } catch {
     // Ignore
   }
@@ -354,6 +369,7 @@ function writeTeacherAssignments(items: AdditionalTeacherAssignment[]): void {
   if (!hasLocalStorage()) return;
   try {
     window.localStorage.setItem(TEACHER_ASSIGNMENTS_STORAGE_KEY, JSON.stringify(items));
+    broadcastAdditionalCurriculumChange('assignments');
   } catch {
     // Ignore
   }
@@ -384,17 +400,25 @@ export function createTeacherAdditionalAssignment(
     status: 'ACTIVE',
   };
   writeTeacherAssignments([created, ...all]);
+  void syncTeacherAssignmentToCloud(created).catch(() => {});
   return created;
 }
 
 export function toggleTeacherAssignmentStatus(assignmentId: string): AdditionalTeacherAssignment[] {
   const all = readTeacherAssignments();
-  const next = all.map((item) =>
-    item.assignmentId === assignmentId
-      ? { ...item, status: (item.status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE') as 'ACTIVE' | 'COMPLETED' }
-      : item
-  );
+  let updatedItem: AdditionalTeacherAssignment | null = null;
+  const next = all.map((item) => {
+    if (item.assignmentId !== assignmentId) return item;
+    updatedItem = {
+      ...item,
+      status: (item.status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE') as 'ACTIVE' | 'COMPLETED',
+    };
+    return updatedItem;
+  });
   writeTeacherAssignments(next);
+  if (updatedItem) {
+    void syncTeacherAssignmentToCloud(updatedItem).catch(() => {});
+  }
   return next;
 }
 
@@ -402,6 +426,7 @@ export function deleteTeacherAdditionalAssignment(assignmentId: string): Additio
   const all = readTeacherAssignments();
   const next = all.filter((item) => item.assignmentId !== assignmentId);
   writeTeacherAssignments(next);
+  void deleteTeacherAssignmentFromCloud(assignmentId).catch(() => {});
   return next;
 }
 
@@ -425,6 +450,7 @@ function writeAllStudentProgress(
   if (!hasLocalStorage()) return;
   try {
     window.localStorage.setItem(STUDENT_PROGRESS_STORAGE_KEY, JSON.stringify(store));
+    broadcastAdditionalCurriculumChange('progress');
   } catch {
     // Ignore
   }
@@ -476,6 +502,7 @@ function updateStudentChapterProgress(
   studentBucket[chapter.chapterId] = merged;
   store[key] = studentBucket;
   writeAllStudentProgress(store);
+  void syncStudentAdditionalProgressToCloud(merged).catch(() => {});
   return merged;
 }
 
