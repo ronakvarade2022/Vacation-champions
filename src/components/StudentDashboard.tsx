@@ -17,6 +17,7 @@ import {
   FileText,
   BookOpen,
   Calendar,
+  Share2,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -37,6 +38,7 @@ import {
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 import { PWAInstallButton } from './PWAInstallButton';
+import { ShareMyAppBanner, ShareMyAppModal } from './ShareMyAppFeature';
 
 interface StudentDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
@@ -77,6 +79,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     updateTeacherSelectedCategories,
   } = useApp();
   const [selectedCurriculumBoard, setSelectedCurriculumBoard] = useState<EducationBoard>(activeBoard);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   useEffect(() => {
     setSelectedCurriculumBoard(activeBoard);
@@ -269,6 +272,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             >
               <Headphones className="w-3.5 h-3.5" />
               <span>HELP &amp; SUPPORT</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(true)}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:brightness-105 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>SHARE APP</span>
             </button>
             <PWAInstallButton variant="compact" />
             <button
@@ -812,6 +823,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           );
         })()}
       </div>
+
+      {/* SHARE MY APP – WHATSAPP STUDENT INVITATION CARD & PWA INSTALL */}
+      <ShareMyAppBanner
+        selectedBoard={selectedCurriculumBoard}
+        selectedClass={currentStudent.classLevel}
+        senderName={currentStudent.name}
+        onOpenStudentApp={() => onNavigateTab('all-courses')}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+      />
+
+      <ShareMyAppModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        defaultBoard={selectedCurriculumBoard}
+        defaultClass={currentStudent.classLevel}
+        senderName={currentStudent.name}
+        onOpenStudentApp={(targetBoard, targetClass) => {
+          if (targetBoard && targetClass) {
+            void switchActiveBoardAndClass(targetBoard, targetClass);
+          }
+          onNavigateTab('all-courses');
+        }}
+      />
     </div>
   );
 };

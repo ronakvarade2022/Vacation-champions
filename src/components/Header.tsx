@@ -32,6 +32,7 @@ import {
   Smartphone,
   Users,
   BookOpenCheck,
+  Share2,
 } from 'lucide-react';
 import {
   ALL_BOARDS,
@@ -43,6 +44,7 @@ import {
 } from '../utils/subscriptionAccess';
 import { BrandBookCapLogo } from './DashboardIllustrations';
 import { PWAInstallButton } from './PWAInstallButton';
+import { ShareMyAppModal } from './ShareMyAppFeature';
 
 interface HeaderProps {
   currentTab: string;
@@ -91,6 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileSelectedMenuId, setMobileSelectedMenuId] = useState<MainMenuId>(
     activeMenuId || 'special-learning'
   );
+  const [isShareAppOpen, setIsShareAppOpen] = useState(false);
 
   const navContainerRef = useRef<HTMLDivElement | null>(null);
   const hoverCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -671,8 +674,32 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Always-visible App Install Button in Top Sticky Header (Mobile & Desktop) */}
+          {/* Always-visible Share My App (WhatsApp Card) & App Install Buttons in Top Sticky Header */}
+          <button
+            type="button"
+            onClick={() => setIsShareAppOpen(true)}
+            data-testid="header-share-app-btn"
+            title="Share MyStudyZone App with Students on WhatsApp"
+            className="min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:brightness-105 text-white font-extrabold text-[11px] sm:text-xs shadow-xs border border-emerald-400/60 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
+          >
+            <Share2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Share App</span>
+            <span className="sm:hidden">Share</span>
+          </button>
+
           <PWAInstallButton variant="header" />
+
+          <ShareMyAppModal
+            isOpen={isShareAppOpen}
+            onClose={() => setIsShareAppOpen(false)}
+            defaultBoard={activeBoard}
+            defaultClass={currentStudent?.classLevel || 'Class 5'}
+            senderName={currentStudent?.name || currentUser?.displayName || ''}
+            onOpenStudentApp={() => {
+              setCurrentTab('all-courses');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
 
           {/* Mobile Hamburger Menu Button */}
           {isLearningRole && (

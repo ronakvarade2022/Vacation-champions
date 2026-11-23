@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 import { PWAInstallButton } from './PWAInstallButton';
+import { ShareMyAppBanner, ShareMyAppModal } from './ShareMyAppFeature';
 
 export type HomeScrollTarget =
   | 'home-overview'
@@ -57,6 +58,8 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   onSelectMainSection,
   activeSubActionId,
 }) => {
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
   return (
     <div className={`${isDesktopMode ? 'space-y-8' : 'space-y-10'} pb-12`}>
       {/* SECTION 1: FOCUSED HOME DASHBOARD */}
@@ -95,8 +98,30 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
         />
       </div>
 
+      {/* SHARE MY APP – WHATSAPP STUDENT INVITATION CARD & PWA INSTALL */}
+      <ShareMyAppBanner
+        selectedBoard={selectedBoard}
+        selectedClass={selectedClass}
+        senderName={currentUserName}
+        onOpenStudentApp={() => onNavigateZone('all-courses')}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+      />
+
       {/* DIRECT PWA MOBILE APP INSTALL BANNER */}
       <PWAInstallButton variant="banner" />
+
+      <ShareMyAppModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        defaultBoard={selectedBoard}
+        defaultClass={selectedClass}
+        senderName={currentUserName}
+        onOpenStudentApp={(targetBoard, targetClass) => {
+          if (targetBoard) onSelectBoard(targetBoard);
+          if (targetClass) onSelectClass(targetClass);
+          onNavigateZone('all-courses');
+        }}
+      />
     </div>
   );
 };
