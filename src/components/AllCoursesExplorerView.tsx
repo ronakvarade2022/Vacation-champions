@@ -367,66 +367,74 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
             ...(chapters.length > 0
               ? [
                   {
-                    id: 'chapters',
-                    stepNum: 2,
-                    icon: '📖',
-                    label: `2. Chapters (${chapters.length})`,
-                    onClick: () =>
-                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'video_lessons'),
-                  },
-                  {
-                    id: 'chapter_materials',
-                    stepNum: 3,
-                    icon: '🎓',
-                    label: '3. Chapter Materials',
-                    onClick: () =>
-                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'short_revision'),
-                  },
-                  {
                     id: 'notes',
-                    stepNum: 4,
+                    stepNum: 2,
                     icon: '📄',
-                    label: '4. Study Notes',
+                    label: '2. Study Notes (A–L)',
                     onClick: () =>
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'chapter_notes'),
                   },
                   {
-                    id: 'worksheets',
+                    id: 'textbook_solutions',
+                    stepNum: 3,
+                    icon: '📘',
+                    label: '3. Textbook Solutions',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'textbook_solutions'),
+                  },
+                  {
+                    id: 'class_notebook',
+                    stepNum: 4,
+                    icon: '📓',
+                    label: '4. Complete Class Notes',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'class_notebook'),
+                  },
+                  {
+                    id: 'chapter_materials',
                     stepNum: 5,
+                    icon: '🎓',
+                    label: '5. Quick Revision',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'short_revision'),
+                  },
+                  {
+                    id: 'worksheets',
+                    stepNum: 6,
                     icon: '📝',
-                    label: '5. Worksheets',
+                    label: '6. Worksheets',
                     onClick: () =>
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'worksheets'),
                   },
                   {
                     id: 'practice_qs',
-                    stepNum: 6,
+                    stepNum: 7,
                     icon: '✍️',
-                    label: '6. Practice Q&A',
+                    label: '7. Practice Q&A',
                     onClick: () =>
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'qa_bank'),
                   },
                   {
                     id: 'mcqs',
-                    stepNum: 7,
+                    stepNum: 8,
                     icon: '❓',
-                    label: '7. MCQ Practice',
+                    label: '8. MCQ Practice',
                     onClick: () =>
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'chapter_test'),
                   },
                   {
                     id: 'tests',
-                    stepNum: 8,
+                    stepNum: 9,
                     icon: '📋',
-                    label: '8. Tests & Exams',
+                    label: '9. Tests & Exams',
                     onClick: () =>
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'model_papers'),
                   },
                   {
                     id: 'pyqs',
-                    stepNum: 9,
+                    stepNum: 10,
                     icon: '🗂️',
-                    label: '9. Previous Papers',
+                    label: '10. Previous Papers',
                     onClick: () =>
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'pyq_papers'),
                   },
@@ -675,10 +683,40 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                                     selectedClass,
                                     subjectName,
                                     'study-materials',
-                                    'short_revision'
+                                    'textbook_solutions'
+                                  )
+                                }
+                                className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 font-extrabold text-[10px] whitespace-nowrap shrink-0 cursor-pointer"
+                              >
+                                📘 Solutions
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onOpenSubjectPractice(
+                                    selectedBoard,
+                                    selectedClass,
+                                    subjectName,
+                                    'study-materials',
+                                    'class_notebook'
                                   )
                                 }
                                 className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-[10px] whitespace-nowrap shrink-0 cursor-pointer"
+                              >
+                                📓 Class Notes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onOpenSubjectPractice(
+                                    selectedBoard,
+                                    selectedClass,
+                                    subjectName,
+                                    'study-materials',
+                                    'short_revision'
+                                  )
+                                }
+                                className="px-2 py-1 rounded-lg bg-amber-50/70 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-[10px] whitespace-nowrap shrink-0 cursor-pointer"
                               >
                                 🎓 Revision
                               </button>

@@ -828,8 +828,121 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
       </section>
 
       {/* =====================================================================
+          PROMINENT CLASS-WISE EXERCISE NOTES & NOTEBOOK QUICK-LAUNCH BAR
+          ===================================================================== */}
+      {chapters.length > 0 && (
+        <section className="bg-gradient-to-r from-[#0f2952] via-[#17396e] to-[#1e3a8a] text-white rounded-2xl p-4 border-2 border-amber-300/80 shadow-sm space-y-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
+                <span>✨ NEW · Class-Wise Exercise Notes &amp; School Notebook System</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-display font-black text-white mt-1">
+                {selectedBoard} · {selectedClass} · {selectedSubject} — Chapter {activeChapter ? `${String(activeChapter.chapterNumber).padStart(2, '0')}: ${activeChapter.chapterTitle}` : ''}
+              </h3>
+              <p className="text-[11px] text-sky-100">
+                Click any button below to open full chapter Study Notes (Sections A–L), Solved Textbook Exercise Answers, or Complete Your School Class Notebook Exercises:
+              </p>
+            </div>
+            {chapters.length > 1 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <label htmlFor="quick-banner-chapter-select" className="text-[11px] font-bold text-amber-200 whitespace-nowrap">
+                  Jump to Chapter:
+                </label>
+                <select
+                  id="quick-banner-chapter-select"
+                  value={selectedChapterIdx}
+                  onChange={(e) => setSelectedChapterIdx(Number(e.target.value))}
+                  className="px-2.5 py-1.5 rounded-xl bg-white text-slate-900 font-bold text-xs border-2 border-amber-300 max-w-[230px] cursor-pointer"
+                >
+                  {chapters.map((ch, idx) => (
+                    <option key={ch.id} value={idx}>
+                      Ch {String(ch.chapterNumber).padStart(2, '0')}: {ch.chapterTitle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {[
+              {
+                id: 'chapter_notes' as StudyLibrarySectionTab,
+                icon: '📄',
+                title: '1. Study Notes (A–L)',
+                sub: 'Topic explanations, formulas & memory tricks',
+                badge: 'Complete A–L',
+              },
+              {
+                id: 'textbook_solutions' as StudyLibrarySectionTab,
+                icon: '📘',
+                title: '2. Textbook Solutions',
+                sub: 'All end-of-chapter exercise answers solved',
+                badge: `${activeChapter?.textbookExerciseSolutions?.length || 9} Solved Qs`,
+              },
+              {
+                id: 'class_notebook' as StudyLibrarySectionTab,
+                icon: '📓',
+                title: '3. Complete Class Notes',
+                sub: 'School notebook exercises + hidden answer key',
+                badge: `${activeChapter?.classNotebookExercises?.length || 10} Notebook Tasks`,
+              },
+              {
+                id: 'word_meanings' as StudyLibrarySectionTab,
+                icon: '🔤',
+                title: '4. Word Meanings',
+                sub: 'Key terms, definitions & sentence usage',
+                badge: `${activeChapter?.difficultWordsAndMeanings?.length || 8} Terms`,
+              },
+              {
+                id: 'practice_questions' as StudyLibrarySectionTab,
+                icon: '✍️',
+                title: '5. Extra Practice Q&A',
+                sub: 'Exam-oriented extra questions & HOTS',
+                badge: 'Exam Ready',
+              },
+            ].map((item) => {
+              const isCurrent = activeSectionTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveSectionTab(item.id)}
+                  className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                    isCurrent
+                      ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-white shadow-sm'
+                      : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-black flex items-center gap-1">
+                      <span>{item.icon}</span>
+                      <span>{item.title}</span>
+                    </span>
+                    <span
+                      className={`text-[10px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+                        isCurrent
+                          ? 'bg-[#0f2952] text-amber-200'
+                          : 'bg-amber-400/20 text-amber-200 border border-amber-300/30'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  </div>
+                  <p className={`text-[11px] leading-snug ${isCurrent ? 'text-slate-800 font-semibold' : 'text-sky-100'}`}>
+                    {item.sub}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* =====================================================================
           TWO-LEVEL HORIZONTAL MATERIAL TABS & SUBSECTIONS
-          ROW 1: All 10 Material Type Tabs together in ONE horizontal row
+          ROW 1: All Material Type Tabs together in ONE horizontal row
           ROW 2: Selected Material Type's horizontal subsections directly below Row 1
           AREA 3: Selected Subsection's complete materials immediately below Row 2
           ===================================================================== */}
@@ -1176,15 +1289,21 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                         activeChapter,
                         syllabusResolution.verificationStatus === 'VERIFIED'
                       );
+                      const isComplete =
+                        comp.status === 'COMPLETE' || comp.status === 'Complete';
+                      const isPartial =
+                        comp.status === 'PARTIAL' || comp.status === 'Partially Complete';
                       return (
                         <span
                           className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                            comp.status === 'Complete'
+                            isComplete
                               ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                              : isPartial
+                              ? 'bg-amber-100 text-amber-900 border-amber-300'
+                              : 'bg-rose-100 text-rose-900 border-rose-300'
                           }`}
                         >
-                          {comp.status} ({comp.completedCount}/{comp.totalChecks} Resources)
+                          {comp.status} ({comp.completedCount}/{comp.totalChecks} Quality Checks)
                         </span>
                       );
                     })()}
@@ -2234,41 +2353,93 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                     )
                   : allSolutions;
 
+                const comp = evaluateChapterCompleteness(
+                  activeChapter,
+                  syllabusResolution.verificationStatus === 'VERIFIED'
+                );
+                const qc = comp.qualityReport;
+                const totalSubQuestions = allSolutions.reduce(
+                  (acc, item) => acc + (item.subQuestionsCount || 1),
+                  0
+                );
+
                 return (
                   <div className="space-y-5">
-                    <div className="rounded-2xl bg-blue-50/70 border border-blue-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-0.5 rounded-full bg-blue-900 text-white text-[10px] font-black uppercase tracking-wider">
-                            Official Textbook Exercise Solutions
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black uppercase">
-                            Verified Complete ({allSolutions.length} Questions)
-                          </span>
+                    <div className="rounded-2xl bg-blue-50/70 border border-blue-200 p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-900 text-white text-[10px] font-black uppercase tracking-wider">
+                              Official Textbook Exercise Solutions
+                            </span>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full border text-[10px] font-black uppercase ${
+                                qc.qualityStatus === 'COMPLETE'
+                                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                  : qc.qualityStatus === 'PARTIAL'
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : 'bg-rose-100 text-rose-900 border-rose-300'
+                              }`}
+                            >
+                              Audit Status: {qc.qualityStatus} ({allSolutions.length} Main Questions •{' '}
+                              {totalSubQuestions} Sub-Questions Solved)
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-300 text-[10px] font-bold">
+                              {qc.totalExerciseSetsIdentified} Exercise Sets Covered
+                            </span>
+                          </div>
+                          <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
+                            Chapter {activeChapter.chapterNumber}: {activeChapter.chapterTitle} — Complete Step-by-Step Textbook Exercise Answers
+                          </h3>
+                          <p className="text-xs text-slate-700 font-medium">
+                            {qc.statusReason}
+                          </p>
                         </div>
-                        <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
-                          Chapter {activeChapter.chapterNumber}: {activeChapter.chapterTitle} — Complete Back-of-Chapter Exercise Answers
-                        </h3>
-                        <p className="text-xs text-slate-600">
-                          Includes Fill in the blanks, Match the pairs, True/False, Short &amp; Long answer questions, Give reasons, Distinguish between, and Problem-solving exercises.
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allOpen = filteredSolutions.every(
+                              (s) => revealedTextbookAnswers[s.id]
+                            );
+                            const next: Record<string, boolean> = { ...revealedTextbookAnswers };
+                            for (const s of filteredSolutions) {
+                              next[s.id] = !allOpen;
+                            }
+                            setRevealedTextbookAnswers(next);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-black cursor-pointer shrink-0"
+                        >
+                          Toggle All Solutions
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const allOpen = filteredSolutions.every(
-                            (s) => revealedTextbookAnswers[s.id]
-                          );
-                          const next: Record<string, boolean> = { ...revealedTextbookAnswers };
-                          for (const s of filteredSolutions) {
-                            next[s.id] = !allOpen;
-                          }
-                          setRevealedTextbookAnswers(next);
-                        }}
-                        className="px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-black cursor-pointer shrink-0"
-                      >
-                        Toggle All Solutions
-                      </button>
+
+                      {/* 8-Criteria Automated Quality Control Bar */}
+                      <div className="pt-2.5 border-t border-blue-200/80 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-950 mr-1">
+                          8-Criteria QC Audit:
+                        </span>
+                        {[
+                          { label: 'A. Chapter Explanation', ok: Boolean(qc.criteria.A_completeChapterExplanation) },
+                          { label: 'B. Textbook Exercises Covered', ok: Boolean(qc.criteria.B_allAvailableTextbookExercisesCovered) },
+                          { label: 'C. All Questions Answered', ok: Boolean(qc.criteria.C_everyApplicableQuestionAnswered) },
+                          { label: 'D. Math Calculations Verified', ok: Boolean(qc.criteria.D_mathCalculationsIndependentlyChecked) },
+                          { label: 'E. Grammar Checked', ok: Boolean(qc.criteria.E_grammarAnswersChecked) },
+                          { label: 'F. Science Facts Verified', ok: Boolean(qc.criteria.F_scienceFactsVerified) },
+                          { label: 'G. Answer Keys Complete', ok: Boolean(qc.criteria.G_answerKeysComplete) },
+                          { label: 'H. Chapter-Specific Notebook', ok: Boolean(qc.criteria.H_notebookExercisesChapterSpecific) },
+                        ].map((c) => (
+                          <span
+                            key={c.label}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                              c.ok
+                                ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                                : 'bg-amber-50 text-amber-900 border-amber-300'
+                            }`}
+                          >
+                            {c.ok ? '✓' : '•'} {c.label}
+                          </span>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="space-y-3">
@@ -2281,15 +2452,36 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex flex-wrap items-center gap-2">
+                                {sol.exerciseSetLabel && (
+                                  <span className="px-2.5 py-0.5 rounded-md bg-blue-900 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                                    {sol.exerciseSetLabel}
+                                  </span>
+                                )}
                                 <span className="px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 text-[11px] font-black">
                                   {sol.qNo}
                                 </span>
                                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
                                   {sol.typeLabel}
                                 </span>
+                                {sol.subQuestionsCount && sol.subQuestionsCount > 1 && (
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+                                    {sol.subQuestionsCount} Sub-Questions Solved
+                                  </span>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {sol.calculationVerified && (
+                                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black">
+                                    ✓ Calculation Verified
+                                  </span>
+                                )}
+                                <span
+                                  className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${
+                                    sol.verificationStatus === 'VERIFIED_TEXTBOOK_ALIGNMENT'
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                      : 'bg-amber-50 text-amber-900 border-amber-300'
+                                  }`}
+                                >
                                   {sol.verificationStatus}
                                 </span>
                                 <span className="text-[11px] font-bold text-slate-500 tabular-nums">
@@ -2320,15 +2512,39 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                             </div>
 
                             {isOpen && (
-                              <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
-                                <p className="text-xs sm:text-sm text-slate-900 whitespace-pre-line leading-relaxed font-medium">
-                                  <strong className="text-emerald-900">Complete Answer: </strong>
-                                  {sol.answer}
-                                </p>
+                              <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2.5">
+                                {(sol.conceptUsed || sol.formulaExplained) && (
+                                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200/80 space-y-1 text-xs">
+                                    {sol.conceptUsed && (
+                                      <p className="text-slate-800">
+                                        <strong className="text-indigo-900">
+                                          Concept / Principle Used:{' '}
+                                        </strong>
+                                        {sol.conceptUsed}
+                                      </p>
+                                    )}
+                                    {sol.formulaExplained && (
+                                      <p className="text-slate-800">
+                                        <strong className="text-indigo-900">
+                                          Formula / Rule Explained Before Application:{' '}
+                                        </strong>
+                                        {sol.formulaExplained}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="space-y-1">
+                                  <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                                    Complete Step-by-Step Solution &amp; Final Answer:
+                                  </p>
+                                  <p className="text-xs sm:text-sm text-slate-900 whitespace-pre-line leading-relaxed font-medium">
+                                    {sol.answer}
+                                  </p>
+                                </div>
                                 {sol.stepByStepExplanation && (
                                   <div className="pt-2 border-t border-emerald-200/70 space-y-1">
                                     <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
-                                      Step-by-Step Method / Working:
+                                      Method &amp; Independent Verification Note:
                                     </p>
                                     <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
                                       {sol.stepByStepExplanation}

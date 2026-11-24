@@ -278,13 +278,22 @@ export type TextbookExerciseQuestionType =
 export interface TextbookExerciseSolutionItem {
   id: string;
   qNo: string;
+  exerciseSetLabel?: string;
   questionType: TextbookExerciseQuestionType;
   typeLabel: string;
   marks: number;
   question: string;
+  conceptUsed?: string;
+  formulaExplained?: string;
   answer: string;
   stepByStepExplanation: string;
-  verificationStatus: 'VERIFIED_TEXTBOOK_ALIGNMENT' | 'AWAITING_VERIFICATION';
+  subQuestionsCount?: number;
+  calculationVerified?: boolean;
+  sourceType?: 'VERIFIED_TEXTBOOK_EXERCISE' | 'CURRICULUM_TOPIC_EXERCISE' | 'SOURCE_REQUIRED';
+  verificationStatus:
+    | 'VERIFIED_TEXTBOOK_ALIGNMENT'
+    | 'AWAITING_VERIFICATION'
+    | 'CONTENT_SOURCE_REQUIRED';
 }
 
 export type ClassNotebookExerciseType =
@@ -327,11 +336,40 @@ export interface ClassNotebookExerciseItem {
   stepByStepExplanation?: string;
 }
 
+export type ChapterQualityAuditStatus =
+  | 'COMPLETE'
+  | 'PARTIAL'
+  | 'SOURCE REQUIRED'
+  | 'VERIFICATION REQUIRED';
+
 export type ChapterResourceCompletenessStatus =
   | 'Complete'
   | 'Partially Complete'
   | 'Missing Content'
-  | 'Awaiting Verification';
+  | 'Awaiting Verification'
+  | ChapterQualityAuditStatus;
+
+export interface ChapterQualityControlReport {
+  qualityStatus: ChapterQualityAuditStatus;
+  statusReason: string;
+  sourceVerificationTag:
+    | 'OFFICIAL_TEXTBOOK_EXERCISES_VERIFIED'
+    | 'TOPIC_MAPPED_CURRICULUM_EXERCISES'
+    | 'CONTENT_SOURCE_REQUIRED';
+  totalExerciseSetsIdentified: number;
+  totalQuestionsIdentified: number;
+  totalSubQuestionsSolved: number;
+  criteria: {
+    A_completeChapterExplanation: boolean;
+    B_allAvailableTextbookExercisesCovered: boolean;
+    C_everyApplicableQuestionAnswered: boolean;
+    D_mathCalculationsIndependentlyChecked: boolean | 'N/A';
+    E_grammarAnswersChecked: boolean | 'N/A';
+    F_scienceFactsVerified: boolean | 'N/A';
+    G_answerKeysComplete: boolean;
+    H_notebookExercisesChapterSpecific: boolean;
+  };
+}
 
 export interface ChapterStudyMaterial {
   id: string;
@@ -362,6 +400,7 @@ export interface ChapterStudyMaterial {
   classNotebookExercises?: ClassNotebookExerciseItem[];
   additionalPracticeQuestions?: ChapterQAItem[];
   completenessStatus?: ChapterResourceCompletenessStatus;
+  qualityControlReport?: ChapterQualityControlReport;
 }
 
 export interface ChapterPracticeTestQuestion {

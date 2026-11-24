@@ -15,7 +15,12 @@ import {
 } from '../classCurriculumConfig';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 import { getOfficialTextbookForSubject } from '../studyLibrary/textbookLibraryData';
-import { buildEnrichedChapterMaterials } from './chapterNotebookAndSolutionsBuilder';
+import { getCentralSyllabusEntry } from '../../services/centralSyllabusService';
+import {
+  buildMathematicsChapterCompletePackage,
+  isMathematicsSubject,
+} from './mathematicsTextbookSolutionsEngine';
+import { buildSubjectChapterCompletePackage } from './subjectTextbookSolutionsEngine';
 
 function cleanChapterDisplayTitle(rawTitle: string): string {
   return rawTitle
@@ -637,30 +642,34 @@ export function getStudyMaterialsForSubject(
   );
   const classMeta = getClassCurriculumMeta(classLevel, board);
   const subjMeta = getSubjectMeta(subject, board);
+  const centralEntry = getCentralSyllabusEntry(board, classLevel, subject);
+  const isSyllabusVerified = Boolean(
+    !centralEntry || centralEntry.verificationStatus === 'VERIFIED'
+  );
 
   return chapters.map((chapterTitle, index) => {
     const chapterNumber = index + 1;
     const chapterId = `NOTES-${board.toUpperCase()}-C${classMeta.classNumber}-${subjMeta.shortCode}-CH${chapterNumber}`;
-    const domain = buildDomainNotesAndQA(
-      board,
-      classLevel,
-      subject,
-      chapterTitle,
-      index,
-      chapterId
-    );
 
-    const enriched = buildEnrichedChapterMaterials({
-      board,
-      classLevel,
-      subject,
-      chapterNumber,
-      chapterTitle,
-      chapterIdPrefix: chapterId,
-      keyPoints: domain.keyPoints,
-      formulasAndRules: domain.formulasAndRules,
-      isVerifiedChapter: true,
-    });
+    const pkg = isMathematicsSubject(subject)
+      ? buildMathematicsChapterCompletePackage({
+          board,
+          classLevel,
+          subject,
+          chapterNumber,
+          chapterTitle,
+          chapterIdPrefix: chapterId,
+          isSyllabusVerified,
+        })
+      : buildSubjectChapterCompletePackage({
+          board,
+          classLevel,
+          subject,
+          chapterNumber,
+          chapterTitle,
+          chapterIdPrefix: chapterId,
+          isSyllabusVerified,
+        });
 
     return {
       id: chapterId,
@@ -671,24 +680,25 @@ export function getStudyMaterialsForSubject(
       chapterTitle,
       textbookRef: `${officialTextbook.bookTitle} (${officialTextbook.syllabusCode})`,
       overview: `${board} Board • ${classLevel} (${subject}) • Chapter ${chapterNumber}: ${chapterTitle}. Prepared per ${classMeta.boardStage} guidelines (${subjMeta.description}). 100% Free Study Material Library access.`,
-      keyPoints: domain.keyPoints,
-      formulasAndRules: domain.formulasAndRules,
-      solvedExamples: domain.solvedExamples,
-      revisionChecklist: domain.revisionChecklist,
+      keyPoints: pkg.keyPoints,
+      formulasAndRules: pkg.formulasAndRules,
+      solvedExamples: pkg.solvedExamples,
+      revisionChecklist: pkg.revisionChecklist,
       isFreePreview: true,
       officialTextbook,
-      detailedExplanation: domain.detailedExplanation,
-      keyDefinitions: domain.keyDefinitions,
-      chapterSummary: domain.chapterSummary,
-      shortRevisionNotes: domain.shortRevisionNotes,
-      qaBank: domain.qaBank,
-      topicWiseExplanations: enriched.topicWiseExplanations,
-      difficultWordsAndMeanings: enriched.difficultWordsAndMeanings,
-      diagramsAndVisuals: enriched.diagramsAndVisuals,
-      textbookExerciseSolutions: enriched.textbookExerciseSolutions,
-      classNotebookExercises: enriched.classNotebookExercises,
-      additionalPracticeQuestions: enriched.additionalPracticeQuestions,
-      completenessStatus: enriched.completenessStatus,
+      detailedExplanation: pkg.detailedExplanation,
+      keyDefinitions: pkg.keyDefinitions,
+      chapterSummary: pkg.chapterSummary,
+      shortRevisionNotes: pkg.shortRevisionNotes,
+      qaBank: pkg.qaBank,
+      topicWiseExplanations: pkg.topicWiseExplanations,
+      difficultWordsAndMeanings: pkg.difficultWordsAndMeanings,
+      diagramsAndVisuals: pkg.diagramsAndVisuals,
+      textbookExerciseSolutions: pkg.textbookExerciseSolutions,
+      classNotebookExercises: pkg.classNotebookExercises,
+      additionalPracticeQuestions: pkg.additionalPracticeQuestions,
+      completenessStatus: pkg.qualityControlReport.qualityStatus,
+      qualityControlReport: pkg.qualityControlReport,
     };
   });
 }

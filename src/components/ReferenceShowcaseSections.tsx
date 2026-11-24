@@ -1721,12 +1721,14 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-800">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-3 border-t border-slate-800">
                             {[
-                              { label: 'Official Textbooks (382)', action: 'sm-textbook-learning' as NavSubActionId, tab: 'textbooks' },
-                              { label: 'Chapter Notes & Revision', action: 'sm-notes' as NavSubActionId, tab: 'chapter_notes' },
-                              { label: 'Model Papers & PYQs', action: 'sm-pdfs' as NavSubActionId, tab: 'pyq_papers' },
-                              { label: 'Math, Science & Grammar Hubs', action: 'sm-special-hubs' as NavSubActionId, tab: 'science_diagrams' },
+                              { label: '📘 Textbook Solutions (NEW)', action: 'sm-textbook-solutions' as NavSubActionId, tab: 'textbook_solutions', highlight: true },
+                              { label: '📓 Class Notebook Notes (NEW)', action: 'sm-class-notebook' as NavSubActionId, tab: 'class_notebook', highlight: true },
+                              { label: '📄 Chapter Study Notes (A–L)', action: 'sm-notes' as NavSubActionId, tab: 'chapter_notes', highlight: false },
+                              { label: '📚 Official Textbooks (382)', action: 'sm-textbook-learning' as NavSubActionId, tab: 'textbooks', highlight: false },
+                              { label: '📋 Model Papers & PYQs', action: 'sm-pdfs' as NavSubActionId, tab: 'pyq_papers', highlight: false },
+                              { label: '🔬 Math, Science & Grammar', action: 'sm-special-hubs' as NavSubActionId, tab: 'science_diagrams', highlight: false },
                             ].map((quick) => (
                               <button
                                 key={quick.tab}
@@ -1738,7 +1740,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                                     onNavigateTab('study-materials', quick.tab);
                                   }
                                 }}
-                                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-left text-xs font-bold text-slate-100 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                                className={`px-3 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer transition-colors ${
+                                  quick.highlight
+                                    ? 'bg-amber-400/20 hover:bg-amber-400/30 border-amber-300/60 text-amber-200'
+                                    : 'bg-white/5 hover:bg-white/15 border-white/10 text-slate-100'
+                                }`}
                               >
                                 <span className="truncate">{quick.label}</span>
                                 <ArrowRight className="w-3.5 h-3.5 text-amber-300 shrink-0" />
@@ -1769,23 +1775,37 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                                     {tb.publisher} · {tb.mediums.join(' / ')}
                                   </p>
                                 </div>
-                                <div className="flex items-center gap-2 pt-1">
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => onNavigateTab('study-materials', 'chapter_notes', tb.subject)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-300 text-[#0f2952] text-[11px] font-bold cursor-pointer"
+                                  >
+                                    📄 Notes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => onNavigateTab('study-materials', 'textbook_solutions', tb.subject)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-[11px] font-bold cursor-pointer"
+                                  >
+                                    📘 Solutions
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => onNavigateTab('study-materials', 'class_notebook', tb.subject)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-[11px] font-bold cursor-pointer"
+                                  >
+                                    📓 Class Notes
+                                  </button>
                                   <a
                                     href={tb.officialReadUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="px-2.5 py-1.5 rounded-lg bg-[#0f2952] hover:bg-blue-900 text-white text-[11px] font-bold inline-flex items-center gap-1"
                                   >
-                                    <span>Official e-Book</span>
+                                    <span>e-Book</span>
                                     <ExternalLink className="w-3 h-3" />
                                   </a>
-                                  <button
-                                    type="button"
-                                    onClick={() => onNavigateTab('study-materials', 'sm-notes', tb.subject)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-300 text-[#0f2952] text-[11px] font-bold cursor-pointer"
-                                  >
-                                    Read Notes
-                                  </button>
                                 </div>
                               </div>
                             );
@@ -1807,7 +1827,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                                 Chapter {String(ch.chapterNumber).padStart(2, '0')}
                               </span>
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                100% Free Notes
+                                100% Free Notes (Sections A–L)
                               </span>
                             </div>
                             <h4 className="text-sm font-display font-black text-[#0f2952]">
@@ -1816,16 +1836,141 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                             <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                               {ch.overview}
                             </p>
-                            <button
-                              type="button"
-                              onClick={() => onNavigateTab('study-materials', 'sm-notes', previewSubject)}
-                              className="inline-flex items-center gap-1 text-xs font-black text-indigo-700 hover:underline cursor-pointer pt-1"
-                            >
-                              <span>Read Complete Notes &amp; Formulas</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('study-materials', 'chapter_notes', previewSubject)}
+                                className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
+                              >
+                                📄 Study Notes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('study-materials', 'textbook_solutions', previewSubject)}
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-[11px] font-bold cursor-pointer"
+                              >
+                                📘 Textbook Solutions
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('study-materials', 'class_notebook', previewSubject)}
+                                className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-[11px] font-bold cursor-pointer"
+                              >
+                                📓 Complete Class Notes
+                              </button>
+                            </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* 3. Textbook Exercise Solutions */}
+                    {activeSub.id === 'sm-textbook-solutions' && (
+                      <div className="space-y-3">
+                        <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <span className="text-[11px] font-black uppercase tracking-wider text-blue-800">
+                              📘 Class-Wise Textbook Exercise Solutions · {selectedBoard} · {selectedClass} · {previewSubject}
+                            </span>
+                            <p className="text-xs text-slate-700 mt-0.5">
+                              Complete step-by-step solved answers for every chapter&apos;s end-of-chapter textbook exercises (Fill in the Blanks, Match Pairs, True/False, Give Reasons, Short &amp; Long Answers, Numericals).
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onNavigateTab('study-materials', 'textbook_solutions', previewSubject)}
+                            className="px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-black text-xs shrink-0 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>Open All Textbook Solutions</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {previewChapters.slice(0, 4).map((ch) => (
+                            <div
+                              key={ch.id}
+                              className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-mono font-black text-blue-700">
+                                  Chapter {String(ch.chapterNumber).padStart(2, '0')}
+                                </span>
+                                <span className="text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                                  {(ch.textbookExerciseSolutions || []).length || 9} Solved Exercises
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-display font-black text-[#0f2952]">
+                                {ch.chapterTitle}
+                              </h4>
+                              <p className="text-xs text-slate-600 line-clamp-2">
+                                {ch.textbookExerciseSolutions?.[0]?.question || ch.overview}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('study-materials', 'textbook_solutions', previewSubject)}
+                                className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline cursor-pointer pt-1"
+                              >
+                                <span>View Solved Textbook Exercises &amp; Export PDF</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. Complete Your Class Notes (School Notebook Exercises) */}
+                    {activeSub.id === 'sm-class-notebook' && (
+                      <div className="space-y-3">
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <span className="text-[11px] font-black uppercase tracking-wider text-amber-900">
+                              📓 Complete Your Class Notes (School Notebook Writing Guide) · {selectedBoard} · {selectedClass} · {previewSubject}
+                            </span>
+                            <p className="text-xs text-slate-700 mt-0.5">
+                              10 structured written notebook exercises per chapter with writing prompts, notebook checklists, and a hidden-by-default &ldquo;VIEW ANSWERS &amp; CHECK YOUR WORK&rdquo; teacher answer key.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onNavigateTab('study-materials', 'class_notebook', previewSubject)}
+                            className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shrink-0 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>Open Class Notebook Exercises</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {previewChapters.slice(0, 4).map((ch) => (
+                            <div
+                              key={ch.id}
+                              className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-mono font-black text-amber-800">
+                                  Chapter {String(ch.chapterNumber).padStart(2, '0')}
+                                </span>
+                                <span className="text-[10px] font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                  {(ch.classNotebookExercises || []).length || 10} Notebook Tasks
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-display font-black text-[#0f2952]">
+                                {ch.chapterTitle}
+                              </h4>
+                              <p className="text-xs text-slate-600 line-clamp-2">
+                                {ch.classNotebookExercises?.[0]?.prompt || ch.overview}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('study-materials', 'class_notebook', previewSubject)}
+                                className="inline-flex items-center gap-1 text-xs font-black text-amber-800 hover:underline cursor-pointer pt-1"
+                              >
+                                <span>Open Notebook Exercises &amp; Check Your Work</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 

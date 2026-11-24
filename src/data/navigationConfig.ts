@@ -37,6 +37,8 @@ export type NavSubActionId =
   // SECTION 4: STUDY MATERIAL
   | 'sm-textbook-learning'
   | 'sm-notes'
+  | 'sm-textbook-solutions'
+  | 'sm-class-notebook'
   | 'sm-summaries'
   | 'sm-question-banks'
   | 'sm-worksheets'
@@ -266,7 +268,7 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
     label: 'Study Material',
     defaultActionId: 'sm-textbook-learning',
     whatIsThis: '100% Free academic reference library arranged Board → Medium → Class → Subject → Chapter.',
-    whatCanILearn: 'Official Textbooks, Chapter Notes, Short Revision, 9-Format Q&A Bank, Model & PYQ Papers, Chapter Tests, Video Lessons & Special Hubs.',
+    whatCanILearn: 'Official Textbooks, Chapter Notes (A–L), Complete Textbook Exercise Solutions, Complete Your Class Notes (School Notebook Exercises), Short Revision, 9-Format Q&A Bank, Model & PYQ Papers, Chapter Tests & Video Lessons.',
     whatShouldIClick: 'Choose a material type in sequence below, then select your Board, Medium, Class, Subject and Chapter.',
     items: [
       {
@@ -277,43 +279,55 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
       },
       {
         id: 'sm-notes',
-        label: '2. Chapter Study Notes',
-        description: 'Detailed chapter explanations, definitions, formulas & solved walkthrough examples',
-        badgeText: 'Chapter Notes',
+        label: '2. Chapter Study Notes (A–L)',
+        description: 'Complete chapter explanations, topic notes, definitions, word meanings, formulas & diagrams',
+        badgeText: 'Full Notes',
+      },
+      {
+        id: 'sm-textbook-solutions',
+        label: '3. Textbook Exercise Solutions',
+        description: 'Complete question-wise back-of-chapter textbook exercise answers with step-by-step solutions',
+        badgeText: 'NEW · Solved',
+      },
+      {
+        id: 'sm-class-notebook',
+        label: '4. Complete Your Class Notes',
+        description: 'Written school notebook exercises with hidden-by-default "View Answers & Check Your Work" key',
+        badgeText: 'NEW · Notebook',
       },
       {
         id: 'sm-summaries',
-        label: '3. Short Revision Sheets',
+        label: '5. Short Revision Sheets',
         description: 'One-page exam summary sheets, memory tricks & self-revision checklists',
         badgeText: 'Fast Revision',
       },
       {
         id: 'sm-question-banks',
-        label: '4. Important Q&A Bank',
+        label: '6. Important Q&A Bank',
         description: '9-format solved textbook & board exam questions with marking scheme tips',
         badgeText: '9 Formats',
       },
       {
         id: 'sm-worksheets',
-        label: '5. Worksheets (Reference)',
+        label: '7. Worksheets (Reference)',
         description: 'Direct link to interactive class-wise & subject-wise worksheets (original module)',
         badgeText: 'All Classes',
       },
       {
         id: 'sm-pdfs',
-        label: '6. Model & PYQ Papers',
+        label: '8. Model & PYQ Papers',
         description: 'Board-pattern model question papers, previous year papers & A4 printable sheets',
         badgeText: 'Exam Papers',
       },
       {
         id: 'sm-guides',
-        label: '7. Chapter Tests & Videos',
+        label: '9. Chapter Tests & Videos',
         description: 'Interactive 10-MCQ chapter tests with auto-grading & curated DIKSHA video lessons',
         badgeText: 'Tests & Videos',
       },
       {
         id: 'sm-special-hubs',
-        label: '8. Special Academic Hubs',
+        label: '10. Special Academic Hubs',
         description: 'Math Formulas, 12 SVG Science Diagrams, English Grammar & Scholarship/Olympiad Hub',
         badgeText: '4 Hubs',
       },

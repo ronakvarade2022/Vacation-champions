@@ -748,6 +748,8 @@ const AppContent: React.FC = () => {
       // SECTION 4: STUDY MATERIAL (100% Free Study Material Library for Visitors, Students & Teachers)
       case 'sm-textbook-learning':
       case 'sm-notes':
+      case 'sm-textbook-solutions':
+      case 'sm-class-notebook':
       case 'sm-summaries':
       case 'sm-question-banks':
       case 'sm-worksheets':
@@ -762,6 +764,8 @@ const AppContent: React.FC = () => {
         const tabMap: Record<string, StudyLibrarySectionTab> = {
           'sm-textbook-learning': 'textbooks',
           'sm-notes': 'chapter_notes',
+          'sm-textbook-solutions': 'textbook_solutions',
+          'sm-class-notebook': 'class_notebook',
           'sm-summaries': 'short_revision',
           'sm-question-banks': 'qa_bank',
           'sm-important-questions': 'qa_bank',
@@ -1267,6 +1271,15 @@ const AppContent: React.FC = () => {
                     const subTabMap: Record<string, StudyLibrarySectionTab> = {
                       textbooks: 'textbooks',
                       chapter_notes: 'chapter_notes',
+                      textbook_solutions: 'textbook_solutions',
+                      class_notebook: 'class_notebook',
+                      word_meanings: 'word_meanings',
+                      practice_questions: 'practice_questions',
+                      'sm-notes': 'chapter_notes',
+                      'sm-textbook-solutions': 'textbook_solutions',
+                      'sm-class-notebook': 'class_notebook',
+                      'sm-summaries': 'short_revision',
+                      'sm-question-banks': 'qa_bank',
                       short_revision: 'short_revision',
                       qa_bank: 'qa_bank',
                       chapter_test: 'chapter_test',
@@ -1598,6 +1611,15 @@ const AppContent: React.FC = () => {
                       const subTabMap: Record<string, StudyLibrarySectionTab> = {
                         textbooks: 'textbooks',
                         chapter_notes: 'chapter_notes',
+                        textbook_solutions: 'textbook_solutions',
+                        class_notebook: 'class_notebook',
+                        word_meanings: 'word_meanings',
+                        practice_questions: 'practice_questions',
+                        'sm-notes': 'chapter_notes',
+                        'sm-textbook-solutions': 'textbook_solutions',
+                        'sm-class-notebook': 'class_notebook',
+                        'sm-summaries': 'short_revision',
+                        'sm-question-banks': 'qa_bank',
                         short_revision: 'short_revision',
                         qa_bank: 'qa_bank',
                         chapter_test: 'chapter_test',
