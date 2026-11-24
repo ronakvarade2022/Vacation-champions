@@ -535,6 +535,9 @@ export async function validateActiveDeviceSession(params: {
     // Continue to backend verification
   }
 
+  const resolvedToken =
+    params.idToken || (await auth.currentUser?.getIdToken().catch(() => undefined));
+
   // Verify against backend session store
   const apiRes = await callSessionApi<{
     success: boolean;
@@ -564,7 +567,7 @@ export async function validateActiveDeviceSession(params: {
         userAgentSummary: meta.userAgentSummary
       })
     },
-    params.idToken
+    resolvedToken
   );
 
   if (apiRes.status === 401 || apiRes.status === 403 || apiRes.data?.valid === false) {
@@ -599,7 +602,7 @@ export async function validateActiveDeviceSession(params: {
       email: params.email,
       studentName: params.studentName,
       accountRole: params.accountRole,
-      idToken: params.idToken
+      idToken: resolvedToken
     });
     return {
       valid: acq.allowed,
@@ -627,6 +630,9 @@ export async function sendDeviceSessionHeartbeat(
     return { valid: false, error: SINGLE_DEVICE_BLOCK_MESSAGE };
   }
 
+  const meta = detectDeviceMetadata();
+  const resolvedToken =
+    idToken || (await auth.currentUser?.getIdToken().catch(() => undefined));
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
   const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
@@ -682,10 +688,18 @@ export async function sendDeviceSessionHeartbeat(
         activeSessionId: local.activeSessionId,
         deviceId: local.deviceId,
         hardwareSignature: local.hardwareSignature,
-        deviceSignature: local.deviceSignature
+        deviceSignature: local.deviceSignature,
+        firebaseUid: auth.currentUser?.uid || userId,
+        email: auth.currentUser?.email || undefined,
+        studentName: auth.currentUser?.displayName || undefined,
+        deviceName: meta.deviceName,
+        deviceType: meta.deviceType,
+        browser: meta.browser,
+        os: meta.os,
+        userAgentSummary: meta.userAgentSummary
       })
     },
-    idToken
+    resolvedToken
   );
 
   if (res.status === 401 || res.status === 403 || res.data?.valid === false) {
@@ -703,6 +717,9 @@ export async function releaseSingleDeviceSession(
 ): Promise<void> {
   const local = getLocalActiveSessionState();
   const targetUserId = userId || local?.userId;
+  if (targetUserId) {
+    teardownUserDeviceSessionWatch(targetUserId);
+  }
 
   if (targetUserId && local) {
     const nowMs = Date.now();
@@ -823,6 +840,49 @@ export async function recoverSingleDeviceSession(params: {
   };
 }
 
+interface SessionWatchEntry {
+  unsubscribeFirestore: Unsubscribe;
+  callbacks: Set<(record: DeviceSessionRecord) => void>;
+  latestRecord?: DeviceSessionRecord;
+}
+
+const activeSessionWatchRegistry = new Map<string, SessionWatchEntry>();
+
+function teardownUserDeviceSessionWatch(userId: string): void {
+  const cleanId = String(userId || '').trim();
+  const entry = activeSessionWatchRegistry.get(cleanId);
+  if (!entry) return;
+  activeSessionWatchRegistry.delete(cleanId);
+  try {
+    entry.unsubscribeFirestore();
+  } catch {
+    // Ignore listener detach errors
+  }
+  entry.callbacks.clear();
+}
+
+export function getActiveSessionWatchCount(userId?: string): {
+  activeFirestoreListeners: number;
+  subscriberCallbacks: number;
+} {
+  if (userId) {
+    const cleanId = String(userId || '').trim();
+    const entry = activeSessionWatchRegistry.get(cleanId);
+    return {
+      activeFirestoreListeners: entry ? 1 : 0,
+      subscriberCallbacks: entry ? entry.callbacks.size : 0
+    };
+  }
+  let totalCallbacks = 0;
+  for (const entry of activeSessionWatchRegistry.values()) {
+    totalCallbacks += entry.callbacks.size;
+  }
+  return {
+    activeFirestoreListeners: activeSessionWatchRegistry.size,
+    subscriberCallbacks: totalCallbacks
+  };
+}
+
 export function subscribeToUserDeviceSession(
   userId: string,
   onRemoteUpdate: (record: DeviceSessionRecord) => void
@@ -831,22 +891,76 @@ export function subscribeToUserDeviceSession(
   if (!cleanId || !auth.currentUser || auth.currentUser.uid !== cleanId) {
     return () => {};
   }
-  try {
-    const ref = doc(db, 'device_sessions', cleanId);
-    return onSnapshot(
-      ref,
-      (snap) => {
-        if (snap.exists()) {
-          onRemoteUpdate(snap.data() as DeviceSessionRecord);
-        }
-      },
-      () => {
-        // Ignore transient listener errors
-      }
-    );
-  } catch {
-    return () => {};
+
+  // Ensure any stale listeners for different user IDs are torn down first
+  for (const existingUserId of Array.from(activeSessionWatchRegistry.keys())) {
+    if (existingUserId !== cleanId) {
+      teardownUserDeviceSessionWatch(existingUserId);
+    }
   }
+
+  let entry = activeSessionWatchRegistry.get(cleanId);
+  if (!entry) {
+    const callbacks = new Set<(record: DeviceSessionRecord) => void>();
+    let unsubscribeFirestore: Unsubscribe = () => {};
+    try {
+      const ref = doc(db, 'device_sessions', cleanId);
+      unsubscribeFirestore = onSnapshot(
+        ref,
+        (snap) => {
+          if (!snap.exists()) return;
+          const record = snap.data() as DeviceSessionRecord;
+          const currentEntry = activeSessionWatchRegistry.get(cleanId);
+          if (currentEntry) {
+            currentEntry.latestRecord = record;
+          }
+          for (const cb of Array.from(callbacks)) {
+            try {
+              cb(record);
+            } catch {
+              // Ignore subscriber callback exception
+            }
+          }
+        },
+        () => {
+          // Tear down cleanly on permission or stream error so reconnects never overlap
+          teardownUserDeviceSessionWatch(cleanId);
+        }
+      );
+    } catch {
+      return () => {};
+    }
+
+    entry = {
+      unsubscribeFirestore,
+      callbacks
+    };
+    activeSessionWatchRegistry.set(cleanId, entry);
+  }
+
+  entry.callbacks.add(onRemoteUpdate);
+  if (entry.latestRecord) {
+    const cachedRecord = entry.latestRecord;
+    queueMicrotask(() => {
+      if (entry?.callbacks.has(onRemoteUpdate)) {
+        try {
+          onRemoteUpdate(cachedRecord);
+        } catch {}
+      }
+    });
+  }
+
+  let unsubscribed = false;
+  return () => {
+    if (unsubscribed) return;
+    unsubscribed = true;
+    const current = activeSessionWatchRegistry.get(cleanId);
+    if (!current) return;
+    current.callbacks.delete(onRemoteUpdate);
+    if (current.callbacks.size === 0) {
+      teardownUserDeviceSessionWatch(cleanId);
+    }
+  };
 }
 
 export async function fetchAllDeviceSessionsForAdmin(

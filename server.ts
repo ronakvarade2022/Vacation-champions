@@ -27,8 +27,10 @@ import {
 import {
   getFirebaseAdminStatus,
   isFirebaseAdminConfigured,
+  runWithRequestBearerToken,
   serverGetDoc,
   serverSetDoc,
+  serverUpdateDoc,
   serverQueryEqualsLimit1,
   verifyAdminRequest,
   verifyBearerIdToken
@@ -225,6 +227,13 @@ app.use('/api/razorpayx/webhook', express.raw({ type: 'application/json' }));
 // 2. Standard JSON parser for all other API endpoints
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 2b. Bind request Authorization Bearer token to AsyncLocalStorage context for Firestore REST v1 operations
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  runWithRequestBearerToken(req.headers.authorization, () => {
+    next();
+  });
+});
 
 // --- API ROUTES ---
 
@@ -1734,6 +1743,7 @@ interface ServerStudentSubscription {
   activatedClassLevel?: string | null;
   activatedClasses?: string[];
   activatedClassKeys?: string[];
+  studentActivatedClassKeys?: string[];
   classSubscriptions?: Record<string, ServerClassSubscriptionEntry>;
   activatedCategoryKeys?: CategoryId[];
   categorySubscriptions?: Partial<Record<CategoryId, CategorySubscriptionRecord>>;
@@ -2023,7 +2033,13 @@ function getServerBoardClassStatus(
     };
   }
 
-  if (isBaseFreePair) {
+  const isStudentActivatedPair =
+    (Array.isArray(sub.studentActivatedClassKeys) &&
+      sub.studentActivatedClassKeys.includes(boardClassKey)) ||
+    (Array.isArray(sub.activatedClassKeys) &&
+      sub.activatedClassKeys.includes(boardClassKey));
+
+  if (isBaseFreePair || isStudentActivatedPair) {
     return {
       board: normalizedBoard,
       classLevel: normalizedTarget,
@@ -2195,13 +2211,16 @@ async function evaluateServerSubscriptionFromStore(
         const classMap = extractServerClassSubscriptionsMap(data);
         const categoryMap = extractServerCategorySubscriptionsMap(data);
         const primaryBoard = normalizeBackendBoard(data.primaryBoard || data.board || 'Maharashtra');
-        const selectedBoard = normalizeBackendBoard(data.board || primaryBoard);
+        const selectedBoard = normalizeBackendBoard(data.activeWorkspaceBoard || data.board || primaryBoard);
         const primary =
           normalizeBackendClassLevel(data.primaryClassLevel) ||
           normalizeBackendClassLevel(data.classLevel) ||
           'Class 1';
         const selected =
-          normalizeBackendClassLevel(data.classLevel) || primary;
+          normalizeBackendClassLevel(data.activeWorkspaceClassLevel || data.classLevel) || primary;
+        const studentActivatedClassKeys = Array.isArray(data.studentActivatedClassKeys)
+          ? data.studentActivatedClassKeys.filter((k: unknown) => typeof k === 'string')
+          : [];
 
         const baseRecord: ServerStudentSubscription = {
           studentId: cleanId,
@@ -2213,6 +2232,7 @@ async function evaluateServerSubscriptionFromStore(
           activatedBoard: data.activatedBoard ? normalizeBackendBoard(data.activatedBoard) : null,
           activatedClassLevel:
             normalizeBackendClassLevel(data.activatedClassLevel) || null,
+          studentActivatedClassKeys,
           classSubscriptions: classMap,
           categorySubscriptions: categoryMap,
           activatedCategoryKeys: Array.isArray(data.activatedCategoryKeys) ? data.activatedCategoryKeys : [],
@@ -2427,15 +2447,37 @@ app.post('/api/auth/session/acquire', async (req: Request, res: Response) => {
 app.post('/api/auth/session/validate', async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
+    const userId = String(body.userId || '').trim();
+    let verifiedUid: string | undefined;
+    let verifiedEmail: string | undefined;
+
+    if (req.headers.authorization) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          valid: false,
+          error: tokenCheck.error || 'Invalid or expired Firebase ID token.'
+        });
+      }
+      verifiedUid = tokenCheck.uid;
+      verifiedEmail = tokenCheck.email;
+    }
+
+    const isVerifiedOwner = Boolean(
+      verifiedUid &&
+        (verifiedUid === userId || (body.firebaseUid && verifiedUid === String(body.firebaseUid).trim()))
+    );
+
     const result = await validateDeviceSessionServer({
-      userId: String(body.userId || '').trim(),
+      userId,
       activeSessionId: body.activeSessionId || (req.headers['x-session-id'] as string) || undefined,
       deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
       hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
       deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
-      allowBootstrapIfMissing: Boolean(body.allowBootstrapIfMissing),
-      firebaseUid: body.firebaseUid,
-      email: body.email,
+      allowBootstrapIfMissing: isVerifiedOwner || (Boolean(body.allowBootstrapIfMissing) && !req.headers.authorization),
+      firebaseUid: verifiedUid || body.firebaseUid,
+      email: verifiedEmail || body.email,
       studentName: body.studentName,
       accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
       deviceName: body.deviceName,
@@ -2471,15 +2513,48 @@ app.post('/api/auth/session/validate', async (req: Request, res: Response) => {
 });
 
 // 8.0c Heartbeat to maintain sliding inactivity TTL on active device
+// Uses Firebase Auth ID-token verification to securely recover sessions after server restarts without false 401 logouts
 app.post('/api/auth/session/heartbeat', async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
+    const userId = String(body.userId || '').trim();
+    let verifiedUid: string | undefined;
+    let verifiedEmail: string | undefined;
+
+    if (req.headers.authorization) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          valid: false,
+          error: tokenCheck.error || 'Invalid or expired Firebase ID token.'
+        });
+      }
+      verifiedUid = tokenCheck.uid;
+      verifiedEmail = tokenCheck.email;
+    }
+
+    const isVerifiedOwner = Boolean(
+      verifiedUid &&
+        (verifiedUid === userId || (body.firebaseUid && verifiedUid === String(body.firebaseUid).trim()))
+    );
+
     const result = await heartbeatDeviceSessionServer({
-      userId: String(body.userId || '').trim(),
+      userId,
       activeSessionId: String(body.activeSessionId || req.headers['x-session-id'] || ''),
       deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
       hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
-      deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || '')
+      deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
+      allowBootstrapIfMissing: isVerifiedOwner,
+      firebaseUid: verifiedUid || body.firebaseUid,
+      email: verifiedEmail || body.email,
+      studentName: body.studentName,
+      accountRole: body.accountRole === 'teacher' ? 'teacher' : 'student',
+      deviceName: body.deviceName,
+      deviceType: body.deviceType,
+      browser: body.browser,
+      os: body.os,
+      userAgentSummary: body.userAgentSummary
     });
 
     if (!result.valid) {
@@ -2494,6 +2569,7 @@ app.post('/api/auth/session/heartbeat', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       valid: true,
+      bootstrapped: Boolean(result.bootstrapped),
       session: result.session
     });
   } catch (error: any) {
@@ -2998,7 +3074,7 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
     }
 
     const isGuestOrDemo = cleanStudentId === 'guest' || cleanStudentId.startsWith('demo_');
-    if (isFirebaseAdminConfigured() && !isGuestOrDemo) {
+    if ((isFirebaseAdminConfigured() || req.headers.authorization) && !isGuestOrDemo) {
       if (!req.headers.authorization) {
         return res.status(401).json({
           success: false,
@@ -3044,7 +3120,26 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
     const targetBoard = normalizeBackendBoard(
       req.body?.targetBoard || req.body?.selectedBoard || req.body?.board || sub.selectedBoard
     );
-    const classStatus = getServerBoardClassStatus(sub, targetBoard, targetClass);
+    const targetCompositeKey = buildBackendBoardClassKey(targetBoard, targetClass);
+    const incomingStudentKeys = Array.isArray(req.body?.studentActivatedClassKeys)
+      ? req.body.studentActivatedClassKeys
+          .map((k: unknown) => parseBackendBoardClassKey(String(k || '')))
+          .filter(Boolean)
+          .map((p: any) => buildBackendBoardClassKey(p.board, p.classLevel))
+      : [];
+    const activateIfMissing = Boolean(req.body?.activateAdditionalBoardClass);
+    const mergedStudentActivatedKeys = Array.from(
+      new Set<string>([
+        ...(Array.isArray(sub.studentActivatedClassKeys) ? sub.studentActivatedClassKeys : []),
+        ...incomingStudentKeys,
+        ...(activateIfMissing ? [targetCompositeKey] : [])
+      ])
+    );
+    const subWithActivations: ServerStudentSubscription = {
+      ...sub,
+      studentActivatedClassKeys: mergedStudentActivatedKeys
+    };
+    const classStatus = getServerBoardClassStatus(subWithActivations, targetBoard, targetClass);
 
     if (!classStatus.isAccessible) {
       return res.status(403).json({
@@ -3059,12 +3154,12 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
         error:
           classStatus.status === 'EXPIRED'
             ? `Your subscription for ${targetBoard} • ${targetClass} has expired. Renew ${targetBoard} (${targetClass}) for ₹99 (365 Days) to switch.`
-            : `${targetBoard} • ${targetClass} is locked on your account. Activate ${targetBoard} (${targetClass}) for ₹99 (365 Days) before switching.`
+            : `${targetBoard} • ${targetClass} is locked on your account. Activate ${targetBoard} (${targetClass}) before switching.`
       });
     }
 
     const updatedSub: ServerStudentSubscription = {
-      ...sub,
+      ...subWithActivations,
       selectedBoard: targetBoard,
       selectedClass: targetClass,
       plan: classStatus.isPaidActive ? 'premium' : 'free',
@@ -3078,15 +3173,26 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
 
     try {
       if (!isGuestOrDemo) {
-        await serverSetDoc(
-          'students',
-          cleanStudentId,
-          { board: targetBoard, classLevel: targetClass },
-          { merge: true }
-        );
+        const isPrimaryOrPaid =
+          (targetBoard === (sub.primaryBoard || 'Maharashtra') &&
+            targetClass === (sub.primaryClassLevel || 'Class 1')) ||
+          classStatus.isPaidActive;
+        const updateDocPayload: Record<string, any> = {
+          activeWorkspaceBoard: targetBoard,
+          activeWorkspaceClassLevel: targetClass,
+          lastActiveDate: new Date().toISOString()
+        };
+        if (mergedStudentActivatedKeys.length > 0) {
+          updateDocPayload.studentActivatedClassKeys = mergedStudentActivatedKeys;
+        }
+        if (isPrimaryOrPaid) {
+          updateDocPayload.board = targetBoard;
+          updateDocPayload.classLevel = targetClass;
+        }
+        await serverUpdateDoc('students', cleanStudentId, updateDocPayload);
       }
     } catch {
-      // Cache still updated if Firestore Admin credentials are absent locally
+      // Cache still updated if document does not exist yet
     }
 
     return res.json({
@@ -3095,6 +3201,7 @@ app.post('/api/subscription/switch-class', async (req: Request, res: Response) =
       selectedBoard: targetBoard,
       selectedClass: targetClass,
       boardClassKey: classStatus.boardClassKey,
+      studentActivatedClassKeys: mergedStudentActivatedKeys,
       status: classStatus.status,
       subscription: updatedSub
     });

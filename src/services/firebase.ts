@@ -21,13 +21,10 @@ import {
   getFirestore,
   initializeFirestore,
   memoryLocalCache,
-  disableNetwork,
-  enableNetwork,
   getDocFromCache,
   setLogLevel,
   doc,
   getDoc,
-  getDocFromServer,
   setDoc,
   updateDoc,
   arrayUnion,
@@ -307,12 +304,7 @@ export async function ensureFirestoreOnline(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return false;
   }
-  try {
-    await enableNetwork(db);
-    return true;
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 async function checkPlatformConfigRestReachable(): Promise<{
@@ -413,33 +405,9 @@ export async function testFirestoreConnection(options?: { force?: boolean }): Pr
     const configRef = doc(db, 'platform_config', 'main');
     let lastErr: unknown = null;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        await ensureFirestoreOnline();
-        const snap = await getDocFromServer(configRef);
-        reportFirestoreConnectionStatus({
-          status: 'connected',
-          isOnline: true,
-          lastCheckedAt: Date.now(),
-          lastConnectedAt: Date.now(),
-          lastError: null,
-          configDocExists: snap.exists(),
-          retryCount: 0,
-        });
-        return {
-          connected: true,
-          via: 'sdk' as const,
-          configDocExists: snap.exists(),
-        };
-      } catch (err) {
-        lastErr = err;
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 600));
-        }
-      }
-    }
-
-    // Fallback check via Firestore REST API to distinguish WebChannel blocking from true offline state
+    // 1. Prefer stateless REST reachability check first so we do not open and abort transient
+    // PersistentListenStream watch targets (which can trigger Firestore 13.2.0 assertion ID: ca9 / b815
+    // when concurrent onSnapshot listeners are active).
     const restProbe = await checkPlatformConfigRestReachable();
     if (restProbe.reachable) {
       reportFirestoreConnectionStatus({
@@ -456,6 +424,27 @@ export async function testFirestoreConnection(options?: { force?: boolean }): Pr
         via: 'rest' as const,
         configDocExists: restProbe.docExists,
       };
+    }
+
+    // 2. Fallback to standard getDoc (without getDocFromServer forced WatchStream target teardown)
+    try {
+      const snap = await getDoc(configRef);
+      reportFirestoreConnectionStatus({
+        status: 'connected',
+        isOnline: true,
+        lastCheckedAt: Date.now(),
+        lastConnectedAt: Date.now(),
+        lastError: null,
+        configDocExists: snap.exists(),
+        retryCount: 0,
+      });
+      return {
+        connected: true,
+        via: 'sdk' as const,
+        configDocExists: snap.exists(),
+      };
+    } catch (err) {
+      lastErr = err;
     }
 
     // Try local IndexedDB cache check so we know if offline cache is intact
@@ -511,7 +500,8 @@ if (typeof window !== 'undefined') {
       void triggerFirestoreReconnect();
     });
     window.addEventListener('offline', () => {
-      void disableNetwork(db).catch(() => {});
+      // Do not call disableNetwork(db) here: Firestore's internal ConnectivityMonitor manages
+      // stream suspension automatically without corrupting WatchChangeAggregator target state (ID: ca9).
       reportFirestoreConnectionStatus({
         status: 'offline',
         isOnline: false,
@@ -981,6 +971,10 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     let existingClassSubscriptions: Partial<Record<string, ClassSubscriptionRecord>> = {};
     let existingActivatedClasses: ClassLevel[] = [];
     let existingActivatedClassKeys: BoardClassKey[] = [];
+    let existingStudentActivatedClassKeys: BoardClassKey[] = [];
+    let existingDocBoard: EducationBoard | undefined;
+    let existingDocClassLevel: ClassLevel | undefined;
+    let stuDocExists = false;
 
     let refDocExists = false;
 
@@ -989,7 +983,15 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
         getCachedStudentDoc(student.id),
         getCachedReferralDoc(student.id),
       ]);
+      stuDocExists = Boolean(stuData);
       refDocExists = Boolean(refData);
+
+      if (stuData?.board) {
+        existingDocBoard = normalizeBoardValue(stuData.board);
+      }
+      if (stuData?.classLevel) {
+        existingDocClassLevel = normalizeClassLevelValue(stuData.classLevel) || undefined;
+      }
 
       const storedCode =
         sanitizeReferralCode(stuData?.referralCode) ||
@@ -1033,6 +1035,14 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
           })
           .filter(Boolean) as BoardClassKey[];
       }
+      if (Array.isArray(stuData?.studentActivatedClassKeys)) {
+        existingStudentActivatedClassKeys = stuData.studentActivatedClassKeys
+          .map((k: string) => {
+            const p = parseBoardClassKey(k);
+            return p ? buildBoardClassKey(p.board, p.classLevel) : null;
+          })
+          .filter(Boolean) as BoardClassKey[];
+      }
     } catch {
       // Offline or first write — proceed with deterministic code
     }
@@ -1047,14 +1057,6 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     };
     const activePaidClasses = new Set<ClassLevel>(existingActivatedClasses);
     const activePaidClassKeys = new Set<BoardClassKey>(existingActivatedClassKeys);
-    for (const clsItem of student.activatedClasses || []) {
-      const norm = normalizeClassLevelValue(clsItem);
-      if (norm) activePaidClasses.add(norm);
-    }
-    for (const kItem of student.activatedClassKeys || []) {
-      const p = parseBoardClassKey(kItem);
-      if (p) activePaidClassKeys.add(buildBoardClassKey(p.board, p.classLevel));
-    }
     for (const [k, rec] of Object.entries(mergedClassSubscriptions)) {
       const parsed = parseBoardClassKey(k);
       const cls = normalizeClassLevelValue(rec?.classLevel || parsed?.classLevel);
@@ -1069,6 +1071,12 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       }
     }
 
+    const studentActivatedKeySet = new Set<BoardClassKey>(existingStudentActivatedClassKeys);
+    for (const kItem of student.studentActivatedClassKeys || []) {
+      const p = parseBoardClassKey(kItem);
+      if (p) studentActivatedKeySet.add(buildBoardClassKey(p.board, p.classLevel));
+    }
+
     const activePlan =
       student.plan === 'basic' || student.plan === 'premium' || activePaidClassKeys.size > 0 || activePaidClasses.size > 0
         ? 'premium'
@@ -1076,15 +1084,38 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     const isPaid = activePlan === 'premium';
     const fallbackDates = isPaid ? computePaidPlanExpiryIsoDate() : null;
 
-    const resolvedBoard = normalizeBoardValue(student.board || 'Maharashtra');
+    const resolvedWorkspaceBoard = normalizeBoardValue(
+      student.activeWorkspaceBoard || student.board || 'Maharashtra'
+    );
+    const resolvedWorkspaceClass =
+      normalizeClassLevelValue(student.activeWorkspaceClassLevel || student.classLevel) || 'Class 1';
     const resolvedPrimaryBoard =
       existingPrimaryBoard ||
-      normalizeBoardValue(student.primaryBoard || resolvedBoard);
+      normalizeBoardValue(student.primaryBoard || resolvedWorkspaceBoard);
     const resolvedPrimaryClass =
       existingPrimaryClass ||
       normalizeClassLevelValue(student.primaryClassLevel) ||
-      normalizeClassLevelValue(student.classLevel) ||
-      'Class 1';
+      resolvedWorkspaceClass;
+
+    // Ensure top-level board & classLevel satisfy firestore.rules allow create / allow update
+    const workspaceCompositeKey = buildBoardClassKey(resolvedWorkspaceBoard, resolvedWorkspaceClass);
+    const canWriteTopLevelBoardClass =
+      !stuDocExists ||
+      (resolvedWorkspaceBoard === resolvedPrimaryBoard &&
+        resolvedWorkspaceClass === resolvedPrimaryClass) ||
+      activePaidClassKeys.has(workspaceCompositeKey) ||
+      (resolvedWorkspaceBoard === 'Maharashtra' && activePaidClasses.has(resolvedWorkspaceClass));
+
+    const ruleSafeBoard = !stuDocExists
+      ? resolvedPrimaryBoard
+      : canWriteTopLevelBoardClass
+        ? resolvedWorkspaceBoard
+        : existingDocBoard || resolvedPrimaryBoard;
+    const ruleSafeClass = !stuDocExists
+      ? resolvedPrimaryClass
+      : canWriteTopLevelBoardClass
+        ? resolvedWorkspaceClass
+        : existingDocClassLevel || resolvedPrimaryClass;
 
     const resolvedPurchasedAt = isPaid
       ? student.planPurchasedAt || fallbackDates?.purchasedAt
@@ -1093,14 +1124,14 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
       ? student.planExpiresAt || fallbackDates?.expiresAt
       : undefined;
     const resolvedActivatedBoard = isPaid
-      ? normalizeBoardValue(student.activatedBoard || resolvedBoard)
+      ? normalizeBoardValue(student.activatedBoard || resolvedWorkspaceBoard)
       : undefined;
     const resolvedActivatedClass = isPaid
-      ? student.activatedClassLevel || Array.from(activePaidClasses)[0] || student.classLevel
+      ? student.activatedClassLevel || Array.from(activePaidClasses)[0] || resolvedWorkspaceClass
       : undefined;
 
     const planLabel = isPaid
-      ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year) (${resolvedActivatedBoard || resolvedBoard} • ${resolvedActivatedClass || student.classLevel})`
+      ? `PREMIUM PLAN – ₹99 – 365 Days (1 Year) (${resolvedActivatedBoard || resolvedWorkspaceBoard} • ${resolvedActivatedClass || resolvedWorkspaceClass})`
       : 'FREE PLAN – ₹0 – Lifetime';
 
     // Strip any passwordHash field and clean undefined values before Firestore setDoc
@@ -1108,12 +1139,16 @@ export async function saveStudentProfileToFirestore(student: StudentProfile & { 
     const cleanData = JSON.parse(
       JSON.stringify({
         ...safeStudentFields,
-        board: resolvedBoard,
+        board: ruleSafeBoard,
+        classLevel: ruleSafeClass,
+        activeWorkspaceBoard: resolvedWorkspaceBoard,
+        activeWorkspaceClassLevel: resolvedWorkspaceClass,
         accountRole: student.accountRole || 'student',
         primaryBoard: resolvedPrimaryBoard,
         primaryClassLevel: resolvedPrimaryClass,
         activatedClasses: Array.from(activePaidClasses),
         activatedClassKeys: Array.from(activePaidClassKeys),
+        studentActivatedClassKeys: Array.from(studentActivatedKeySet),
         classSubscriptions: mergedClassSubscriptions,
         plan: activePlan,
         planLabel,
@@ -1688,12 +1723,15 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
   plan?: 'free' | 'basic' | 'premium';
   board?: EducationBoard;
   classLevel?: ClassLevel;
+  activeWorkspaceBoard?: EducationBoard;
+  activeWorkspaceClassLevel?: ClassLevel;
   primaryBoard?: EducationBoard;
   primaryClassLevel?: ClassLevel;
   activatedBoard?: EducationBoard | null;
   activatedClassLevel?: string | null;
   activatedClasses?: ClassLevel[];
   activatedClassKeys?: BoardClassKey[];
+  studentActivatedClassKeys?: BoardClassKey[];
   classSubscriptions?: Partial<Record<string, ClassSubscriptionRecord>>;
   activatedCategoryKeys?: CategoryId[];
   categorySubscriptions?: Partial<Record<CategoryId, CategorySubscriptionRecord>>;
@@ -1709,13 +1747,22 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
     const rawPlan = data?.plan;
     const plan: 'free' | 'basic' | 'premium' =
       rawPlan === 'premium' || rawPlan === 'basic' ? rawPlan : 'free';
-    const resolvedBoard = normalizeBoardValue(data?.board || data?.primaryBoard || 'Maharashtra');
+    const resolvedBoard = normalizeBoardValue(
+      data?.activeWorkspaceBoard || data?.board || data?.primaryBoard || 'Maharashtra'
+    );
+    const resolvedClassLevel =
+      normalizeClassLevelValue(data?.activeWorkspaceClassLevel || data?.classLevel) || undefined;
     return {
       found: true,
       plan,
       board: resolvedBoard,
-      classLevel: normalizeClassLevelValue(data?.classLevel) || undefined,
-      primaryBoard: normalizeBoardValue(data?.primaryBoard || resolvedBoard),
+      classLevel: resolvedClassLevel,
+      activeWorkspaceBoard: data?.activeWorkspaceBoard
+        ? normalizeBoardValue(data.activeWorkspaceBoard)
+        : undefined,
+      activeWorkspaceClassLevel:
+        normalizeClassLevelValue(data?.activeWorkspaceClassLevel) || undefined,
+      primaryBoard: normalizeBoardValue(data?.primaryBoard || data?.board || resolvedBoard),
       primaryClassLevel:
         normalizeClassLevelValue(data?.primaryClassLevel) ||
         normalizeClassLevelValue(data?.classLevel) ||
@@ -1729,6 +1776,14 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
         : [],
       activatedClassKeys: Array.isArray(data?.activatedClassKeys)
         ? (data.activatedClassKeys
+            .map((k: string) => {
+              const p = parseBoardClassKey(k);
+              return p ? buildBoardClassKey(p.board, p.classLevel) : null;
+            })
+            .filter(Boolean) as BoardClassKey[])
+        : [],
+      studentActivatedClassKeys: Array.isArray(data?.studentActivatedClassKeys)
+        ? (data.studentActivatedClassKeys
             .map((k: string) => {
               const p = parseBoardClassKey(k);
               return p ? buildBoardClassKey(p.board, p.classLevel) : null;
@@ -1756,21 +1811,50 @@ export async function fetchStudentSubscriptionFromFirestore(studentId: string): 
   }
 }
 
-// 10c. Persist verified switch between already-unlocked (board, class) pairs on a user account
+// 10c. Persist verified switch or additional board/class activation on a student account in Firestore
 export async function switchStudentActiveClassInFirestore(
   studentId: string,
   targetClass: ClassLevel,
-  targetBoard?: EducationBoard
+  targetBoard?: EducationBoard,
+  studentActivatedClassKeys?: BoardClassKey[]
 ): Promise<{ success: boolean }> {
   if (!studentId) return { success: false };
   try {
+    const resolvedBoard = normalizeBoardValue(targetBoard || 'Maharashtra');
+    const existingData = await getCachedStudentDoc(studentId);
+    const primaryBoard = normalizeBoardValue(
+      existingData?.primaryBoard || existingData?.board || resolvedBoard
+    );
+    const primaryClass =
+      normalizeClassLevelValue(existingData?.primaryClassLevel) ||
+      normalizeClassLevelValue(existingData?.classLevel) ||
+      targetClass;
+    const paidKeys: string[] = Array.isArray(existingData?.activatedClassKeys)
+      ? existingData.activatedClassKeys
+      : [];
+    const paidClasses: string[] = Array.isArray(existingData?.activatedClasses)
+      ? existingData.activatedClasses
+      : [];
+    const targetCompositeKey = buildBoardClassKey(resolvedBoard, targetClass);
+
+    const canUpdateTopLevelBoardClass =
+      (resolvedBoard === primaryBoard && targetClass === primaryClass) ||
+      paidKeys.includes(targetCompositeKey) ||
+      (resolvedBoard === 'Maharashtra' && paidClasses.includes(targetClass));
+
     const updatePayload: Record<string, any> = {
-      classLevel: targetClass,
+      activeWorkspaceBoard: resolvedBoard,
+      activeWorkspaceClassLevel: targetClass,
       lastActiveDate: new Date().toISOString(),
     };
-    if (targetBoard) {
-      updatePayload.board = normalizeBoardValue(targetBoard);
+    if (canUpdateTopLevelBoardClass) {
+      updatePayload.board = resolvedBoard;
+      updatePayload.classLevel = targetClass;
     }
+    if (Array.isArray(studentActivatedClassKeys) && studentActivatedClassKeys.length > 0) {
+      updatePayload.studentActivatedClassKeys = studentActivatedClassKeys;
+    }
+
     await updateDoc(doc(db, 'students', studentId), updatePayload);
     updateCachedStudentDoc(studentId, updatePayload);
     return { success: true };
@@ -1800,18 +1884,41 @@ export async function fetchStudentProfileFromFirestore(
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanUid && !cleanEmail) return null;
 
+  const hydrateFetchedProfile = (data: StudentProfile, fallbackId: string): StudentProfile => {
+    const { passwordHash: _ignored, ...safeProfile } = data;
+    const resolvedBoard = normalizeBoardValue(
+      data.activeWorkspaceBoard || data.board || data.primaryBoard || 'Maharashtra'
+    );
+    const resolvedClassLevel =
+      normalizeClassLevelValue(
+        data.activeWorkspaceClassLevel || data.classLevel || data.primaryClassLevel
+      ) || 'Class 1';
+    return {
+      ...safeProfile,
+      board: resolvedBoard,
+      classLevel: resolvedClassLevel,
+      activeWorkspaceBoard: resolvedBoard,
+      activeWorkspaceClassLevel: resolvedClassLevel,
+      primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
+      primaryClassLevel:
+        normalizeClassLevelValue(data.primaryClassLevel || data.classLevel) || resolvedClassLevel,
+      studentActivatedClassKeys: Array.isArray(data.studentActivatedClassKeys)
+        ? (data.studentActivatedClassKeys
+            .map((k: string) => {
+              const p = parseBoardClassKey(k);
+              return p ? buildBoardClassKey(p.board, p.classLevel) : null;
+            })
+            .filter(Boolean) as BoardClassKey[])
+        : undefined,
+      id: data.id || fallbackId,
+    };
+  };
+
   try {
     if (cleanUid) {
       const directData = await getCachedStudentDoc(cleanUid);
       if (directData) {
-        const data = directData as StudentProfile;
-        const { passwordHash: _ignored, ...safeProfile } = data;
-        return {
-          ...safeProfile,
-          board: normalizeBoardValue(data.board || data.primaryBoard || 'Maharashtra'),
-          primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
-          id: data.id || cleanUid,
-        };
+        return hydrateFetchedProfile(directData as StudentProfile, cleanUid);
       }
 
       const byFirebaseUidQuery = query(
@@ -1822,14 +1929,7 @@ export async function fetchStudentProfileFromFirestore(
       const byUidSnap = await getDocs(byFirebaseUidQuery).catch(() => null);
       if (byUidSnap && !byUidSnap.empty) {
         const docSnap = byUidSnap.docs[0];
-        const data = docSnap.data() as StudentProfile;
-        const { passwordHash: _ignored, ...safeProfile } = data;
-        return {
-          ...safeProfile,
-          board: normalizeBoardValue(data.board || data.primaryBoard || 'Maharashtra'),
-          primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
-          id: data.id || docSnap.id,
-        };
+        return hydrateFetchedProfile(docSnap.data() as StudentProfile, docSnap.id);
       }
     }
 
@@ -1842,14 +1942,7 @@ export async function fetchStudentProfileFromFirestore(
       const byEmailSnap = await getDocs(byEmailQuery).catch(() => null);
       if (byEmailSnap && !byEmailSnap.empty) {
         const docSnap = byEmailSnap.docs[0];
-        const data = docSnap.data() as StudentProfile;
-        const { passwordHash: _ignored, ...safeProfile } = data;
-        return {
-          ...safeProfile,
-          board: normalizeBoardValue(data.board || data.primaryBoard || 'Maharashtra'),
-          primaryBoard: normalizeBoardValue(data.primaryBoard || data.board || 'Maharashtra'),
-          id: data.id || docSnap.id,
-        };
+        return hydrateFetchedProfile(docSnap.data() as StudentProfile, docSnap.id);
       }
     }
   } catch (err) {

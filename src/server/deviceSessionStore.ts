@@ -315,10 +315,16 @@ export async function validateDeviceSessionServer(
       input.hardwareSignature?.length >= 8 &&
       input.deviceSignature?.length >= 8
     ) {
+      const preferredSid =
+        input.activeSessionId &&
+        input.activeSessionId.length >= 8 &&
+        input.activeSessionId.length <= 128
+          ? input.activeSessionId
+          : undefined;
       const fresh = buildFreshActiveSession(
         {
           userId: cleanUserId,
-          firebaseUid: input.firebaseUid,
+          firebaseUid: input.firebaseUid || cleanUserId,
           email: input.email || '',
           studentName: input.studentName || 'Student',
           accountRole: input.accountRole || 'student',
@@ -331,7 +337,9 @@ export async function validateDeviceSessionServer(
           os: input.os,
           userAgentSummary: input.userAgentSummary
         },
-        nowMs
+        nowMs,
+        null,
+        preferredSid
       );
       await persistDeviceSessionToStore(fresh);
       return {
@@ -423,6 +431,7 @@ export async function validateDeviceSessionServer(
 
 /**
  * Heartbeat updates lastActivityAt & extends expiresAtMs ONLY for the active device & session.
+ * Supports authenticated recovery after server restarts when the caller presents a verified Firebase Auth ID token.
  */
 export async function heartbeatDeviceSessionServer(
   input: {
@@ -431,6 +440,16 @@ export async function heartbeatDeviceSessionServer(
     deviceId: string;
     hardwareSignature: string;
     deviceSignature: string;
+    allowBootstrapIfMissing?: boolean;
+    firebaseUid?: string;
+    email?: string;
+    studentName?: string;
+    accountRole?: 'student' | 'teacher';
+    deviceName?: string;
+    deviceType?: DeviceType;
+    browser?: string;
+    os?: string;
+    userAgentSummary?: string;
   },
   nowMs: number = Date.now()
 ): Promise<ValidateSessionResult> {
@@ -448,6 +467,7 @@ export async function heartbeatDeviceSessionServer(
   await persistDeviceSessionToStore(updated);
   return {
     valid: true,
+    bootstrapped: Boolean(check.bootstrapped),
     session: updated
   };
 }

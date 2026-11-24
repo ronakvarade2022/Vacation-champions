@@ -131,10 +131,13 @@ export interface StudentProfile {
   accountRole?: 'student' | 'teacher';
   primaryBoard?: EducationBoard;
   primaryClassLevel?: ClassLevel;
+  activeWorkspaceBoard?: EducationBoard;
+  activeWorkspaceClassLevel?: ClassLevel;
   activatedBoard?: EducationBoard;
   activatedClassLevel?: ClassLevel;
   activatedClasses?: ClassLevel[];
   activatedClassKeys?: BoardClassKey[];
+  studentActivatedClassKeys?: BoardClassKey[];
   classSubscriptions?: Partial<Record<string, ClassSubscriptionRecord>>;
   activatedCategoryKeys?: CategoryId[];
   categorySubscriptions?: Partial<Record<CategoryId, CategorySubscriptionRecord>>;

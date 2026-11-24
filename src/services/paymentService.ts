@@ -308,8 +308,18 @@ export async function switchStudentActiveClassApi(
   studentId: string,
   targetClass: ClassLevel,
   idToken?: string,
-  targetBoard?: EducationBoard
-): Promise<{ success: boolean; board?: EducationBoard; classLevel?: string; error?: string }> {
+  targetBoard?: EducationBoard,
+  options?: {
+    studentActivatedClassKeys?: string[];
+    activateAdditionalBoardClass?: boolean;
+  }
+): Promise<{
+  success: boolean;
+  board?: EducationBoard;
+  classLevel?: string;
+  studentActivatedClassKeys?: string[];
+  error?: string;
+}> {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (idToken) headers.Authorization = `Bearer ${idToken}`;
@@ -323,7 +333,13 @@ export async function switchStudentActiveClassApi(
           studentId,
           targetBoard: resolvedBoard,
           selectedBoard: resolvedBoard,
-          targetClass
+          targetClass,
+          ...(Array.isArray(options?.studentActivatedClassKeys)
+            ? { studentActivatedClassKeys: options.studentActivatedClassKeys }
+            : {}),
+          ...(options?.activateAdditionalBoardClass
+            ? { activateAdditionalBoardClass: true }
+            : {})
         })
       },
       10000
@@ -333,6 +349,9 @@ export async function switchStudentActiveClassApi(
       success: Boolean(res.ok && data?.success),
       board: data?.selectedBoard || resolvedBoard,
       classLevel: data?.classLevel || data?.selectedClass,
+      studentActivatedClassKeys: Array.isArray(data?.studentActivatedClassKeys)
+        ? data.studentActivatedClassKeys
+        : undefined,
       error: data?.error
     };
   } catch {

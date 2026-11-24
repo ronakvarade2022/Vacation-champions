@@ -762,8 +762,10 @@ export function getBoardClassSubscriptionInfo(
     };
   }
 
-  // Student-activated additional board & class workspace (via activatedClassKeys or classSubscriptions)
+  // Student-activated additional board & class workspace (via studentActivatedClassKeys, activatedClassKeys or classSubscriptions)
   const isStudentWorkspaceActivated =
+    (Array.isArray(student.studentActivatedClassKeys) &&
+      student.studentActivatedClassKeys.includes(boardClassKey)) ||
     (Array.isArray(student.activatedClassKeys) && student.activatedClassKeys.includes(boardClassKey)) ||
     (b === 'Maharashtra' &&
       Array.isArray(student.activatedClasses) &&

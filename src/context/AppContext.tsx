@@ -741,7 +741,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const code =
           sanitizeReferralCode(safeParsed.referralCode) ||
           generateUniqueStudentReferralCode(safeParsed.id, safeParsed.name);
-        const resolvedBoard = normalizeBoardValue(safeParsed.board || 'Maharashtra');
+        const resolvedBoard = normalizeBoardValue(
+          safeParsed.activeWorkspaceBoard || safeParsed.board || 'Maharashtra'
+        );
+        const resolvedClassLevel =
+          normalizeClassLevelValue(safeParsed.activeWorkspaceClassLevel) ||
+          normalizeClassLevelValue(safeParsed.classLevel) ||
+          'Class 1';
         let extraLocalActivatedKeys: BoardClassKey[] = [];
         try {
           const rawLocalKeys = localStorage.getItem(`msz_activated_board_classes_${safeParsed.id}`);
@@ -752,9 +758,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
         } catch {}
-        const mergedInitialActivatedKeys = Array.from(
+        const mergedStudentActivatedKeys = Array.from(
           new Set<BoardClassKey>([
-            ...(Array.isArray(safeParsed.activatedClassKeys) ? safeParsed.activatedClassKeys : []),
+            ...(Array.isArray(safeParsed.studentActivatedClassKeys)
+              ? safeParsed.studentActivatedClassKeys
+              : []),
             ...extraLocalActivatedKeys,
           ])
         );
@@ -762,7 +770,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...safeParsed,
           accountRole: safeParsed.accountRole || 'student',
           board: resolvedBoard,
-          primaryBoard: normalizeBoardValue(safeParsed.primaryBoard || resolvedBoard),
+          classLevel: resolvedClassLevel,
+          activeWorkspaceBoard: resolvedBoard,
+          activeWorkspaceClassLevel: resolvedClassLevel,
+          primaryBoard: normalizeBoardValue(safeParsed.primaryBoard || safeParsed.board || resolvedBoard),
           activatedBoard: safeParsed.activatedBoard ? normalizeBoardValue(safeParsed.activatedBoard) : undefined,
           primaryClassLevel:
             normalizeClassLevelValue(safeParsed.primaryClassLevel) ||
@@ -776,8 +787,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           activatedClasses: Array.isArray(safeParsed.activatedClasses)
             ? safeParsed.activatedClasses
             : undefined,
-          activatedClassKeys:
-            mergedInitialActivatedKeys.length > 0 ? mergedInitialActivatedKeys : undefined,
+          activatedClassKeys: Array.isArray(safeParsed.activatedClassKeys)
+            ? safeParsed.activatedClassKeys
+            : undefined,
+          studentActivatedClassKeys:
+            mergedStudentActivatedKeys.length > 0 ? mergedStudentActivatedKeys : undefined,
           classSubscriptions: safeParsed.classSubscriptions || undefined,
           activatedCategoryKeys: Array.isArray(safeParsed.activatedCategoryKeys)
             ? safeParsed.activatedCategoryKeys
@@ -1606,6 +1620,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         displayName: resolvedProfile.name,
         role: accountRole,
         studentId: resolvedProfile.id,
+        board: resolvedProfile.board,
         classLevel: resolvedProfile.classLevel,
         isVerified: true
       });
@@ -1728,6 +1743,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...(fbSub.activatedClassKeys || []),
           ])
         );
+        const mergedStudentActivatedKeys = Array.from(
+          new Set<BoardClassKey>([
+            ...(profile.studentActivatedClassKeys || []),
+            ...((fbSub.studentActivatedClassKeys as BoardClassKey[]) || []),
+          ])
+        );
         const mergedActivatedCategoryKeys = Array.from(
           new Set([
             ...(profile.activatedCategoryKeys || []),
@@ -1736,14 +1757,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         const resolvedPrimary =
           fbSub.primaryClassLevel || profile.primaryClassLevel || profile.classLevel;
-        const resolvedBoard = normalizeBoardValue(fbSub.board || profile.board || 'Maharashtra');
+        const resolvedBoard = normalizeBoardValue(
+          fbSub.activeWorkspaceBoard || fbSub.board || profile.activeWorkspaceBoard || profile.board || 'Maharashtra'
+        );
+        const resolvedClassLevel =
+          normalizeClassLevelValue(fbSub.activeWorkspaceClassLevel) ||
+          normalizeClassLevelValue(fbSub.classLevel) ||
+          normalizeClassLevelValue(profile.activeWorkspaceClassLevel) ||
+          profile.classLevel;
         const resolvedPrimaryBoard = normalizeBoardValue(
-          fbSub.primaryBoard || profile.primaryBoard || resolvedBoard
+          fbSub.primaryBoard || profile.primaryBoard || fbSub.board || resolvedBoard
         );
         return {
           ...profile,
           plan: fbSub.plan!,
           board: resolvedBoard,
+          classLevel: resolvedClassLevel,
+          activeWorkspaceBoard: resolvedBoard,
+          activeWorkspaceClassLevel: resolvedClassLevel,
           primaryBoard: resolvedPrimaryBoard,
           activatedBoard: fbSub.activatedBoard
             ? normalizeBoardValue(fbSub.activatedBoard)
@@ -1753,6 +1784,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (fbSub.activatedClassLevel as ClassLevel) || profile.activatedClassLevel,
           activatedClasses: mergedActivatedClasses,
           activatedClassKeys: mergedActivatedKeys,
+          studentActivatedClassKeys:
+            mergedStudentActivatedKeys.length > 0
+              ? mergedStudentActivatedKeys
+              : profile.studentActivatedClassKeys,
           classSubscriptions: mergedClassSubs,
           activatedCategoryKeys: mergedActivatedCategoryKeys.length > 0 ? mergedActivatedCategoryKeys : profile.activatedCategoryKeys,
           categorySubscriptions: mergedCategorySubs,
@@ -1767,9 +1802,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (
           prev.plan === next.plan &&
           (prev.board || 'Maharashtra') === (next.board || 'Maharashtra') &&
+          prev.classLevel === next.classLevel &&
           (prev.planExpiresAt || null) === (next.planExpiresAt || null) &&
           JSON.stringify(prev.classSubscriptions || {}) === JSON.stringify(next.classSubscriptions || {}) &&
           JSON.stringify(prev.activatedClassKeys || []) === JSON.stringify(next.activatedClassKeys || []) &&
+          JSON.stringify(prev.studentActivatedClassKeys || []) === JSON.stringify(next.studentActivatedClassKeys || []) &&
           JSON.stringify(prev.categorySubscriptions || {}) === JSON.stringify(next.categorySubscriptions || {}) &&
           JSON.stringify(prev.activatedCategoryKeys || []) === JSON.stringify(next.activatedCategoryKeys || [])
         ) {
@@ -3030,6 +3067,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...currentStudent,
       board: resolvedBoard,
       classLevel: normalizedTarget,
+      activeWorkspaceBoard: resolvedBoard,
+      activeWorkspaceClassLevel: normalizedTarget,
       lastActiveDate: new Date().toISOString(),
     };
 
@@ -3039,13 +3078,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev ? { ...prev, board: resolvedBoard, classLevel: normalizedTarget } : prev
     );
 
-    switchStudentActiveClassInFirestore(updatedStudent.id, normalizedTarget, resolvedBoard).catch(() => {});
+    switchStudentActiveClassInFirestore(
+      updatedStudent.id,
+      normalizedTarget,
+      resolvedBoard,
+      updatedStudent.studentActivatedClassKeys
+    ).catch(() => {});
     (async () => {
       let token: string | undefined;
       try {
         token = await auth.currentUser?.getIdToken();
       } catch {}
-      await switchStudentActiveClassApi(updatedStudent.id, normalizedTarget, token, resolvedBoard);
+      await switchStudentActiveClassApi(updatedStudent.id, normalizedTarget, token, resolvedBoard, {
+        studentActivatedClassKeys: updatedStudent.studentActivatedClassKeys,
+      });
     })().catch(() => {});
 
     addNotification(
@@ -3093,27 +3139,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetKey = buildBoardClassKey(resolvedBoard, normalizedTarget);
     const baseKey = buildBoardClassKey(baseBoard, baseClass);
 
-    const existingKeys = Array.isArray(currentStudent.activatedClassKeys)
+    const existingStudentKeys = Array.isArray(currentStudent.studentActivatedClassKeys)
+      ? currentStudent.studentActivatedClassKeys
+      : [];
+    const existingPaidKeys = Array.isArray(currentStudent.activatedClassKeys)
       ? currentStudent.activatedClassKeys
       : [];
-    const mergedKeys = Array.from(new Set<BoardClassKey>([...existingKeys, baseKey, targetKey]));
+    const mergedStudentKeys = Array.from(
+      new Set<BoardClassKey>([...existingStudentKeys, ...existingPaidKeys, baseKey, targetKey])
+    );
 
-    const existingClasses = Array.isArray(currentStudent.activatedClasses)
-      ? currentStudent.activatedClasses
-      : [];
-    const mergedClasses =
-      resolvedBoard === 'Maharashtra'
-        ? Array.from(new Set<ClassLevel>([...existingClasses, normalizedTarget]))
-        : existingClasses;
+    const nextActiveBoard = switchAfterActivate
+      ? resolvedBoard
+      : normalizeBoardValue(currentStudent.board || baseBoard);
+    const nextActiveClass = switchAfterActivate
+      ? normalizedTarget
+      : currentStudent.classLevel;
 
     const updatedStudent: StudentProfile = {
       ...currentStudent,
       primaryBoard: baseBoard,
       primaryClassLevel: baseClass,
-      board: switchAfterActivate ? resolvedBoard : normalizeBoardValue(currentStudent.board || baseBoard),
-      classLevel: switchAfterActivate ? normalizedTarget : currentStudent.classLevel,
-      activatedClassKeys: mergedKeys,
-      activatedClasses: mergedClasses.length > 0 ? mergedClasses : currentStudent.activatedClasses,
+      board: nextActiveBoard,
+      classLevel: nextActiveClass,
+      activeWorkspaceBoard: nextActiveBoard,
+      activeWorkspaceClassLevel: nextActiveClass,
+      studentActivatedClassKeys: mergedStudentKeys,
       lastActiveDate: new Date().toISOString(),
     };
 
@@ -3127,8 +3178,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const storageKey = `msz_activated_board_classes_${updatedStudent.id}`;
-      localStorage.setItem(storageKey, JSON.stringify(mergedKeys));
+      localStorage.setItem(storageKey, JSON.stringify(mergedStudentKeys));
     } catch {}
+
+    // Persist additional board & class activation securely to Firestore and backend
+    switchStudentActiveClassInFirestore(
+      updatedStudent.id,
+      nextActiveClass,
+      nextActiveBoard,
+      mergedStudentKeys
+    ).catch(() => {});
+    (async () => {
+      let token: string | undefined;
+      try {
+        token = await auth.currentUser?.getIdToken();
+      } catch {}
+      await switchStudentActiveClassApi(updatedStudent.id, nextActiveClass, token, nextActiveBoard, {
+        studentActivatedClassKeys: mergedStudentKeys,
+        activateAdditionalBoardClass: true,
+      });
+    })().catch(() => {});
 
     addNotification(
       `Activated ${getBoardShortLabel(resolvedBoard)} • ${normalizedTarget} ✅`,

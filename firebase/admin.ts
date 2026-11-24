@@ -323,17 +323,293 @@ export function getAdminAuth(): AdminAuth | null {
   return initAdminRuntime().auth;
 }
 
+import { AsyncLocalStorage } from 'async_hooks';
+
+interface RequestBearerContext {
+  token?: string;
+  uid?: string;
+  email?: string;
+}
+
+const requestBearerStorage = new AsyncLocalStorage<RequestBearerContext>();
+
+/**
+ * Wraps an asynchronous request handler with the caller's raw Authorization Bearer token
+ * so server-side Firestore operations can authenticate against Firestore REST v1 under firestore.rules
+ * whenever an explicit Admin service account key is not present in the environment.
+ */
+export function runWithRequestBearerToken<T>(
+  authHeader: string | string[] | undefined,
+  fn: () => T
+): T {
+  const headerStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const token =
+    headerStr && headerStr.startsWith('Bearer ')
+      ? headerStr.slice('Bearer '.length).trim()
+      : undefined;
+  return requestBearerStorage.run({ token: token && token.length >= 20 ? token : undefined }, fn);
+}
+
+export function getActiveRequestBearerToken(): string | undefined {
+  return requestBearerStorage.getStore()?.token;
+}
+
 function sanitizeDocPayload(data: Record<string, any>): Record<string, any> {
   return JSON.parse(JSON.stringify(data));
 }
 
+// ---------------------------------------------------------------------------
+// Firestore REST v1 Value Serialization / Deserialization Helpers
+// Allows authenticated server-side reads/writes using the caller's verified
+// Firebase Auth ID token so firestore.rules are enforced by Google Cloud.
+// ---------------------------------------------------------------------------
+
+function jsToFirestoreValue(val: any): Record<string, any> {
+  if (val === null || val === undefined) {
+    return { nullValue: null };
+  }
+  if (typeof val === 'boolean') {
+    return { booleanValue: val };
+  }
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) {
+      return { integerValue: String(val) };
+    }
+    return { doubleValue: val };
+  }
+  if (typeof val === 'string') {
+    return { stringValue: val };
+  }
+  if (Array.isArray(val)) {
+    return {
+      arrayValue: {
+        values: val.map((item) => jsToFirestoreValue(item))
+      }
+    };
+  }
+  if (typeof val === 'object') {
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== undefined) {
+        fields[k] = jsToFirestoreValue(v);
+      }
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+
+function firestoreValueToJs(fieldVal: Record<string, any> | undefined): any {
+  if (!fieldVal || typeof fieldVal !== 'object') return null;
+  if ('nullValue' in fieldVal) return null;
+  if ('booleanValue' in fieldVal) return Boolean(fieldVal.booleanValue);
+  if ('integerValue' in fieldVal) return Number(fieldVal.integerValue);
+  if ('doubleValue' in fieldVal) return Number(fieldVal.doubleValue);
+  if ('timestampValue' in fieldVal) return String(fieldVal.timestampValue);
+  if ('stringValue' in fieldVal) return String(fieldVal.stringValue);
+  if ('arrayValue' in fieldVal) {
+    const arr = fieldVal.arrayValue?.values;
+    return Array.isArray(arr) ? arr.map((v: any) => firestoreValueToJs(v)) : [];
+  }
+  if ('mapValue' in fieldVal) {
+    const fields = fieldVal.mapValue?.fields;
+    if (!fields || typeof fields !== 'object') return {};
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = firestoreValueToJs(v as Record<string, any>);
+    }
+    return out;
+  }
+  return null;
+}
+
+function firestoreDocToJs(docObj: { name?: string; fields?: Record<string, any> }): Record<string, any> {
+  const out: Record<string, any> = {};
+  const fields = docObj?.fields;
+  if (fields && typeof fields === 'object') {
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = firestoreValueToJs(v as Record<string, any>);
+    }
+  }
+  return out;
+}
+
+function getFirestoreRestBaseUrl(): string {
+  const projectId = encodeURIComponent(firebaseConfig.projectId);
+  const databaseId = encodeURIComponent(firebaseConfig.firestoreDatabaseId);
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents`;
+}
+
+async function firestoreRestGetDoc(
+  collectionName: string,
+  docId: string,
+  bearerToken?: string
+): Promise<Record<string, any> | null> {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const apiKeyParam = firebaseConfig.apiKey
+    ? `?key=${encodeURIComponent(String(firebaseConfig.apiKey))}`
+    : '';
+  const url = `${baseUrl}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}${apiKeyParam}`;
+  const headers: Record<string, string> = {
+    Accept: 'application/json'
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const res = await fetch(url, { method: 'GET', headers });
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST GET failed (${res.status}): ${errText}`);
+  }
+  const json = (await res.json()) as { name?: string; fields?: Record<string, any> };
+  return firestoreDocToJs(json);
+}
+
+async function firestoreRestPatchDoc(
+  collectionName: string,
+  docId: string,
+  data: Record<string, any>,
+  merge: boolean,
+  bearerToken?: string
+): Promise<void> {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const cleanPayload = sanitizeDocPayload(data);
+  const keys = Object.keys(cleanPayload);
+  const queryParts: string[] = [];
+  if (firebaseConfig.apiKey) {
+    queryParts.push(`key=${encodeURIComponent(String(firebaseConfig.apiKey))}`);
+  }
+  if (merge) {
+    for (const k of keys) {
+      queryParts.push(`updateMask.fieldPaths=${encodeURIComponent(k)}`);
+    }
+  }
+  const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  const url = `${baseUrl}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}${qs}`;
+
+  const fields: Record<string, any> = {};
+  for (const [k, v] of Object.entries(cleanPayload)) {
+    if (v !== undefined) {
+      fields[k] = jsToFirestoreValue(v);
+    }
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json'
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ fields })
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST PATCH failed (${res.status}): ${errText}`);
+  }
+}
+
+async function firestoreRestQueryEqualsLimit1(
+  collectionName: string,
+  field: string,
+  value: string | number | boolean,
+  bearerToken?: string
+): Promise<{ id: string; data: Record<string, any> } | null> {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const apiKeyParam = firebaseConfig.apiKey
+    ? `?key=${encodeURIComponent(String(firebaseConfig.apiKey))}`
+    : '';
+  const url = `${baseUrl}:runQuery${apiKeyParam}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json'
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: collectionName }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: field },
+          op: 'EQUAL',
+          value: jsToFirestoreValue(value)
+        }
+      },
+      limit: 1
+    }
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST runQuery failed (${res.status}): ${errText}`);
+  }
+  const rows = (await res.json()) as Array<{ document?: { name?: string; fields?: Record<string, any> } }>;
+  if (!Array.isArray(rows)) return null;
+  for (const row of rows) {
+    if (row?.document?.name) {
+      const parts = row.document.name.split('/');
+      const id = parts[parts.length - 1] || '';
+      return { id, data: firestoreDocToJs(row.document) };
+    }
+  }
+  return null;
+}
+
+async function firestoreRestListCollection(
+  collectionName: string,
+  maxLimit: number,
+  bearerToken?: string
+): Promise<{ id: string; data: Record<string, any> }[]> {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const queryParts: string[] = [`pageSize=${Math.min(Math.max(1, maxLimit), 500)}`];
+  if (firebaseConfig.apiKey) {
+    queryParts.push(`key=${encodeURIComponent(String(firebaseConfig.apiKey))}`);
+  }
+  const url = `${baseUrl}/${encodeURIComponent(collectionName)}?${queryParts.join('&')}`;
+  const headers: Record<string, string> = {
+    Accept: 'application/json'
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const res = await fetch(url, { method: 'GET', headers });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST LIST failed (${res.status}): ${errText}`);
+  }
+  const json = (await res.json()) as {
+    documents?: Array<{ name?: string; fields?: Record<string, any> }>;
+  };
+  if (!Array.isArray(json?.documents)) return [];
+  return json.documents.map((docItem) => {
+    const parts = String(docItem.name || '').split('/');
+    const id = parts[parts.length - 1] || '';
+    return { id, data: firestoreDocToJs(docItem) };
+  });
+}
+
 /**
  * Reads a document via Firebase Admin SDK (`adminDb`) when configured,
- * falling back to the unprivileged client SDK only if Admin credentials are not yet provisioned.
+ * or via authenticated Firestore REST v1 when a verified user Bearer token is present,
+ * falling back to the unprivileged client SDK only for public collections.
  */
 export async function serverGetDoc(
   collectionName: string,
-  docId: string
+  docId: string,
+  options?: { bearerToken?: string }
 ): Promise<Record<string, any> | null> {
   const cleanId = String(docId || '').trim();
   if (!cleanId) return null;
@@ -344,6 +620,11 @@ export async function serverGetDoc(
     return snap.exists ? (snap.data() as Record<string, any>) : null;
   }
 
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    return firestoreRestGetDoc(collectionName, cleanId, bearerToken);
+  }
+
   const clientDb = getFallbackClientDb();
   const snap = await clientGetDoc(clientDoc(clientDb, collectionName, cleanId));
   return snap.exists() ? (snap.data() as Record<string, any>) : null;
@@ -351,13 +632,13 @@ export async function serverGetDoc(
 
 /**
  * Writes/merges a document via Firebase Admin SDK (`adminDb`) when configured,
- * bypassing client security rules for verified server/webhook operations.
+ * or via caller-authenticated Firestore REST v1 (enforcing firestore.rules as the authenticated user).
  */
 export async function serverSetDoc(
   collectionName: string,
   docId: string,
   data: Record<string, any>,
-  options: { merge?: boolean } = { merge: true }
+  options: { merge?: boolean; bearerToken?: string } = { merge: true }
 ): Promise<{ usedAdminSdk: boolean }> {
   const cleanId = String(docId || '').trim();
   if (!cleanId) {
@@ -374,6 +655,18 @@ export async function serverSetDoc(
     return { usedAdminSdk: true };
   }
 
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    await firestoreRestPatchDoc(
+      collectionName,
+      cleanId,
+      cleanPayload,
+      options.merge !== false,
+      bearerToken
+    );
+    return { usedAdminSdk: false };
+  }
+
   const clientDb = getFallbackClientDb();
   await clientSetDoc(clientDoc(clientDb, collectionName, cleanId), cleanPayload, {
     merge: options.merge !== false
@@ -382,12 +675,14 @@ export async function serverSetDoc(
 }
 
 /**
- * Updates specific fields on an existing document via Firebase Admin SDK (`adminDb`) when configured.
+ * Updates specific fields on an existing document via Firebase Admin SDK (`adminDb`) when configured,
+ * or via caller-authenticated Firestore REST v1 (enforcing firestore.rules as the authenticated user).
  */
 export async function serverUpdateDoc(
   collectionName: string,
   docId: string,
-  data: Record<string, any>
+  data: Record<string, any>,
+  options?: { bearerToken?: string }
 ): Promise<{ usedAdminSdk: boolean }> {
   const cleanId = String(docId || '').trim();
   if (!cleanId) {
@@ -401,18 +696,26 @@ export async function serverUpdateDoc(
     return { usedAdminSdk: true };
   }
 
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    await firestoreRestPatchDoc(collectionName, cleanId, cleanPayload, true, bearerToken);
+    return { usedAdminSdk: false };
+  }
+
   const clientDb = getFallbackClientDb();
   await clientUpdateDoc(clientDoc(clientDb, collectionName, cleanId), cleanPayload);
   return { usedAdminSdk: false };
 }
 
 /**
- * Queries a collection with an equality filter (`limit 1`) via Admin SDK when configured.
+ * Queries a collection with an equality filter (`limit 1`) via Admin SDK when configured,
+ * or via caller-authenticated Firestore REST v1.
  */
 export async function serverQueryEqualsLimit1(
   collectionName: string,
   field: string,
-  value: string | number | boolean
+  value: string | number | boolean,
+  options?: { bearerToken?: string }
 ): Promise<{ id: string; data: Record<string, any> } | null> {
   const adminDb = getAdminFirestore();
   if (adminDb) {
@@ -424,6 +727,11 @@ export async function serverQueryEqualsLimit1(
     if (snap.empty) return null;
     const d = snap.docs[0];
     return { id: d.id, data: d.data() as Record<string, any> };
+  }
+
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    return firestoreRestQueryEqualsLimit1(collectionName, field, value, bearerToken);
   }
 
   const clientDb = getFallbackClientDb();
@@ -439,11 +747,13 @@ export async function serverQueryEqualsLimit1(
 }
 
 /**
- * Lists documents from a collection via Admin SDK when configured (or fallback client SDK).
+ * Lists documents from a collection via Admin SDK when configured,
+ * or via caller-authenticated Firestore REST v1.
  */
 export async function serverListCollection(
   collectionName: string,
-  maxLimit: number = 500
+  maxLimit: number = 500,
+  options?: { bearerToken?: string }
 ): Promise<{ id: string; data: Record<string, any> }[]> {
   const adminDb = getAdminFirestore();
   if (adminDb) {
@@ -452,6 +762,11 @@ export async function serverListCollection(
       id: d.id,
       data: d.data() as Record<string, any>
     }));
+  }
+
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    return firestoreRestListCollection(collectionName, maxLimit, bearerToken);
   }
 
   const clientDb = getFallbackClientDb();
@@ -472,6 +787,7 @@ export interface BearerAuthResult {
   uid?: string;
   email?: string;
   emailVerified?: boolean;
+  token?: string;
   decoded?: DecodedIdToken;
   error?: string;
 }
@@ -518,12 +834,19 @@ export async function verifyBearerIdToken(
       token,
       state.hasServiceAccountCredentials
     );
+    const activeStore = requestBearerStorage.getStore();
+    if (activeStore) {
+      activeStore.token = token;
+      activeStore.uid = decoded.uid;
+      activeStore.email = decoded.email?.toLowerCase();
+    }
     return {
       valid: true,
       statusCode: 200,
       uid: decoded.uid,
       email: decoded.email?.toLowerCase(),
       emailVerified: Boolean(decoded.email_verified),
+      token,
       decoded
     };
   } catch (err: any) {
@@ -598,21 +921,20 @@ export async function verifyAdminRequest(headers: {
   }
 
   // Secondary check: /admins/{uid} role document in Firestore
-  const adminDb = getAdminFirestore();
-  if (adminDb) {
-    try {
-      const adminDocSnap = await adminDb.collection('admins').doc(tokenResult.uid).get();
-      if (adminDocSnap.exists) {
-        return {
-          authorized: true,
-          statusCode: 200,
-          uid: tokenResult.uid,
-          email: tokenResult.email
-        };
-      }
-    } catch {
-      // Fall through to 403
+  try {
+    const adminDoc = await serverGetDoc('admins', tokenResult.uid, {
+      bearerToken: tokenResult.token
+    });
+    if (adminDoc) {
+      return {
+        authorized: true,
+        statusCode: 200,
+        uid: tokenResult.uid,
+        email: tokenResult.email
+      };
     }
+  } catch {
+    // Fall through to 403
   }
 
   return {
