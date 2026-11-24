@@ -237,6 +237,102 @@ export interface ChapterQAItem {
   examTip?: string;
 }
 
+export interface ChapterTopicExplanation {
+  topicTitle: string;
+  explanation: string;
+  keyTakeaway: string;
+}
+
+export interface ChapterWordMeaningItem {
+  word: string;
+  meaning: string;
+  usageExample: string;
+}
+
+export interface ChapterVisualDiagramGuide {
+  title: string;
+  category: 'diagram' | 'map' | 'flowchart' | 'table';
+  labels: string[];
+  description: string;
+  drawingOrMapTip: string;
+}
+
+export type TextbookExerciseQuestionType =
+  | 'answer_one_sentence'
+  | 'answer_briefly'
+  | 'answer_in_detail'
+  | 'fill_in_blanks'
+  | 'true_or_false'
+  | 'match_following'
+  | 'choose_correct_answer'
+  | 'give_reasons'
+  | 'explain_following'
+  | 'define_following'
+  | 'differentiate_between'
+  | 'name_following'
+  | 'complete_sentences'
+  | 'solve_following'
+  | 'grammar_comprehension'
+  | 'activity_assignment';
+
+export interface TextbookExerciseSolutionItem {
+  id: string;
+  qNo: string;
+  questionType: TextbookExerciseQuestionType;
+  typeLabel: string;
+  marks: number;
+  question: string;
+  answer: string;
+  stepByStepExplanation: string;
+  verificationStatus: 'VERIFIED_TEXTBOOK_ALIGNMENT' | 'AWAITING_VERIFICATION';
+}
+
+export type ClassNotebookExerciseType =
+  | 'answer_following'
+  | 'answer_one_sentence'
+  | 'answer_in_brief'
+  | 'answer_in_detail'
+  | 'fill_in_blanks'
+  | 'true_or_false'
+  | 'match_following'
+  | 'mcq'
+  | 'give_reasons'
+  | 'explain_following'
+  | 'define_following'
+  | 'differentiate_between'
+  | 'name_following'
+  | 'complete_sentences'
+  | 'odd_one_out'
+  | 'give_examples'
+  | 'short_notes'
+  | 'diagram_labelling'
+  | 'solve_following'
+  | 'grammar_exercises'
+  | 'vocabulary_exercises'
+  | 'comprehension_exercises'
+  | 'map_exercises'
+  | 'activity_questions'
+  | 'application_questions';
+
+export interface ClassNotebookExerciseItem {
+  id: string;
+  qNo: string;
+  exerciseType: ClassNotebookExerciseType;
+  sectionGroup: string;
+  typeLabel: string;
+  marks: number;
+  prompt: string;
+  writingGuidance: string;
+  modelAnswer: string;
+  stepByStepExplanation?: string;
+}
+
+export type ChapterResourceCompletenessStatus =
+  | 'Complete'
+  | 'Partially Complete'
+  | 'Missing Content'
+  | 'Awaiting Verification';
+
 export interface ChapterStudyMaterial {
   id: string;
   board: EducationBoard;
@@ -258,6 +354,14 @@ export interface ChapterStudyMaterial {
   chapterSummary?: string;
   shortRevisionNotes?: ChapterShortRevisionNotes;
   qaBank?: ChapterQAItem[];
+  // Phase 3 Complete Study Notes, Textbook Exercise Solutions & Class Notebook System
+  topicWiseExplanations?: ChapterTopicExplanation[];
+  difficultWordsAndMeanings?: ChapterWordMeaningItem[];
+  diagramsAndVisuals?: ChapterVisualDiagramGuide[];
+  textbookExerciseSolutions?: TextbookExerciseSolutionItem[];
+  classNotebookExercises?: ClassNotebookExerciseItem[];
+  additionalPracticeQuestions?: ChapterQAItem[];
+  completenessStatus?: ChapterResourceCompletenessStatus;
 }
 
 export interface ChapterPracticeTestQuestion {

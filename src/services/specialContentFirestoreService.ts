@@ -866,6 +866,10 @@ export interface StudyLibraryDynamicItemPayload {
   materialCategory:
     | 'textbook'
     | 'notes'
+    | 'textbook_solutions'
+    | 'class_notebook'
+    | 'word_meanings'
+    | 'practice_questions'
     | 'revision'
     | 'qa'
     | 'test'

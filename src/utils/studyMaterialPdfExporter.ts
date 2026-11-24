@@ -228,18 +228,36 @@ function printHtmlViaHiddenIframe(documentTitle: string, bodyHtml: string): void
 }
 
 export function printChapterStudySheetA4(params: {
-  mode: 'chapter_notes' | 'short_revision' | 'qa_bank';
+  mode:
+    | 'chapter_notes'
+    | 'short_revision'
+    | 'qa_bank'
+    | 'textbook_solutions'
+    | 'class_notebook'
+    | 'word_meanings'
+    | 'practice_questions';
   board: EducationBoard;
   classLevel: ClassLevel;
   subject: SubjectName;
   chapter: ChapterStudyMaterial;
+  includeNotebookAnswerKey?: boolean;
 }): void {
-  const { mode, board, classLevel, subject, chapter } = params;
+  const { mode, board, classLevel, subject, chapter, includeNotebookAnswerKey = true } = params;
   const modeLabel =
     mode === 'short_revision'
       ? '1-Page Short Revision Sheet'
       : mode === 'qa_bank'
-      ? '9-Format Solved Q&A Bank'
+      ? 'Important Questions & Answers (9 Formats)'
+      : mode === 'textbook_solutions'
+      ? 'Complete Textbook Exercise Solutions'
+      : mode === 'class_notebook'
+      ? includeNotebookAnswerKey
+        ? 'Complete Your Class Notes (With Reference Answer Key)'
+        : 'Complete Your Class Notes (Notebook Exercise Sheet)'
+      : mode === 'word_meanings'
+      ? 'Word Meanings, Definitions & Terminology Glossary'
+      : mode === 'practice_questions'
+      ? 'Additional Practice Questions & Solutions'
       : 'Detailed Chapter Study Notes';
 
   const docTitle = `MyStudyZone - ${board} ${classLevel} ${subject} - Ch ${chapter.chapterNumber} ${modeLabel}`;
@@ -247,6 +265,21 @@ export function printChapterStudySheetA4(params: {
   let sectionsHtml = '';
 
   if (mode === 'chapter_notes') {
+    const detailedHtml = (chapter.detailedExplanation || [])
+      .map((para) => `<p>${escapeHtml(para)}</p>`)
+      .join('');
+
+    const topicsHtml = (chapter.topicWiseExplanations || [])
+      .map(
+        (t) => `
+        <div class="card">
+          <h3>${escapeHtml(t.topicTitle)}</h3>
+          <p>${escapeHtml(t.explanation)}</p>
+          <div class="tip-note"><strong>Key Takeaway:</strong> ${escapeHtml(t.keyTakeaway)}</div>
+        </div>`
+      )
+      .join('');
+
     const keyPointsHtml = chapter.keyPoints
       .map((pt) => `<li>${escapeHtml(pt)}</li>`)
       .join('');
@@ -260,8 +293,32 @@ export function printChapterStudySheetA4(params: {
       )
       .join('');
 
+    const wordsHtml = (chapter.difficultWordsAndMeanings || [])
+      .map(
+        (w) =>
+          `<div class="card"><strong>${escapeHtml(w.word)}:</strong> ${escapeHtml(
+            w.meaning
+          )} <div class="tip-note">Usage: ${escapeHtml(w.usageExample)}</div></div>`
+      )
+      .join('');
+
     const formulasHtml = (chapter.formulasAndRules || [])
       .map((f) => `<div class="formula-block">${escapeHtml(f)}</div>`)
+      .join('');
+
+    const diagramsHtml = (chapter.diagramsAndVisuals || [])
+      .map(
+        (dg) => `
+        <div class="card-white">
+          <div class="qa-meta">${escapeHtml(dg.category.toUpperCase())} GUIDE</div>
+          <h3>${escapeHtml(dg.title)}</h3>
+          <p>${escapeHtml(dg.description)}</p>
+          <p><strong>Key Labels:</strong> ${dg.labels.map(escapeHtml).join(' &bull; ')}</p>
+          <div class="tip-note"><strong>Drawing / Map Tip:</strong> ${escapeHtml(
+            dg.drawingOrMapTip
+          )}</div>
+        </div>`
+      )
       .join('');
 
     const examplesHtml = (chapter.solvedExamples || [])
@@ -278,15 +335,140 @@ export function printChapterStudySheetA4(params: {
       .join('');
 
     sectionsHtml = `
-      <h2>1. Chapter Overview</h2>
+      <h2>A. Chapter Introduction &amp; Overview</h2>
       <p>${escapeHtml(chapter.overview)}</p>
 
-      <h2>2. Key Concepts &amp; Syllabus Points</h2>
+      ${detailedHtml ? `<h2>B. Complete Chapter Explanation</h2>${detailedHtml}` : ''}
+      ${
+        chapter.chapterSummary
+          ? `<h2>C. Chapter Summary</h2><div class="card"><p>${escapeHtml(
+              chapter.chapterSummary
+            )}</p></div>`
+          : ''
+      }
+      ${topicsHtml ? `<h2>D. Topic-Wise Explanations</h2>${topicsHtml}` : ''}
+
+      <h2>E &amp; F. Important Concepts &amp; Syllabus Facts</h2>
       <ul>${keyPointsHtml}</ul>
 
-      ${defsHtml ? `<h2>3. Important Definitions Glossary</h2>${defsHtml}` : ''}
-      ${formulasHtml ? `<h2>4. Core Formulas, Rules &amp; Laws</h2>${formulasHtml}` : ''}
-      ${examplesHtml ? `<h2>5. Solved Worked Examples</h2>${examplesHtml}` : ''}
+      ${defsHtml ? `<h2>G. Key Definitions</h2>${defsHtml}` : ''}
+      ${examplesHtml ? `<h2>H. Solved Examples</h2>${examplesHtml}` : ''}
+      ${wordsHtml ? `<h2>I. Difficult Words &amp; Meanings</h2>${wordsHtml}` : ''}
+      ${formulasHtml ? `<h2>J. Important Formulas, Rules &amp; Laws</h2>${formulasHtml}` : ''}
+      ${diagramsHtml ? `<h2>K. Diagrams, Maps &amp; Illustrations Guide</h2>${diagramsHtml}` : ''}
+    `;
+  } else if (mode === 'textbook_solutions') {
+    const tbHtml = (chapter.textbookExerciseSolutions || [])
+      .map(
+        (sol) => `
+        <div class="card-white">
+          <div class="qa-meta">${escapeHtml(sol.qNo)} &middot; ${escapeHtml(
+          sol.typeLabel
+        )} &middot; ${escapeHtml(sol.marks)} Mark${sol.marks === 1 ? '' : 's'}</div>
+          <p><strong>Textbook Question:</strong>\n${escapeHtml(sol.question)}</p>
+          <div class="answer-box"><strong>Complete Answer:</strong>\n${escapeHtml(
+            sol.answer
+          )}</div>
+          <div class="tip-note"><strong>Step-by-Step Explanation:</strong> ${escapeHtml(
+            sol.stepByStepExplanation
+          )}</div>
+        </div>`
+      )
+      .join('');
+
+    sectionsHtml = `
+      <h2>Complete Textbook Exercise Solutions (${
+        (chapter.textbookExerciseSolutions || []).length
+      } Questions)</h2>
+      ${tbHtml}
+    `;
+  } else if (mode === 'class_notebook') {
+    const nbHtml = (chapter.classNotebookExercises || [])
+      .map(
+        (ex) => `
+        <div class="card-white">
+          <div class="qa-meta">${escapeHtml(ex.qNo)} &middot; ${escapeHtml(
+          ex.typeLabel
+        )} &middot; ${escapeHtml(ex.marks)} Marks</div>
+          <p><strong>Exercise to Write in Class Notebook:</strong>\n${escapeHtml(ex.prompt)}</p>
+          <div class="tip-note"><strong>Notebook Writing Tip:</strong> ${escapeHtml(
+            ex.writingGuidance
+          )}</div>
+          ${
+            includeNotebookAnswerKey
+              ? `<div class="answer-box"><strong>Reference Answer Key:</strong>\n${escapeHtml(
+                  ex.modelAnswer
+                )}${
+                  ex.stepByStepExplanation
+                    ? `\nNote: ${escapeHtml(ex.stepByStepExplanation)}`
+                    : ''
+                }</div>`
+              : ''
+          }
+        </div>`
+      )
+      .join('');
+
+    sectionsHtml = `
+      <h2>Complete Your Class Notes — Written School Notebook Exercises (${
+        (chapter.classNotebookExercises || []).length
+      } Exercises)</h2>
+      ${nbHtml}
+    `;
+  } else if (mode === 'word_meanings') {
+    const wordsHtml = (chapter.difficultWordsAndMeanings || [])
+      .map(
+        (w) => `
+        <div class="card-white">
+          <h3>${escapeHtml(w.word)}</h3>
+          <p><strong>Meaning:</strong> ${escapeHtml(w.meaning)}</p>
+          <div class="tip-note"><strong>Sentence Usage:</strong> ${escapeHtml(
+            w.usageExample
+          )}</div>
+        </div>`
+      )
+      .join('');
+
+    const defsHtml = (chapter.keyDefinitions || [])
+      .map(
+        (d) => `
+        <div class="card">
+          <h3>${escapeHtml(d.term)}</h3>
+          <p>${escapeHtml(d.meaning)}</p>
+        </div>`
+      )
+      .join('');
+
+    sectionsHtml = `
+      <h2>Difficult Words &amp; Contextual Meanings</h2>
+      ${wordsHtml}
+      <h2>Chapter Definitions &amp; Technical Terminology</h2>
+      ${defsHtml}
+    `;
+  } else if (mode === 'practice_questions') {
+    const pracHtml = (chapter.additionalPracticeQuestions || [])
+      .map(
+        (item, idx) => `
+        <div class="card-white">
+          <div class="qa-meta">Practice Q${idx + 1} &middot; ${escapeHtml(
+          item.formatLabel
+        )} &middot; ${escapeHtml(item.marks)} Marks</div>
+          <p><strong>Question:</strong> ${escapeHtml(item.question)}</p>
+          <div class="answer-box"><strong>Model Solution:</strong>\n${escapeHtml(
+            item.answer
+          )}</div>
+          ${
+            item.examTip
+              ? `<div class="tip-note"><strong>Tip:</strong> ${escapeHtml(item.examTip)}</div>`
+              : ''
+          }
+        </div>`
+      )
+      .join('');
+
+    sectionsHtml = `
+      <h2>Additional Practice Questions &amp; Model Answers</h2>
+      ${pracHtml}
     `;
   } else if (mode === 'short_revision') {
     const rev = chapter.shortRevisionNotes;

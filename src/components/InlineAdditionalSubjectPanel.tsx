@@ -24,7 +24,7 @@ import {
 } from '../services/additionalCurriculumService';
 import { subscribeAdditionalCurriculumChanges } from '../services/additionalCurriculumPersistence';
 
-export type InlineAdditionalMode = 'notes' | 'worksheet' | 'quiz' | 'qa';
+export type InlineAdditionalMode = 'notes' | 'notebook' | 'worksheet' | 'quiz' | 'qa';
 
 export interface InlineAdditionalSubjectPanelProps {
   resolution: InlineAdditionalCurriculumResolution;
@@ -61,6 +61,8 @@ export const InlineAdditionalSubjectPanel: React.FC<InlineAdditionalSubjectPanel
 
   const [worksheetDrafts, setWorksheetDrafts] = useState<Record<string, string>>({});
   const [showWorksheetAnswers, setShowWorksheetAnswers] = useState(false);
+  const [showNotebookAnswerKey, setShowNotebookAnswerKey] = useState(false);
+  const [notebookWrittenDone, setNotebookWrittenDone] = useState<Record<string, boolean>>({});
   const [selectedMcqAnswers, setSelectedMcqAnswers] = useState<Record<string, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [revealedShortAnswers, setRevealedShortAnswers] = useState<Record<string, boolean>>({});
@@ -92,6 +94,7 @@ export const InlineAdditionalSubjectPanel: React.FC<InlineAdditionalSubjectPanel
   useEffect(() => {
     setWorksheetDrafts({});
     setShowWorksheetAnswers(false);
+    setShowNotebookAnswerKey(false);
     setSelectedMcqAnswers({});
     setQuizSubmitted(false);
     setRevealedShortAnswers({});
@@ -181,8 +184,8 @@ export const InlineAdditionalSubjectPanel: React.FC<InlineAdditionalSubjectPanel
 
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-3xl">
               {isIntegratedIntoParent && syllabusResolution.integratedParentLabel
-                ? `Official parent coverage: ${syllabusResolution.integratedParentLabel}. Below are the integrated supplementary lessons, worksheets, and practice quizzes directly inside ${classLevel}.`
-                : `Supplementary enrichment curriculum (not an official standalone board textbook) integrated directly into ${board} ${classLevel} so students can study notes, complete worksheets, and practice MCQs in place.`}
+                ? `Official parent coverage: ${syllabusResolution.integratedParentLabel}. Below are the integrated supplementary lessons, class notebook exercises, worksheets, and practice quizzes directly inside ${classLevel}.`
+                : `Supplementary enrichment curriculum (not an official standalone board textbook) integrated directly into ${board} ${classLevel} so students can study notes, write class notebook exercises, complete worksheets, and practice MCQs in place.`}
             </p>
           </div>
 
@@ -236,10 +239,11 @@ export const InlineAdditionalSubjectPanel: React.FC<InlineAdditionalSubjectPanel
           <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-200/70 rounded-lg">
             {(
               [
-                { id: 'notes', label: 'Notes & Activity', icon: BookOpen },
-                { id: 'worksheet', label: 'Practice Worksheet', icon: FileText },
-                { id: 'quiz', label: 'MCQ Quiz', icon: ClipboardCheck },
-                { id: 'qa', label: 'Q&A & Revision', icon: HelpCircle },
+                { id: 'notes', label: '1. Chapter Notes', icon: BookOpen },
+                { id: 'notebook', label: '2. Complete Your Class Notes', icon: FileText },
+                { id: 'worksheet', label: '3. Practice Worksheet', icon: FileText },
+                { id: 'quiz', label: '4. MCQ Quiz', icon: ClipboardCheck },
+                { id: 'qa', label: '5. Q&A & Revision', icon: HelpCircle },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -387,12 +391,163 @@ export const InlineAdditionalSubjectPanel: React.FC<InlineAdditionalSubjectPanel
               </button>
               <button
                 type="button"
-                onClick={() => setMode('worksheet')}
+                onClick={() => setMode('notebook')}
                 className="px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <span>Next: Practice Worksheet</span>
+                <span>Next: Complete Your Class Notes</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* MODE 1B: COMPLETE YOUR CLASS NOTES (PHYSICAL SCHOOL NOTEBOOK EXERCISES + HIDDEN-BY-DEFAULT ANSWER KEY) */}
+        {mode === 'notebook' && (
+          <div className="space-y-6">
+            <div className="rounded-xl bg-amber-50/70 border border-amber-300 p-4 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-900 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                  📓 COMPLETE YOUR CLASS NOTES · SCHOOL NOTEBOOK EXERCISES
+                </span>
+                <span className="text-xs font-bold text-amber-950">
+                  Write in your physical notebook first, then check answers below
+                </span>
+              </div>
+              <h5 className="text-sm sm:text-base font-bold text-slate-900">
+                {localizedChapterTitle} — Structured Notebook Writing Exercises
+              </h5>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                Complete these written exercises neatly in your school notebook to build complete class notes for{' '}
+                <strong>{localizedSubjectTitle}</strong>. Answers are hidden below so you can write your own answers first.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {activeChapter.materials.practiceWorksheet.items.map((item, idx) => {
+                const nbKey = `${activeChapter.chapterId}-nb-ws-${item.id}`;
+                const isWritten = Boolean(notebookWrittenDone[nbKey]);
+                return (
+                  <div
+                    key={nbKey}
+                    className={`p-4 rounded-xl border space-y-2 ${
+                      isWritten ? 'bg-emerald-50/40 border-emerald-300' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-black text-indigo-800 uppercase">
+                        Notebook Exercise {idx + 1} · {item.type.replace(/_/g, ' ')}
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isWritten}
+                          onChange={() =>
+                            setNotebookWrittenDone((prev) => ({ ...prev, [nbKey]: !prev[nbKey] }))
+                          }
+                          className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                        />
+                        <span>{isWritten ? '✓ Written in Notebook' : 'Mark Written in Notebook'}</span>
+                      </label>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">{item.prompt}</p>
+                    <p className="text-[11px] text-slate-500">
+                      Notebook Guidance: Write the complete statement or sentence neatly in your school notebook (2–3 lines).
+                    </p>
+                  </div>
+                );
+              })}
+
+              {activeChapter.materials.shortAnswerQuestions.map((sa, idx) => {
+                const nbKey = `${activeChapter.chapterId}-nb-sa-${sa.id}`;
+                const isWritten = Boolean(notebookWrittenDone[nbKey]);
+                const exNum = activeChapter.materials.practiceWorksheet.items.length + idx + 1;
+                return (
+                  <div
+                    key={nbKey}
+                    className={`p-4 rounded-xl border space-y-2 ${
+                      isWritten ? 'bg-emerald-50/40 border-emerald-300' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-black text-indigo-800 uppercase">
+                        Notebook Exercise {exNum} · Short Answer ({sa.marks} Marks)
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isWritten}
+                          onChange={() =>
+                            setNotebookWrittenDone((prev) => ({ ...prev, [nbKey]: !prev[nbKey] }))
+                          }
+                          className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                        />
+                        <span>{isWritten ? '✓ Written in Notebook' : 'Mark Written in Notebook'}</span>
+                      </label>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">{sa.question}</p>
+                    <p className="text-[11px] text-slate-500">
+                      Notebook Guidance: Write a clear 3–4 line explanation in your school notebook and underline key terms.
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* SEPARATE EXPANDABLE SECTION: VIEW ANSWERS & CHECK YOUR WORK */}
+            <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800">
+                    Self-Correction Reference Key · Hidden by Default
+                  </span>
+                  <h6 className="text-sm font-bold text-slate-900">
+                    Finished writing in your school notebook? Check your work below.
+                  </h6>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNotebookAnswerKey((prev) => !prev)}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer shrink-0"
+                >
+                  {showNotebookAnswerKey
+                    ? 'HIDE ANSWERS & CHECK YOUR WORK'
+                    : 'VIEW ANSWERS & CHECK YOUR WORK'}
+                </button>
+              </div>
+
+              {showNotebookAnswerKey && (
+                <div className="space-y-2.5 pt-2 border-t border-indigo-200">
+                  {activeChapter.materials.practiceWorksheet.items.map((item, idx) => (
+                    <div
+                      key={`ans-ws-${item.id}`}
+                      className="p-3 rounded-lg bg-white border border-emerald-200 text-xs space-y-1"
+                    >
+                      <p className="font-bold text-slate-900">
+                        Notebook Exercise {idx + 1}: {item.prompt}
+                      </p>
+                      <p className="text-emerald-900 font-semibold">
+                        Reference Answer: {item.answer}
+                      </p>
+                    </div>
+                  ))}
+                  {activeChapter.materials.shortAnswerQuestions.map((sa, idx) => {
+                    const exNum = activeChapter.materials.practiceWorksheet.items.length + idx + 1;
+                    return (
+                      <div
+                        key={`ans-sa-${sa.id}`}
+                        className="p-3 rounded-lg bg-white border border-emerald-200 text-xs space-y-1"
+                      >
+                        <p className="font-bold text-slate-900">
+                          Notebook Exercise {exNum}: {sa.question}
+                        </p>
+                        <p className="text-emerald-900 font-semibold">
+                          Reference Answer: {sa.modelAnswer}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

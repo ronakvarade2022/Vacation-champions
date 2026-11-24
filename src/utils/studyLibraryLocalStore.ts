@@ -143,3 +143,79 @@ export function saveChapterTestLocalResult(
   writeStorage(CHAPTER_TESTS_KEY, updated);
   return updated;
 }
+
+export type ChapterWorkflowStepId =
+  | 'study_chapter'
+  | 'read_notes'
+  | 'important_concepts'
+  | 'textbook_solutions'
+  | 'complete_class_notes'
+  | 'additional_practice'
+  | 'check_answer_key'
+  | 'chapter_revision';
+
+export const CHAPTER_WORKFLOW_STEPS: {
+  id: ChapterWorkflowStepId;
+  stepNum: number;
+  label: string;
+  shortLabel: string;
+}[] = [
+  { id: 'study_chapter', stepNum: 1, label: '1. Study the Chapter', shortLabel: 'Study Chapter' },
+  { id: 'read_notes', stepNum: 2, label: '2. Read Chapter Notes', shortLabel: 'Read Notes' },
+  { id: 'important_concepts', stepNum: 3, label: '3. Understand Important Concepts', shortLabel: 'Key Concepts' },
+  { id: 'textbook_solutions', stepNum: 4, label: '4. Refer to Textbook Exercise Solutions', shortLabel: 'Textbook Solutions' },
+  { id: 'complete_class_notes', stepNum: 5, label: '5. Complete Your Class Notes', shortLabel: 'Class Notebook' },
+  { id: 'additional_practice', stepNum: 6, label: '6. Attempt Additional Practice', shortLabel: 'Practice Q&A' },
+  { id: 'check_answer_key', stepNum: 7, label: '7. Check Answer Key', shortLabel: 'Check Answer Key' },
+  { id: 'chapter_revision', stepNum: 8, label: '8. Complete Chapter Revision', shortLabel: 'Chapter Revision' },
+];
+
+const CHAPTER_WORKFLOW_KEY = 'msz_study_lib_chapter_workflow_v1';
+const NOTEBOOK_WRITTEN_EX_KEY = 'msz_study_lib_notebook_written_v1';
+
+export type ChapterWorkflowProgressMap = Record<
+  string,
+  Partial<Record<ChapterWorkflowStepId, boolean>>
+>;
+
+export function getChapterWorkflowProgressMap(): ChapterWorkflowProgressMap {
+  const map = readStorage<ChapterWorkflowProgressMap>(CHAPTER_WORKFLOW_KEY, {});
+  return map && typeof map === 'object' ? map : {};
+}
+
+export function toggleChapterWorkflowStep(
+  chapterId: string,
+  stepId: ChapterWorkflowStepId,
+  forceValue?: boolean
+): ChapterWorkflowProgressMap {
+  const current = getChapterWorkflowProgressMap();
+  const prevChapter = current[chapterId] || {};
+  const nextVal = typeof forceValue === 'boolean' ? forceValue : !prevChapter[stepId];
+  const updated: ChapterWorkflowProgressMap = {
+    ...current,
+    [chapterId]: {
+      ...prevChapter,
+      [stepId]: nextVal,
+    },
+  };
+  writeStorage(CHAPTER_WORKFLOW_KEY, updated);
+  return updated;
+}
+
+export function getNotebookWrittenItemsMap(): Record<string, boolean> {
+  const map = readStorage<Record<string, boolean>>(NOTEBOOK_WRITTEN_EX_KEY, {});
+  return map && typeof map === 'object' ? map : {};
+}
+
+export function toggleNotebookWrittenExerciseItem(
+  exerciseId: string
+): Record<string, boolean> {
+  const current = getNotebookWrittenItemsMap();
+  const updated = {
+    ...current,
+    [exerciseId]: !current[exerciseId],
+  };
+  writeStorage(NOTEBOOK_WRITTEN_EX_KEY, updated);
+  return updated;
+}
+

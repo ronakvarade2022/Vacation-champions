@@ -15,6 +15,7 @@ import {
 } from '../classCurriculumConfig';
 import { getRichChaptersForSubject } from '../worksheets/builders/chapterCatalog';
 import { getOfficialTextbookForSubject } from '../studyLibrary/textbookLibraryData';
+import { buildEnrichedChapterMaterials } from './chapterNotebookAndSolutionsBuilder';
 
 function cleanChapterDisplayTitle(rawTitle: string): string {
   return rawTitle
@@ -649,6 +650,18 @@ export function getStudyMaterialsForSubject(
       chapterId
     );
 
+    const enriched = buildEnrichedChapterMaterials({
+      board,
+      classLevel,
+      subject,
+      chapterNumber,
+      chapterTitle,
+      chapterIdPrefix: chapterId,
+      keyPoints: domain.keyPoints,
+      formulasAndRules: domain.formulasAndRules,
+      isVerifiedChapter: true,
+    });
+
     return {
       id: chapterId,
       board,
@@ -669,6 +682,13 @@ export function getStudyMaterialsForSubject(
       chapterSummary: domain.chapterSummary,
       shortRevisionNotes: domain.shortRevisionNotes,
       qaBank: domain.qaBank,
+      topicWiseExplanations: enriched.topicWiseExplanations,
+      difficultWordsAndMeanings: enriched.difficultWordsAndMeanings,
+      diagramsAndVisuals: enriched.diagramsAndVisuals,
+      textbookExerciseSolutions: enriched.textbookExerciseSolutions,
+      classNotebookExercises: enriched.classNotebookExercises,
+      additionalPracticeQuestions: enriched.additionalPracticeQuestions,
+      completenessStatus: enriched.completenessStatus,
     };
   });
 }

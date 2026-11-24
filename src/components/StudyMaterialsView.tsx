@@ -77,8 +77,13 @@ import {
   normalizeBoardValue,
 } from '../utils/subscriptionAccess';
 import {
+  CHAPTER_WORKFLOW_STEPS,
   ChapterTestLocalResult,
+  ChapterWorkflowProgressMap,
+  ChapterWorkflowStepId,
   getChapterTestLocalResults,
+  getChapterWorkflowProgressMap,
+  getNotebookWrittenItemsMap,
   getStudyLibraryBookmarks,
   getStudyLibraryChecklistState,
   getStudyLibraryRecentItems,
@@ -86,19 +91,26 @@ import {
   saveChapterTestLocalResult,
   StudyLibraryBookmarkItem,
   StudyLibraryRecentItem,
+  toggleChapterWorkflowStep,
+  toggleNotebookWrittenExerciseItem,
   toggleStudyLibraryBookmark,
   toggleStudyLibraryChecklistItem,
 } from '../utils/studyLibraryLocalStore';
+import { evaluateChapterCompleteness } from '../data/notes/chapterNotebookAndSolutionsBuilder';
 
 export type StudyLibrarySectionTab =
   | 'textbooks'
   | 'chapter_notes'
-  | 'short_revision'
+  | 'textbook_solutions'
+  | 'class_notebook'
   | 'qa_bank'
+  | 'word_meanings'
+  | 'practice_questions'
+  | 'short_revision'
   | 'worksheets_ref'
+  | 'chapter_test'
   | 'model_papers'
   | 'pyq_papers'
-  | 'chapter_test'
   | 'video_lessons'
   | 'math_hub'
   | 'science_diagrams'
@@ -342,6 +354,17 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   const [selectedChapterIdx, setSelectedChapterIdx] = useState<number>(0);
   const [revealedSolutions, setRevealedSolutions] = useState<Record<string, boolean>>({});
   const [revealedQaAnswers, setRevealedQaAnswers] = useState<Record<string, boolean>>({});
+  const [revealedTextbookAnswers, setRevealedTextbookAnswers] = useState<Record<string, boolean>>({});
+  const [revealedPracticeAnswers, setRevealedPracticeAnswers] = useState<Record<string, boolean>>({});
+  const [showNotebookAnswerKeySection, setShowNotebookAnswerKeySection] = useState<boolean>(false);
+  const [revealedNotebookItemKey, setRevealedNotebookItemKey] = useState<Record<string, boolean>>({});
+  const [inChapterSearchQuery, setInChapterSearchQuery] = useState<string>('');
+  const [workflowProgressMap, setWorkflowProgressMap] = useState<ChapterWorkflowProgressMap>(() =>
+    getChapterWorkflowProgressMap()
+  );
+  const [notebookWrittenItems, setNotebookWrittenItems] = useState<Record<string, boolean>>(() =>
+    getNotebookWrittenItemsMap()
+  );
 
   useEffect(() => {
     if (chapters.length > 0) {
@@ -358,6 +381,11 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     setSelectedPyqPaperIdx(0);
     setRevealedSolutions({});
     setRevealedQaAnswers({});
+    setRevealedTextbookAnswers({});
+    setRevealedPracticeAnswers({});
+    setShowNotebookAnswerKeySection(false);
+    setRevealedNotebookItemKey({});
+    setInChapterSearchQuery('');
     setRevealedPaperAnswers({});
     setTestAnswers({});
     setTestSubmitted(false);
@@ -393,6 +421,9 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   useEffect(() => {
     setTestAnswers({});
     setTestSubmitted(false);
+    setShowNotebookAnswerKeySection(false);
+    setRevealedNotebookItemKey({});
+    setInChapterSearchQuery('');
   }, [selectedChapterIdx]);
 
   const filteredChapters = useMemo(() => {
@@ -878,9 +909,13 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 </>
               )}
 
-              {/* Subsections for Chapter-Based Tabs (Notes, Short Revision, Chapter Test, Video Lessons): Horizontal Chapters Row */}
+              {/* Subsections for Chapter-Based Tabs (Notes, Textbook Solutions, Class Notebook, Word Meanings, Practice Qs, Short Revision, Chapter Test, Video Lessons): Horizontal Chapters Row */}
               {!(Boolean(inlineAdditional) && chapters.length === 0) &&
                 (activeSectionTab === 'chapter_notes' ||
+                  activeSectionTab === 'textbook_solutions' ||
+                  activeSectionTab === 'class_notebook' ||
+                  activeSectionTab === 'word_meanings' ||
+                  activeSectionTab === 'practice_questions' ||
                   activeSectionTab === 'short_revision' ||
                   activeSectionTab === 'chapter_test' ||
                   activeSectionTab === 'video_lessons') && (
@@ -1119,8 +1154,8 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
         <div className="p-5 sm:p-7">
           {activeChapter ? (
             <article className="space-y-6">
-              {/* Editorial Metadata, Full Academic Path & Bookmark Bar */}
-              <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              {/* Editorial Metadata, Full Academic Path, Prev/Next Navigation & Bookmark Bar */}
+              <div className="border-b border-slate-100 pb-4 flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-500">
                     <span>{selectedBoard} Board</span>
@@ -1134,8 +1169,25 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                     </span>
                     <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     <span className="tabular-nums text-slate-800 font-bold">
-                      Chapter {activeChapter.chapterNumber}
+                      Chapter {activeChapter.chapterNumber} of {chapters.length}
                     </span>
+                    {(() => {
+                      const comp = evaluateChapterCompleteness(
+                        activeChapter,
+                        syllabusResolution.verificationStatus === 'VERIFIED'
+                      );
+                      return (
+                        <span
+                          className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                            comp.status === 'Complete'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          }`}
+                        >
+                          {comp.status} ({comp.completedCount}/{comp.totalChecks} Resources)
+                        </span>
+                      );
+                    })()}
                   </div>
                   <h2 className="text-xl sm:text-2xl font-display font-black text-slate-900">
                     {String(activeChapter.chapterNumber).padStart(2, '0')}.{' '}
@@ -1148,7 +1200,37 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={selectedChapterIdx <= 0}
+                    onClick={() => setSelectedChapterIdx((idx) => Math.max(0, idx - 1))}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
+                      selectedChapterIdx <= 0
+                        ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                        : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-300 cursor-pointer'
+                    }`}
+                  >
+                    &larr; Prev Chapter
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedChapterIdx >= chapters.length - 1}
+                    onClick={() =>
+                      setSelectedChapterIdx((idx) => Math.min(chapters.length - 1, idx + 1))
+                    }
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
+                      selectedChapterIdx >= chapters.length - 1
+                        ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                        : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-300 cursor-pointer'
+                    }`}
+                  >
+                    Next Chapter &rarr;
+                  </button>
                   {(activeSectionTab === 'chapter_notes' ||
+                    activeSectionTab === 'textbook_solutions' ||
+                    activeSectionTab === 'class_notebook' ||
+                    activeSectionTab === 'word_meanings' ||
+                    activeSectionTab === 'practice_questions' ||
                     activeSectionTab === 'short_revision' ||
                     activeSectionTab === 'qa_bank') && (
                     <button
@@ -1160,6 +1242,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                           classLevel: selectedClass,
                           subject: selectedSubject,
                           chapter: activeChapter,
+                          includeNotebookAnswerKey: showNotebookAnswerKeySection,
                         })
                       }
                       className="px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
@@ -1184,6 +1267,187 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                     />
                     <span>{isCurrentBookmarked ? 'Bookmarked' : 'Bookmark Chapter'}</span>
                   </button>
+                </div>
+              </div>
+
+              {/* SECTION 9: 9 CLICKABLE CHAPTER RESOURCE CARDS + SEARCH WITHIN CHAPTER */}
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
+                      Chapter {activeChapter.chapterNumber} Learning Resources — Click Any Card to Open
+                    </span>
+                  </div>
+                  <div className="relative min-w-[230px]">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={inChapterSearchQuery}
+                      onChange={(e) => setInChapterSearchQuery(e.target.value)}
+                      placeholder="Search within this chapter..."
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2">
+                  {[
+                    {
+                      tab: 'chapter_notes' as StudyLibrarySectionTab,
+                      num: 1,
+                      title: 'Chapter Notes',
+                      badge: `${(activeChapter.topicWiseExplanations || []).length + 9} Sections`,
+                      emoji: '📄',
+                      step: 'read_notes' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'textbook_solutions' as StudyLibrarySectionTab,
+                      num: 2,
+                      title: 'Textbook Exercise Solutions',
+                      badge: `${(activeChapter.textbookExerciseSolutions || []).length} Solved`,
+                      emoji: '📘',
+                      step: 'textbook_solutions' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'class_notebook' as StudyLibrarySectionTab,
+                      num: 3,
+                      title: 'Complete Your Class Notes',
+                      badge: `${(activeChapter.classNotebookExercises || []).length} Notebook Ex`,
+                      emoji: '📓',
+                      step: 'complete_class_notes' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'qa_bank' as StudyLibrarySectionTab,
+                      num: 4,
+                      title: 'Important Questions & Answers',
+                      badge: `${(activeChapter.qaBank || []).length} Q&As`,
+                      emoji: '✍️',
+                      step: 'important_concepts' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'word_meanings' as StudyLibrarySectionTab,
+                      num: 5,
+                      title: 'Word Meanings & Definitions',
+                      badge: `${
+                        (activeChapter.difficultWordsAndMeanings || []).length +
+                        (activeChapter.keyDefinitions || []).length
+                      } Terms`,
+                      emoji: '🔤',
+                      step: 'study_chapter' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'practice_questions' as StudyLibrarySectionTab,
+                      num: 6,
+                      title: 'Practice Questions',
+                      badge: `${(activeChapter.additionalPracticeQuestions || []).length} Practice`,
+                      emoji: '🎯',
+                      step: 'additional_practice' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'short_revision' as StudyLibrarySectionTab,
+                      num: 7,
+                      title: 'Chapter Revision',
+                      badge: '1-Page Sheet',
+                      emoji: '🎓',
+                      step: 'chapter_revision' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'worksheets_ref' as StudyLibrarySectionTab,
+                      num: 8,
+                      title: 'Existing Worksheets',
+                      badge: 'Interactive',
+                      emoji: '📝',
+                      step: 'additional_practice' as ChapterWorkflowStepId,
+                    },
+                    {
+                      tab: 'chapter_test' as StudyLibrarySectionTab,
+                      num: 9,
+                      title: 'Existing MCQs',
+                      badge: `${activeChapterTest?.questions.length || 10} MCQs`,
+                      emoji: '❓',
+                      step: 'check_answer_key' as ChapterWorkflowStepId,
+                    },
+                  ].map((card) => {
+                    const isCardActive = activeSectionTab === card.tab;
+                    const isStepDone = Boolean(
+                      workflowProgressMap[activeChapter.id]?.[card.step]
+                    );
+                    return (
+                      <button
+                        key={card.tab}
+                        type="button"
+                        onClick={() => {
+                          setActiveSectionTab(card.tab);
+                          const nextWf = toggleChapterWorkflowStep(
+                            activeChapter.id,
+                            card.step,
+                            true
+                          );
+                          setWorkflowProgressMap(nextWf);
+                        }}
+                        className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                          isCardActive
+                            ? 'bg-[#0f2952] text-white border-amber-400 shadow-xs'
+                            : 'bg-white hover:bg-indigo-50/70 text-slate-900 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-sm">{card.emoji}</span>
+                          <span
+                            className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                              isCardActive
+                                ? 'bg-amber-400 text-slate-950'
+                                : isStepDone
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {isStepDone ? '✓ Done' : `#${card.num}`}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-extrabold leading-tight line-clamp-2">
+                          {card.title}
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold ${
+                            isCardActive ? 'text-amber-200' : 'text-indigo-700'
+                          }`}
+                        >
+                          {card.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* SECTION 10: 8-STEP CHAPTER COMPLETION WORKFLOW TRACKER */}
+                <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    8-Step Chapter Completion Sequence (Click any step to mark Completed / Pending):
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {CHAPTER_WORKFLOW_STEPS.map((st) => {
+                      const done = Boolean(workflowProgressMap[activeChapter.id]?.[st.id]);
+                      return (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={() => {
+                            const updated = toggleChapterWorkflowStep(activeChapter.id, st.id);
+                            setWorkflowProgressMap(updated);
+                          }}
+                          className={`px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer flex items-center gap-1 transition-colors ${
+                            done
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>{done ? '✓' : st.stepNum + '.'}</span>
+                          <span>{st.shortLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1407,12 +1671,23 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                                     type="button"
                                     onClick={() => {
                                       setSelectedChapterIdx(idx);
-                                      setActiveSectionTab('short_revision');
+                                      setActiveSectionTab('textbook_solutions');
                                     }}
-                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
                                   >
-                                    <span>🎓</span>
-                                    <span>Revision</span>
+                                    <span>📘</span>
+                                    <span>Solutions</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('class_notebook');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>📓</span>
+                                    <span>Class Notes</span>
                                   </button>
                                   <button
                                     type="button"
@@ -1423,7 +1698,18 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                                     className="shrink-0 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
                                   >
                                     <span>✍️</span>
-                                    <span>Practice Q&amp;A</span>
+                                    <span>Imp. Q&amp;A</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedChapterIdx(idx);
+                                      setActiveSectionTab('short_revision');
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>🎓</span>
+                                    <span>Revision</span>
                                   </button>
                                   <button
                                     type="button"
@@ -1435,17 +1721,6 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                                   >
                                     <span>❓</span>
                                     <span>10 MCQs</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedChapterIdx(idx);
-                                      setActiveSectionTab('video_lessons');
-                                    }}
-                                    className="shrink-0 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-950 text-[11px] font-extrabold cursor-pointer flex items-center gap-1"
-                                  >
-                                    <span>📖</span>
-                                    <span>Video</span>
                                   </button>
                                 </div>
                               </div>
@@ -1562,142 +1837,954 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 </div>
               )}
 
-              {/* TAB B: CHAPTER-WISE NOTES */}
-              {activeSectionTab === 'chapter_notes' && (
-                <div className="space-y-6">
-                  {/* 1. Overview */}
-                  <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    {activeChapter.overview}
-                  </p>
+              {/* TAB B: COMPLETE CHAPTER-WISE STUDY NOTES (SECTIONS A TO L) */}
+              {activeSectionTab === 'chapter_notes' && (() => {
+                const sq = inChapterSearchQuery.trim().toLowerCase();
+                const matchesSearch = (text: string) => !sq || text.toLowerCase().includes(sq);
+                return (
+                  <div className="space-y-6">
+                    {/* A. Chapter Introduction */}
+                    {matchesSearch(activeChapter.overview) && (
+                      <section className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                        <span className="inline-block text-[11px] font-black uppercase tracking-wider text-indigo-800">
+                          A. Chapter Introduction
+                        </span>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          {activeChapter.overview}
+                        </p>
+                      </section>
+                    )}
 
-                  {/* 2. Detailed Student-Friendly Explanation */}
-                  {activeChapter.detailedExplanation &&
-                    activeChapter.detailedExplanation.length > 0 && (
-                      <section className="space-y-2.5">
-                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-indigo-600" />
-                          <span>Student-Friendly Chapter Explanation</span>
+                    {/* B. Complete Chapter Explanation */}
+                    {activeChapter.detailedExplanation &&
+                      activeChapter.detailedExplanation.some(matchesSearch) && (
+                        <section className="space-y-2.5">
+                          <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4 text-indigo-600" />
+                            <span>B. Complete Chapter Explanation</span>
+                          </h3>
+                          <div className="space-y-2.5 text-sm text-slate-700 leading-relaxed">
+                            {activeChapter.detailedExplanation
+                              .filter(matchesSearch)
+                              .map((para, idx) => (
+                                <p key={idx} className="p-3.5 rounded-xl bg-white border border-slate-200">
+                                  {para}
+                                </p>
+                              ))}
+                          </div>
+                        </section>
+                      )}
+
+                    {/* C. Chapter Summary */}
+                    {activeChapter.chapterSummary && matchesSearch(activeChapter.chapterSummary) && (
+                      <section className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-1">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900">
+                          C. Chapter Summary
                         </h3>
-                        <div className="space-y-2.5 text-sm text-slate-700 leading-relaxed">
-                          {activeChapter.detailedExplanation.map((para, idx) => (
-                            <p key={idx} className="p-3.5 rounded-xl bg-white border border-slate-200">
-                              {para}
-                            </p>
+                        <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                          {activeChapter.chapterSummary}
+                        </p>
+                      </section>
+                    )}
+
+                    {/* D. Topic-Wise Explanations */}
+                    {activeChapter.topicWiseExplanations &&
+                      activeChapter.topicWiseExplanations.some(
+                        (t) =>
+                          matchesSearch(t.topicTitle) ||
+                          matchesSearch(t.explanation) ||
+                          matchesSearch(t.keyTakeaway)
+                      ) && (
+                        <section className="space-y-3 pt-4 border-t border-slate-100">
+                          <h3 className="text-sm font-black text-slate-900">
+                            D. Topic-Wise Explanations
+                          </h3>
+                          <div className="grid grid-cols-1 gap-3">
+                            {activeChapter.topicWiseExplanations
+                              .filter(
+                                (t) =>
+                                  matchesSearch(t.topicTitle) ||
+                                  matchesSearch(t.explanation) ||
+                                  matchesSearch(t.keyTakeaway)
+                              )
+                              .map((topic, i) => (
+                                <div
+                                  key={i}
+                                  className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-2xs"
+                                >
+                                  <h4 className="text-xs sm:text-sm font-black text-[#0f2952]">
+                                    {topic.topicTitle}
+                                  </h4>
+                                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                                    {topic.explanation}
+                                  </p>
+                                  <div className="pt-1">
+                                    <span className="inline-block px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-700">
+                                      • Key Takeaway: {topic.keyTakeaway}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </section>
+                      )}
+
+                    {/* E & F. Important Concepts & Important Facts */}
+                    {activeChapter.keyPoints.some(matchesSearch) && (
+                      <section className="space-y-2.5 pt-4 border-t border-slate-100">
+                        <h3 className="text-sm font-black text-slate-900">
+                          E &amp; F. Important Concepts &amp; Syllabus Facts
+                        </h3>
+                        <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
+                          {activeChapter.keyPoints.filter(matchesSearch).map((pt, i) => (
+                            <li key={i} className="flex items-start gap-2.5">
+                              <span className="font-mono text-xs font-bold text-indigo-600 tabular-nums mt-0.5">
+                                0{i + 1}.
+                              </span>
+                              <span>{pt}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+
+                    {/* G. Definitions */}
+                    {activeChapter.keyDefinitions &&
+                      activeChapter.keyDefinitions.some(
+                        (d) => matchesSearch(d.term) || matchesSearch(d.meaning)
+                      ) && (
+                        <section className="space-y-2.5 pt-4 border-t border-slate-100">
+                          <h3 className="text-sm font-black text-slate-900">
+                            G. Key Definitions &amp; Terminology
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {activeChapter.keyDefinitions
+                              .filter((d) => matchesSearch(d.term) || matchesSearch(d.meaning))
+                              .map((def, i) => (
+                                <div
+                                  key={i}
+                                  className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1"
+                                >
+                                  <p className="text-xs font-black text-indigo-900">{def.term}</p>
+                                  <p className="text-xs text-slate-700 leading-relaxed">
+                                    {def.meaning}
+                                  </p>
+                                </div>
+                              ))}
+                          </div>
+                        </section>
+                      )}
+
+                    {/* H. Examples */}
+                    {activeChapter.solvedExamples.some(
+                      (ex) => matchesSearch(ex.prompt) || matchesSearch(ex.solution)
+                    ) && (
+                      <section className="space-y-3 pt-4 border-t border-slate-100">
+                        <h3 className="text-sm font-black text-slate-900">
+                          H. Solved Walkthrough Examples
+                        </h3>
+                        <div className="space-y-3">
+                          {activeChapter.solvedExamples
+                            .filter((ex) => matchesSearch(ex.prompt) || matchesSearch(ex.solution))
+                            .map((ex, i) => {
+                              const key = `${activeChapter.id}-ex-${i}`;
+                              const isRevealed = Boolean(revealedSolutions[key]);
+                              return (
+                                <div
+                                  key={key}
+                                  className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5"
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <p className="text-sm font-bold text-slate-900">
+                                      Example {i + 1}: {ex.prompt}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setRevealedSolutions((prev) => ({
+                                          ...prev,
+                                          [key]: !prev[key],
+                                        }))
+                                      }
+                                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-indigo-50 border border-slate-300 text-xs font-bold text-indigo-700 cursor-pointer shrink-0 self-start sm:self-center"
+                                    >
+                                      {isRevealed ? 'Hide Solution' : 'Reveal Step-by-Step Solution'}
+                                    </button>
+                                  </div>
+                                  {isRevealed && (
+                                    <div className="p-3 rounded-lg bg-white border border-emerald-200 text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed whitespace-pre-line">
+                                      <strong className="text-emerald-800">Solution: </strong>
+                                      {ex.solution}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* I. Difficult Words & Meanings */}
+                    {activeChapter.difficultWordsAndMeanings &&
+                      activeChapter.difficultWordsAndMeanings.some(
+                        (w) =>
+                          matchesSearch(w.word) ||
+                          matchesSearch(w.meaning) ||
+                          matchesSearch(w.usageExample)
+                      ) && (
+                        <section className="space-y-2.5 pt-4 border-t border-slate-100">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-black text-slate-900">
+                              I. Difficult Words &amp; Meanings
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => setActiveSectionTab('word_meanings')}
+                              className="text-xs font-bold text-indigo-700 hover:underline cursor-pointer"
+                            >
+                              Open Full Vocabulary Tab &rarr;
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {activeChapter.difficultWordsAndMeanings
+                              .filter(
+                                (w) =>
+                                  matchesSearch(w.word) ||
+                                  matchesSearch(w.meaning) ||
+                                  matchesSearch(w.usageExample)
+                              )
+                              .map((wm, i) => (
+                                <div
+                                  key={i}
+                                  className="p-3.5 rounded-xl bg-amber-50/40 border border-amber-200/80 space-y-1"
+                                >
+                                  <p className="text-xs font-black text-slate-900">{wm.word}</p>
+                                  <p className="text-xs text-slate-700">
+                                    <strong>Meaning:</strong> {wm.meaning}
+                                  </p>
+                                  <p className="text-[11px] text-slate-600 italic">
+                                    <strong>Usage:</strong> {wm.usageExample}
+                                  </p>
+                                </div>
+                              ))}
+                          </div>
+                        </section>
+                      )}
+
+                    {/* J. Formulas, Grammar Rules & Scientific Laws */}
+                    {activeChapter.formulasAndRules.some(matchesSearch) && (
+                      <section className="space-y-2.5 pt-4 border-t border-slate-100">
+                        <h3 className="text-sm font-black text-slate-900">
+                          J. Key Formulas, Grammar Rules &amp; Scientific Laws
+                        </h3>
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {activeChapter.formulasAndRules.filter(matchesSearch).map((rule, i) => (
+                            <div
+                              key={i}
+                              className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-800 font-mono"
+                            >
+                              {rule}
+                            </div>
                           ))}
                         </div>
                       </section>
                     )}
 
-                  {/* 3. Key Concepts */}
-                  <section className="space-y-2.5 pt-4 border-t border-slate-100">
-                    <h3 className="text-sm font-black text-slate-900">
-                      Important Syllabus Points
-                    </h3>
-                    <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
-                      {activeChapter.keyPoints.map((pt, i) => (
-                        <li key={i} className="flex items-start gap-2.5">
-                          <span className="font-mono text-xs font-bold text-indigo-600 tabular-nums mt-0.5">
-                            0{i + 1}.
-                          </span>
-                          <span>{pt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-
-                  {/* 4. Key Definitions Glossary */}
-                  {activeChapter.keyDefinitions && activeChapter.keyDefinitions.length > 0 && (
-                    <section className="space-y-2.5 pt-4 border-t border-slate-100">
-                      <h3 className="text-sm font-black text-slate-900">
-                        Key Definitions &amp; Terminology
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {activeChapter.keyDefinitions.map((def, i) => (
-                          <div
-                            key={i}
-                            className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1"
-                          >
-                            <p className="text-xs font-black text-indigo-900">{def.term}</p>
-                            <p className="text-xs text-slate-700 leading-relaxed">{def.meaning}</p>
+                    {/* K. Diagrams, Maps & Illustrations Guide */}
+                    {activeChapter.diagramsAndVisuals &&
+                      activeChapter.diagramsAndVisuals.some(
+                        (d) =>
+                          matchesSearch(d.title) ||
+                          matchesSearch(d.description) ||
+                          d.labels.some(matchesSearch)
+                      ) && (
+                        <section className="space-y-2.5 pt-4 border-t border-slate-100">
+                          <h3 className="text-sm font-black text-slate-900">
+                            K. Diagrams, Maps &amp; Illustrations Guide
+                          </h3>
+                          <div className="grid grid-cols-1 gap-3">
+                            {activeChapter.diagramsAndVisuals
+                              .filter(
+                                (d) =>
+                                  matchesSearch(d.title) ||
+                                  matchesSearch(d.description) ||
+                                  d.labels.some(matchesSearch)
+                              )
+                              .map((diag, i) => (
+                                <div
+                                  key={i}
+                                  className="p-4 rounded-xl bg-sky-50/50 border border-sky-200 space-y-2"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 className="text-xs sm:text-sm font-black text-sky-950">
+                                      {diag.title}
+                                    </h4>
+                                    <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 text-[10px] font-black uppercase">
+                                      {diag.category}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-700 leading-relaxed">
+                                    {diag.description}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-[11px] font-bold text-slate-600">
+                                      Required Labels:
+                                    </span>
+                                    {diag.labels.map((lbl, li) => (
+                                      <span
+                                        key={li}
+                                        className="px-2 py-0.5 rounded-md bg-white border border-sky-200 text-[11px] font-semibold text-sky-900"
+                                      >
+                                        {lbl}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="text-[11px] text-emerald-800 font-semibold">
+                                    Notebook Drawing Tip: {diag.drawingOrMapTip}
+                                  </p>
+                                </div>
+                              ))}
                           </div>
-                        ))}
+                        </section>
+                      )}
+
+                    {/* L. Important Points for Revision */}
+                    {activeChapter.shortRevisionNotes &&
+                      activeChapter.shortRevisionNotes.quickRevisionPoints.some(matchesSearch) && (
+                        <section className="space-y-2.5 pt-4 border-t border-slate-100">
+                          <h3 className="text-sm font-black text-slate-900">
+                            L. Important Points for Quick Revision
+                          </h3>
+                          <ul className="space-y-2">
+                            {activeChapter.shortRevisionNotes.quickRevisionPoints
+                              .filter(matchesSearch)
+                              .map((pt, idx) => (
+                                <li
+                                  key={idx}
+                                  className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-200 text-xs sm:text-sm text-slate-800 flex items-start gap-2.5"
+                                >
+                                  <span className="font-mono text-xs font-black text-emerald-700 mt-0.5">
+                                    #{idx + 1}
+                                  </span>
+                                  <span>{pt}</span>
+                                </li>
+                              ))}
+                          </ul>
+                        </section>
+                      )}
+
+                    {/* Next Action Callout */}
+                    <div className="p-4 rounded-2xl bg-[#0f2952] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                          Step 1 Complete? Move to Step 2 &amp; Step 3
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-white">
+                          Review Complete Textbook Exercise Solutions or Complete Your Class Notes in your physical school notebook.
+                        </p>
                       </div>
-                    </section>
-                  )}
-
-                  {/* 5. Key Formulas & Rules */}
-                  <section className="space-y-2.5 pt-4 border-t border-slate-100">
-                    <h3 className="text-sm font-black text-slate-900">
-                      Key Formulas, Grammar Rules &amp; Scientific Laws
-                    </h3>
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {activeChapter.formulasAndRules.map((rule, i) => (
-                        <div
-                          key={i}
-                          className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-800 font-mono"
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = toggleChapterWorkflowStep(
+                              activeChapter.id,
+                              'study_chapter',
+                              true
+                            );
+                            setWorkflowProgressMap(updated);
+                            setActiveSectionTab('textbook_solutions');
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
                         >
-                          {rule}
-                        </div>
-                      ))}
+                          📘 Textbook Exercise Solutions
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = toggleChapterWorkflowStep(
+                              activeChapter.id,
+                              'study_chapter',
+                              true
+                            );
+                            setWorkflowProgressMap(updated);
+                            setActiveSectionTab('class_notebook');
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/20 text-xs font-bold cursor-pointer"
+                        >
+                          📓 Complete Your Class Notes
+                        </button>
+                      </div>
                     </div>
-                  </section>
+                  </div>
+                );
+              })()}
 
-                  {/* 6. Worked Examples */}
-                  <section className="space-y-3 pt-4 border-t border-slate-100">
-                    <h3 className="text-sm font-black text-slate-900">
-                      Solved Walkthrough Examples
-                    </h3>
+              {/* TAB B2: COMPLETE TEXTBOOK EXERCISE SOLUTIONS */}
+              {activeSectionTab === 'textbook_solutions' && (() => {
+                const allSolutions = activeChapter.textbookExerciseSolutions || [];
+                const sq = inChapterSearchQuery.trim().toLowerCase();
+                const filteredSolutions = sq
+                  ? allSolutions.filter(
+                      (s) =>
+                        s.question.toLowerCase().includes(sq) ||
+                        s.answer.toLowerCase().includes(sq) ||
+                        s.typeLabel.toLowerCase().includes(sq) ||
+                        s.qNo.toLowerCase().includes(sq)
+                    )
+                  : allSolutions;
+
+                return (
+                  <div className="space-y-5">
+                    <div className="rounded-2xl bg-blue-50/70 border border-blue-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-blue-900 text-white text-[10px] font-black uppercase tracking-wider">
+                            Official Textbook Exercise Solutions
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black uppercase">
+                            Verified Complete ({allSolutions.length} Questions)
+                          </span>
+                        </div>
+                        <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
+                          Chapter {activeChapter.chapterNumber}: {activeChapter.chapterTitle} — Complete Back-of-Chapter Exercise Answers
+                        </h3>
+                        <p className="text-xs text-slate-600">
+                          Includes Fill in the blanks, Match the pairs, True/False, Short &amp; Long answer questions, Give reasons, Distinguish between, and Problem-solving exercises.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allOpen = filteredSolutions.every(
+                            (s) => revealedTextbookAnswers[s.id]
+                          );
+                          const next: Record<string, boolean> = { ...revealedTextbookAnswers };
+                          for (const s of filteredSolutions) {
+                            next[s.id] = !allOpen;
+                          }
+                          setRevealedTextbookAnswers(next);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-black cursor-pointer shrink-0"
+                      >
+                        Toggle All Solutions
+                      </button>
+                    </div>
+
                     <div className="space-y-3">
-                      {activeChapter.solvedExamples.map((ex, i) => {
-                        const key = `${activeChapter.id}-ex-${i}`;
-                        const isRevealed = Boolean(revealedSolutions[key]);
+                      {filteredSolutions.map((sol) => {
+                        const isOpen = Boolean(revealedTextbookAnswers[sol.id]);
                         return (
                           <div
-                            key={key}
-                            className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5"
+                            key={sol.id}
+                            className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2.5"
                           >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <p className="text-sm font-bold text-slate-900">
-                                Example {i + 1}: {ex.prompt}
-                              </p>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 text-[11px] font-black">
+                                  {sol.qNo}
+                                </span>
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                                  {sol.typeLabel}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                                  {sol.verificationStatus}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-500 tabular-nums">
+                                  {sol.marks} {sol.marks === 1 ? 'Mark' : 'Marks'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <p className="text-sm font-bold text-slate-900 whitespace-pre-line leading-relaxed">
+                              {sol.question}
+                            </p>
+
+                            <div className="flex items-center justify-between pt-1">
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setRevealedSolutions((prev) => ({
+                                  setRevealedTextbookAnswers((prev) => ({
                                     ...prev,
-                                    [key]: !prev[key],
+                                    [sol.id]: !prev[sol.id],
                                   }))
                                 }
-                                className="px-3 py-1.5 rounded-lg bg-white hover:bg-indigo-50 border border-slate-300 text-xs font-bold text-indigo-700 cursor-pointer shrink-0 self-start sm:self-center"
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 border border-slate-300 text-xs font-bold text-indigo-800 cursor-pointer"
                               >
-                                {isRevealed ? 'Hide Solution' : 'Reveal Step-by-Step Solution'}
+                                {isOpen
+                                  ? 'Hide Textbook Solution'
+                                  : 'View Complete Answer & Step-by-Step Solution'}
                               </button>
                             </div>
-                            {isRevealed && (
-                              <div className="p-3 rounded-lg bg-white border border-emerald-200 text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed whitespace-pre-line">
-                                <strong className="text-emerald-800">Solution: </strong>
-                                {ex.solution}
+
+                            {isOpen && (
+                              <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+                                <p className="text-xs sm:text-sm text-slate-900 whitespace-pre-line leading-relaxed font-medium">
+                                  <strong className="text-emerald-900">Complete Answer: </strong>
+                                  {sol.answer}
+                                </p>
+                                {sol.stepByStepExplanation && (
+                                  <div className="pt-2 border-t border-emerald-200/70 space-y-1">
+                                    <p className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                                      Step-by-Step Method / Working:
+                                    </p>
+                                    <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+                                      {sol.stepByStepExplanation}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
                         );
                       })}
                     </div>
-                  </section>
+                  </div>
+                );
+              })()}
 
-                  {/* 7. Chapter Summary */}
-                  {activeChapter.chapterSummary && (
-                    <section className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-1">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900">
-                        Chapter Summary
+              {/* TAB B3: COMPLETE YOUR CLASS NOTES (PHYSICAL SCHOOL NOTEBOOK EXERCISES + HIDDEN-BY-DEFAULT ANSWER KEY) */}
+              {activeSectionTab === 'class_notebook' && (() => {
+                const allNotebookExercises = activeChapter.classNotebookExercises || [];
+                const sq = inChapterSearchQuery.trim().toLowerCase();
+                const filteredExercises = sq
+                  ? allNotebookExercises.filter(
+                      (nb) =>
+                        nb.prompt.toLowerCase().includes(sq) ||
+                        nb.sectionGroup.toLowerCase().includes(sq) ||
+                        nb.typeLabel.toLowerCase().includes(sq)
+                    )
+                  : allNotebookExercises;
+
+                const writtenCount = allNotebookExercises.filter(
+                  (nb) => notebookWrittenItems[`${activeChapter.id}-${nb.id}`]
+                ).length;
+
+                return (
+                  <div className="space-y-6">
+                    {/* Dedicated Class Notebook Header Banner */}
+                    <div className="rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50/70 to-amber-50 border-2 border-amber-300 p-5 space-y-3">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-[#0f2952] text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                              📓 COMPLETE YOUR CLASS NOTES · SCHOOL NOTEBOOK BUILDER
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-white border border-amber-300 text-amber-950 text-[10px] font-black">
+                              {writtenCount} / {allNotebookExercises.length} Written in Notebook
+                            </span>
+                          </div>
+                          <h3 className="text-base sm:text-lg font-display font-black text-slate-900">
+                            Chapter {activeChapter.chapterNumber}: {activeChapter.chapterTitle} — Complete Class Notebook Exercises
+                          </h3>
+                          <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                            Write the following structured exercises neatly in your physical school notebook to build complete, self-written class notes and prepare for school exams.{' '}
+                            <strong className="text-slate-900">
+                              Attempt each question in your notebook first, then open &ldquo;VIEW ANSWERS &amp; CHECK YOUR WORK&rdquo; at the bottom to verify and correct your answers.
+                            </strong>
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              printChapterStudySheetA4({
+                                board: selectedBoard,
+                                classLevel: selectedClass,
+                                subject: selectedSubject,
+                                chapter: activeChapter,
+                                mode: 'class_notebook',
+                                includeNotebookAnswerKey: false,
+                              })
+                            }
+                            className="px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 border border-amber-400 text-amber-950 text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Print Notebook Questions Only</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              printChapterStudySheetA4({
+                                board: selectedBoard,
+                                classLevel: selectedClass,
+                                subject: selectedSubject,
+                                chapter: activeChapter,
+                                mode: 'class_notebook',
+                                includeNotebookAnswerKey: true,
+                              })
+                            }
+                            className="px-3.5 py-2 rounded-xl bg-[#0f2952] hover:bg-slate-800 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Print with Answer Key</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Written Exercises List (NO ANSWERS SHOWN BESIDE QUESTIONS BY DEFAULT) */}
+                    <div className="space-y-3">
+                      {filteredExercises.map((item) => {
+                        const nbStoreKey = `${activeChapter.id}-${item.id}`;
+                        const isWritten = Boolean(notebookWrittenItems[nbStoreKey]);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-4 rounded-xl border transition-all space-y-2.5 ${
+                              isWritten
+                                ? 'bg-emerald-50/40 border-emerald-300'
+                                : 'bg-white border-slate-200 shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 text-[11px] font-black">
+                                  {item.qNo}
+                                </span>
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-800">
+                                  {item.sectionGroup}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+                                  {item.typeLabel}
+                                </span>
+                              </div>
+
+                              <label className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-50 hover:bg-emerald-50 border border-slate-200 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isWritten}
+                                  onChange={() => {
+                                    const updated = toggleNotebookWrittenExerciseItem(nbStoreKey);
+                                    setNotebookWrittenItems(updated);
+                                  }}
+                                  className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                                />
+                                <span>
+                                  {isWritten
+                                    ? '✓ Written in My School Notebook'
+                                    : 'Mark Written in Notebook'}
+                                </span>
+                              </label>
+                            </div>
+
+                            <p className="text-sm font-bold text-slate-900 whitespace-pre-line leading-relaxed">
+                              {item.prompt}
+                            </p>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/80">
+                              <span>
+                                <strong className="text-slate-800">Notebook Guidance:</strong>{' '}
+                                {item.writingGuidance}
+                              </span>
+                              <span className="font-bold text-indigo-700 shrink-0">
+                                {item.marks} {item.marks === 1 ? 'Mark' : 'Marks'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* SEPARATE EXPANDABLE SECTION: VIEW ANSWERS & CHECK YOUR WORK (HIDDEN BY DEFAULT) */}
+                    <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/40 p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <span className="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-800">
+                            Self-Correction &amp; Reference Key · Hidden by Default
+                          </span>
+                          <h4 className="text-sm sm:text-base font-display font-black text-slate-900">
+                            Finished writing in your school notebook? Check your answers below.
+                          </h4>
+                          <p className="text-xs text-slate-600">
+                            Compare your handwritten notebook answers with the complete reference answers, step-by-step calculations, and key marking points.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextState = !showNotebookAnswerKeySection;
+                            setShowNotebookAnswerKeySection(nextState);
+                            if (nextState) {
+                              const updated = toggleChapterWorkflowStep(
+                                activeChapter.id,
+                                'check_answer_key',
+                                true
+                              );
+                              setWorkflowProgressMap(updated);
+                            }
+                          }}
+                          className={`px-5 py-3 rounded-xl text-xs font-black flex items-center gap-2 cursor-pointer shrink-0 transition-all shadow-xs ${
+                            showNotebookAnswerKeySection
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>
+                            {showNotebookAnswerKeySection
+                              ? 'HIDE ANSWERS & CHECK YOUR WORK'
+                              : 'VIEW ANSWERS & CHECK YOUR WORK'}
+                          </span>
+                        </button>
+                      </div>
+
+                      {showNotebookAnswerKeySection && (
+                        <div className="space-y-3 pt-3 border-t border-indigo-200">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-black text-indigo-950">
+                              Complete Class Notebook Reference Answer Key ({filteredExercises.length}{' '}
+                              Exercises)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allOpen = filteredExercises.every(
+                                  (nb) => revealedNotebookItemKey[nb.id] !== false
+                                );
+                                const next: Record<string, boolean> = {};
+                                for (const nb of filteredExercises) {
+                                  next[nb.id] = !allOpen;
+                                }
+                                setRevealedNotebookItemKey(next);
+                              }}
+                              className="px-3 py-1 rounded-lg bg-white border border-indigo-200 text-xs font-bold text-indigo-800 cursor-pointer"
+                            >
+                              Toggle Individual Answer Cards
+                            </button>
+                          </div>
+
+                          {filteredExercises.map((item) => {
+                            const isCardOpen = revealedNotebookItemKey[item.id] !== false;
+                            return (
+                              <div
+                                key={`ans-${item.id}`}
+                                className="p-4 rounded-xl bg-white border border-emerald-200 space-y-2.5 shadow-2xs"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="text-xs font-black text-emerald-950">
+                                    {item.qNo} ({item.typeLabel}):{' '}
+                                    {item.prompt.split('\n')[0]}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setRevealedNotebookItemKey((prev) => ({
+                                        ...prev,
+                                        [item.id]: prev[item.id] === false ? true : false,
+                                      }))
+                                    }
+                                    className="text-[11px] font-bold text-indigo-700 hover:underline cursor-pointer"
+                                  >
+                                    {isCardOpen ? 'Collapse' : 'Expand Answer'}
+                                  </button>
+                                </div>
+
+                                {isCardOpen && (
+                                  <div className="space-y-2 pt-1">
+                                    <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200 text-xs sm:text-sm text-slate-900 whitespace-pre-line leading-relaxed font-medium">
+                                      <strong className="text-emerald-900">
+                                        Reference Notebook Answer:{' '}
+                                      </strong>
+                                      {item.modelAnswer}
+                                    </div>
+                                    {item.stepByStepExplanation && (
+                                      <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+                                        <p className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                          Self-Check &amp; Marking Points:
+                                        </p>
+                                        <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+                                          {item.stepByStepExplanation}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* TAB B4: WORD MEANINGS & DEFINITIONS */}
+              {activeSectionTab === 'word_meanings' && (() => {
+                const words = activeChapter.difficultWordsAndMeanings || [];
+                const defs = activeChapter.keyDefinitions || [];
+                const sq = inChapterSearchQuery.trim().toLowerCase();
+                return (
+                  <div className="space-y-6">
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-black text-slate-900">
+                        Difficult Words, Meanings &amp; Sentence Usage ({words.length})
                       </h3>
-                      <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">
-                        {activeChapter.chapterSummary}
-                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {words
+                          .filter(
+                            (w) =>
+                              !sq ||
+                              w.word.toLowerCase().includes(sq) ||
+                              w.meaning.toLowerCase().includes(sq) ||
+                              w.usageExample.toLowerCase().includes(sq)
+                          )
+                          .map((wm, idx) => (
+                            <div
+                              key={idx}
+                              className="p-4 rounded-xl bg-amber-50/40 border border-amber-200 space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs sm:text-sm font-black text-slate-900">
+                                  {wm.word}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-800 leading-relaxed">
+                                <strong>Meaning:</strong> {wm.meaning}
+                              </p>
+                              <p className="text-xs text-slate-600 italic leading-relaxed">
+                                <strong>Example Sentence:</strong> {wm.usageExample}
+                              </p>
+                            </div>
+                          ))}
+                      </div>
                     </section>
-                  )}
-                </div>
-              )}
+
+                    <section className="space-y-3 pt-4 border-t border-slate-100">
+                      <h3 className="text-sm font-black text-slate-900">
+                        Key Chapter Definitions &amp; Technical Terms ({defs.length})
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {defs
+                          .filter(
+                            (d) =>
+                              !sq ||
+                              d.term.toLowerCase().includes(sq) ||
+                              d.meaning.toLowerCase().includes(sq)
+                          )
+                          .map((def, idx) => (
+                            <div
+                              key={idx}
+                              className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1"
+                            >
+                              <p className="text-xs sm:text-sm font-black text-indigo-900">
+                                {def.term}
+                              </p>
+                              <p className="text-xs text-slate-700 leading-relaxed">
+                                {def.meaning}
+                              </p>
+                            </div>
+                          ))}
+                      </div>
+                    </section>
+                  </div>
+                );
+              })()}
+
+              {/* TAB B5: ADDITIONAL PRACTICE QUESTIONS (CLEARLY SEPARATED FROM TEXTBOOK EXERCISES) */}
+              {activeSectionTab === 'practice_questions' && (() => {
+                const extraQuestions = activeChapter.additionalPracticeQuestions || [];
+                const sq = inChapterSearchQuery.trim().toLowerCase();
+                const filteredExtra = sq
+                  ? extraQuestions.filter(
+                      (q) =>
+                        q.question.toLowerCase().includes(sq) ||
+                        q.answer.toLowerCase().includes(sq) ||
+                        q.formatLabel.toLowerCase().includes(sq)
+                    )
+                  : extraQuestions;
+
+                return (
+                  <div className="space-y-5">
+                    <div className="rounded-2xl bg-cyan-50/70 border border-cyan-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="px-2.5 py-0.5 rounded-full bg-cyan-900 text-white text-[10px] font-black uppercase tracking-wider">
+                          Extra Exam &amp; Competency Practice · Separate from Textbook Exercises
+                        </span>
+                        <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
+                          Additional Practice Questions for Chapter {activeChapter.chapterNumber}:{' '}
+                          {activeChapter.chapterTitle}
+                        </h3>
+                        <p className="text-xs text-slate-600">
+                          Attempt these supplementary application, HOTS, and exam-oriented practice questions after completing your official textbook exercises.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allOpen = filteredExtra.every(
+                            (q) => revealedPracticeAnswers[q.id]
+                          );
+                          const next: Record<string, boolean> = { ...revealedPracticeAnswers };
+                          for (const q of filteredExtra) {
+                            next[q.id] = !allOpen;
+                          }
+                          setRevealedPracticeAnswers(next);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-cyan-900 hover:bg-cyan-800 text-white text-xs font-black cursor-pointer shrink-0"
+                      >
+                        Toggle All Practice Answers
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {filteredExtra.map((pq, idx) => {
+                        const isOpen = Boolean(revealedPracticeAnswers[pq.id]);
+                        return (
+                          <div
+                            key={pq.id}
+                            className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5 shadow-2xs"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-cyan-800">
+                                Practice Q{idx + 1} · {pq.formatLabel}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-500 tabular-nums">
+                                {pq.marks} {pq.marks === 1 ? 'Mark' : 'Marks'}
+                              </span>
+                            </div>
+                            <p className="text-sm font-bold text-slate-900 whitespace-pre-line leading-relaxed">
+                              {pq.question}
+                            </p>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedPracticeAnswers((prev) => ({
+                                    ...prev,
+                                    [pq.id]: !prev[pq.id],
+                                  }))
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-cyan-50 border border-slate-300 text-xs font-bold text-cyan-900 cursor-pointer"
+                              >
+                                {isOpen ? 'Hide Practice Answer' : 'View Answer & Explanation'}
+                              </button>
+                            </div>
+                            {isOpen && (
+                              <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+                                <p className="text-xs sm:text-sm text-slate-800 whitespace-pre-line leading-relaxed font-medium">
+                                  <strong className="text-emerald-900">Model Answer: </strong>
+                                  {pq.answer}
+                                </p>
+                                {pq.examTip && (
+                                  <p className="text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 font-semibold">
+                                    Tip: {pq.examTip}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* TAB C: SHORT REVISION NOTES (1-PAGE EXAM SHEET) */}
               {activeSectionTab === 'short_revision' && (
