@@ -38,6 +38,7 @@ import {
   limit as clientLimit,
   getDocs as clientGetDocs
 } from "firebase/firestore";
+import { AsyncLocalStorage } from "async_hooks";
 dotenv.config();
 try {
   setClientFirestoreLogLevel("silent");
@@ -228,16 +229,230 @@ function isFirebaseAdminConfigured() {
 function getAdminFirestore() {
   return initAdminRuntime().db;
 }
+var requestBearerStorage = new AsyncLocalStorage();
+function runWithRequestBearerToken(authHeader, fn) {
+  const headerStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const token = headerStr && headerStr.startsWith("Bearer ") ? headerStr.slice("Bearer ".length).trim() : void 0;
+  return requestBearerStorage.run({ token: token && token.length >= 20 ? token : void 0 }, fn);
+}
+function getActiveRequestBearerToken() {
+  return requestBearerStorage.getStore()?.token;
+}
 function sanitizeDocPayload(data) {
   return JSON.parse(JSON.stringify(data));
 }
-async function serverGetDoc(collectionName, docId) {
+function jsToFirestoreValue(val) {
+  if (val === null || val === void 0) {
+    return { nullValue: null };
+  }
+  if (typeof val === "boolean") {
+    return { booleanValue: val };
+  }
+  if (typeof val === "number") {
+    if (Number.isInteger(val)) {
+      return { integerValue: String(val) };
+    }
+    return { doubleValue: val };
+  }
+  if (typeof val === "string") {
+    return { stringValue: val };
+  }
+  if (Array.isArray(val)) {
+    return {
+      arrayValue: {
+        values: val.map((item) => jsToFirestoreValue(item))
+      }
+    };
+  }
+  if (typeof val === "object") {
+    const fields = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== void 0) {
+        fields[k] = jsToFirestoreValue(v);
+      }
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+function firestoreValueToJs(fieldVal) {
+  if (!fieldVal || typeof fieldVal !== "object") return null;
+  if ("nullValue" in fieldVal) return null;
+  if ("booleanValue" in fieldVal) return Boolean(fieldVal.booleanValue);
+  if ("integerValue" in fieldVal) return Number(fieldVal.integerValue);
+  if ("doubleValue" in fieldVal) return Number(fieldVal.doubleValue);
+  if ("timestampValue" in fieldVal) return String(fieldVal.timestampValue);
+  if ("stringValue" in fieldVal) return String(fieldVal.stringValue);
+  if ("arrayValue" in fieldVal) {
+    const arr = fieldVal.arrayValue?.values;
+    return Array.isArray(arr) ? arr.map((v) => firestoreValueToJs(v)) : [];
+  }
+  if ("mapValue" in fieldVal) {
+    const fields = fieldVal.mapValue?.fields;
+    if (!fields || typeof fields !== "object") return {};
+    const out = {};
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = firestoreValueToJs(v);
+    }
+    return out;
+  }
+  return null;
+}
+function firestoreDocToJs(docObj) {
+  const out = {};
+  const fields = docObj?.fields;
+  if (fields && typeof fields === "object") {
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = firestoreValueToJs(v);
+    }
+  }
+  return out;
+}
+function getFirestoreRestBaseUrl() {
+  const projectId = encodeURIComponent(firebaseConfig.projectId);
+  const databaseId = encodeURIComponent(firebaseConfig.firestoreDatabaseId);
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents`;
+}
+async function firestoreRestGetDoc(collectionName, docId, bearerToken) {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const apiKeyParam = firebaseConfig.apiKey ? `?key=${encodeURIComponent(String(firebaseConfig.apiKey))}` : "";
+  const url = `${baseUrl}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}${apiKeyParam}`;
+  const headers = {
+    Accept: "application/json"
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const res = await fetch(url, { method: "GET", headers });
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST GET failed (${res.status}): ${errText}`);
+  }
+  const json = await res.json();
+  return firestoreDocToJs(json);
+}
+async function firestoreRestPatchDoc(collectionName, docId, data, merge, bearerToken) {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const cleanPayload = sanitizeDocPayload(data);
+  const keys = Object.keys(cleanPayload);
+  const queryParts = [];
+  if (firebaseConfig.apiKey) {
+    queryParts.push(`key=${encodeURIComponent(String(firebaseConfig.apiKey))}`);
+  }
+  if (merge) {
+    for (const k of keys) {
+      queryParts.push(`updateMask.fieldPaths=${encodeURIComponent(k)}`);
+    }
+  }
+  const qs = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
+  const url = `${baseUrl}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}${qs}`;
+  const fields = {};
+  for (const [k, v] of Object.entries(cleanPayload)) {
+    if (v !== void 0) {
+      fields[k] = jsToFirestoreValue(v);
+    }
+  }
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json"
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ fields })
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST PATCH failed (${res.status}): ${errText}`);
+  }
+}
+async function firestoreRestQueryEqualsLimit1(collectionName, field, value, bearerToken) {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const apiKeyParam = firebaseConfig.apiKey ? `?key=${encodeURIComponent(String(firebaseConfig.apiKey))}` : "";
+  const url = `${baseUrl}:runQuery${apiKeyParam}`;
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json"
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: collectionName }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: field },
+          op: "EQUAL",
+          value: jsToFirestoreValue(value)
+        }
+      },
+      limit: 1
+    }
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST runQuery failed (${res.status}): ${errText}`);
+  }
+  const rows = await res.json();
+  if (!Array.isArray(rows)) return null;
+  for (const row of rows) {
+    if (row?.document?.name) {
+      const parts = row.document.name.split("/");
+      const id = parts[parts.length - 1] || "";
+      return { id, data: firestoreDocToJs(row.document) };
+    }
+  }
+  return null;
+}
+async function firestoreRestListCollection(collectionName, maxLimit, bearerToken) {
+  const baseUrl = getFirestoreRestBaseUrl();
+  const queryParts = [`pageSize=${Math.min(Math.max(1, maxLimit), 500)}`];
+  if (firebaseConfig.apiKey) {
+    queryParts.push(`key=${encodeURIComponent(String(firebaseConfig.apiKey))}`);
+  }
+  const url = `${baseUrl}/${encodeURIComponent(collectionName)}?${queryParts.join("&")}`;
+  const headers = {
+    Accept: "application/json"
+  };
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`;
+  }
+  const res = await fetch(url, { method: "GET", headers });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Firestore REST LIST failed (${res.status}): ${errText}`);
+  }
+  const json = await res.json();
+  if (!Array.isArray(json?.documents)) return [];
+  return json.documents.map((docItem) => {
+    const parts = String(docItem.name || "").split("/");
+    const id = parts[parts.length - 1] || "";
+    return { id, data: firestoreDocToJs(docItem) };
+  });
+}
+async function serverGetDoc(collectionName, docId, options) {
   const cleanId = String(docId || "").trim();
   if (!cleanId) return null;
   const adminDb = getAdminFirestore();
   if (adminDb) {
     const snap2 = await adminDb.collection(collectionName).doc(cleanId).get();
     return snap2.exists ? snap2.data() : null;
+  }
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    return firestoreRestGetDoc(collectionName, cleanId, bearerToken);
   }
   const clientDb = getFallbackClientDb();
   const snap = await clientGetDoc(clientDoc(clientDb, collectionName, cleanId));
@@ -254,19 +469,54 @@ async function serverSetDoc(collectionName, docId, data, options = { merge: true
     await adminDb.collection(collectionName).doc(cleanId).set(cleanPayload, { merge: options.merge !== false });
     return { usedAdminSdk: true };
   }
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    await firestoreRestPatchDoc(
+      collectionName,
+      cleanId,
+      cleanPayload,
+      options.merge !== false,
+      bearerToken
+    );
+    return { usedAdminSdk: false };
+  }
   const clientDb = getFallbackClientDb();
   await clientSetDoc(clientDoc(clientDb, collectionName, cleanId), cleanPayload, {
     merge: options.merge !== false
   });
   return { usedAdminSdk: false };
 }
-async function serverQueryEqualsLimit1(collectionName, field, value) {
+async function serverUpdateDoc(collectionName, docId, data, options) {
+  const cleanId = String(docId || "").trim();
+  if (!cleanId) {
+    throw new Error(`Invalid docId for ${collectionName}`);
+  }
+  const cleanPayload = sanitizeDocPayload(data);
+  const adminDb = getAdminFirestore();
+  if (adminDb) {
+    await adminDb.collection(collectionName).doc(cleanId).update(cleanPayload);
+    return { usedAdminSdk: true };
+  }
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    await firestoreRestPatchDoc(collectionName, cleanId, cleanPayload, true, bearerToken);
+    return { usedAdminSdk: false };
+  }
+  const clientDb = getFallbackClientDb();
+  await clientUpdateDoc(clientDoc(clientDb, collectionName, cleanId), cleanPayload);
+  return { usedAdminSdk: false };
+}
+async function serverQueryEqualsLimit1(collectionName, field, value, options) {
   const adminDb = getAdminFirestore();
   if (adminDb) {
     const snap2 = await adminDb.collection(collectionName).where(field, "==", value).limit(1).get();
     if (snap2.empty) return null;
     const d2 = snap2.docs[0];
     return { id: d2.id, data: d2.data() };
+  }
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    return firestoreRestQueryEqualsLimit1(collectionName, field, value, bearerToken);
   }
   const clientDb = getFallbackClientDb();
   const q = clientQuery(
@@ -279,7 +529,7 @@ async function serverQueryEqualsLimit1(collectionName, field, value) {
   const d = snap.docs[0];
   return { id: d.id, data: d.data() };
 }
-async function serverListCollection(collectionName, maxLimit = 500) {
+async function serverListCollection(collectionName, maxLimit = 500, options) {
   const adminDb = getAdminFirestore();
   if (adminDb) {
     const snap2 = await adminDb.collection(collectionName).limit(maxLimit).get();
@@ -287,6 +537,10 @@ async function serverListCollection(collectionName, maxLimit = 500) {
       id: d.id,
       data: d.data()
     }));
+  }
+  const bearerToken = options?.bearerToken || getActiveRequestBearerToken();
+  if (bearerToken) {
+    return firestoreRestListCollection(collectionName, maxLimit, bearerToken);
   }
   const clientDb = getFallbackClientDb();
   const q = clientQuery(
@@ -330,12 +584,19 @@ async function verifyBearerIdToken(authHeader) {
       token,
       state.hasServiceAccountCredentials
     );
+    const activeStore = requestBearerStorage.getStore();
+    if (activeStore) {
+      activeStore.token = token;
+      activeStore.uid = decoded.uid;
+      activeStore.email = decoded.email?.toLowerCase();
+    }
     return {
       valid: true,
       statusCode: 200,
       uid: decoded.uid,
       email: decoded.email?.toLowerCase(),
       emailVerified: Boolean(decoded.email_verified),
+      token,
       decoded
     };
   } catch (err) {
@@ -373,20 +634,19 @@ async function verifyAdminRequest(headers) {
       email: tokenResult.email
     };
   }
-  const adminDb = getAdminFirestore();
-  if (adminDb) {
-    try {
-      const adminDocSnap = await adminDb.collection("admins").doc(tokenResult.uid).get();
-      if (adminDocSnap.exists) {
-        return {
-          authorized: true,
-          statusCode: 200,
-          uid: tokenResult.uid,
-          email: tokenResult.email
-        };
-      }
-    } catch {
+  try {
+    const adminDoc = await serverGetDoc("admins", tokenResult.uid, {
+      bearerToken: tokenResult.token
+    });
+    if (adminDoc) {
+      return {
+        authorized: true,
+        statusCode: 200,
+        uid: tokenResult.uid,
+        email: tokenResult.email
+      };
     }
+  } catch {
   }
   return {
     authorized: false,
@@ -1763,10 +2023,11 @@ async function validateDeviceSessionServer(input, nowMs = Date.now()) {
   const existing = await loadDeviceSessionFromStore(cleanUserId);
   if (!existing) {
     if (input.allowBootstrapIfMissing && input.deviceId?.length >= 6 && input.hardwareSignature?.length >= 8 && input.deviceSignature?.length >= 8) {
+      const preferredSid = input.activeSessionId && input.activeSessionId.length >= 8 && input.activeSessionId.length <= 128 ? input.activeSessionId : void 0;
       const fresh = buildFreshActiveSession(
         {
           userId: cleanUserId,
-          firebaseUid: input.firebaseUid,
+          firebaseUid: input.firebaseUid || cleanUserId,
           email: input.email || "",
           studentName: input.studentName || "Student",
           accountRole: input.accountRole || "student",
@@ -1779,7 +2040,9 @@ async function validateDeviceSessionServer(input, nowMs = Date.now()) {
           os: input.os,
           userAgentSummary: input.userAgentSummary
         },
-        nowMs
+        nowMs,
+        null,
+        preferredSid
       );
       await persistDeviceSessionToStore(fresh);
       return {
@@ -1864,6 +2127,7 @@ async function heartbeatDeviceSessionServer(input, nowMs = Date.now()) {
   await persistDeviceSessionToStore(updated);
   return {
     valid: true,
+    bootstrapped: Boolean(check.bootstrapped),
     session: updated
   };
 }
@@ -4929,15 +5193,43 @@ app.use(compression({ threshold: 1024 }));
 var transactionLedger = [];
 var processedPaymentIds = /* @__PURE__ */ new Set();
 var processedOrderIds = /* @__PURE__ */ new Set();
+var STATIC_TRUSTED_ORIGINS = /* @__PURE__ */ new Set([
+  "https://mystudyzone.in",
+  "https://www.mystudyzone.in",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  ...(process.env.ALLOWED_ORIGINS || "").split(",").map((o) => o.trim().replace(/\/+$/, "")).filter(Boolean)
+]);
+function resolveTrustedCorsOrigin(rawOrigin) {
+  const origin = (Array.isArray(rawOrigin) ? rawOrigin[0] : rawOrigin || "").trim().replace(/\/+$/, "");
+  if (!origin) return null;
+  if (STATIC_TRUSTED_ORIGINS.has(origin)) return origin;
+  if (/^https:\/\/ais-(dev|pre)-[a-z0-9-]+\.[a-z0-9-]+\.run\.app$/i.test(origin)) {
+    return origin;
+  }
+  if (/^https:\/\/([a-z0-9-]+--)?[a-z0-9-]+\.netlify\.app$/i.test(origin)) {
+    return origin;
+  }
+  return null;
+}
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const rawOrigin = req.headers.origin;
+  const trustedOrigin = resolveTrustedCorsOrigin(rawOrigin);
+  res.setHeader("Vary", "Origin");
+  if (trustedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", trustedOrigin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature"
   );
   if (req.method === "OPTIONS") {
-    return res.status(200).end();
+    if (rawOrigin && !trustedOrigin) {
+      return res.status(403).json({ success: false, error: "Origin not allowed by CORS policy." });
+    }
+    return res.status(204).end();
   }
   if (req.url.startsWith("/.netlify/functions/api")) {
     req.url = req.url.replace(/^\/\.netlify\/functions\/api/, "/api") || "/api";
@@ -4949,6 +5241,11 @@ app.use("/functions/webhook", express.raw({ type: "application/json" }));
 app.use("/api/razorpayx/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use((req, _res, next) => {
+  runWithRequestBearerToken(req.headers.authorization, () => {
+    next();
+  });
+});
 app.get("/api/razorpay/config", (_req, res) => {
   const creds = getResolvedRazorpayCredentials();
   res.json({
@@ -6356,7 +6653,8 @@ function getServerBoardClassStatus(sub, targetBoard, targetClass) {
       expiresAt: validity.expiryDateIst || entry.expiresAt
     };
   }
-  if (isBaseFreePair) {
+  const isStudentActivatedPair = Array.isArray(sub.studentActivatedClassKeys) && sub.studentActivatedClassKeys.includes(boardClassKey) || Array.isArray(sub.activatedClassKeys) && sub.activatedClassKeys.includes(boardClassKey);
+  if (isBaseFreePair || isStudentActivatedPair) {
     return {
       board: normalizedBoard,
       classLevel: normalizedTarget,
@@ -6508,9 +6806,10 @@ async function evaluateServerSubscriptionFromStore(studentId) {
         const classMap = extractServerClassSubscriptionsMap(data);
         const categoryMap = extractServerCategorySubscriptionsMap(data);
         const primaryBoard = normalizeBackendBoard(data.primaryBoard || data.board || "Maharashtra");
-        const selectedBoard = normalizeBackendBoard(data.board || primaryBoard);
+        const selectedBoard = normalizeBackendBoard(data.activeWorkspaceBoard || data.board || primaryBoard);
         const primary = normalizeBackendClassLevel(data.primaryClassLevel) || normalizeBackendClassLevel(data.classLevel) || "Class 1";
-        const selected = normalizeBackendClassLevel(data.classLevel) || primary;
+        const selected = normalizeBackendClassLevel(data.activeWorkspaceClassLevel || data.classLevel) || primary;
+        const studentActivatedClassKeys = Array.isArray(data.studentActivatedClassKeys) ? data.studentActivatedClassKeys.filter((k) => typeof k === "string") : [];
         const baseRecord = {
           studentId: cleanId,
           plan: data.plan === "premium" || data.plan === "basic" ? "premium" : "free",
@@ -6520,6 +6819,7 @@ async function evaluateServerSubscriptionFromStore(studentId) {
           primaryClassLevel: primary,
           activatedBoard: data.activatedBoard ? normalizeBackendBoard(data.activatedBoard) : null,
           activatedClassLevel: normalizeBackendClassLevel(data.activatedClassLevel) || null,
+          studentActivatedClassKeys,
           classSubscriptions: classMap,
           categorySubscriptions: categoryMap,
           activatedCategoryKeys: Array.isArray(data.activatedCategoryKeys) ? data.activatedCategoryKeys : [],
@@ -6693,15 +6993,33 @@ app.post("/api/auth/session/acquire", async (req, res) => {
 app.post("/api/auth/session/validate", async (req, res) => {
   try {
     const body = req.body || {};
+    const userId = String(body.userId || "").trim();
+    let verifiedUid;
+    let verifiedEmail;
+    if (req.headers.authorization) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          valid: false,
+          error: tokenCheck.error || "Invalid or expired Firebase ID token."
+        });
+      }
+      verifiedUid = tokenCheck.uid;
+      verifiedEmail = tokenCheck.email;
+    }
+    const isVerifiedOwner = Boolean(
+      verifiedUid && (verifiedUid === userId || body.firebaseUid && verifiedUid === String(body.firebaseUid).trim())
+    );
     const result = await validateDeviceSessionServer({
-      userId: String(body.userId || "").trim(),
+      userId,
       activeSessionId: body.activeSessionId || req.headers["x-session-id"] || void 0,
       deviceId: String(body.deviceId || req.headers["x-device-id"] || ""),
       hardwareSignature: String(body.hardwareSignature || req.headers["x-hardware-signature"] || ""),
       deviceSignature: String(body.deviceSignature || req.headers["x-device-signature"] || ""),
-      allowBootstrapIfMissing: Boolean(body.allowBootstrapIfMissing),
-      firebaseUid: body.firebaseUid,
-      email: body.email,
+      allowBootstrapIfMissing: isVerifiedOwner || Boolean(body.allowBootstrapIfMissing) && !req.headers.authorization,
+      firebaseUid: verifiedUid || body.firebaseUid,
+      email: verifiedEmail || body.email,
       studentName: body.studentName,
       accountRole: body.accountRole === "teacher" ? "teacher" : "student",
       deviceName: body.deviceName,
@@ -6736,12 +7054,40 @@ app.post("/api/auth/session/validate", async (req, res) => {
 app.post("/api/auth/session/heartbeat", async (req, res) => {
   try {
     const body = req.body || {};
+    const userId = String(body.userId || "").trim();
+    let verifiedUid;
+    let verifiedEmail;
+    if (req.headers.authorization) {
+      const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+      if (!tokenCheck.valid) {
+        return res.status(tokenCheck.statusCode).json({
+          success: false,
+          valid: false,
+          error: tokenCheck.error || "Invalid or expired Firebase ID token."
+        });
+      }
+      verifiedUid = tokenCheck.uid;
+      verifiedEmail = tokenCheck.email;
+    }
+    const isVerifiedOwner = Boolean(
+      verifiedUid && (verifiedUid === userId || body.firebaseUid && verifiedUid === String(body.firebaseUid).trim())
+    );
     const result = await heartbeatDeviceSessionServer({
-      userId: String(body.userId || "").trim(),
+      userId,
       activeSessionId: String(body.activeSessionId || req.headers["x-session-id"] || ""),
       deviceId: String(body.deviceId || req.headers["x-device-id"] || ""),
       hardwareSignature: String(body.hardwareSignature || req.headers["x-hardware-signature"] || ""),
-      deviceSignature: String(body.deviceSignature || req.headers["x-device-signature"] || "")
+      deviceSignature: String(body.deviceSignature || req.headers["x-device-signature"] || ""),
+      allowBootstrapIfMissing: isVerifiedOwner,
+      firebaseUid: verifiedUid || body.firebaseUid,
+      email: verifiedEmail || body.email,
+      studentName: body.studentName,
+      accountRole: body.accountRole === "teacher" ? "teacher" : "student",
+      deviceName: body.deviceName,
+      deviceType: body.deviceType,
+      browser: body.browser,
+      os: body.os,
+      userAgentSummary: body.userAgentSummary
     });
     if (!result.valid) {
       return res.status(401).json({
@@ -6754,6 +7100,7 @@ app.post("/api/auth/session/heartbeat", async (req, res) => {
     return res.json({
       success: true,
       valid: true,
+      bootstrapped: Boolean(result.bootstrapped),
       session: result.session
     });
   } catch (error) {
@@ -7157,7 +7504,7 @@ app.post("/api/subscription/switch-class", async (req, res) => {
       });
     }
     const isGuestOrDemo = cleanStudentId === "guest" || cleanStudentId.startsWith("demo_");
-    if (isFirebaseAdminConfigured() && !isGuestOrDemo) {
+    if ((isFirebaseAdminConfigured() || req.headers.authorization) && !isGuestOrDemo) {
       if (!req.headers.authorization) {
         return res.status(401).json({
           success: false,
@@ -7199,7 +7546,21 @@ app.post("/api/subscription/switch-class", async (req, res) => {
     const targetBoard = normalizeBackendBoard(
       req.body?.targetBoard || req.body?.selectedBoard || req.body?.board || sub.selectedBoard
     );
-    const classStatus = getServerBoardClassStatus(sub, targetBoard, targetClass);
+    const targetCompositeKey = buildBackendBoardClassKey(targetBoard, targetClass);
+    const incomingStudentKeys = Array.isArray(req.body?.studentActivatedClassKeys) ? req.body.studentActivatedClassKeys.map((k) => parseBackendBoardClassKey(String(k || ""))).filter(Boolean).map((p) => buildBackendBoardClassKey(p.board, p.classLevel)) : [];
+    const activateIfMissing = Boolean(req.body?.activateAdditionalBoardClass);
+    const mergedStudentActivatedKeys = Array.from(
+      /* @__PURE__ */ new Set([
+        ...Array.isArray(sub.studentActivatedClassKeys) ? sub.studentActivatedClassKeys : [],
+        ...incomingStudentKeys,
+        ...activateIfMissing ? [targetCompositeKey] : []
+      ])
+    );
+    const subWithActivations = {
+      ...sub,
+      studentActivatedClassKeys: mergedStudentActivatedKeys
+    };
+    const classStatus = getServerBoardClassStatus(subWithActivations, targetBoard, targetClass);
     if (!classStatus.isAccessible) {
       return res.status(403).json({
         success: false,
@@ -7210,11 +7571,11 @@ app.post("/api/subscription/switch-class", async (req, res) => {
         targetBoard,
         targetClass,
         boardClassKey: classStatus.boardClassKey,
-        error: classStatus.status === "EXPIRED" ? `Your subscription for ${targetBoard} \u2022 ${targetClass} has expired. Renew ${targetBoard} (${targetClass}) for \u20B999 (365 Days) to switch.` : `${targetBoard} \u2022 ${targetClass} is locked on your account. Activate ${targetBoard} (${targetClass}) for \u20B999 (365 Days) before switching.`
+        error: classStatus.status === "EXPIRED" ? `Your subscription for ${targetBoard} \u2022 ${targetClass} has expired. Renew ${targetBoard} (${targetClass}) for \u20B999 (365 Days) to switch.` : `${targetBoard} \u2022 ${targetClass} is locked on your account. Activate ${targetBoard} (${targetClass}) before switching.`
       });
     }
     const updatedSub = {
-      ...sub,
+      ...subWithActivations,
       selectedBoard: targetBoard,
       selectedClass: targetClass,
       plan: classStatus.isPaidActive ? "premium" : "free",
@@ -7227,12 +7588,20 @@ app.post("/api/subscription/switch-class", async (req, res) => {
     serverStudentSubscriptions.set(cleanStudentId, updatedSub);
     try {
       if (!isGuestOrDemo) {
-        await serverSetDoc(
-          "students",
-          cleanStudentId,
-          { board: targetBoard, classLevel: targetClass },
-          { merge: true }
-        );
+        const isPrimaryOrPaid = targetBoard === (sub.primaryBoard || "Maharashtra") && targetClass === (sub.primaryClassLevel || "Class 1") || classStatus.isPaidActive;
+        const updateDocPayload = {
+          activeWorkspaceBoard: targetBoard,
+          activeWorkspaceClassLevel: targetClass,
+          lastActiveDate: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        if (mergedStudentActivatedKeys.length > 0) {
+          updateDocPayload.studentActivatedClassKeys = mergedStudentActivatedKeys;
+        }
+        if (isPrimaryOrPaid) {
+          updateDocPayload.board = targetBoard;
+          updateDocPayload.classLevel = targetClass;
+        }
+        await serverUpdateDoc("students", cleanStudentId, updateDocPayload);
       }
     } catch {
     }
@@ -7242,6 +7611,7 @@ app.post("/api/subscription/switch-class", async (req, res) => {
       selectedBoard: targetBoard,
       selectedClass: targetClass,
       boardClassKey: classStatus.boardClassKey,
+      studentActivatedClassKeys: mergedStudentActivatedKeys,
       status: classStatus.status,
       subscription: updatedSub
     });
@@ -7249,8 +7619,45 @@ app.post("/api/subscription/switch-class", async (req, res) => {
     return res.status(500).json({ success: false, allowed: false, error: error.message });
   }
 });
+async function verifyStudentOwnershipOrAdmin(req, targetStudentId) {
+  const cleanTargetId = String(targetStudentId || "").trim();
+  if (!cleanTargetId) {
+    return { authorized: false, statusCode: 400, error: "studentId is required." };
+  }
+  const tokenCheck = await verifyBearerIdToken(req.headers.authorization);
+  if (!tokenCheck.valid || !tokenCheck.uid) {
+    return {
+      authorized: false,
+      statusCode: tokenCheck.statusCode || 401,
+      error: tokenCheck.error || "Valid Firebase Authorization Bearer token required."
+    };
+  }
+  if (tokenCheck.uid === cleanTargetId) {
+    return { authorized: true, statusCode: 200, uid: tokenCheck.uid };
+  }
+  const existingStudent = await serverGetDoc("students", cleanTargetId).catch(() => null);
+  if (existingStudent?.firebaseUid === tokenCheck.uid) {
+    return { authorized: true, statusCode: 200, uid: tokenCheck.uid };
+  }
+  const adminCheck = await verifyAdminRequest(req.headers);
+  if (adminCheck.authorized) {
+    return { authorized: true, statusCode: 200, uid: tokenCheck.uid };
+  }
+  return {
+    authorized: false,
+    statusCode: 403,
+    error: "Forbidden: Authenticated user does not own this student account."
+  };
+}
 app.get("/api/subscription/status/:studentId", async (req, res) => {
-  const studentId = String(req.params.studentId || "");
+  const studentId = String(req.params.studentId || "").trim();
+  const ownerCheck = await verifyStudentOwnershipOrAdmin(req, studentId);
+  if (!ownerCheck.authorized) {
+    return res.status(ownerCheck.statusCode).json({
+      success: false,
+      error: ownerCheck.error || "Unauthorized access to subscription status."
+    });
+  }
   const sub = await evaluateServerSubscriptionFromStore(studentId);
   const queryBoard = req.query.board ? normalizeBackendBoard(String(req.query.board)) : null;
   const userBoard = queryBoard || sub.selectedBoard || sub.primaryBoard || "Maharashtra";
@@ -7308,7 +7715,15 @@ var SERVER_WORKSHEET_UPGRADE_MSG = "Unlock All Worksheets for Your Board & Class
 app.post("/api/subscription/verify-access", async (req, res) => {
   const { studentId, feature, categoryId, subject, worksheetId, selectedBoard, board, selectedClass } = req.body || {};
   const cleanStudentId = String(studentId || "").trim();
-  if (cleanStudentId && cleanStudentId !== "guest" && !cleanStudentId.startsWith("demo_")) {
+  const isGuestOrDemo = !cleanStudentId || cleanStudentId === "guest" || cleanStudentId.startsWith("demo_");
+  if (!isGuestOrDemo) {
+    const ownerCheck = await verifyStudentOwnershipOrAdmin(req, cleanStudentId);
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.statusCode).json({
+        allowed: false,
+        error: ownerCheck.error || "Unauthorized access verification request."
+      });
+    }
     const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
     if (!sessionCheck.valid) {
       return res.status(sessionCheck.statusCode).json({
@@ -7431,6 +7846,13 @@ app.post("/api/subscription/verify-access", async (req, res) => {
 });
 app.get("/api/worksheets/access/:studentId", async (req, res) => {
   const studentId = String(req.params.studentId || "").trim();
+  const ownerCheck = await verifyStudentOwnershipOrAdmin(req, studentId);
+  if (!ownerCheck.authorized) {
+    return res.status(ownerCheck.statusCode).json({
+      success: false,
+      error: ownerCheck.error || "Unauthorized access to worksheet entitlements."
+    });
+  }
   const queryBoard = req.query.selectedBoard || req.query.board ? normalizeBackendBoard(String(req.query.selectedBoard || req.query.board)) : null;
   const queryClass = req.query.selectedClass ? normalizeBackendClassLevel(String(req.query.selectedClass)) : null;
   const sub = await evaluateServerSubscriptionFromStore(studentId);
@@ -7468,6 +7890,17 @@ app.post("/api/worksheets/verify-access", async (req, res) => {
       allowed: false,
       error: "worksheetId is required."
     });
+  }
+  const isGuestOrDemo = !cleanStudentId || cleanStudentId === "guest" || cleanStudentId.startsWith("demo_");
+  if (!isGuestOrDemo) {
+    const ownerCheck = await verifyStudentOwnershipOrAdmin(req, cleanStudentId);
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.statusCode).json({
+        success: false,
+        allowed: false,
+        error: ownerCheck.error || "Unauthorized worksheet access verification."
+      });
+    }
   }
   const sessionCheck = await verifyRequestDeviceSession(req, cleanStudentId);
   if (!sessionCheck.valid) {

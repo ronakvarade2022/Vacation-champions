@@ -2729,10 +2729,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }));
     if (currentStudent?.id === studentId) {
-      setCurrentStudent(prev => prev ? {
-        ...prev,
-        assignments: (prev.assignments || []).map(a => a.id === assignmentId ? { ...a, ...updates } : a)
-      } : null);
+      setCurrentStudent(prev => {
+        if (!prev) return null;
+        const updated = {
+          ...prev,
+          assignments: (prev.assignments || []).map(a => a.id === assignmentId ? { ...a, ...updates } : a)
+        };
+        saveStudentProfileToFirestore(updated).catch(() => {});
+        return updated;
+      });
     }
   };
 
