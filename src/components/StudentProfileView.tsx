@@ -70,13 +70,17 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     savedDrawings,
     activeBoard,
     switchActiveBoardAndClass,
-    updateStudentScholarshipMedium
+    updateStudentScholarshipMedium,
+    updateStudentAssignment
   } = useApp();
   const [copiedRefLink, setCopiedRefLink] = useState(false);
   const [copiedRefCode, setCopiedRefCode] = useState(false);
   const [promotionBannerMsg, setPromotionBannerMsg] = useState<string | null>(null);
   const [mediumSavedMsg, setMediumSavedMsg] = useState<string | null>(null);
   const [ledgerBoard, setLedgerBoard] = useState<EducationBoard>(activeBoard);
+  const [submittingAssignment, setSubmittingAssignment] = useState<any | null>(null);
+  const [submissionNote, setSubmissionNote] = useState<string>('');
+  const [submissionSuccessMsg, setSubmissionSuccessMsg] = useState<string | null>(null);
 
   if (!currentStudent) return null;
 
@@ -1201,6 +1205,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </span>
         </div>
 
+        {submissionSuccessMsg && (
+          <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center justify-between">
+            <span>{submissionSuccessMsg}</span>
+            <button type="button" onClick={() => setSubmissionSuccessMsg(null)} className="text-emerald-700 cursor-pointer">✕</button>
+          </div>
+        )}
+
         <div className="space-y-2.5">
           {(currentStudent.assignments && currentStudent.assignments.length > 0) ? (
             currentStudent.assignments.map(assign => (
@@ -1233,7 +1244,25 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                     👨‍🏫 Teacher Feedback: "{assign.teacherFeedback}"
                   </p>
                 )}
-                <p className="text-[10px] text-slate-400">Due Date: {assign.dueDate}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                  <p className="text-[10px] text-slate-400">Due Date: {assign.dueDate}</p>
+                  {assign.status !== 'graded' && assign.status !== 'submitted' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubmittingAssignment(assign);
+                        setSubmissionNote('');
+                      }}
+                      className="px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-[10px] cursor-pointer shadow-xs transition-colors"
+                    >
+                      Submit Homework
+                    </button>
+                  ) : assign.status === 'submitted' ? (
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      ✓ Submitted — Awaiting Teacher Review
+                    </span>
+                  ) : null}
+                </div>
               </div>
             ))
           ) : (
@@ -1242,6 +1271,74 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             </div>
           )}
         </div>
+
+        {/* Student Assignment Submission Modal */}
+        {submittingAssignment && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-display font-black text-slate-900">
+                  Submit Assignment
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setSubmittingAssignment(null)}
+                  className="p-1 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-1 text-xs">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900">
+                  {submittingAssignment.subject}
+                </span>
+                <h4 className="text-sm font-black text-slate-900">{submittingAssignment.title}</h4>
+                <p className="text-slate-600 text-[11px]">{submittingAssignment.description}</p>
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <label className="block font-bold text-slate-700">
+                  Your Answer / Completion Notes *
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={submissionNote}
+                  onChange={(e) => setSubmissionNote(e.target.value)}
+                  placeholder="Summarize your work, paste answers or add notes for your teacher..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-medium focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSubmittingAssignment(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!submissionNote.trim()) return;
+                    updateStudentAssignment(currentStudent.id, submittingAssignment.id, {
+                      status: 'submitted',
+                      submittedAt: new Date().toISOString(),
+                      teacherRemarks: `Student Submission: ${submissionNote.trim()}`
+                    });
+                    setSubmissionSuccessMsg(`Submitted "${submittingAssignment.title}" to teacher.`);
+                    setSubmittingAssignment(null);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs cursor-pointer shadow-xs"
+                >
+                  Confirm Submission
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2D. Student's Own Fee Details */}

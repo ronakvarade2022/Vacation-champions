@@ -356,6 +356,42 @@ service cloud.firestore {
           isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
         );
       }
+
+      // Additive Subcollection: /students/{studentId}/additional_progress/{chapterId}
+      // Strictly isolated per student owner; Master Gate ensures parent /students/{studentId} exists.
+      match /additional_progress/{chapterId} {
+        allow get: if isValidId(studentId) && isValidId(chapterId) && (
+          isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin()
+        );
+        allow list: if isValidId(studentId) && (
+          isStudentDocOwner(studentId) || isParentOf(studentId) || isAdmin()
+        );
+        allow create: if isValidId(studentId) && isValidId(chapterId) &&
+                         isSignedIn() &&
+                         isValidAdditionalProgress(incoming()) &&
+                         incoming().studentId == studentId &&
+                         incoming().chapterId == chapterId &&
+                         exists(/databases/$(database)/documents/students/$(studentId)) &&
+                         (isAdmin() || isStudentDocOwner(studentId));
+        allow update: if isValidId(studentId) && isValidId(chapterId) &&
+                         isSignedIn() &&
+                         isValidAdditionalProgress(incoming()) &&
+                         incoming().studentId == existing().studentId &&
+                         incoming().chapterId == existing().chapterId &&
+                         incoming().subjectId == existing().subjectId &&
+                         exists(/databases/$(database)/documents/students/$(studentId)) && (
+                           isAdmin() || (
+                             isStudentDocOwner(studentId) &&
+                             incoming().bestQuizScore >= existing().bestQuizScore &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'classLevel', 'board', 'medium',
+                               'notesCompleted', 'worksheetCompleted', 'quizCompleted',
+                               'bestQuizScore', 'quizTotal', 'lastUpdatedAt'
+                             ])
+                           )
+                         );
+        allow delete: if isValidId(studentId) && isValidId(chapterId) && isAdmin();
+      }
     }
 
     // 2. Collection: /parents/{parentId}
@@ -787,6 +823,257 @@ service cloud.firestore {
                        isValidAcademicYearArchive(incoming()) &&
                        incoming().id == archiveId;
       allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // ADDITIVE ADDITIONAL CURRICULUM VALIDATORS & COLLECTIONS (17–19)
+    // ------------------------------------------------------------------
+
+    // Isolated Student Supplementary Progress Schema Validator (Zero-PII)
+    function isValidAdditionalProgress(data) {
+      return data.keys().hasAll([
+               'studentId', 'chapterId', 'subjectId', 'classLevel', 'board', 'medium',
+               'notesCompleted', 'worksheetCompleted', 'quizCompleted',
+               'bestQuizScore', 'quizTotal', 'lastUpdatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'studentId', 'chapterId', 'subjectId', 'classLevel', 'board', 'medium',
+               'notesCompleted', 'worksheetCompleted', 'quizCompleted',
+               'bestQuizScore', 'quizTotal', 'lastUpdatedAt'
+             ]) &&
+             isValidId(data.studentId) &&
+             isValidId(data.chapterId) &&
+             isValidId(data.subjectId) &&
+             data.classLevel is string && data.classLevel.size() > 0 && data.classLevel.size() <= 20 &&
+             data.board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+             data.medium in ['English', 'Marathi', 'Hindi', 'Semi-English'] &&
+             data.notesCompleted is bool &&
+             data.worksheetCompleted is bool &&
+             data.quizCompleted is bool &&
+             data.bestQuizScore is number && data.bestQuizScore >= 0 &&
+             data.quizTotal is number && data.quizTotal >= 0 && data.quizTotal <= 100 &&
+             data.bestQuizScore <= data.quizTotal &&
+             data.lastUpdatedAt is string && data.lastUpdatedAt.size() > 0 && data.lastUpdatedAt.size() <= 50 &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    // Zero-PII Additional Subject Catalog Validator
+    function isValidAdditionalSubject(data) {
+      return data.keys().hasAll([
+               'id', 'code', 'name', 'localizedNames', 'tagline', 'description',
+               'applicableBoards', 'applicableMediums', 'classesCovered',
+               'accentColor', 'isPublished', 'updatedByUid', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'code', 'name', 'localizedNames', 'tagline', 'description',
+               'applicableBoards', 'applicableMediums', 'classesCovered',
+               'accentColor', 'isPublished', 'isCustom',
+               'mapsFromNonStandaloneSubject', 'updatedByUid', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             data.code is string && data.code.size() > 0 && data.code.size() <= 16 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.localizedNames is map && data.localizedNames.size() <= 5 &&
+             data.tagline is string && data.tagline.size() <= 200 &&
+             data.description is string && data.description.size() <= 600 &&
+             data.applicableBoards is list && data.applicableBoards.size() >= 1 && data.applicableBoards.size() <= 3 && data.applicableBoards[0] is string &&
+             data.applicableMediums is list && data.applicableMediums.size() >= 1 && data.applicableMediums.size() <= 4 && data.applicableMediums[0] is string &&
+             data.classesCovered is list && data.classesCovered.size() >= 1 && data.classesCovered.size() <= 10 && data.classesCovered[0] is string &&
+             data.accentColor is string && data.accentColor.size() > 0 && data.accentColor.size() <= 30 &&
+             data.isPublished is bool &&
+             (!('isCustom' in data) || data.isCustom is bool) &&
+             (!('mapsFromNonStandaloneSubject' in data) || (data.mapsFromNonStandaloneSubject is string && data.mapsFromNonStandaloneSubject.size() <= 120)) &&
+             isValidId(data.updatedByUid) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    // Zero-PII Additional Chapter Catalog Validator
+    function isValidAdditionalChapter(data) {
+      return data.keys().hasAll([
+               'chapterId', 'subjectId', 'classLevel', 'classNumber', 'chapterNumber',
+               'title', 'localizedTitles', 'applicableBoards', 'applicableMediums',
+               'curriculumLabel', 'workflowStatus', 'updatedAt',
+               'learningObjectives', 'materials', 'updatedByUid'
+             ]) &&
+             data.keys().hasOnly([
+               'chapterId', 'subjectId', 'classLevel', 'classNumber', 'chapterNumber',
+               'title', 'localizedTitles', 'applicableBoards', 'applicableMediums',
+               'curriculumLabel', 'workflowStatus', 'reviewedBy', 'updatedAt',
+               'learningObjectives', 'materials', 'isCustom', 'updatedByUid'
+             ]) &&
+             isValidId(data.chapterId) &&
+             isValidId(data.subjectId) &&
+             data.classLevel is string && data.classLevel.size() > 0 && data.classLevel.size() <= 20 &&
+             data.classNumber is number && data.classNumber >= 1 && data.classNumber <= 10 &&
+             data.chapterNumber is number && data.chapterNumber >= 1 && data.chapterNumber <= 100 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.localizedTitles is map && data.localizedTitles.size() <= 5 &&
+             data.applicableBoards is list && data.applicableBoards.size() >= 1 && data.applicableBoards.size() <= 3 && data.applicableBoards[0] is string &&
+             data.applicableMediums is list && data.applicableMediums.size() >= 1 && data.applicableMediums.size() <= 4 && data.applicableMediums[0] is string &&
+             data.curriculumLabel == 'MY STUDYZONE ADDITIONAL CURRICULUM' &&
+             data.workflowStatus in ['DRAFT', 'UNDER_REVIEW', 'APPROVED', 'PUBLISHED', 'UNPUBLISHED'] &&
+             (!('reviewedBy' in data) || (data.reviewedBy is string && data.reviewedBy.size() <= 120)) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             data.learningObjectives is list && data.learningObjectives.size() >= 1 && data.learningObjectives.size() <= 20 && data.learningObjectives[0] is string &&
+             data.materials is map && data.materials.size() >= 1 && data.materials.size() <= 12 &&
+             (!('isCustom' in data) || data.isCustom is bool) &&
+             isValidId(data.updatedByUid) &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    // Zero-PII Supplementary Teacher Assignment Validator
+    function isValidAdditionalAssignment(data) {
+      return data.keys().hasAll([
+               'assignmentId', 'teacherId', 'teacherUid', 'teacherName',
+               'board', 'classLevel', 'medium', 'division',
+               'subjectId', 'chapterId', 'chapterTitle', 'dueDate',
+               'teacherNote', 'assignedAt', 'status'
+             ]) &&
+             data.keys().hasOnly([
+               'assignmentId', 'teacherId', 'teacherUid', 'teacherName',
+               'board', 'classLevel', 'medium', 'division',
+               'subjectId', 'chapterId', 'chapterTitle', 'dueDate',
+               'teacherNote', 'assignedAt', 'updatedAt', 'status'
+             ]) &&
+             isValidId(data.assignmentId) &&
+             isValidId(data.teacherId) &&
+             isValidId(data.teacherUid) &&
+             data.teacherName is string && data.teacherName.size() > 0 && data.teacherName.size() <= 100 &&
+             data.board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+             data.classLevel is string && data.classLevel.size() > 0 && data.classLevel.size() <= 20 &&
+             data.medium in ['English', 'Marathi', 'Hindi', 'Semi-English'] &&
+             data.division is string && data.division.size() > 0 && data.division.size() <= 30 &&
+             isValidId(data.subjectId) &&
+             isValidId(data.chapterId) &&
+             data.chapterTitle is string && data.chapterTitle.size() > 0 && data.chapterTitle.size() <= 200 &&
+             data.dueDate is string && data.dueDate.size() > 0 && data.dueDate.size() <= 20 &&
+             data.teacherNote is string && data.teacherNote.size() <= 500 &&
+             data.assignedAt is string && data.assignedAt.size() > 0 && data.assignedAt.size() <= 50 &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+             data.status in ['ACTIVE', 'COMPLETED'] &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    // 17. Additive Collection: /additional_curriculum_subjects/{subjectId}
+    match /additional_curriculum_subjects/{subjectId} {
+      allow get: if isValidId(subjectId) && (
+        isAdmin() || (isSignedIn() && existing().isPublished == true)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.isPublished == true);
+      allow create: if isValidId(subjectId) &&
+                       isAdmin() &&
+                       isValidAdditionalSubject(incoming()) &&
+                       incoming().id == subjectId &&
+                       incoming().updatedByUid == request.auth.uid;
+      allow update: if isValidId(subjectId) &&
+                       isAdmin() &&
+                       isValidAdditionalSubject(incoming()) &&
+                       incoming().id == existing().id &&
+                       incoming().updatedByUid == request.auth.uid &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'code', 'name', 'localizedNames', 'tagline', 'description',
+                         'applicableBoards', 'applicableMediums', 'classesCovered',
+                         'accentColor', 'isPublished', 'isCustom',
+                         'mapsFromNonStandaloneSubject', 'updatedByUid', 'updatedAt'
+                       ]);
+      allow delete: if isValidId(subjectId) && isAdmin();
+    }
+
+    // 18. Additive Collection: /additional_curriculum_chapters/{chapterId}
+    match /additional_curriculum_chapters/{chapterId} {
+      allow get: if isValidId(chapterId) && (
+        isAdmin() || (isSignedIn() && existing().workflowStatus == 'PUBLISHED')
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.workflowStatus == 'PUBLISHED');
+      allow create: if isValidId(chapterId) &&
+                       isAdmin() &&
+                       isValidAdditionalChapter(incoming()) &&
+                       incoming().chapterId == chapterId &&
+                       incoming().updatedByUid == request.auth.uid;
+      allow update: if isValidId(chapterId) &&
+                       isAdmin() &&
+                       isValidAdditionalChapter(incoming()) &&
+                       incoming().chapterId == existing().chapterId &&
+                       incoming().curriculumLabel == existing().curriculumLabel &&
+                       incoming().updatedByUid == request.auth.uid &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'subjectId', 'classLevel', 'classNumber', 'chapterNumber',
+                         'title', 'localizedTitles', 'applicableBoards', 'applicableMediums',
+                         'workflowStatus', 'reviewedBy', 'updatedAt',
+                         'learningObjectives', 'materials', 'isCustom', 'updatedByUid'
+                       ]);
+      allow delete: if isValidId(chapterId) && isAdmin();
+    }
+
+    // 19. Additive Collection: /additional_curriculum_assignments/{assignmentId}
+    match /additional_curriculum_assignments/{assignmentId} {
+      allow get: if isValidId(assignmentId) && (
+        isAdmin() || (
+          isSignedIn() && (
+            existing().teacherUid == request.auth.uid || (
+              existing().status in ['ACTIVE', 'COMPLETED'] &&
+              existing().board in ['Maharashtra', 'CBSE', 'ICSE']
+            )
+          )
+        )
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.teacherUid == request.auth.uid || (
+            resource.data.status in ['ACTIVE', 'COMPLETED'] &&
+            resource.data.board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+            resource.data.classLevel is string &&
+            resource.data.classLevel.size() > 0 &&
+            resource.data.classLevel.size() <= 20
+          )
+        )
+      );
+      allow create: if isValidId(assignmentId) &&
+                       isSignedIn() &&
+                       isValidAdditionalAssignment(incoming()) &&
+                       incoming().assignmentId == assignmentId &&
+                       incoming().teacherUid == request.auth.uid && (
+                         isAdmin() || (
+                           isStudentDocOwner(incoming().teacherId) &&
+                           isTeacherAccount(incoming().teacherId)
+                         )
+                       );
+      allow update: if isValidId(assignmentId) &&
+                       isSignedIn() &&
+                       isValidAdditionalAssignment(incoming()) &&
+                       incoming().assignmentId == existing().assignmentId &&
+                       incoming().teacherId == existing().teacherId &&
+                       incoming().teacherUid == existing().teacherUid &&
+                       incoming().assignedAt == existing().assignedAt && (
+                         isAdmin() || (
+                           existing().teacherUid == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         )
+                       );
+      allow delete: if isValidId(assignmentId) && (
+        isAdmin() || (isSignedIn() && existing().teacherUid == request.auth.uid)
+      );
     }
   }
 }

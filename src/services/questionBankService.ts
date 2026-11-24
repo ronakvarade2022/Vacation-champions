@@ -549,7 +549,11 @@ export function computeQuestionBankAnalytics(questions: QuizQuestion[]): Questio
     'Social Science': 0, 'History & Civics': 0,
     'Computer Studies': 0, 'Computer Applications': 0,
     'Economics': 0, 'Commercial Studies': 0,
-    'Sanskrit': 0
+    'Sanskrit': 0,
+    'Environmental Awareness': 0,
+    'Life Skills': 0,
+    'General Science Activities': 0,
+    'Financial Literacy & Digital Citizenship': 0
   };
 
   const typeCounts: Record<string, number> = {};

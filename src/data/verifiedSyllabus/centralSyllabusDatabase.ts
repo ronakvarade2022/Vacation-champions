@@ -95,8 +95,13 @@ const ENRICHMENT_SUBJECTS = new Set<SubjectName>([
   'General Knowledge',
   'Logical Reasoning',
   'Vocabulary and Grammar',
+  'Computer Knowledge',
   'Moral Education',
   'Drawing and Creative Activities',
+  'Environmental Awareness',
+  'Life Skills',
+  'General Science Activities',
+  'Financial Literacy & Digital Citizenship',
 ]);
 
 function getBoardOfficialPortal(board: EducationBoard): string {

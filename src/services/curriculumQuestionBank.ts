@@ -76,7 +76,11 @@ export const SUBJECT_CODES: Record<SubjectName, string> = {
   'Computer Applications': 'CMPAP',
   'Economics': 'ECON',
   'Commercial Studies': 'COMM',
-  'Sanskrit': 'SKT'
+  'Sanskrit': 'SKT',
+  'Environmental Awareness': 'ENVA',
+  'Life Skills': 'LIFE',
+  'General Science Activities': 'GSCI',
+  'Financial Literacy & Digital Citizenship': 'FINLIT'
 };
 
 const CLASS_STAGE_DESCRIPTORS: Record<ClassLevel, string> = {

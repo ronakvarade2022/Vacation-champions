@@ -90,6 +90,7 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
     const [studentPageSize, setStudentPageSize] = useState<number>(15);
     const [auditPage, setAuditPage] = useState<number>(1);
     const [auditPageSize, setAuditPageSize] = useState<number>(15);
+    const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'teacher'>('all');
 
     const [subscriptionMigrationFeedback, setSubscriptionMigrationFeedback] = useState<{
       studentId: string;
@@ -184,6 +185,9 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
 
     const filteredStudents = useMemo(() => {
       return mergedStudents.filter((s) => {
+        if (roleFilter === 'student' && s.accountRole === 'teacher') return false;
+        if (roleFilter === 'teacher' && s.accountRole !== 'teacher') return false;
+
         if (selectedBoardWorkspace !== 'all') {
           const baseBoard = normalizeBoardValue(s.board || s.primaryBoard || 'Maharashtra');
           const hasBoardSub =
@@ -196,17 +200,18 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
             s.name.toLowerCase().includes(debouncedSearch) ||
             s.email.toLowerCase().includes(debouncedSearch) ||
             s.mobile.includes(debouncedSearch) ||
+            (s.schoolName && s.schoolName.toLowerCase().includes(debouncedSearch)) ||
             s.id.toLowerCase().includes(debouncedSearch);
           if (!hit) return false;
         }
         return true;
       });
-    }, [mergedStudents, selectedBoardWorkspace, debouncedSearch]);
+    }, [mergedStudents, selectedBoardWorkspace, debouncedSearch, roleFilter]);
 
     useEffect(() => {
       setStudentPage(1);
       setAuditPage(1);
-    }, [selectedBoardWorkspace, debouncedSearch]);
+    }, [selectedBoardWorkspace, debouncedSearch, roleFilter]);
 
     const safeStudentPage = Math.min(
       studentPage,
@@ -360,6 +365,37 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
               />
             </div>
           </div>
+        </div>
+
+        {/* Role Type Filter Bar (All / Students / Teachers) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+              Account Type:
+            </span>
+            {[
+              { id: 'all' as const, label: `All Users (${mergedStudents.length})` },
+              { id: 'student' as const, label: `Students (${mergedStudents.filter((s) => s.accountRole !== 'teacher').length})` },
+              { id: 'teacher' as const, label: `Teachers / Educators (${mergedStudents.filter((s) => s.accountRole === 'teacher').length})` },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setRoleFilter(tab.id)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  roleFilter === tab.id
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-xs font-medium text-slate-500">
+            {filteredStudents.length} matching record{filteredStudents.length === 1 ? '' : 's'}
+          </span>
         </div>
 
         {/* Independent Board Filter Indicator */}

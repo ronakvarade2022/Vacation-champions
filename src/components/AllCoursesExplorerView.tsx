@@ -33,9 +33,13 @@ import {
   getEffectiveSyllabusForConsumer,
   getSyllabusStatusPresentation,
 } from '../services/centralSyllabusService';
-import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import {
+  resolveAdditionalSubjectForBlockedEntry,
+  resolveInlineAdditionalCurriculumFallback,
+} from '../services/additionalCurriculumService';
 import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
 import type { InstructionMedium } from '../types/lessonPlanner';
+import { InlineAdditionalSubjectPanel } from './InlineAdditionalSubjectPanel';
 
 interface AllCoursesExplorerViewProps {
   selectedBoard: EducationBoard;
@@ -330,8 +334,17 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
             medium: effectiveMedium,
           });
           const statusPresentation = getSyllabusStatusPresentation(syllabusResolution);
+          const inlineAdditional =
+            chapters.length === 0
+              ? resolveInlineAdditionalCurriculumFallback({
+                  board: selectedBoard,
+                  classLevel: selectedClass,
+                  subject: subjectName,
+                  medium: effectiveMedium,
+                })
+              : null;
           const additionalMapping =
-            syllabusResolution.verificationStatus === 'NOT_PUBLISHED_AS_STANDALONE'
+            !inlineAdditional && syllabusResolution.verificationStatus === 'NOT_PUBLISHED_AS_STANDALONE'
               ? resolveAdditionalSubjectForBlockedEntry(subjectName, selectedBoard, effectiveMedium)
               : null;
           const isExpanded = expandedSubject === subjectName;
@@ -418,6 +431,49 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                       onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'pyq_papers'),
                   },
                 ]
+              : inlineAdditional
+              ? [
+                  {
+                    id: 'modules',
+                    stepNum: 2,
+                    icon: '📖',
+                    label: `2. Modules (${inlineAdditional.chapters.length})`,
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'chapter_notes'),
+                  },
+                  {
+                    id: 'notes',
+                    stepNum: 3,
+                    icon: '📄',
+                    label: '3. Study Notes',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'chapter_notes'),
+                  },
+                  {
+                    id: 'worksheets',
+                    stepNum: 4,
+                    icon: '📝',
+                    label: '4. Worksheets',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'worksheets'),
+                  },
+                  {
+                    id: 'practice_qs',
+                    stepNum: 5,
+                    icon: '✍️',
+                    label: '5. Practice Q&A',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'qa_bank'),
+                  },
+                  {
+                    id: 'mcqs',
+                    stepNum: 6,
+                    icon: '❓',
+                    label: '6. MCQ Practice',
+                    onClick: () =>
+                      onOpenSubjectPractice(selectedBoard, selectedClass, subjectName, 'study-materials', 'chapter_test'),
+                  },
+                ]
               : []),
             {
               id: 'results',
@@ -444,21 +500,31 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                       </h3>
                       <p className="text-[11px] font-bold text-slate-500">
                         {getBoardShortLabel(selectedBoard)} · {selectedClass} ·{' '}
-                        {chapters.length > 0 ? `${chapters.length} Verified Chapters` : statusPresentation.badgeLabel}
+                        {chapters.length > 0
+                          ? `${chapters.length} Verified Chapters`
+                          : inlineAdditional
+                          ? `${inlineAdditional.chapters.length} Supplementary Modules`
+                          : statusPresentation.badgeLabel}
                       </p>
                     </div>
                   </div>
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
-                      chapters.length === 0
+                      chapters.length === 0 && !inlineAdditional
                         ? 'bg-amber-100 text-amber-900'
+                        : inlineAdditional
+                        ? 'bg-indigo-100 text-indigo-900'
                         : isFreeSub || classSubInfo.isPaidActive
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-amber-100 text-amber-900'
                     }`}
                   >
                     {chapters.length === 0
-                      ? statusPresentation.badgeLabel
+                      ? inlineAdditional
+                        ? inlineAdditional.isIntegratedIntoParent
+                          ? 'Integrated + Modules'
+                          : 'Enrichment Ready'
+                        : statusPresentation.badgeLabel
                       : classSubInfo.isPaidActive
                       ? 'Unlocked'
                       : isFreeSub
@@ -508,6 +574,8 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                     <span>
                       {chapters.length > 0
                         ? `Ordered Chapter Sequence (${chapters.length} Chapters)`
+                        : inlineAdditional
+                        ? `Supplementary Modules (${inlineAdditional.chapters.length} Chapters)`
                         : `Official Textbook Status (${statusPresentation.badgeLabel})`}
                     </span>
                     {isExpanded ? (
@@ -518,8 +586,31 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
                   </button>
 
                   {isExpanded && (
-                    <div className="mt-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 max-h-60 overflow-y-auto">
-                      {chapters.length === 0 ? (
+                    <div
+                      className={`mt-2 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 overflow-y-auto ${
+                        inlineAdditional && chapters.length === 0 ? 'p-2 max-h-[480px]' : 'p-3 max-h-60'
+                      }`}
+                    >
+                      {chapters.length === 0 && inlineAdditional ? (
+                        <InlineAdditionalSubjectPanel
+                          resolution={inlineAdditional}
+                          board={selectedBoard}
+                          classLevel={selectedClass}
+                          medium={effectiveMedium}
+                          userId={currentStudent?.id}
+                          onOpenFullWorkspace={
+                            onOpenAdditionalCurriculum
+                              ? () =>
+                                  onOpenAdditionalCurriculum({
+                                    board: selectedBoard,
+                                    classLevel: selectedClass,
+                                    medium: effectiveMedium,
+                                    subjectId: inlineAdditional.additionalSubject.id,
+                                  })
+                              : undefined
+                          }
+                        />
+                      ) : chapters.length === 0 ? (
                         <div className="space-y-2">
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-950">
                             {statusPresentation.badgeLabel}: {statusPresentation.message}

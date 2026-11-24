@@ -17,6 +17,7 @@ import {
   FileText,
   BookOpen,
   Calendar,
+  Users,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -223,6 +224,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {currentStudent.accountRole === 'teacher' && (
               <>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('teacher-dashboard')}
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                >
+                  <Users className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Teacher Class &amp; Student Command Center</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => onNavigateTab('lesson-planner')}

@@ -61,6 +61,10 @@ const UNIQUE_SUBJ_ID_CODE: Record<SubjectName, string> = {
   'Economics': 'ECONOMICS',
   'Commercial Studies': 'COMMERCIALST',
   'Sanskrit': 'SANSKRIT',
+  'Environmental Awareness': 'ENVAWARENESS',
+  'Life Skills': 'LIFESKILLS',
+  'General Science Activities': 'GENSCIACT',
+  'Financial Literacy & Digital Citizenship': 'FINLITDIGI',
 };
 
 const DEFAULT_INSTRUCTIONS: Record<WorksheetDifficultyLevel, string[]> = {

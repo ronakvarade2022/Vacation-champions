@@ -407,6 +407,98 @@
         "updatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "teacherUid", "board", "classLevel", "subject", "academicYear", "division", "medium", "periodsPerWeek", "updatedAt"]
+    },
+    "AdditionalCurriculumSubject": {
+      "title": "AdditionalCurriculumSubject",
+      "description": "Zero-PII supplementary subject catalog definition or Admin CMS override under MY STUDYZONE ADDITIONAL CURRICULUM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "code": { "type": "string", "maxLength": 16 },
+        "name": { "type": "string", "maxLength": 120 },
+        "localizedNames": { "type": "object" },
+        "tagline": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 600 },
+        "applicableBoards": { "type": "array", "description": "Max 3 boards (Maharashtra, CBSE, ICSE)." },
+        "applicableMediums": { "type": "array", "description": "Max 4 mediums (English, Marathi, Hindi, Semi-English)." },
+        "classesCovered": { "type": "array", "description": "Max 10 class levels (Class 1 to Class 10)." },
+        "accentColor": { "type": "string", "maxLength": 30 },
+        "isPublished": { "type": "boolean" },
+        "isCustom": { "type": "boolean" },
+        "mapsFromNonStandaloneSubject": { "type": "string", "maxLength": 120 },
+        "updatedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "code", "name", "localizedNames", "tagline", "description", "applicableBoards", "applicableMediums", "classesCovered", "accentColor", "isPublished", "updatedByUid", "updatedAt"]
+    },
+    "AdditionalCurriculumChapter": {
+      "title": "AdditionalCurriculumChapter",
+      "description": "Zero-PII supplementary chapter notes, worksheet, MCQ quiz, and workflow state managed by Admin CMS.",
+      "type": "object",
+      "properties": {
+        "chapterId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "subjectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classLevel": { "type": "string", "maxLength": 20 },
+        "classNumber": { "type": "number" },
+        "chapterNumber": { "type": "number" },
+        "title": { "type": "string", "maxLength": 200 },
+        "localizedTitles": { "type": "object" },
+        "applicableBoards": { "type": "array", "description": "Max 3 boards." },
+        "applicableMediums": { "type": "array", "description": "Max 4 mediums." },
+        "curriculumLabel": { "type": "string", "enum": ["MY STUDYZONE ADDITIONAL CURRICULUM"] },
+        "workflowStatus": { "type": "string", "enum": ["DRAFT", "UNDER_REVIEW", "APPROVED", "PUBLISHED", "UNPUBLISHED"] },
+        "reviewedBy": { "type": "string", "maxLength": 120 },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "learningObjectives": { "type": "array", "description": "Max 20 learning objectives." },
+        "materials": { "type": "object" },
+        "isCustom": { "type": "boolean" },
+        "updatedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" }
+      },
+      "required": ["chapterId", "subjectId", "classLevel", "classNumber", "chapterNumber", "title", "localizedTitles", "applicableBoards", "applicableMediums", "curriculumLabel", "workflowStatus", "updatedAt", "learningObjectives", "materials", "updatedByUid"]
+    },
+    "AdditionalCurriculumAssignment": {
+      "title": "AdditionalCurriculumAssignment",
+      "description": "Zero-PII supplementary chapter assignment issued by a verified teacher or admin for a specific board, class, medium, and division.",
+      "type": "object",
+      "properties": {
+        "assignmentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 100 },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "classLevel": { "type": "string", "maxLength": 20 },
+        "medium": { "type": "string", "enum": ["English", "Marathi", "Hindi", "Semi-English"] },
+        "division": { "type": "string", "maxLength": 30 },
+        "subjectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "chapterId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "chapterTitle": { "type": "string", "maxLength": 200 },
+        "dueDate": { "type": "string", "maxLength": 20 },
+        "teacherNote": { "type": "string", "maxLength": 500 },
+        "assignedAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["ACTIVE", "COMPLETED"] }
+      },
+      "required": ["assignmentId", "teacherId", "teacherUid", "teacherName", "board", "classLevel", "medium", "division", "subjectId", "chapterId", "chapterTitle", "dueDate", "teacherNote", "assignedAt", "status"]
+    },
+    "AdditionalCurriculumProgress": {
+      "title": "AdditionalCurriculumProgress",
+      "description": "Isolated per-student supplementary chapter completion progress (notes, worksheet, best MCQ quiz score) under /students/{studentId}/additional_progress.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "chapterId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "subjectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classLevel": { "type": "string", "maxLength": 20 },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "medium": { "type": "string", "enum": ["English", "Marathi", "Hindi", "Semi-English"] },
+        "notesCompleted": { "type": "boolean" },
+        "worksheetCompleted": { "type": "boolean" },
+        "quizCompleted": { "type": "boolean" },
+        "bestQuizScore": { "type": "number" },
+        "quizTotal": { "type": "number" },
+        "lastUpdatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["studentId", "chapterId", "subjectId", "classLevel", "board", "medium", "notesCompleted", "worksheetCompleted", "quizCompleted", "bestQuizScore", "quizTotal", "lastUpdatedAt"]
     }
   },
   "firestore": {
@@ -493,6 +585,22 @@
     "/students/{studentId}/lesson_plans_state/{stateId}": {
       "schema": { "$ref": "#/entities/TeacherLessonPlanState" },
       "description": "Private per-teacher progress, timetable load, permitted edits, outcome statuses, and private remarks isolated by authenticated Teacher UID."
+    },
+    "/students/{studentId}/additional_progress/{chapterId}": {
+      "schema": { "$ref": "#/entities/AdditionalCurriculumProgress" },
+      "description": "Isolated per-student supplementary chapter progress under MY STUDYZONE ADDITIONAL CURRICULUM."
+    },
+    "/additional_curriculum_subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/AdditionalCurriculumSubject" },
+      "description": "Zero-PII supplementary subject catalog overrides managed exclusively by Admin."
+    },
+    "/additional_curriculum_chapters/{chapterId}": {
+      "schema": { "$ref": "#/entities/AdditionalCurriculumChapter" },
+      "description": "Zero-PII supplementary chapters and workflow states managed exclusively by Admin."
+    },
+    "/additional_curriculum_assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/AdditionalCurriculumAssignment" },
+      "description": "Zero-PII supplementary chapter assignments issued by verified Teachers or Admins."
     }
   }
 }

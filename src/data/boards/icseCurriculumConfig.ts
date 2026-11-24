@@ -24,7 +24,13 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'General Knowledge',
       'Drawing and Creative Activities',
       'Moral Education',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Logical Reasoning',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       English: [
@@ -67,7 +73,13 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'General Knowledge',
       'Vocabulary and Grammar',
       'Moral Education',
-      'Logical Reasoning'
+      'Logical Reasoning',
+      'Computer Knowledge',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -105,7 +117,13 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'General Knowledge',
       'Vocabulary and Grammar',
       'Logical Reasoning',
-      'Moral Education'
+      'Moral Education',
+      'Computer Knowledge',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -149,7 +167,13 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'General Knowledge',
       'Logical Reasoning',
       'Vocabulary and Grammar',
-      'Moral Education'
+      'Moral Education',
+      'Computer Knowledge',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -193,7 +217,13 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'General Knowledge',
       'Logical Reasoning',
       'Vocabulary and Grammar',
-      'Moral Education'
+      'Moral Education',
+      'Computer Knowledge',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -233,7 +263,14 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'Computer Studies',
       'General Knowledge',
       'Logical Reasoning',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -297,7 +334,14 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'Computer Studies',
       'General Knowledge',
       'Logical Reasoning',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -361,7 +405,14 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'Computer Studies',
       'General Knowledge',
       'Logical Reasoning',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -420,7 +471,17 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'Economics',
       'Commercial Studies',
       'Environmental Education',
-      'Physical Education'
+      'Physical Education',
+      'General Knowledge',
+      'Logical Reasoning',
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [
@@ -491,7 +552,17 @@ export const ICSE_CURRICULUM_BY_CLASS: Record<ClassLevel, IcseBoardClassStageInf
       'Economics',
       'Commercial Studies',
       'Environmental Education',
-      'Physical Education'
+      'Physical Education',
+      'General Knowledge',
+      'Logical Reasoning',
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     chaptersBySubject: {
       Mathematics: [

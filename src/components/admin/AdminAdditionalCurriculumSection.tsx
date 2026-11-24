@@ -34,6 +34,7 @@ import {
 import {
   exportAdditionalCurriculumSnapshot,
   getAdditionalCurriculumStorageStatus,
+  hydrateAdditionalCurriculumFromCloud,
   importAdditionalCurriculumSnapshot,
   subscribeAdditionalCurriculumChanges,
 } from '../../services/additionalCurriculumPersistence';
@@ -56,9 +57,15 @@ export const AdminAdditionalCurriculumSection: React.FC = () => {
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    return subscribeAdditionalCurriculumChanges(() => {
+    const unsub = subscribeAdditionalCurriculumChanges(() => {
       setVersion((v) => v + 1);
     });
+    void hydrateAdditionalCurriculumFromCloud({ isAdminUser: true })
+      .then((res) => {
+        if (res.hydrated) setVersion((v) => v + 1);
+      })
+      .catch(() => {});
+    return unsub;
   }, []);
 
   // Filters for Chapters tab
@@ -428,12 +435,17 @@ export const AdminAdditionalCurriculumSection: React.FC = () => {
         {/* Isolated Persistence Status Strip */}
         <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 tabular-nums">
           <span>
-            Persistence: <strong className="text-slate-900">Isolated Local + Real-Time Cross-Tab Sync</strong>
+            Persistence:{' '}
+            <strong className="text-slate-900">
+              {storageStatus.cloudSyncEnabled
+                ? 'Cloud Firestore Sync + Local Cross-Tab Cache'
+                : 'Isolated Local + Real-Time Cross-Tab Sync'}
+            </strong>
             {' · '}
             {storageStatus.customSubjectsCount} subject override(s) · {storageStatus.customChaptersCount} chapter draft(s) · {storageStatus.teacherAssignmentsCount} teacher assignment(s)
           </span>
           <span className="text-slate-500">
-            Cloud Firestore sync staged (awaiting additive rules approval · zero impact on live collections)
+            Additive rules verified (zero impact on official syllabus or existing collections)
           </span>
         </div>
 

@@ -1006,6 +1006,22 @@ export const SUBJECT_TOPIC_MAP: Record<SubjectName, { topics: string[]; sampleKe
   'Sanskrit': {
     topics: ['संस्कृत वर्णमाला', 'लट्/लृट् लकार', 'शब्द रूपाणि', 'संधि व सुभाषितानि'],
     sampleKeywords: ['लकार', 'विभक्ति', 'संधि', 'धातु', 'सुभाषित']
+  },
+  'Environmental Awareness': {
+    topics: ['Waste Segregation', 'Water Conservation', 'Biodiversity', 'Renewable Energy', 'Climate Action'],
+    sampleKeywords: ['recycle', 'compost', 'conservation', 'ecosystem', 'solar']
+  },
+  'Life Skills': {
+    topics: ['Time Management', 'Empathy & Teamwork', 'Emotional Resilience', 'Personal Safety', 'Goal Setting'],
+    sampleKeywords: ['listen', 'team', 'priority', 'empathy', 'safety']
+  },
+  'General Science Activities': {
+    topics: ['Observation Labs', 'Everyday Physics', 'Kitchen Chemistry', 'Plant Biology', 'Experimental Inquiry'],
+    sampleKeywords: ['experiment', 'observe', 'hypothesis', 'filter', 'magnet']
+  },
+  'Financial Literacy & Digital Citizenship': {
+    topics: ['Saving & Budgeting', 'Needs vs Wants', 'UPI & Banking Safety', 'Cyber Privacy', 'Fact-Checking'],
+    sampleKeywords: ['budget', 'saving', 'password', 'phishing', 'interest']
   }
 };
 

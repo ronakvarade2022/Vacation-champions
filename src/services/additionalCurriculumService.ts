@@ -18,18 +18,28 @@ import {
 import {
   DEFAULT_ADDITIONAL_CHAPTERS,
   findAdditionalSubjectForNonStandaloneName,
+  findInlineAdditionalSubjectForClassSubject,
 } from '../data/additionalCurriculum/additionalCurriculumRegistry';
+import {
+  getEffectiveSyllabusForConsumer,
+  getSyllabusStatusPresentation,
+  type EffectiveSyllabusResolution,
+  type SyllabusStatusPresentation,
+} from './centralSyllabusService';
 import {
   ADDITIONAL_ADMIN_STORAGE_KEY,
   ADDITIONAL_ASSIGNMENTS_STORAGE_KEY,
   ADDITIONAL_PROGRESS_STORAGE_KEY,
   broadcastAdditionalCurriculumChange,
   deleteTeacherAssignmentFromCloud,
+  hydrateAdditionalCurriculumFromCloud,
   syncAdditionalChapterToCloud,
   syncAdditionalSubjectToCloud,
   syncStudentAdditionalProgressToCloud,
   syncTeacherAssignmentToCloud,
+  updateTeacherAssignmentStatusInCloud,
 } from './additionalCurriculumPersistence';
+import type { SubjectName } from '../types';
 
 const ADMIN_OVERRIDES_STORAGE_KEY = ADDITIONAL_ADMIN_STORAGE_KEY;
 const TEACHER_ASSIGNMENTS_STORAGE_KEY = ADDITIONAL_ASSIGNMENTS_STORAGE_KEY;
@@ -211,6 +221,74 @@ export function resolveAdditionalSubjectForBlockedEntry(
 ): AdditionalSubjectDefinition | null {
   const published = getAllAdditionalSubjects({ board, medium, includeUnpublished: false });
   return findAdditionalSubjectForNonStandaloneName(subjectName, published);
+}
+
+export interface InlineAdditionalCurriculumResolution {
+  additionalSubject: AdditionalSubjectDefinition;
+  chapters: AdditionalChapterRecord[];
+  syllabusResolution: EffectiveSyllabusResolution;
+  statusPresentation: SyllabusStatusPresentation;
+  isIntegratedIntoParent: boolean;
+}
+
+/**
+ * Resolves published Additional / Supplementary Curriculum chapters directly inside
+ * any Board -> Class -> Subject view whenever:
+ * 1. The central syllabus slot is NOT an official verified standalone textbook (`mode !== 'central_verified'`), AND
+ * 2. It is NOT school-textbook dependent (`SCHOOL_TEXTBOOK_DEPENDENT`), AND
+ * 3. The selected SubjectName is one of the 10 supplementary subjects covered by MyStudyZone Additional Curriculum.
+ */
+export function resolveInlineAdditionalCurriculumFallback(params: {
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  medium?: InstructionMedium;
+}): InlineAdditionalCurriculumResolution | null {
+  const { board, classLevel, subject, medium } = params;
+  const syllabusResolution = getEffectiveSyllabusForConsumer({
+    board,
+    classLevel,
+    subject,
+    medium,
+  });
+
+  if (syllabusResolution.mode === 'central_verified') {
+    return null;
+  }
+  if (syllabusResolution.verificationStatus === 'SCHOOL_TEXTBOOK_DEPENDENT') {
+    return null;
+  }
+
+  const effectiveMedium = normalizeMediumForBoard(board, medium || 'English');
+  const publishedSubjects = getAllAdditionalSubjects({
+    board,
+    medium: effectiveMedium,
+    includeUnpublished: false,
+  });
+  const matchedSubject = findInlineAdditionalSubjectForClassSubject(subject, publishedSubjects);
+  if (!matchedSubject) {
+    return null;
+  }
+
+  const chapters = getAllAdditionalChapters({
+    board,
+    classLevel,
+    medium: effectiveMedium,
+    subjectId: matchedSubject.id,
+    includeUnpublished: false,
+  });
+
+  if (chapters.length === 0) {
+    return null;
+  }
+
+  return {
+    additionalSubject: matchedSubject,
+    chapters,
+    syllabusResolution,
+    statusPresentation: getSyllabusStatusPresentation(syllabusResolution),
+    isIntegratedIntoParent: syllabusResolution.verificationStatus === 'INTEGRATED_INTO_PARENT',
+  };
 }
 
 // ---------- Admin CMS Controls (Safe Local Persistence — Zero Official Curriculum Mutation) ----------
@@ -406,18 +484,20 @@ export function createTeacherAdditionalAssignment(
 
 export function toggleTeacherAssignmentStatus(assignmentId: string): AdditionalTeacherAssignment[] {
   const all = readTeacherAssignments();
-  let updatedItem: AdditionalTeacherAssignment | null = null;
+  let nextStatus: 'ACTIVE' | 'COMPLETED' | null = null;
+  const nowIso = new Date().toISOString();
   const next = all.map((item) => {
     if (item.assignmentId !== assignmentId) return item;
-    updatedItem = {
+    nextStatus = item.status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE';
+    return {
       ...item,
-      status: (item.status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE') as 'ACTIVE' | 'COMPLETED',
+      status: nextStatus,
+      updatedAt: nowIso,
     };
-    return updatedItem;
   });
   writeTeacherAssignments(next);
-  if (updatedItem) {
-    void syncTeacherAssignmentToCloud(updatedItem).catch(() => {});
+  if (nextStatus) {
+    void updateTeacherAssignmentStatusInCloud(assignmentId, nextStatus).catch(() => {});
   }
   return next;
 }
@@ -428,6 +508,15 @@ export function deleteTeacherAdditionalAssignment(assignmentId: string): Additio
   writeTeacherAssignments(next);
   void deleteTeacherAssignmentFromCloud(assignmentId).catch(() => {});
   return next;
+}
+
+export async function hydrateAdditionalCurriculumState(options?: {
+  studentId?: string;
+  board?: EducationBoard;
+  classLevel?: ClassLevel;
+  isAdminUser?: boolean;
+}) {
+  return hydrateAdditionalCurriculumFromCloud(options);
 }
 
 // ---------- Separate Student Supplementary Progress Store (Zero Overlap with Official Board Progress) ----------

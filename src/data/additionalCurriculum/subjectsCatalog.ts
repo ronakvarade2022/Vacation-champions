@@ -109,9 +109,9 @@ export const DEFAULT_ADDITIONAL_SUBJECTS: readonly AdditionalSubjectDefinition[]
       Marathi: 'शब्दसंग्रह व व्याकरण',
       Hindi: 'शब्दावली एवं व्याकरण',
     },
-    tagline: 'Word Roots, Sentence Mastery, Comprehension & Clear Writing',
+    tagline: 'Additional English & Grammar, Word Roots, Comprehension & Clear Writing',
     description:
-      'Structured grammar mechanics, contextual vocabulary building, idioms, punctuation, and effective academic writing.',
+      'Structured Additional English and Grammar mechanics, contextual vocabulary building, idioms, punctuation, and effective academic writing.',
     applicableBoards: ALL_ADDITIONAL_BOARDS,
     applicableMediums: ['English', 'Marathi', 'Hindi', 'Semi-English'],
     classesCovered: ALL_ADDITIONAL_CLASSES,
@@ -155,7 +155,7 @@ export const DEFAULT_ADDITIONAL_SUBJECTS: readonly AdditionalSubjectDefinition[]
     classesCovered: ALL_ADDITIONAL_CLASSES,
     accentColor: 'teal',
     isPublished: true,
-    mapsFromNonStandaloneSubject: 'Environmental Studies',
+    mapsFromNonStandaloneSubject: 'Environmental Awareness',
   },
   {
     id: 'ADD_LS',

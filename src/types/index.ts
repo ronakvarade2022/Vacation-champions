@@ -57,7 +57,12 @@ export type SubjectName =
   | 'Computer Applications'
   | 'Economics'
   | 'Commercial Studies'
-  | 'Sanskrit';
+  | 'Sanskrit'
+  // Additional / Supplementary Curriculum Subjects (Classes 1–10 across Boards)
+  | 'Environmental Awareness'
+  | 'Life Skills'
+  | 'General Science Activities'
+  | 'Financial Literacy & Digital Citizenship';
 
 export type QuizLevel = 1 | 2 | 3 | 4;
 

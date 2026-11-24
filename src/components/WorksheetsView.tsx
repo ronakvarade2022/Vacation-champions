@@ -34,8 +34,12 @@ import {
   getEffectiveSyllabusForConsumer,
   getSyllabusStatusPresentation,
 } from '../services/centralSyllabusService';
-import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import {
+  resolveAdditionalSubjectForBlockedEntry,
+  resolveInlineAdditionalCurriculumFallback,
+} from '../services/additionalCurriculumService';
 import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
+import { InlineAdditionalSubjectPanel } from './InlineAdditionalSubjectPanel';
 import { mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
 import {
   ALL_10_CLASSES,
@@ -229,6 +233,19 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
     }
     return getWorksheetsForClassAndSubject(selectedClass, effectiveSubject, selectedBoard, selectedMedium);
   }, [selectedClass, effectiveSubject, selectedBoard, selectedMedium]);
+
+  const inlineAdditional = useMemo(
+    () =>
+      effectiveSubject !== 'ALL' && subjectScopedWorksheets.length === 0
+        ? resolveInlineAdditionalCurriculumFallback({
+            board: selectedBoard,
+            classLevel: selectedClass,
+            subject: effectiveSubject,
+            medium: selectedMedium,
+          })
+        : null,
+    [effectiveSubject, subjectScopedWorksheets.length, selectedBoard, selectedClass, selectedMedium]
+  );
 
   const collectionScopedWorksheets = useMemo(() => {
     if (collectionFilter === 'all') return subjectScopedWorksheets;
@@ -1637,8 +1654,29 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           </div>
         )}
 
-        {/* Worksheets Grid OR Pending Verification State */}
+        {/* Worksheets Grid OR Inline Supplementary Practice / Pending Verification State */}
         {visibleWorksheetsList.length === 0 ? (
+          inlineAdditional ? (
+            <InlineAdditionalSubjectPanel
+              resolution={inlineAdditional}
+              board={selectedBoard}
+              classLevel={selectedClass}
+              medium={selectedMedium}
+              userId={currentStudent?.id}
+              initialMode="worksheet"
+              onOpenFullWorkspace={
+                onOpenAdditionalCurriculum
+                  ? () =>
+                      onOpenAdditionalCurriculum({
+                        board: selectedBoard,
+                        classLevel: selectedClass,
+                        medium: selectedMedium,
+                        subjectId: inlineAdditional.additionalSubject.id,
+                      })
+                  : undefined
+              }
+            />
+          ) : (
           <div className="rounded-3xl border-2 border-amber-200 bg-amber-50/80 p-8 text-center space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-black uppercase tracking-wider">
               <Clock className="w-3.5 h-3.5 text-amber-700" />
@@ -1710,6 +1748,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 );
               })()}
           </div>
+          )
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {visibleWorksheetsList.map(ws => {

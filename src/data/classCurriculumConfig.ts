@@ -491,6 +491,51 @@ export const ADDITIONAL_CLASS_SUBJECTS: SubjectMetaItem[] = [
     hindiName: 'संस्कृत (रुचिरा / शेमुषी / दीपकम्)',
     description: 'CBSE Sanskrit Grammar & Literature: वर्णमाला, शब्द-रूप, धातु-रूप (लकार), संधि, समास एवं सुभाषितानि',
     chapters: ['संस्कृत वर्णमाला व माहेश्वर सूत्र परिचयः', 'लकार व शब्द रूपाणि (अकारांत/आकारांत)', 'संधि, उपसर्ग एवं प्रत्यय अभ्यासः', 'सुभाषितानि, समास व अनुवाद कौशलम्']
+  },
+  // Supplementary Curricular Enrichment Subjects (Classes 1–10 across Boards)
+  {
+    name: 'Environmental Awareness',
+    icon: '🌿',
+    bgGradient: 'from-teal-500 to-emerald-600',
+    shortCode: 'ENVA',
+    category: 'science',
+    marathiName: 'पर्यावरण जाणीव व संवर्धन',
+    hindiName: 'पर्यावरण जागरूकता',
+    description: 'Ecology, Water Conservation, Waste Segregation, Clean Energy & Climate Stewardship',
+    chapters: ['Our Green Friends & Clean Water', 'Waste Segregation, Biodiversity & Climate Action']
+  },
+  {
+    name: 'Life Skills',
+    icon: '🧭',
+    bgGradient: 'from-violet-500 to-indigo-600',
+    shortCode: 'LIFE',
+    category: 'skill',
+    marathiName: 'जीवन कौशल्ये',
+    hindiName: 'जीवन कौशल',
+    description: 'Communication, Time Management, Empathy, Personal Safety & Emotional Resilience',
+    chapters: ['Self-Discipline, Time & Study Habits', 'Teamwork, Safety & Emotional Resilience']
+  },
+  {
+    name: 'General Science Activities',
+    icon: '🔭',
+    bgGradient: 'from-blue-500 to-cyan-600',
+    shortCode: 'GSCI',
+    category: 'science',
+    marathiName: 'सामान्य विज्ञान प्रयोग व उपक्रम',
+    hindiName: 'सामान्य विज्ञान गतिविधियाँ',
+    description: 'Hands-On Observation Labs, Everyday Physics, Kitchen Chemistry & Scientific Inquiry',
+    chapters: ['Guided Home Observation Labs', 'Hands-On Inquiry & Simple Experiments']
+  },
+  {
+    name: 'Financial Literacy & Digital Citizenship',
+    icon: '💳',
+    bgGradient: 'from-slate-600 to-indigo-700',
+    shortCode: 'FINLIT',
+    category: 'skill',
+    marathiName: 'आर्थिक साक्षरता व डिजिटल नागरिकत्व',
+    hindiName: 'वित्तीय साक्षरता एवं डिजिटल नागरिकता',
+    description: 'Smart Saving, Budgeting, Banking Basics, Digital Privacy & Fact-Checking',
+    chapters: ['Needs vs Wants, Saving & Budgeting', 'UPI Safety, Cyber Privacy & Fact-Checking']
   }
 ];
 
@@ -605,7 +650,11 @@ export function getSubjectsForClass(
       'Science',
       'Social Studies',
       'History',
-      'Geography'
+      'Geography',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ];
   }
 
@@ -631,7 +680,12 @@ export function getSubjectsForClass(
       'Science',
       'Social Studies',
       'Computer Knowledge',
-      'Environmental Studies'
+      'Environmental Studies',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ];
   }
 
@@ -659,12 +713,24 @@ export function getSubjectsForClass(
       'Science',
       'Social Studies',
       'Computer Knowledge',
-      'Environmental Studies'
+      'Environmental Studies',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ];
   }
 
-  // Classes 2 to 8: Preserve the exact 14 existing subjects
-  return CORE_14_SUBJECTS.map(s => s.name);
+  // Classes 2 to 8: Preserve the exact 14 existing subjects + integrated supplementary subjects
+  return [
+    ...CORE_14_SUBJECTS.map(s => s.name),
+    'Drawing and Creative Activities',
+    'Environmental Awareness',
+    'Life Skills',
+    'General Science Activities',
+    'Financial Literacy & Digital Citizenship'
+  ];
 }
 
 export interface StandardFourLevelMeta {

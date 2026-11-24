@@ -25,7 +25,12 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'Drawing and Creative Activities',
       'Moral Education',
       'Vocabulary and Grammar',
-      'Computer Knowledge'
+      'Computer Knowledge',
+      'Logical Reasoning',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Joyful Mathematics Class 1',
@@ -81,7 +86,12 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'Computer Knowledge',
       'Vocabulary and Grammar',
       'Moral Education',
-      'Logical Reasoning'
+      'Logical Reasoning',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Joyful Mathematics Class 2',
@@ -132,7 +142,12 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'General Knowledge',
       'Vocabulary and Grammar',
       'Logical Reasoning',
-      'Moral Education'
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Maths Mela Class 3',
@@ -183,7 +198,12 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'General Knowledge',
       'Logical Reasoning',
       'Vocabulary and Grammar',
-      'Moral Education'
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Maths Mela Class 4',
@@ -227,7 +247,12 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'General Knowledge',
       'Logical Reasoning',
       'Vocabulary and Grammar',
-      'Moral Education'
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Maths Mela / Math-Magic Class 5',
@@ -272,7 +297,13 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'Computer Knowledge',
       'General Knowledge',
       'Logical Reasoning',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Ganita Prakash Class 6',
@@ -332,7 +363,13 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'Computer Knowledge',
       'General Knowledge',
       'Logical Reasoning',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Mathematics Class 7',
@@ -379,7 +416,13 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'Computer Knowledge',
       'Logical Reasoning',
       'General Knowledge',
-      'Vocabulary and Grammar'
+      'Vocabulary and Grammar',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Mathematics Class 8',
@@ -427,7 +470,17 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'English',
       'Hindi',
       'Sanskrit',
-      'Information Technology'
+      'Information Technology',
+      'General Knowledge',
+      'Logical Reasoning',
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Mathematics Class 9',
@@ -476,7 +529,17 @@ export const CBSE_CURRICULUM_BY_CLASS: Record<ClassLevel, BoardClassStageInfo> =
       'English',
       'Hindi',
       'Sanskrit',
-      'Information Technology'
+      'Information Technology',
+      'General Knowledge',
+      'Logical Reasoning',
+      'Vocabulary and Grammar',
+      'Computer Knowledge',
+      'Moral Education',
+      'Drawing and Creative Activities',
+      'Environmental Awareness',
+      'Life Skills',
+      'General Science Activities',
+      'Financial Literacy & Digital Citizenship'
     ],
     textbooks: {
       Mathematics: 'NCERT Mathematics Class 10',

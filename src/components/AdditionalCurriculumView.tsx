@@ -42,7 +42,10 @@ import {
   recordAdditionalQuizAttempt,
   toggleTeacherAssignmentStatus,
 } from '../services/additionalCurriculumService';
-import { subscribeAdditionalCurriculumChanges } from '../services/additionalCurriculumPersistence';
+import {
+  hydrateAdditionalCurriculumFromCloud,
+  subscribeAdditionalCurriculumChanges,
+} from '../services/additionalCurriculumPersistence';
 import { QuickStudyZoneIconBar } from './OneLineIconNavBar';
 
 type WorkspaceMode = 'notes' | 'worksheet' | 'quiz' | 'revision' | 'teacher';
@@ -196,6 +199,27 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
       }
     });
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void hydrateAdditionalCurriculumFromCloud({
+      studentId: userId,
+      board,
+      classLevel,
+      isAdminUser: false,
+    })
+      .then((res) => {
+        if (!cancelled && res.hydrated) {
+          setCmsVersion((v) => v + 1);
+          setAssignmentsVersion((v) => v + 1);
+          setProgressVersion((v) => v + 1);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, board, classLevel]);
 
   const progressMap = useMemo(() => {
     void progressVersion;

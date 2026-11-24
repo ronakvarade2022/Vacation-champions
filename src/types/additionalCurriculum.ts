@@ -43,6 +43,8 @@ export interface AdditionalSubjectDefinition {
   isCustom?: boolean;
   /** Optional mapping from legacy non-standalone subject names to guide users cleanly */
   mapsFromNonStandaloneSubject?: string;
+  updatedByUid?: string;
+  updatedAt?: string;
 }
 
 export interface AdditionalMcqQuestion {
@@ -116,6 +118,7 @@ export interface AdditionalChapterRecord {
   learningObjectives: string[];
   materials: AdditionalChapterMaterials;
   isCustom?: boolean;
+  updatedByUid?: string;
 }
 
 export interface AdditionalCurriculumProgressRecord {
@@ -136,6 +139,7 @@ export interface AdditionalCurriculumProgressRecord {
 export interface AdditionalTeacherAssignment {
   assignmentId: string;
   teacherId: string;
+  teacherUid?: string;
   teacherName: string;
   board: EducationBoard;
   classLevel: ClassLevel;
@@ -147,6 +151,7 @@ export interface AdditionalTeacherAssignment {
   dueDate: string;
   teacherNote: string;
   assignedAt: string;
+  updatedAt?: string;
   status: 'ACTIVE' | 'COMPLETED';
 }
 

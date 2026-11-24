@@ -36,6 +36,7 @@ export const DEFAULT_ADDITIONAL_CHAPTERS_MAP: ReadonlyMap<string, AdditionalChap
 const NON_STANDALONE_ALIAS_MAP: Record<string, string> = {
   'general knowledge': 'ADD_GK',
   gk: 'ADD_GK',
+  'general knowledge (gk)': 'ADD_GK',
   'logical reasoning': 'ADD_LR',
   reasoning: 'ADD_LR',
   'mental ability': 'ADD_LR',
@@ -48,6 +49,9 @@ const NON_STANDALONE_ALIAS_MAP: Record<string, string> = {
   'computer applications': 'ADD_CK',
   'information technology': 'ADD_CK',
   'vocabulary and grammar': 'ADD_VG',
+  vocabulary: 'ADD_VG',
+  'additional english': 'ADD_VG',
+  'additional english and grammar': 'ADD_VG',
   'english grammar': 'ADD_VG',
   grammar: 'ADD_VG',
   'drawing and creative activities': 'ADD_DC',
@@ -60,8 +64,23 @@ const NON_STANDALONE_ALIAS_MAP: Record<string, string> = {
   'life skills': 'ADD_LS',
   'health and physical education': 'ADD_LS',
   'general science activities': 'ADD_GS',
+  'science activities': 'ADD_GS',
   'financial literacy': 'ADD_FD',
   'digital citizenship': 'ADD_FD',
+  'financial literacy & digital citizenship': 'ADD_FD',
+};
+
+const INLINE_CLASS_ADDITIONAL_SUBJECT_ID_BY_NAME: Record<string, string> = {
+  'general knowledge': 'ADD_GK',
+  'logical reasoning': 'ADD_LR',
+  'moral education': 'ADD_ME',
+  'computer knowledge': 'ADD_CK',
+  'vocabulary and grammar': 'ADD_VG',
+  'drawing and creative activities': 'ADD_DC',
+  'environmental awareness': 'ADD_EA',
+  'life skills': 'ADD_LS',
+  'general science activities': 'ADD_GS',
+  'financial literacy & digital citizenship': 'ADD_FD',
 };
 
 export function findAdditionalSubjectForNonStandaloneName(
@@ -89,4 +108,20 @@ export function findAdditionalSubjectForNonStandaloneName(
   });
 
   return partialMatch || null;
+}
+
+/**
+ * Resolves ONLY true enrichment/additional subjects to their published supplementary module
+ * when accessed inside a class syllabus section (so core academic board subjects keep their
+ * strict parent/school-textbook messaging rather than swapping silently).
+ */
+export function findInlineAdditionalSubjectForClassSubject(
+  subjectName: string | null | undefined,
+  subjects: readonly AdditionalSubjectDefinition[] = DEFAULT_ADDITIONAL_SUBJECTS
+): AdditionalSubjectDefinition | null {
+  if (!subjectName) return null;
+  const normalized = subjectName.trim().toLowerCase();
+  const id = INLINE_CLASS_ADDITIONAL_SUBJECT_ID_BY_NAME[normalized];
+  if (!id) return null;
+  return subjects.find((s) => s.id === id) || null;
 }

@@ -89,7 +89,11 @@ const SUBJECT_CHAPTER_THEMES: Record<SubjectName, [string, string]> = {
   'Computer Applications': ['Chapter 1: Java OOP Principles, Operators & Constructors', 'Chapter 2: Loops, String Handling & 1D/2D Arrays'],
   'Economics': ['Chapter 1: Factors of Production, Demand & Market Equilibrium', 'Chapter 2: Money, RBI Banking, Inflation & Food Security'],
   'Commercial Studies': ['Chapter 1: Stakeholders, E-Commerce & Marketing Strategies', 'Chapter 2: Final Accounts (Trading/P&L), Budgeting & Logistics'],
-  'Sanskrit': ['अध्याय १: संस्कृत वर्णमाला, लकार व शब्द रूपाणि', 'अध्याय २: संधि, समास, उपसर्ग एवं सुभाषितानि']
+  'Sanskrit': ['अध्याय १: संस्कृत वर्णमाला, लकार व शब्द रूपाणि', 'अध्याय २: संधि, समास, उपसर्ग एवं सुभाषितानि'],
+  'Environmental Awareness': ['Ecology, Clean Water & Biodiversity Conservation', 'Waste Reduction, Renewable Energy & Climate Action'],
+  'Life Skills': ['Communication, Time Management & Goal Setting', 'Safety Awareness, Empathy & Emotional Resilience'],
+  'General Science Activities': ['Hands-On Observation Labs & Kitchen Chemistry', 'Everyday Physics Experiments & Scientific Inquiry'],
+  'Financial Literacy & Digital Citizenship': ['Smart Saving, Needs vs Wants & Banking Basics', 'Digital Privacy, Cyber Hygiene & Fact-Checking']
 };
 
 function selectFormatForSubjectAndIndex(subject: SubjectName, index: number): WorksheetItemFormat {

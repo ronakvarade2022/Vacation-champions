@@ -116,6 +116,9 @@ const AdditionalCurriculumView = lazyWithRetry(() =>
     default: m.AdditionalCurriculumView,
   }))
 );
+const TeacherDashboard = lazyWithRetry(() =>
+  import('./components/TeacherDashboard').then((m) => ({ default: m.TeacherDashboard }))
+);
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
   <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
@@ -154,6 +157,7 @@ const FEATURE_TITLES: Record<string, string> = {
   'future-skills': 'AI Learning Academy & Future Skills',
   'ai-academy': 'AI Learning Academy & Future Skills',
   'additional-curriculum': 'MY STUDYZONE ADDITIONAL CURRICULUM (10 Subjects · Classes 1–10)',
+  'teacher-dashboard': 'Teacher & Educator Command Center (Classes 1–10)',
   certificates: 'Official Champion Certificates & Leaderboard',
   leaderboard: 'Official Champion Certificates & Leaderboard',
   referrals: 'Learn • Share • Grow • Earn Referral Hub',
@@ -456,11 +460,16 @@ const AppContent: React.FC = () => {
       return;
     }
 
+    if (tab === 'teacher-dashboard' && (!isTeacherPortal || !currentStudent)) {
+      openAuthModalWithTab('teacher', 'teacher');
+      return;
+    }
+
     const alwaysOpenTabs = new Set([
       'demo', 'demo-mock-tests', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
-      'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'additional-curriculum',
+      'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'teacher-dashboard', 'additional-curriculum',
       'help-support', 'faqs', 'terms', 'privacy', 'disclaimer',
       'grievance', 'about', 'contact', 'referrals', 'admin'
     ]);
@@ -954,7 +963,7 @@ const AppContent: React.FC = () => {
     if (panel === 'teacher') {
       if (currentStudent && currentStudent.accountRole === 'teacher' && intent === 'login') {
         switchRole('teacher');
-        setCurrentTab('dashboard');
+        setCurrentTab('teacher-dashboard');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -1943,12 +1952,23 @@ const AppContent: React.FC = () => {
                   />
                 )}
 
+                {currentTab === 'teacher-dashboard' && isTeacherPortal && (
+                  <TeacherDashboard
+                    onNavigateTab={handleNavigateTab}
+                    onOpenAdditionalCurriculum={openAdditionalCurriculum}
+                    onSwitchToStudentView={() => {
+                      setCurrentTab('dashboard');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  />
+                )}
+
                 {currentTab === 'lesson-planner' && isTeacherPortal && (
                   <TeacherLessonPlannerView
                     currentTeacher={currentStudent}
                     initialBoard={activeBoard}
                     initialClass={currentStudent.classLevel}
-                    onReturnOverview={() => handleNavigateTab('dashboard')}
+                    onReturnOverview={() => handleNavigateTab('teacher-dashboard')}
                     onOpenAdditionalCurriculum={openAdditionalCurriculum}
                   />
                 )}

@@ -91,6 +91,7 @@ import {
   saveSpecialContentItemToFirestore,
   deleteSpecialContentItemFromFirestore,
 } from '../services/specialContentFirestoreService';
+import { hydrateAdditionalCurriculumFromCloud } from '../services/additionalCurriculumPersistence';
 import {
   checkExistingAccountApi,
   switchStudentActiveClassApi,
@@ -1625,6 +1626,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isVerified: true
       });
       setActiveRole(accountRole);
+      void hydrateAdditionalCurriculumFromCloud({
+        studentId: resolvedProfile.id,
+        board: resolvedProfile.board,
+        classLevel: resolvedProfile.classLevel,
+        isAdminUser: false,
+      }).catch(() => {});
     });
 
     return () => {

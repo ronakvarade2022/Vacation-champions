@@ -765,6 +765,30 @@ const EXPANDED_SUBJECT_CHAPTERS: Record<
       'Chapter 5: Sports Injuries, R.I.C.E. Protocol & First Aid',
     ],
   },
+  'Environmental Awareness': {
+    early: ['Our Green Friends: Plants & Trees', 'Clean Water & Tidy Surroundings'],
+    upper_primary: ['Segregating Waste & Composting', 'Protecting Rivers, Soil & Wildlife'],
+    middle: ['Local Biodiversity & Ecosystems', 'Renewable Energy & Zero-Waste Living'],
+    secondary: ['Climate Resilience & Carbon Footprint', 'Sustainable Watershed & Eco-Stewardship'],
+  },
+  'Life Skills': {
+    early: ['Polite Words, Sharing & Kindness', 'Personal Safety & Daily Routines'],
+    upper_primary: ['Time Management & Study Habits', 'Teamwork & Handling Disagreements'],
+    middle: ['Active Listening & Goal Planning', 'Emotional Regulation & Peer Confidence'],
+    secondary: ['Decision Making & Stress Management', 'Leadership, First Aid & Career Readiness'],
+  },
+  'General Science Activities': {
+    early: ['Sink or Float Observation Lab', 'Seed Sprouting & Sunlight Journal'],
+    upper_primary: ['Kitchen Acid-Base Indicators', 'Magnets, Shadows & Water Filtration'],
+    middle: ['Simple Periscope & Capillary Action', 'Electricity Circuits & Microscope Discovery'],
+    secondary: ['DIY Spectroscope & Electromagnet Lab', 'Soil pH Testing & Solar Oven Inquiry'],
+  },
+  'Financial Literacy & Digital Citizenship': {
+    early: ['Needs vs Wants & Coin Counting', 'Kind Words & Safe Screen Habits'],
+    upper_primary: ['Piggy Bank Saving & Pocket Budgeting', 'Strong Passwords & Trusted Adults Online'],
+    middle: ['Bank Accounts, UPI Safety & Fraud Alerts', 'Digital Footprint & Fact-Checking Sources'],
+    secondary: ['Compound Interest, Taxes & Smart Planning', 'Cyber Privacy, Phishing Defence & Media Ethics'],
+  },
 };
 
 export function getRichChaptersForSubject(

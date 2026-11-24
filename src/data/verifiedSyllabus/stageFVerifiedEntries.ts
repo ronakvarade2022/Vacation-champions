@@ -489,13 +489,31 @@ function buildStageFIntegratedSpecs(): Record<string, StageFIntegratedSpec> {
     },
   };
 
-  // CBSE Classes 1–8 Vocabulary and Grammar — integrated inside verified NCERT English textbooks
-  for (let cls = 1; cls <= 8; cls++) {
-    const bookSeries = cls <= 2 ? 'Mridang' : cls <= 5 ? 'Santoor' : 'Poorvi';
+  // CBSE Classes 1–10 Vocabulary and Grammar — integrated inside verified NCERT English textbooks
+  for (let cls = 1; cls <= 10; cls++) {
+    const bookSeries =
+      cls <= 2
+        ? 'Mridang'
+        : cls <= 5
+        ? 'Santoor'
+        : cls <= 8
+        ? 'Poorvi'
+        : cls === 9
+        ? 'Beehive & Words and Expressions I'
+        : 'First Flight & Words and Expressions II';
     specs[`CBSE__Class ${cls}__Vocabulary and Grammar`] = {
       parentEntryIds: [`CBSE__Class ${cls}__English`],
       parentLabel: `CBSE Class ${cls} English (NCERT ${bookSeries})`,
-      note: `Officially integrated into verified parent textbook "NCERT ${bookSeries} – Class ${cls} English" (CBSE Class ${cls} English). NCERT embeds grammar and vocabulary exercises ("Let us learn", "Let us write", "Word power") inside the official English textbook rather than publishing a standalone grammar textbook.`,
+      note: `Officially integrated into verified parent textbook "NCERT ${bookSeries} – Class ${cls} English" (CBSE Class ${cls} English). NCERT embeds grammar and vocabulary exercises inside the official English & workbook sequence rather than publishing a separate standalone grammar board book.`,
+    };
+  }
+
+  // ICSE Classes 9–10 Vocabulary and Grammar — integrated inside verified CISCE English Paper 1 (Language)
+  for (const cls of [9, 10]) {
+    specs[`ICSE__Class ${cls}__Vocabulary and Grammar`] = {
+      parentEntryIds: [`ICSE__Class ${cls}__English`],
+      parentLabel: `ICSE Class ${cls} English (CISCE Paper 1 Language & Literature)`,
+      note: `Officially integrated into verified CISCE Class ${cls} English syllabus (English Language Paper 1 covers functional grammar, transformation of sentences, prepositions, and vocabulary). Interactive supplementary Additional English & Grammar practice modules remain available inline.`,
     };
   }
 

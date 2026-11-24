@@ -42,6 +42,11 @@ const MAHARASHTRA_COMBINED_ENRICHMENT_C9_C10 = new Set<SubjectName>([
   'Moral Education',
   'Computer Knowledge',
   'Environmental Studies',
+  'Drawing and Creative Activities',
+  'Environmental Awareness',
+  'Life Skills',
+  'General Science Activities',
+  'Financial Literacy & Digital Citizenship',
 ]);
 
 export function getSubjectGroupBucket(

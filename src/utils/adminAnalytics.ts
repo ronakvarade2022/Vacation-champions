@@ -47,6 +47,10 @@ export const ALL_ADMIN_SUBJECTS: SubjectName[] = [
   'Economics',
   'Commercial Studies',
   'Sanskrit',
+  'Environmental Awareness',
+  'Life Skills',
+  'General Science Activities',
+  'Financial Literacy & Digital Citizenship',
 ];
 
 export interface QuestionBoardClassIndex {
@@ -151,6 +155,10 @@ export function computeBoardAwareQuestionAnalytics(
     Economics: 0,
     'Commercial Studies': 0,
     Sanskrit: 0,
+    'Environmental Awareness': 0,
+    'Life Skills': 0,
+    'General Science Activities': 0,
+    'Financial Literacy & Digital Citizenship': 0,
   };
 
   const boardCounts: Record<EducationBoard, number> = {

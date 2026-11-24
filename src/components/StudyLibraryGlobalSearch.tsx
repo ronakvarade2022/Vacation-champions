@@ -15,6 +15,7 @@ import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConf
 import { isVerifiedSyllabusPipelineEnabled } from '../data/verifiedSyllabus/syllabusFeatureFlags';
 import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
 import { getRichChaptersForSubject } from '../data/worksheets/builders/chapterCatalog';
+import { resolveInlineAdditionalCurriculumFallback } from '../services/additionalCurriculumService';
 import {
   ENGLISH_GRAMMAR_MODULES,
   MATH_FORMULA_TOPICS,
@@ -98,21 +99,46 @@ function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
       const subjects = getSubjectsForClass(classLevel, board);
       for (const subject of subjects) {
         const chapterTitles = getRichChaptersForSubject(board, classLevel, subject);
-        chapterTitles.forEach((rawTitle, idx) => {
-          const chNum = idx + 1;
-          entries.push({
-            id: `ch_${board}_${classLevel}_${subject}_${chNum}`,
-            kind: 'chapter',
-            title: `Ch ${chNum}: ${rawTitle}`,
-            subtitle: `${board} · ${classLevel} · ${subject} · Notes, Revision, Q&A & Test`,
-            searchBlob: `${rawTitle} ${subject} ${board} ${classLevel} chapter ${chNum}`.toLowerCase(),
+        if (chapterTitles.length > 0) {
+          chapterTitles.forEach((rawTitle, idx) => {
+            const chNum = idx + 1;
+            entries.push({
+              id: `ch_${board}_${classLevel}_${subject}_${chNum}`,
+              kind: 'chapter',
+              title: `Ch ${chNum}: ${rawTitle}`,
+              subtitle: `${board} · ${classLevel} · ${subject} · Notes, Revision, Q&A & Test`,
+              searchBlob: `${rawTitle} ${subject} ${board} ${classLevel} chapter ${chNum}`.toLowerCase(),
+              board,
+              classLevel,
+              subject,
+              chapterNumber: chNum,
+              targetTab: 'chapter_notes',
+            });
+          });
+        } else {
+          const inlineAdditional = resolveInlineAdditionalCurriculumFallback({
             board,
             classLevel,
             subject,
-            chapterNumber: chNum,
-            targetTab: 'chapter_notes',
+            medium: 'English',
           });
-        });
+          if (inlineAdditional) {
+            inlineAdditional.chapters.forEach((ch) => {
+              entries.push({
+                id: `addch_${board}_${classLevel}_${subject}_${ch.chapterId}`,
+                kind: 'chapter',
+                title: `Ch ${ch.chapterNumber}: ${ch.title}`,
+                subtitle: `${board} · ${classLevel} · ${subject} · Supplementary Notes, Worksheet & Quiz`,
+                searchBlob: `${ch.title} ${ch.localizedTitles.Marathi} ${ch.localizedTitles.Hindi} ${subject} ${board} ${classLevel} chapter ${ch.chapterNumber}`.toLowerCase(),
+                board,
+                classLevel,
+                subject,
+                chapterNumber: ch.chapterNumber,
+                targetTab: 'chapter_notes',
+              });
+            });
+          }
+        }
       }
     }
   }

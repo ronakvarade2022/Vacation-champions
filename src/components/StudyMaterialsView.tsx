@@ -66,8 +66,12 @@ import {
   getEffectiveSyllabusForConsumer,
   getSyllabusStatusPresentation,
 } from '../services/centralSyllabusService';
-import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import {
+  resolveAdditionalSubjectForBlockedEntry,
+  resolveInlineAdditionalCurriculumFallback,
+} from '../services/additionalCurriculumService';
 import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
+import { InlineAdditionalSubjectPanel } from './InlineAdditionalSubjectPanel';
 import {
   formatStandardOrdinal,
   normalizeBoardValue,
@@ -290,6 +294,19 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
   );
 
+  const inlineAdditional = useMemo(
+    () =>
+      chapters.length === 0
+        ? resolveInlineAdditionalCurriculumFallback({
+            board: selectedBoard,
+            classLevel: selectedClass,
+            subject: selectedSubject,
+            medium: effectiveMedium,
+          })
+        : null,
+    [chapters.length, selectedBoard, selectedClass, selectedSubject, effectiveMedium]
+  );
+
   const boardClassTextbooks = useMemo(
     () =>
       getOfficialTextbooksForBoardClass(
@@ -327,9 +344,13 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   const [revealedQaAnswers, setRevealedQaAnswers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (pendingChapterNumber && pendingChapterNumber > 0) {
-      setSelectedChapterIdx(Math.max(0, pendingChapterNumber - 1));
-      setPendingChapterNumber(null);
+    if (chapters.length > 0) {
+      if (pendingChapterNumber && pendingChapterNumber > 0) {
+        setSelectedChapterIdx(Math.max(0, pendingChapterNumber - 1));
+        setPendingChapterNumber(null);
+      } else {
+        setSelectedChapterIdx(0);
+      }
     } else {
       setSelectedChapterIdx(0);
     }
@@ -340,13 +361,14 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     setRevealedPaperAnswers({});
     setTestAnswers({});
     setTestSubmitted(false);
-  }, [selectedBoard, selectedClass, selectedSubject]);
+  }, [selectedBoard, selectedClass, selectedSubject, chapters.length]);
 
-  // If a subject has 0 verified chapters (e.g. non-standalone or school-specific blocked),
+  // If a subject has 0 verified chapters AND no inline supplementary curriculum,
   // ensure no empty chapter-dependent tab remains selected.
   useEffect(() => {
     if (
       chapters.length === 0 &&
+      !inlineAdditional &&
       activeSectionTab !== 'textbooks' &&
       activeSectionTab !== 'math_hub' &&
       activeSectionTab !== 'science_diagrams' &&
@@ -355,7 +377,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     ) {
       setActiveSectionTab('textbooks');
     }
-  }, [chapters.length, activeSectionTab]);
+  }, [chapters.length, inlineAdditional, activeSectionTab]);
 
   const handleGlobalSearchJump = (target: GlobalSearchJumpTarget) => {
     if (target.board) setSelectedBoard(target.board);
@@ -605,7 +627,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
           } else if (target === 'worksheets') {
             onNavigateTab('worksheets', selectedSubject);
           } else if (target === 'mcqs') {
-            if (chapters.length > 0) setActiveSectionTab('chapter_test');
+            if (chapters.length > 0 || inlineAdditional) setActiveSectionTab('chapter_test');
             else onNavigateTab('quizzes', selectedSubject);
           } else if (target === 'results') {
             setActiveSectionTab('math_hub');
@@ -707,7 +729,9 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
             <span className="text-xs font-bold text-emerald-700">
               {chapters.length > 0
                 ? `All ${chapters.length} Chapters Unlocked Free · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`
-                : `PENDING VERIFICATION · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`}
+                : inlineAdditional
+                ? `Supplementary Curriculum Ready · ${inlineAdditional.chapters.length} Modules · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`
+                : `${getSyllabusStatusPresentation(syllabusResolution).badgeLabel} · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
@@ -807,13 +831,17 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
 
             {/* SECOND ROW — ONLY THE SELECTED MATERIAL SECTION'S SUBSECTIONS (HORIZONTAL, STRICTLY BELOW ROW 1) */}
             <div className="bg-sky-50/60 border-b-2 border-slate-200 px-3.5 sm:px-4 py-3 space-y-2">
-              {/* Subsections for Textbooks & Worksheets: Subject Horizontal Row */}
-              {(activeSectionTab === 'textbooks' || activeSectionTab === 'worksheets_ref') && (
+              {/* Subsections for Textbooks & Worksheets (or Inline Supplementary Subject): Subject Horizontal Row */}
+              {(activeSectionTab === 'textbooks' ||
+                activeSectionTab === 'worksheets_ref' ||
+                (Boolean(inlineAdditional) && chapters.length === 0 && !isSpecialHubTab)) && (
                 <>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
                       {activeSectionTab === 'textbooks'
                         ? `Subject Textbooks (${boardClassTextbooks.length} Official Books)`
+                        : inlineAdditional && chapters.length === 0
+                        ? `Class Subjects (${subjects.length} Subjects · Supplementary Modules Active)`
                         : `Subject Worksheets (${subjects.length} Subjects)`}
                     </span>
                     <span className="text-[11px] font-bold text-slate-600">
@@ -851,10 +879,11 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
               )}
 
               {/* Subsections for Chapter-Based Tabs (Notes, Short Revision, Chapter Test, Video Lessons): Horizontal Chapters Row */}
-              {(activeSectionTab === 'chapter_notes' ||
-                activeSectionTab === 'short_revision' ||
-                activeSectionTab === 'chapter_test' ||
-                activeSectionTab === 'video_lessons') && (
+              {!(Boolean(inlineAdditional) && chapters.length === 0) &&
+                (activeSectionTab === 'chapter_notes' ||
+                  activeSectionTab === 'short_revision' ||
+                  activeSectionTab === 'chapter_test' ||
+                  activeSectionTab === 'video_lessons') && (
                 <>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
@@ -909,7 +938,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
               )}
 
               {/* Subsections for Q&A Bank: Horizontal 9 Format Subsections + Compact Chapter Selector */}
-              {activeSectionTab === 'qa_bank' && (
+              {!(Boolean(inlineAdditional) && chapters.length === 0) && activeSectionTab === 'qa_bank' && (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
@@ -962,7 +991,8 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
               )}
 
               {/* Subsections for Model Papers & PYQ Papers: Horizontal Paper Set / Year Tabs */}
-              {(activeSectionTab === 'model_papers' || activeSectionTab === 'pyq_papers') && (() => {
+              {!(Boolean(inlineAdditional) && chapters.length === 0) &&
+                (activeSectionTab === 'model_papers' || activeSectionTab === 'pyq_papers') && (() => {
                 const isPyq = activeSectionTab === 'pyq_papers';
                 const papers = isPyq ? examPapersBundle.pyqPapers : examPapersBundle.modelPapers;
                 const activeIdx = isPyq ? selectedPyqPaperIdx : selectedModelPaperIdx;
@@ -2367,6 +2397,37 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
               selectedBoard={selectedBoard}
               selectedClass={selectedClass}
               onNavigateTab={(tab) => onNavigateTab(tab)}
+            />
+          ) : inlineAdditional ? (
+            <InlineAdditionalSubjectPanel
+              resolution={inlineAdditional}
+              board={selectedBoard}
+              classLevel={selectedClass}
+              medium={effectiveMedium}
+              userId={currentStudent?.id}
+              initialMode={
+                activeSectionTab === 'worksheets_ref'
+                  ? 'worksheet'
+                  : activeSectionTab === 'chapter_test'
+                  ? 'quiz'
+                  : activeSectionTab === 'qa_bank' ||
+                    activeSectionTab === 'model_papers' ||
+                    activeSectionTab === 'pyq_papers'
+                  ? 'qa'
+                  : 'notes'
+              }
+              initialChapterNumber={pendingChapterNumber || undefined}
+              onOpenFullWorkspace={
+                onOpenAdditionalCurriculum
+                  ? () =>
+                      onOpenAdditionalCurriculum({
+                        board: selectedBoard,
+                        classLevel: selectedClass,
+                        medium: effectiveMedium,
+                        subjectId: inlineAdditional.additionalSubject.id,
+                      })
+                  : undefined
+              }
             />
           ) : (
             <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-6 sm:p-8 text-center space-y-3">

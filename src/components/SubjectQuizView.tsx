@@ -41,8 +41,12 @@ import {
   getEffectiveSyllabusForConsumer,
   getSyllabusStatusPresentation,
 } from '../services/centralSyllabusService';
-import { resolveAdditionalSubjectForBlockedEntry } from '../services/additionalCurriculumService';
+import {
+  resolveAdditionalSubjectForBlockedEntry,
+  resolveInlineAdditionalCurriculumFallback,
+} from '../services/additionalCurriculumService';
 import { ADDITIONAL_CURRICULUM_LABEL } from '../types/additionalCurriculum';
+import { InlineAdditionalSubjectPanel } from './InlineAdditionalSubjectPanel';
 import {
   ALL_10_CLASSES,
   getSubjectsForClass,
@@ -245,6 +249,18 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
     [activeBoard, currentStudent.classLevel, selectedSubject, selectedMedium]
   );
   const isPendingVerificationBlocked = activeSyllabusStatus.mode === 'central_pending_blocked';
+  const inlineAdditional = React.useMemo(
+    () =>
+      isPendingVerificationBlocked
+        ? resolveInlineAdditionalCurriculumFallback({
+            board: activeBoard,
+            classLevel: currentStudent.classLevel,
+            subject: selectedSubject,
+            medium: selectedMedium,
+          })
+        : null,
+    [isPendingVerificationBlocked, activeBoard, currentStudent.classLevel, selectedSubject, selectedMedium]
+  );
 
   // Reset subject selection cleanly if activeBoard/classLevel changes and selectedSubject is not in class syllabus
   useEffect(() => {
@@ -778,8 +794,28 @@ export const SubjectQuizView: React.FC<SubjectQuizViewProps> = ({
         </div>
       )}
 
-      {/* PENDING VERIFICATION OR ERROR NOTICE */}
-      {!isLoadingSubject && (loadError || isPendingVerificationBlocked) && (
+      {/* INLINE SUPPLEMENTARY QUIZ OR PENDING VERIFICATION / ERROR NOTICE */}
+      {!isLoadingSubject && !loadError && isPendingVerificationBlocked && inlineAdditional ? (
+        <InlineAdditionalSubjectPanel
+          resolution={inlineAdditional}
+          board={activeBoard}
+          classLevel={currentStudent.classLevel}
+          medium={selectedMedium}
+          userId={currentStudent.id}
+          initialMode="quiz"
+          onOpenFullWorkspace={
+            onOpenAdditionalCurriculum
+              ? () =>
+                  onOpenAdditionalCurriculum({
+                    board: activeBoard,
+                    classLevel: currentStudent.classLevel,
+                    medium: selectedMedium,
+                    subjectId: inlineAdditional.additionalSubject.id,
+                  })
+              : undefined
+          }
+        />
+      ) : !isLoadingSubject && (loadError || isPendingVerificationBlocked) && (
         <div className="bg-amber-50/90 rounded-3xl p-8 border-2 border-amber-200 shadow-xs text-center space-y-4">
           <AlertTriangle className="w-10 h-10 mx-auto text-amber-600" />
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-[11px] font-black uppercase tracking-wider">
