@@ -794,11 +794,16 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setIsShareAppOpen(true)}
             data-testid="header-share-app-btn"
             title="Share MyStudyZone App with Students on WhatsApp"
-            className="min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:brightness-105 text-white font-extrabold text-[11px] sm:text-xs shadow-xs border border-emerald-400/60 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
+            style={{
+              backgroundColor: '#128C7E',
+              backgroundImage: 'linear-gradient(to right, #25D366, #128C7E)',
+              color: '#ffffff',
+            }}
+            className="min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-[#128C7E] bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:brightness-105 text-white font-extrabold text-[11px] sm:text-xs shadow-xs border border-emerald-500 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
           >
-            <Share2 className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Share App</span>
-            <span className="sm:hidden">Share</span>
+            <Share2 className="w-3.5 h-3.5 shrink-0 text-white" />
+            <span className="hidden sm:inline text-white">Share App</span>
+            <span className="sm:hidden text-white">Share</span>
           </button>
 
           <PWAInstallButton variant="header" />
@@ -834,10 +839,15 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={handleTopLogoutClick}
               aria-label="Logout"
-              className="min-h-[36px] sm:min-h-[40px] xl:min-h-[42px] px-3 sm:px-4 xl:px-5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40 whitespace-nowrap"
+              style={{
+                backgroundColor: '#e11d48',
+                backgroundImage: 'linear-gradient(to right, #e11d48, #dc2626)',
+                color: '#ffffff',
+              }}
+              className="min-h-[36px] sm:min-h-[40px] xl:min-h-[42px] px-3 sm:px-4 xl:px-5 py-1.5 sm:py-2 rounded-xl bg-rose-600 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40 whitespace-nowrap"
             >
-              <LogOut className="w-4 h-4 shrink-0" />
-              <span>Logout</span>
+              <LogOut className="w-4 h-4 shrink-0 text-white" />
+              <span className="text-white">Logout</span>
             </button>
           ) : (
             <button
@@ -847,10 +857,15 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenAuth('login');
               }}
               aria-label="Login"
-              className="min-h-[36px] sm:min-h-[40px] xl:min-h-[42px] px-3 sm:px-4 xl:px-5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40 whitespace-nowrap"
+              style={{
+                backgroundColor: '#4f46e5',
+                backgroundImage: 'linear-gradient(to right, #4f46e5, #2563eb)',
+                color: '#ffffff',
+              }}
+              className="min-h-[36px] sm:min-h-[40px] xl:min-h-[42px] px-3 sm:px-4 xl:px-5 py-1.5 sm:py-2 rounded-xl bg-indigo-600 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40 whitespace-nowrap"
             >
-              <LogIn className="w-4 h-4 shrink-0" />
-              <span>Login</span>
+              <LogIn className="w-4 h-4 shrink-0 text-white" />
+              <span className="text-white">Login</span>
             </button>
           )}
         </div>

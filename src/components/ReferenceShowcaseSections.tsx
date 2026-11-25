@@ -714,7 +714,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
           type="button"
           onClick={() => handleSelectAccordionSection('courses')}
           aria-label={`Active Class: ${getBoardShortLabel(selectedBoard)} ${selectedClass}`}
-          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#fef3c7] via-[#fde68a] to-[#fcd34d] hover:brightness-105 text-[#0f2952] font-display font-black text-xs sm:text-sm shadow-sm border-2 border-amber-400 flex items-center justify-center gap-2 px-3 cursor-pointer transition-all active:scale-[0.99]"
+          style={{
+            backgroundColor: '#fde68a',
+            backgroundImage: 'linear-gradient(to bottom, #fef3c7, #fde68a, #fcd34d)',
+          }}
+          className="h-11 sm:h-12 rounded-2xl bg-[#fde68a] bg-gradient-to-b from-[#fef3c7] via-[#fde68a] to-[#fcd34d] hover:brightness-105 text-[#0f2952] font-display font-black text-xs sm:text-sm shadow-sm border-2 border-amber-400 flex items-center justify-center gap-2 px-3 cursor-pointer transition-all active:scale-[0.99]"
         >
           <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-800 shrink-0" />
           <span className="truncate">
@@ -725,7 +729,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         <button
           type="button"
           onClick={() => onOpenDemo('live-quiz')}
-          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#e0d4fc] via-[#c4b5fd] to-[#a78bfa] hover:brightness-105 text-[#1e1b4b] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#8b5cf6]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
+          style={{
+            backgroundColor: '#c4b5fd',
+            backgroundImage: 'linear-gradient(to bottom, #e0d4fc, #c4b5fd, #a78bfa)',
+          }}
+          className="h-11 sm:h-12 rounded-2xl bg-[#c4b5fd] bg-gradient-to-b from-[#e0d4fc] via-[#c4b5fd] to-[#a78bfa] hover:brightness-105 text-[#1e1b4b] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#8b5cf6]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
         >
           <span className="text-lg sm:text-xl drop-shadow-xs">🚀</span>
           <span>Free Demo</span>
@@ -734,7 +742,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         <button
           type="button"
           onClick={() => onNavigateTab('all-courses')}
-          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#1e1b4b] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
+          style={{
+            backgroundColor: '#facc15',
+            backgroundImage: 'linear-gradient(to bottom, #fef08a, #facc15, #eab308)',
+          }}
+          className="h-11 sm:h-12 rounded-2xl bg-[#facc15] bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#1e1b4b] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#ca8a04]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
         >
           <span className="text-lg sm:text-xl drop-shadow-xs">📖</span>
           <span>Courses</span>
@@ -745,7 +757,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
           onClick={() => {
             if (onToggleViewMode) onToggleViewMode();
           }}
-          className="h-11 sm:h-12 rounded-2xl bg-gradient-to-b from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8] hover:brightness-105 text-[#0c4a6e] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#0284c7]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
+          style={{
+            backgroundColor: '#7dd3fc',
+            backgroundImage: 'linear-gradient(to bottom, #bae6fd, #7dd3fc, #38bdf8)',
+          }}
+          className="h-11 sm:h-12 rounded-2xl bg-[#7dd3fc] bg-gradient-to-b from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8] hover:brightness-105 text-[#0c4a6e] font-display font-black text-xs sm:text-base shadow-sm border-2 border-[#0284c7]/50 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
         >
           {viewMode === 'desktop' ? (
             <>

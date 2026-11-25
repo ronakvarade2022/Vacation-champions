@@ -102,6 +102,39 @@ export function transformCssForSmartTvCompatibility(inputCss: string): string {
   out = out.replace(/([\{;])scale:([0-9.]+)/g, '$1transform:scale($2);scale:$2');
   out = out.replace(/([\{;])rotate:(-?[0-9.]+deg)/g, '$1transform:rotate($2);rotate:$2');
 
+  // 7. Remove `@supports (background-image:linear-gradient(in lab, red, red)){...}` and `@supports (color:lab(0% 0 0)){...}`
+  // so `:root` colors remain standard `#hex` and gradients never get overridden with `in oklab` on Smart TV browsers (Chromium < 111)
+  while (true) {
+    const match =
+      /@supports\s*\((?:background-image:linear-gradient\(in\s+lab|color:lab\(0%\s+0\s+0\))[^\{]*\{/.exec(
+        out
+      );
+    if (!match) break;
+    const openIdx = match.index + match[0].length - 1;
+    const closeIdx = findMatchingBraceEnd(out, openIdx);
+    if (closeIdx === -1) break;
+    out = out.slice(0, match.index) + out.slice(closeIdx + 1);
+  }
+
+  // 8. Strip CSS Color 4 ` in oklab` / ` in oklch` / ` in lab` / ` in lch` from gradient directions
+  // (`--tw-gradient-position:to right in oklab` -> `--tw-gradient-position:to right`)
+  // In Chromium < 111 (ViewSonic Smart TV browsers), `linear-gradient(to right in oklab, ...)` is invalid CSS
+  // and causes all `.bg-gradient-to-*` buttons (Share App, Install App, Login, shortcut cards) to lose their background!
+  out = out.replace(
+    /(--tw-gradient-position\s*:\s*[^;\}]+?)\s+in\s+(?:oklab|oklch|lab|lch|srgb|hsl)\b/gi,
+    '$1'
+  );
+  out = out.replace(
+    /(linear-gradient\(\s*to\s+[a-z\s]+?)\s+in\s+(?:oklab|oklch|lab|lch|srgb|hsl)\b/gi,
+    '$1'
+  );
+
+  // 9. Ensure 2-stop gradients (`from-* to-*` without `via-*`) resolve directly without relying on multi-comma `var()` fallback or `@property`
+  out = out.replace(
+    /--tw-gradient-via-stops:initial/g,
+    '--tw-gradient-via-stops:var(--tw-gradient-position),var(--tw-gradient-from) var(--tw-gradient-from-position),var(--tw-gradient-to) var(--tw-gradient-to-position)'
+  );
+
   return out;
 }
 
@@ -109,11 +142,14 @@ function smartTvCssCompatibilityPlugin(): Plugin {
   return {
     name: 'mystudyzone-smart-tv-css-compat',
     enforce: 'post',
-    transformIndexHtml: {
-      order: 'post',
-      handler(html) {
-        return html;
-      },
+    transform(code, id) {
+      if (id.endsWith('.css') || id.includes('.css?')) {
+        return {
+          code: transformCssForSmartTvCompatibility(code),
+          map: null,
+        };
+      }
+      return null;
     },
     generateBundle(_options, bundle) {
       for (const fileName of Object.keys(bundle)) {

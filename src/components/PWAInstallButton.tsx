@@ -130,11 +130,16 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           disabled={isPrompting}
           data-testid="pwa-install-btn-header"
           title="Install MyStudyZone App to your Home Screen"
-          className={`min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-[11px] sm:text-xs shadow-xs border border-amber-400/60 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap ${className}`}
+          style={{
+            backgroundColor: '#ea580c',
+            backgroundImage: 'linear-gradient(to right, #f59e0b, #ea580c)',
+            color: '#ffffff',
+          }}
+          className={`min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-orange-600 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-[11px] sm:text-xs shadow-xs border border-amber-500 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap ${className}`}
         >
-          <Download className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline">Install App</span>
-          <span className="sm:hidden">Install</span>
+          <Download className="w-3.5 h-3.5 shrink-0 text-white" />
+          <span className="hidden sm:inline text-white">Install App</span>
+          <span className="sm:hidden text-white">Install</span>
         </button>
       ) : (
         <button
@@ -142,10 +147,23 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           onClick={() => void handleInstallClick()}
           disabled={isPrompting}
           data-testid={`pwa-install-btn-${variant}`}
+          style={
+            variant === 'teacher'
+              ? {
+                  backgroundColor: '#fcd34d',
+                  backgroundImage: 'linear-gradient(to right, #fcd34d, #fde047)',
+                  color: '#020617',
+                }
+              : {
+                  backgroundColor: '#ea580c',
+                  backgroundImage: 'linear-gradient(to right, #f59e0b, #ea580c)',
+                  color: '#ffffff',
+                }
+          }
           className={
             variant === 'teacher'
-              ? `px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all bg-gradient-to-r from-amber-300 to-yellow-300 hover:brightness-105 text-slate-950 shadow-xs border border-amber-200 ${className}`
-              : `px-3.5 sm:px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-xs ${className}`
+              ? `px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all bg-amber-300 bg-gradient-to-r from-amber-300 to-yellow-300 hover:brightness-105 text-slate-950 shadow-xs border border-amber-200 ${className}`
+              : `px-3.5 sm:px-4 py-2.5 rounded-xl bg-orange-600 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-xs ${className}`
           }
         >
           <span>📲 INSTALL MYSTUDYZONE APP</span>
