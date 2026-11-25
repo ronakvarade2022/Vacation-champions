@@ -219,6 +219,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
@@ -402,7 +403,9 @@ export default defineConfig(() => {
             }
             if (
               id.includes('src/data/scholarship') ||
-              id.includes('src/data/msceMock')
+              id.includes('src/data/msce') ||
+              id.includes('src/data/demoScholarship') ||
+              id.includes('src/data/demoPaper2')
             ) {
               return 'data-scholarship';
             }

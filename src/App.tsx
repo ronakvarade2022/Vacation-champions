@@ -17,109 +17,51 @@ import {
   isSmartTvOrSingleWindowBrowser,
 } from './utils/smartTvCompatibility';
 
-const SubjectQuizView = lazyWithRetry(() =>
-  import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
-);
-const DemoSectionView = lazyWithRetry(() =>
-  import('./components/DemoSectionView').then((m) => ({ default: m.DemoSectionView }))
-);
-const MembershipModal = lazyWithRetry(() =>
-  import('./components/MembershipModal').then((m) => ({ default: m.MembershipModal }))
-);
-const PlanUpgradePromptModal = lazyWithRetry(() =>
-  import('./components/PlanUpgradePromptModal').then((m) => ({ default: m.PlanUpgradePromptModal }))
-);
-const AuthModal = lazyWithRetry(() =>
-  import('./components/AuthModal').then((m) => ({ default: m.AuthModal }))
-);
-const PasswordResetModal = lazyWithRetry(() =>
-  import('./components/PasswordResetModal').then((m) => ({ default: m.PasswordResetModal }))
-);
-const HelpSupportView = lazyWithRetry(() =>
-  import('./components/HelpSupportView').then((m) => ({ default: m.HelpSupportView }))
-);
-const GrievanceRedressalView = lazyWithRetry(() =>
-  import('./components/GrievanceRedressalView').then((m) => ({ default: m.GrievanceRedressalView }))
-);
-const TermsAndPrivacyView = lazyWithRetry(() =>
-  import('./components/TermsAndPrivacyView').then((m) => ({ default: m.TermsAndPrivacyView }))
-);
-const AboutUsView = lazyWithRetry(() =>
-  import('./components/AboutUsView').then((m) => ({ default: m.AboutUsView }))
-);
-const ContactUsView = lazyWithRetry(() =>
-  import('./components/ContactUsView').then((m) => ({ default: m.ContactUsView }))
-);
-const FaqsView = lazyWithRetry(() =>
-  import('./components/FaqsView').then((m) => ({ default: m.FaqsView }))
-);
-const AdminDashboard = lazyWithRetry(() =>
-  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
-);
-const StoryWorldView = lazyWithRetry(() =>
-  import('./components/StoryWorldView').then((m) => ({ default: m.StoryWorldView }))
-);
-const DrawingChampionsView = lazyWithRetry(() =>
-  import('./components/DrawingChampionsView').then((m) => ({ default: m.DrawingChampionsView }))
-);
-const PuzzleChampionsView = lazyWithRetry(() =>
-  import('./components/PuzzleChampionsView').then((m) => ({ default: m.PuzzleChampionsView }))
-);
-const CertificatesView = lazyWithRetry(() =>
-  import('./components/CertificatesView').then((m) => ({ default: m.CertificatesView }))
-);
-const CricketChampionsView = lazyWithRetry(() =>
-  import('./components/CricketChampionsView').then((m) => ({ default: m.CricketChampionsView }))
-);
+import { SubjectQuizView } from './components/SubjectQuizView';
+import { DemoSectionView } from './components/DemoSectionView';
+import { MembershipModal } from './components/MembershipModal';
+import { PlanUpgradePromptModal } from './components/PlanUpgradePromptModal';
+import { AuthModal } from './components/AuthModal';
+import { PasswordResetModal } from './components/PasswordResetModal';
+import { HelpSupportView } from './components/HelpSupportView';
+import { GrievanceRedressalView } from './components/GrievanceRedressalView';
+import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
+import { AboutUsView } from './components/AboutUsView';
+import { ContactUsView } from './components/ContactUsView';
+import { FaqsView } from './components/FaqsView';
+import { StoryWorldView } from './components/StoryWorldView';
+import { DrawingChampionsView } from './components/DrawingChampionsView';
+import { PuzzleChampionsView } from './components/PuzzleChampionsView';
+import { CertificatesView } from './components/CertificatesView';
+import { CricketChampionsView } from './components/CricketChampionsView';
+import { StudentProfileView } from './components/StudentProfileView';
+import { ShivajiStoriesView } from './components/ShivajiStoriesView';
+import { SudokuView } from './components/SudokuView';
+import { FutureSkillsView } from './components/FutureSkillsView';
+import { ReferralHubView } from './components/ReferralHubView';
+import { WorksheetsView } from './components/WorksheetsView';
+import { StudyMaterialsView, type StudyLibrarySectionTab } from './components/StudyMaterialsView';
+import { PublicZoneExplorerView } from './components/PublicZoneExplorerView';
+import { AllCoursesExplorerView } from './components/AllCoursesExplorerView';
+import { OtherProgramsView } from './components/OtherProgramsView';
+import { AdditionalCurriculumView } from './components/AdditionalCurriculumView';
+
 const ScholarshipChampionsView = lazyWithRetry(() =>
   import('./components/ScholarshipChampionsView').then((m) => ({
     default: m.ScholarshipChampionsView,
   }))
+);
+const AdminDashboard = lazyWithRetry(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
 );
 const TetCtetView = lazyWithRetry(() =>
   import('./components/TetCtetView').then((m) => ({
     default: m.TetCtetView,
   }))
 );
-const StudentProfileView = lazyWithRetry(() =>
-  import('./components/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
-);
-const ShivajiStoriesView = lazyWithRetry(() =>
-  import('./components/ShivajiStoriesView').then((m) => ({ default: m.ShivajiStoriesView }))
-);
-const SudokuView = lazyWithRetry(() =>
-  import('./components/SudokuView').then((m) => ({ default: m.SudokuView }))
-);
-const FutureSkillsView = lazyWithRetry(() =>
-  import('./components/FutureSkillsView').then((m) => ({ default: m.FutureSkillsView }))
-);
-const ReferralHubView = lazyWithRetry(() =>
-  import('./components/ReferralHubView').then((m) => ({ default: m.ReferralHubView }))
-);
-const WorksheetsView = lazyWithRetry(() =>
-  import('./components/WorksheetsView').then((m) => ({ default: m.WorksheetsView }))
-);
-import type { StudyLibrarySectionTab } from './components/StudyMaterialsView';
-const StudyMaterialsView = lazyWithRetry(() =>
-  import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
-);
-const PublicZoneExplorerView = lazyWithRetry(() =>
-  import('./components/PublicZoneExplorerView').then((m) => ({ default: m.PublicZoneExplorerView }))
-);
-const AllCoursesExplorerView = lazyWithRetry(() =>
-  import('./components/AllCoursesExplorerView').then((m) => ({ default: m.AllCoursesExplorerView }))
-);
-const OtherProgramsView = lazyWithRetry(() =>
-  import('./components/OtherProgramsView').then((m) => ({ default: m.OtherProgramsView }))
-);
 const TeacherLessonPlannerView = lazyWithRetry(() =>
   import('./components/lessonPlanner/TeacherLessonPlannerView').then((m) => ({
     default: m.TeacherLessonPlannerView,
-  }))
-);
-const AdditionalCurriculumView = lazyWithRetry(() =>
-  import('./components/AdditionalCurriculumView').then((m) => ({
-    default: m.AdditionalCurriculumView,
   }))
 );
 const TeacherDashboard = lazyWithRetry(() =>

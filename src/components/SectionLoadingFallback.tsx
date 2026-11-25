@@ -15,31 +15,28 @@ export const SectionLoadingFallback: React.FC<SectionLoadingFallbackProps> = ({
   onRetry,
   onReturnHome,
 }) => {
-  const { firebaseConnectionStatus, retryFirebaseConnection } = useApp();
+  const { retryFirebaseConnection } = useApp();
   const [timedOut, setTimedOut] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
   const isOfflineState =
-    (typeof navigator !== 'undefined' && navigator.onLine === false) ||
-    firebaseConnectionStatus === 'offline' ||
-    firebaseConnectionStatus === 'error';
+    typeof navigator !== 'undefined' && navigator.onLine === false;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setTimedOut(true);
-    }, 4500);
+    }, 15000);
     return () => window.clearTimeout(timer);
   }, []);
 
   const handleRetry = async () => {
     if (retrying) return;
     setRetrying(true);
+    setTimedOut(false);
     try {
       await retryFirebaseConnection();
       if (onRetry) {
         onRetry();
-      } else {
-        window.location.reload();
       }
     } finally {
       setRetrying(false);

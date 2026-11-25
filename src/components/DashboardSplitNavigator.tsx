@@ -174,12 +174,12 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
         </button>
       </div>
 
-      {/* ROW 1: ALL MAIN SECTION TABS — Mobile Vertical Stack · Desktop & Smart TV Horizontal Grid */}
+      {/* ROW 1: ALL MAIN SECTION TABS — VERTICAL STACK */}
       <div className="bg-slate-50/90 border-b border-sky-200/80">
         <div
           role="tablist"
           aria-label="All Main Sections"
-          className="flex flex-col divide-y divide-slate-200/80 md:grid md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 md:divide-y-0 md:gap-1.5 md:p-2"
+          className="flex flex-col divide-y divide-slate-200/80"
         >
           {MAIN_NAV_MENUS.map((m) => {
             const isCurr = m.id === effectiveMenuId;
@@ -192,13 +192,13 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
                 role="tab"
                 aria-selected={isCurr}
                 onClick={() => onSelectSection(m.id)}
-                className={`w-full min-h-[44px] px-3.5 sm:px-4 md:px-3 py-2.5 md:rounded-2xl text-xs xl:text-[11px] 2xl:text-xs font-display font-black flex items-center justify-between gap-2 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                className={`w-full min-h-[44px] px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-display font-black flex items-center justify-between gap-2 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
                   isCurr
-                    ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 md:border-l-0 md:border-2 border-amber-400 shadow-xs'
-                    : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent md:border md:border-slate-200/90'
+                    ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 border-amber-400 shadow-xs'
+                    : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent'
                 }`}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <span
                     className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg ${mMeta.badgeBg} ${mMeta.iconColor} flex items-center justify-center shrink-0`}
                   >
@@ -208,9 +208,9 @@ export const SubPageConsistencyBar: React.FC<SubPageConsistencyBarProps> = ({
                     {m.label.replace('🎓 ', '')}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {isCurr && (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[9px] uppercase tracking-wider hidden sm:inline-block md:hidden">
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[9px] uppercase tracking-wider">
                       Selected
                     </span>
                   )}

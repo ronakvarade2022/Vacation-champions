@@ -43,10 +43,10 @@ import {
   getSubjectMeta,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
-import type { getOfficialTextbooksForBoardClass as GetOfficialTextbooksFn } from '../data/studyLibrary/textbookLibraryData';
-import type { getStudyMaterialsForSubject as GetStudyMaterialsFn } from '../data/notes/studyMaterialsData';
-import type { getExamPapersForSubject as GetExamPapersFn } from '../data/studyLibrary/examPapersData';
-import type { getVideoLessonsForSubject as GetVideoLessonsFn } from '../data/studyLibrary/videoLessonsData';
+import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
+import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
+import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
+import { getVideoLessonsForSubject } from '../data/studyLibrary/videoLessonsData';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import {
   SpecialCardIllustration,
@@ -400,77 +400,40 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   const currentSubjects = getSubjectsForClass(selectedClass, coursesEffectiveBoard);
   const studyPreviewSubjects = getSubjectsForClass(selectedClass, selectedBoard);
 
-  // Live Study Material preview datasets (loaded on demand when study-material or exam-zone is expanded so homepage startup never blocks on 1.3MB study library chunks)
-  const [studyPreviewLoaders, setStudyPreviewLoaders] = useState<{
-    getOfficialTextbooksForBoardClass: typeof GetOfficialTextbooksFn;
-    getStudyMaterialsForSubject: typeof GetStudyMaterialsFn;
-    getExamPapersForSubject: typeof GetExamPapersFn;
-    getVideoLessonsForSubject: typeof GetVideoLessonsFn;
-  } | null>(null);
-
-  useEffect(() => {
-    if (
-      (expandedSectionId === 'study-material' || expandedSectionId === 'exam-zone') &&
-      !studyPreviewLoaders
-    ) {
-      let cancelled = false;
-      Promise.all([
-        import('../data/studyLibrary/textbookLibraryData'),
-        import('../data/notes/studyMaterialsData'),
-        import('../data/studyLibrary/examPapersData'),
-        import('../data/studyLibrary/videoLessonsData'),
-      ])
-        .then(([tbMod, notesMod, papersMod, videosMod]) => {
-          if (cancelled) return;
-          setStudyPreviewLoaders({
-            getOfficialTextbooksForBoardClass: tbMod.getOfficialTextbooksForBoardClass,
-            getStudyMaterialsForSubject: notesMod.getStudyMaterialsForSubject,
-            getExamPapersForSubject: papersMod.getExamPapersForSubject,
-            getVideoLessonsForSubject: videosMod.getVideoLessonsForSubject,
-          });
-        })
-        .catch(() => {
-          // Ignore preview chunk error; full StudyMaterialsView handles retries
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [expandedSectionId, studyPreviewLoaders]);
-
+  // Live Study Material preview datasets (wrapped safely in try/catch)
   const previewTextbooks = (() => {
-    if (expandedSectionId !== 'study-material' || !studyPreviewLoaders) return [];
+    if (expandedSectionId !== 'study-material') return [];
     try {
-      return studyPreviewLoaders.getOfficialTextbooksForBoardClass(selectedBoard, selectedClass);
+      return getOfficialTextbooksForBoardClass(selectedBoard, selectedClass);
     } catch {
       return [];
     }
   })();
 
   const previewChapters = (() => {
-    if (expandedSectionId !== 'study-material' || !studyPreviewLoaders) return [];
+    if (expandedSectionId !== 'study-material') return [];
     try {
-      return studyPreviewLoaders.getStudyMaterialsForSubject(selectedBoard, selectedClass, previewSubject);
+      return getStudyMaterialsForSubject(selectedBoard, selectedClass, previewSubject);
     } catch {
       return [];
     }
   })();
 
   const previewExamPapers = (() => {
-    if ((expandedSectionId !== 'study-material' && expandedSectionId !== 'exam-zone') || !studyPreviewLoaders) {
+    if (expandedSectionId !== 'study-material' && expandedSectionId !== 'exam-zone') {
       return null;
     }
     try {
-      return studyPreviewLoaders.getExamPapersForSubject(selectedBoard, selectedClass, previewSubject);
+      return getExamPapersForSubject(selectedBoard, selectedClass, previewSubject);
     } catch {
       return null;
     }
   })();
 
   const previewVideos = (() => {
-    if (expandedSectionId !== 'study-material' || !studyPreviewLoaders) return [];
+    if (expandedSectionId !== 'study-material') return [];
     try {
-      return studyPreviewLoaders.getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject);
+      return getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject);
     } catch {
       return [];
     }
@@ -899,13 +862,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
             className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden"
           >
             {/* ---------------------------------------------------------------
-                ROW 1: ALL MAIN SECTION TABS (Mobile Vertical Stack · Desktop & Smart TV Full-Width Grid)
+                ROW 1: ALL MAIN SECTION TABS (Vertical Stack)
                 --------------------------------------------------------------- */}
             <div className="border-b border-sky-200/80 bg-slate-50/90">
               <div
                 role="tablist"
                 aria-label="All Main Sections"
-                className="flex flex-col divide-y divide-slate-200/80 md:grid md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 md:divide-y-0 md:gap-1.5 md:p-2"
+                className="flex flex-col divide-y divide-slate-200/80"
               >
                 {DASHBOARD_ACCORDION_MENU_IDS.map((menuId) => {
                   const menu = MAIN_NAV_MENUS.find((m) => m.id === menuId);
@@ -924,20 +887,20 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                       aria-selected={isSelected}
                       aria-controls="second-row-subsections"
                       onClick={() => handleSelectAccordionSection(menu.id)}
-                      className={`w-full min-h-[46px] px-3.5 sm:px-4 md:px-3 py-2.5 md:rounded-2xl flex items-center justify-between gap-2 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                      className={`w-full min-h-[46px] px-3.5 sm:px-4 py-2.5 flex items-center justify-between gap-2 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
                         isSelected
-                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 md:border-l-0 md:border-2 border-amber-400 shadow-xs'
-                          : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent md:border md:border-slate-200/90'
+                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 border-amber-400 shadow-xs'
+                          : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent'
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <span
                           className={`w-7 h-7 rounded-lg ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
                         >
                           <IconComp className="w-4 h-4" />
                         </span>
                         <span
-                          className={`font-display font-black text-xs xl:text-[11px] 2xl:text-xs tracking-wide uppercase truncate ${
+                          className={`font-display font-black text-xs sm:text-sm tracking-wide uppercase truncate ${
                             isSelected ? 'text-white' : 'text-[#0f2952]'
                           }`}
                         >
@@ -945,9 +908,9 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         {isSelected && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[10px] uppercase tracking-wider hidden sm:inline-block md:hidden">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[10px] uppercase tracking-wider">
                             Selected
                           </span>
                         )}

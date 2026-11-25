@@ -53,24 +53,6 @@ export function lazyWithRetry<T extends React.ComponentType<any>>(
     const errMsg = sanitizeDiagnosticErrorMessage(lastError);
     console.warn('[MyStudyZone LazyChunk Notice]:', errMsg);
 
-    const isChunkLoadFailure =
-      /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk .* failed|Unable to preload CSS|NetworkError/i.test(
-        errMsg
-      );
-
-    if (isChunkLoadFailure && typeof window !== 'undefined') {
-      try {
-        const reloadKey = 'msz_chunk_retry_ts';
-        const lastRetry = Number(window.sessionStorage?.getItem(reloadKey) || '0');
-        if (Date.now() - lastRetry > 30_000) {
-          window.sessionStorage?.setItem(reloadKey, String(Date.now()));
-          window.location.reload();
-        }
-      } catch {
-        // Ignore sessionStorage restrictions on Smart TV WebViews
-      }
-    }
-
     throw lastError instanceof Error ? lastError : new Error(errMsg);
   };
 
