@@ -1,22 +1,31 @@
 @import "tailwindcss";
 
 @layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
   html, body {
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
+    width: 100%;
     max-width: 100%;
     overflow-x: hidden;
   }
 
   #root {
+    width: 100%;
     max-width: 100%;
     overflow-x: hidden;
   }
 
-  /* Responsive Desktop & Mobile Preview Safe Layout */
+  /* Responsive Desktop, Smart TV & Mobile Preview Safe Layout */
   html.desktop-site-active,
   html.desktop-site-active body,
-  html.desktop-site-active #root {
+  html.desktop-site-active #root,
+  html.tv-browser-detected,
+  html.tv-browser-detected body,
+  html.tv-browser-detected #root {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
@@ -32,9 +41,9 @@
 
   /* Prevent automatic mobile screen zoom when inputs are focused in Mobile View */
   @media (max-width: 768px) {
-    html:not(.desktop-site-active) input,
-    html:not(.desktop-site-active) select,
-    html:not(.desktop-site-active) textarea {
+    html:not(.desktop-site-active):not(.tv-browser-detected) input,
+    html:not(.desktop-site-active):not(.tv-browser-detected) select,
+    html:not(.desktop-site-active):not(.tv-browser-detected) textarea {
       font-size: 16px !important;
     }
   }
@@ -43,6 +52,31 @@
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
+}
+
+/* Dedicated Responsive Container for Mobile, Desktop, 1366x768 TV & 1920x1080 Smart TV */
+.msz-container {
+  width: 100%;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 1280px) {
+  .msz-container {
+    max-width: 1580px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .msz-container {
+    max-width: 1840px;
+  }
+}
+
+html.desktop-site-active .msz-container,
+html.tv-browser-detected .msz-container {
+  max-width: 1840px;
 }
 
 /* Smart TV Remote & Keyboard High-Contrast Focus Ring */
@@ -57,6 +91,17 @@ html.tv-nav-active [tabindex="0"]:focus {
   outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 0 5px rgba(15, 41, 82, 0.35) !important;
+}
+
+/* Prevent sticky header from eating vertical viewport on landscape Smart TV browsers */
+@media (min-width: 960px) and (max-height: 820px) {
+  header.sticky {
+    position: relative !important;
+  }
+}
+
+html.tv-browser-detected header.sticky {
+  position: relative !important;
 }
 
 /* Below-the-fold section rendering optimization for fast mobile FCP/INP */

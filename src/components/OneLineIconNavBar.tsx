@@ -88,7 +88,7 @@ export function OneLineIconNavBar<T extends string = string>({
       <div
         role="tablist"
         aria-label={ariaLabel}
-        className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar"
+        className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto md:flex-wrap md:overflow-x-visible pb-1 pt-0.5 no-scrollbar"
       >
         {visibleItems.map((item) => {
           const isActive = item.id === activeId;

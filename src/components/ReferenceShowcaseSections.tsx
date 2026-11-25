@@ -712,15 +712,15 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         aria-label="Welcome to MyStudyZone Promotional Banner"
         className="rounded-3xl bg-white border-2 border-sky-300 shadow-lg overflow-hidden"
       >
-        <div className="relative w-full aspect-[1000/282] overflow-hidden bg-sky-100">
+        <div className="relative w-full overflow-hidden bg-sky-100">
           <img
-            src="/assets/aistudio/IMG-20261117-WA0052_8bad2f82.jpg"
+            src="/assets/aistudio/mystudyzone_hero_promo_clean.jpg"
             alt="Welcome to MyStudyZone! Your Learning World! Learn • Play • Excel — Start Learning"
-            width={1024}
-            height={1536}
+            width={1000}
+            height={282}
             fetchPriority="high"
             decoding="async"
-            className="w-[102.4%] max-w-none -ml-[1.2%] -mt-[14.6%] block select-none pointer-events-none"
+            className="w-full h-auto block select-none pointer-events-none"
           />
 
           {/* Interactive Clickable Hotspot over "▶ Start Learning" button in the banner */}
@@ -825,14 +825,13 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
             className="rounded-3xl bg-white border-2 border-sky-200/90 shadow-md overflow-hidden"
           >
             {/* ---------------------------------------------------------------
-                ROW 1: ALL MAIN SECTION TABS – VERTICAL STACKED
+                ROW 1: ALL MAIN SECTION TABS (Mobile Vertical Stack · Desktop & Smart TV Full-Width Grid)
                 --------------------------------------------------------------- */}
             <div className="border-b border-sky-200/80 bg-slate-50/90">
               <div
                 role="tablist"
-                aria-orientation="vertical"
                 aria-label="All Main Sections"
-                className="flex flex-col divide-y divide-slate-200/80"
+                className="flex flex-col divide-y divide-slate-200/80 md:grid md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 md:divide-y-0 md:gap-1.5 md:p-2"
               >
                 {DASHBOARD_ACCORDION_MENU_IDS.map((menuId) => {
                   const menu = MAIN_NAV_MENUS.find((m) => m.id === menuId);
@@ -851,20 +850,20 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                       aria-selected={isSelected}
                       aria-controls="second-row-subsections"
                       onClick={() => handleSelectAccordionSection(menu.id)}
-                      className={`w-full min-h-[46px] px-3.5 sm:px-5 py-2.5 flex items-center justify-between gap-3 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+                      className={`w-full min-h-[46px] px-3.5 sm:px-4 md:px-3 py-2.5 md:rounded-2xl flex items-center justify-between gap-2 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 ${
                         isSelected
-                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 border-l-amber-400 shadow-xs'
-                          : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent'
+                          ? 'bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white border-l-4 md:border-l-0 md:border-2 border-amber-400 shadow-xs'
+                          : 'bg-white hover:bg-sky-50/90 text-[#0f2952] border-l-4 border-l-transparent md:border md:border-slate-200/90'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span
-                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
+                          className={`w-7 h-7 rounded-lg ${meta.badgeBg} ${meta.iconColor} flex items-center justify-center shadow-2xs shrink-0`}
                         >
-                          <IconComp className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                          <IconComp className="w-4 h-4" />
                         </span>
                         <span
-                          className={`font-display font-black text-xs sm:text-sm tracking-wide uppercase truncate ${
+                          className={`font-display font-black text-xs xl:text-[11px] 2xl:text-xs tracking-wide uppercase truncate ${
                             isSelected ? 'text-white' : 'text-[#0f2952]'
                           }`}
                         >
@@ -872,14 +871,14 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {isSelected && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[10px] uppercase tracking-wider hidden sm:inline-block">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0f2952] font-display font-black text-[10px] uppercase tracking-wider hidden sm:inline-block md:hidden">
                             Selected
                           </span>
                         )}
                         <ArrowRight
-                          className={`w-4 h-4 transition-transform ${
+                          className={`w-3.5 h-3.5 transition-transform ${
                             isSelected ? 'text-amber-300 translate-x-0.5' : 'text-slate-400'
                           }`}
                         />
@@ -891,7 +890,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
             </div>
 
             {/* ---------------------------------------------------------------
-                ROW 2: SELECTED SECTION'S SUBSECTIONS – HORIZONTAL ONE-LINE ICON BAR
+                ROW 2: SELECTED SECTION'S SUBSECTIONS – HORIZONTAL BAR (Wraps Cleanly on Desktop & Smart TV)
                 --------------------------------------------------------------- */}
             <div
               id="second-row-subsections"
@@ -901,20 +900,20 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
               <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                 <div className="inline-flex items-center gap-2 bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#0f2952] text-white px-3 py-1 rounded-full shadow-2xs">
                   <span className="text-sm leading-none">{activeSectionMeta.pillEmoji}</span>
-                  <h2 className="text-xs font-display font-black tracking-tight">
+                  <h2 className="text-xs xl:text-sm font-display font-black tracking-tight">
                     {activeMenuGroup.label.replace('🎓 ', '')} — Options ({activeSubsections.length})
                   </h2>
                 </div>
-                <span className="text-[11px] sm:text-xs font-display font-extrabold text-[#0f2952]">
+                <span className="text-[11px] sm:text-xs xl:text-sm font-display font-extrabold text-[#0f2952]">
                   {activeSectionMeta.tagline}
                 </span>
               </div>
 
-              {/* Horizontal Scrollable One-Line Icon Row of ONLY Selected Section's Subsections */}
+              {/* Horizontal Scrollable on Mobile · Cleanly Wrapped on Desktop & Smart TV */}
               <div
                 role="tablist"
                 aria-label={`${activeMenuGroup.label.replace('🎓 ', '')} Subsections`}
-                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar"
+                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto md:flex-wrap md:overflow-x-visible pb-1 pt-0.5 no-scrollbar"
               >
                 {activeSubsections.map((sub) => {
                   const isSubSelected = activeSub?.id === sub.id;

@@ -293,7 +293,7 @@ export const AdminDashboard: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+    <div className="space-y-6 msz-container pb-16">
       {/* Top Banner */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

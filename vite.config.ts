@@ -18,6 +18,7 @@ export default defineConfig(() => {
           'pwa-maskable-512x512.png',
           'apple-touch-icon.png',
           'file_00000000b7dc8211912b865fa7acee86.webp',
+          'assets/aistudio/mystudyzone_hero_promo_clean.jpg',
           'icon.svg',
         ],
         manifest: {

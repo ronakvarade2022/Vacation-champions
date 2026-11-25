@@ -305,7 +305,7 @@ export const ReferralHubView: React.FC<ReferralHubViewProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn">
+    <div className="msz-container px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn">
       {/* 1. BRAND HERO HEADER */}
       <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-amber-950 border border-amber-500/30 p-8 sm:p-12 mb-8 text-white">
         {/* Decorative Glows */}

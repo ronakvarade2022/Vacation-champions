@@ -277,20 +277,28 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
 
   return (
     <>
-      {/* ONE Clearly Visible HELP & SUPPORT Button */}
+      {/* Non-overlapping Docked HELP & SUPPORT Bar (Never floats over main content) */}
       {!isOpen && (
-        <button
-          type="button"
-          onClick={() => onOpenChange(true)}
-          aria-label="HELP & SUPPORT"
-          data-testid="help-support-launcher"
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 inline-flex items-center gap-2.5 px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#133870] to-[#1d4ed8] hover:from-[#133870] hover:to-[#1e40af] text-white font-display font-black text-xs sm:text-sm tracking-wide shadow-xl border-2 border-amber-300/80 cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98]"
-        >
-          <span className="w-7 h-7 rounded-xl bg-amber-400 text-[#0f2952] flex items-center justify-center shrink-0 shadow-xs">
-            <Headphones className="w-4 h-4" />
-          </span>
-          <span>HELP &amp; SUPPORT</span>
-        </button>
+        <div className="w-full no-print bg-amber-50/40 border-t border-amber-200/60 py-3 px-4 sm:px-6 lg:px-8">
+          <div className="msz-container flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#0f2952]">
+              <LifeBuoy className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Need assistance with classes, notes, subscriptions, or login?</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenChange(true)}
+              aria-label="HELP & SUPPORT"
+              data-testid="help-support-launcher"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#133870] to-[#1d4ed8] hover:from-[#133870] hover:to-[#1e40af] text-white font-display font-black text-xs sm:text-sm tracking-wide shadow-md border-2 border-amber-300/80 cursor-pointer transition-all"
+            >
+              <span className="w-6 h-6 rounded-xl bg-amber-400 text-[#0f2952] flex items-center justify-center shrink-0 shadow-xs">
+                <Headphones className="w-3.5 h-3.5" />
+              </span>
+              <span>HELP &amp; SUPPORT</span>
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Single Modern Chat Drawer / Modal */}

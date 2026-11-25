@@ -171,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const containerWidthClass =
-    viewMode === 'desktop' ? 'max-w-[1680px] w-full mx-auto' : 'max-w-7xl w-full mx-auto';
+    viewMode === 'desktop' ? 'max-w-[1840px] w-full mx-auto' : 'msz-container';
 
   const isTeacherAccount = currentStudent?.accountRole === 'teacher' || activeRole === 'teacher';
   const isStudentAccount = Boolean(currentStudent && currentStudent.accountRole !== 'teacher' && activeRole === 'student');
@@ -191,18 +191,18 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs w-full">
-      {/* Top Role Portals Bar: Always-visible Student Portal, Teacher Portal & Admin Portal (Desktop & Mobile 360px safe) */}
+      {/* Top Role Portals Bar: Always-visible Student Portal, Teacher Portal & Admin Portal (Desktop, Smart TV & Mobile 360px safe) */}
       <div className="bg-slate-900 text-white border-b border-slate-800">
-        <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-1.5 flex items-center justify-between gap-2`}>
-          <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 truncate">
-            <BookOpenCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+        <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-1.5 xl:py-2 flex items-center justify-between gap-2`}>
+          <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] xl:text-xs 2xl:text-sm font-semibold text-slate-300 truncate">
+            <BookOpenCheck className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-amber-400 shrink-0" />
             <span>Classes 1–10 · 4th &amp; 7th Scholarship · MAHA TET · CTET Portals</span>
           </span>
 
           <div
             role="navigation"
             aria-label="Portal Access"
-            className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto sm:justify-end"
+            className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-2 xl:gap-2.5 w-full md:w-auto sm:justify-end"
           >
             <button
               type="button"
@@ -211,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenPanel('student', 'login');
               }}
-              className={`min-h-[32px] px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[34px] xl:min-h-[38px] px-2 sm:px-3 xl:px-4 py-1 xl:py-1.5 rounded-lg text-[10px] sm:text-xs xl:text-[13px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
                 isStudentAccount
                   ? 'bg-indigo-600 text-white border-indigo-400 shadow-xs'
                   : 'bg-white/10 hover:bg-indigo-600/80 text-white border-white/15'
@@ -228,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenPanel('teacher', 'login');
               }}
-              className={`min-h-[32px] px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[34px] xl:min-h-[38px] px-2 sm:px-3 xl:px-4 py-1 xl:py-1.5 rounded-lg text-[10px] sm:text-xs xl:text-[13px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
                 isTeacherAccount
                   ? 'bg-emerald-600 text-white border-emerald-400 shadow-xs'
                   : 'bg-white/10 hover:bg-emerald-600/80 text-white border-white/15'
@@ -245,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenPanel('admin', 'login');
               }}
-              className={`min-h-[32px] px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[34px] xl:min-h-[38px] px-2 sm:px-3 xl:px-4 py-1 xl:py-1.5 rounded-lg text-[10px] sm:text-xs xl:text-[13px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
                 isAdminActive
                   ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-xs'
                   : 'bg-white/10 hover:bg-amber-500/80 hover:text-slate-950 text-white border-white/15'
@@ -259,7 +259,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Header Row */}
-      <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-2 sm:py-2.5 min-h-[56px] sm:min-h-[64px] flex items-center justify-between gap-1.5 sm:gap-3`}>
+      <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-2 sm:py-2.5 xl:py-3 min-h-[56px] sm:min-h-[64px] xl:min-h-[72px] flex items-center justify-between gap-2 sm:gap-3`}>
         {/* Brand Logo (Reference-matched Orange Cap-Book Icon + Two-Tone MyStudyZone + Learn • Practice • Grow) */}
         <button
           type="button"
@@ -269,22 +269,22 @@ export const Header: React.FC<HeaderProps> = ({
             if (activeRole === 'admin') handleRoleChange('student');
             onMenuAction('home-overview');
           }}
-          className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink min-w-0 text-left"
+          className="flex items-center gap-2 sm:gap-3 xl:gap-3.5 cursor-pointer group shrink min-w-0 text-left"
         >
-          <BrandBookCapLogo className="w-8 h-8 sm:w-11 sm:h-11 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
+          <BrandBookCapLogo className="w-8 h-8 sm:w-11 sm:h-11 xl:w-12 xl:h-12 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0" />
           <div className="leading-none min-w-0">
-            <span className="font-display font-black text-sm sm:text-2xl tracking-tight block truncate">
+            <span className="font-display font-black text-sm sm:text-2xl xl:text-[26px] tracking-tight block truncate">
               <span className="text-slate-900">MyStudy</span>
               <span className="text-orange-600">Zone</span>
             </span>
-            <span className="text-[9px] sm:text-[11px] font-extrabold text-slate-700 tracking-wide block mt-0.5 truncate">
+            <span className="text-[9px] sm:text-[11px] xl:text-xs font-extrabold text-slate-700 tracking-wide block mt-0.5 truncate">
               Learn • Practice • Grow
             </span>
           </div>
         </button>
 
-        {/* Right Actions Area (Always keeps Login/Logout button visible in mobile & desktop preview frames) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Right Actions Area (Always keeps Login/Logout button visible in mobile, desktop & Smart TV frames) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 xl:gap-2.5 shrink-0">
           {/* Signed-in Active Board & Class Switcher Pill (Visible on Mobile, Tablet & Desktop) */}
           {isLearningRole &&
             currentStudent &&
@@ -820,7 +820,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors shrink-0"
+              className="md:hidden p-2 rounded-xl text-slate-800 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors shrink-0"
               aria-label="Toggle Navigation Menu"
               aria-expanded={mobileMenuOpen}
             >
@@ -834,7 +834,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={handleTopLogoutClick}
               aria-label="Logout"
-              className="min-h-[36px] sm:min-h-[40px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40 whitespace-nowrap"
+              className="min-h-[36px] sm:min-h-[40px] xl:min-h-[42px] px-3 sm:px-4 xl:px-5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-rose-500/40 whitespace-nowrap"
             >
               <LogOut className="w-4 h-4 shrink-0" />
               <span>Logout</span>
@@ -847,7 +847,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenAuth('login');
               }}
               aria-label="Login"
-              className="min-h-[36px] sm:min-h-[40px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40 whitespace-nowrap"
+              className="min-h-[36px] sm:min-h-[40px] xl:min-h-[42px] px-3 sm:px-4 xl:px-5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm hover:shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-indigo-500/40 whitespace-nowrap"
             >
               <LogIn className="w-4 h-4 shrink-0" />
               <span>Login</span>
@@ -856,13 +856,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Desktop Navigation Bar (Single Horizontal Row of All Main Section Tabs) */}
+      {/* Desktop & Smart TV Navigation Bar (Full-Width Horizontal Row of All Main Section Tabs) */}
       {isLearningRole && (
-        <div className="hidden lg:block border-t border-slate-100 bg-slate-50/80">
+        <div className="hidden md:block border-t border-slate-100 bg-slate-50/90">
           <nav
             ref={navContainerRef}
             aria-label="Primary Navigation"
-            className={`${containerWidthClass} px-4 sm:px-6 lg:px-8 py-1.5 flex items-center gap-1.5 flex-nowrap overflow-x-auto`}
+            className={`${containerWidthClass} px-3 sm:px-6 lg:px-8 py-1.5 xl:py-2 flex items-center gap-1.5 xl:gap-2 flex-wrap`}
           >
             {MAIN_NAV_MENUS.map((menu) => {
               const visibleItems = menu.items.filter(
@@ -889,7 +889,7 @@ export const Header: React.FC<HeaderProps> = ({
                       handleTriggerSubAction(menu.defaultActionId);
                     }
                   }}
-                  className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`shrink-0 px-2.5 xl:px-3.5 py-1.5 xl:py-2 rounded-lg text-[11px] xl:text-xs 2xl:text-[13px] font-extrabold uppercase tracking-tight flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
                     isSpecialTab
                       ? isActive
                         ? 'bg-amber-500 text-slate-950 shadow-xs ring-2 ring-[#0f2952]/20'
@@ -909,7 +909,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Hamburger Drawer with Expandable Sub-Menus */}
       {isLearningRole && mobileMenuOpen && (
-        <div className="lg:hidden bg-white border-t border-slate-200 px-4 py-4 space-y-3 max-h-[82vh] overflow-y-auto shadow-lg">
+        <div className="md:hidden bg-white border-t border-slate-200 px-4 py-4 space-y-3 max-h-[82vh] overflow-y-auto shadow-lg">
           {/* Quick Priority Mobile Actions */}
           <div className="grid grid-cols-3 gap-2">
             <button

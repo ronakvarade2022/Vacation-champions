@@ -692,7 +692,7 @@ export const DrawingChampionsView: React.FC<DrawingChampionsViewProps> = ({ onOp
   });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16 px-2 sm:px-4">
+    <div className="space-y-6 msz-container pb-16 px-2 sm:px-4">
       {/* Top Header Banner */}
       <div className="bg-linear-to-r from-amber-500 via-rose-500 to-indigo-600 rounded-3xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">

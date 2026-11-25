@@ -474,7 +474,7 @@ export const DemoSectionView: React.FC<DemoSectionViewProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="msz-container px-4 py-8">
       {/* Top Demo Banner */}
       <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 rounded-3xl p-7 sm:p-8 text-white mb-8 shadow-xl relative overflow-hidden">
         <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />

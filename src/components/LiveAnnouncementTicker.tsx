@@ -87,22 +87,22 @@ export const LiveAnnouncementTicker: React.FC<LiveAnnouncementTickerProps> = ({
       aria-label="Live Announcements"
       role="region"
       data-testid="live-announcement-ticker"
-      className={`w-full border-b border-amber-200/80 bg-slate-900 text-slate-100 no-print ${
-        isPreview ? 'rounded-xl border overflow-hidden' : ''
+      className={`w-full max-w-full overflow-hidden border-b border-amber-200/80 bg-slate-900 text-slate-100 no-print ${
+        isPreview ? 'rounded-xl border' : ''
       }`}
     >
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-3 min-h-[40px]">
+      <div className="msz-container px-3 sm:px-6 lg:px-8 flex items-center gap-3 min-h-[42px] xl:min-h-[46px]">
         {/* Static Label */}
         <div className="flex items-center gap-1.5 shrink-0 pr-3 border-r border-slate-700 text-amber-400">
-          <Megaphone className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          <span className="text-xs font-bold tracking-tight whitespace-nowrap">
+          <Megaphone className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" aria-hidden="true" />
+          <span className="text-xs xl:text-sm font-bold tracking-tight whitespace-nowrap">
             Announcements
           </span>
         </div>
 
-        {/* Scrolling Track */}
+        {/* Scrolling Track (min-w-0 prevents flex child w-max from overflowing viewport) */}
         <div
-          className={`flex-1 overflow-hidden relative py-1.5 ${
+          className={`flex-1 min-w-0 overflow-hidden relative py-2 ${
             config.pauseOnHover ? 'msz-ticker-hover-pause' : ''
           }`}
         >
@@ -116,7 +116,7 @@ export const LiveAnnouncementTicker: React.FC<LiveAnnouncementTickerProps> = ({
             {repeatedItems.map((item, idx) => (
               <div
                 key={`${item.id}_${idx}`}
-                className="inline-flex items-center gap-2 text-xs leading-tight"
+                className="inline-flex items-center gap-2 text-xs xl:text-sm leading-normal"
                 aria-hidden={idx >= activeItems.length ? 'true' : undefined}
               >
                 <span className="font-semibold text-amber-300">
@@ -134,7 +134,7 @@ export const LiveAnnouncementTicker: React.FC<LiveAnnouncementTickerProps> = ({
                     className="inline-flex items-center gap-0.5 text-amber-300 hover:text-amber-200 underline underline-offset-2 font-semibold cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-amber-400 rounded-sm px-1"
                   >
                     <span>{item.actionLabel}</span>
-                    <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
+                    <ArrowUpRight className="w-3 h-3 xl:w-3.5 xl:h-3.5" aria-hidden="true" />
                   </button>
                 )}
                 <span className="text-slate-600 pl-4" aria-hidden="true">

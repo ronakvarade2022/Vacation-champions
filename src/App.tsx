@@ -14,6 +14,7 @@ import {
   useSmartTvNavigation,
   safeScrollToTop,
   safeScrollToElementById,
+  isSmartTvOrSingleWindowBrowser,
 } from './utils/smartTvCompatibility';
 
 const SubjectQuizView = lazyWithRetry(() =>
@@ -283,8 +284,13 @@ const AppContent: React.FC = () => {
     );
   };
 
-  // Desktop Site / Mobile View preference
-  const [viewMode, setViewMode] = useState<'auto' | 'desktop'>('auto');
+  // Desktop Site / Smart TV / Mobile View preference
+  const [viewMode, setViewMode] = useState<'auto' | 'desktop'>(() => {
+    if (typeof window !== 'undefined' && isSmartTvOrSingleWindowBrowser()) {
+      return 'desktop';
+    }
+    return 'auto';
+  });
 
   useEffect(() => {
     try {
@@ -1097,10 +1103,10 @@ const AppContent: React.FC = () => {
 
       {/* Main Content Arena */}
       <main
-        className={`flex-1 w-full mx-auto pt-6 pb-12 ${
+        className={`flex-1 w-full mx-auto pt-4 sm:pt-6 pb-10 ${
           viewMode === 'desktop'
-            ? 'max-w-[1680px] px-5 sm:px-8'
-            : 'max-w-7xl px-4 sm:px-6'
+            ? 'max-w-[1840px] px-4 sm:px-6 lg:px-8 2xl:px-10'
+            : 'msz-container px-4 sm:px-6 lg:px-8 2xl:px-10'
         }`}
       >
         {sessionSecurityNotice && (
@@ -2184,12 +2190,12 @@ const AppContent: React.FC = () => {
       <PWAOfflineIndicator />
 
       {/* Professional Education Platform Footer */}
-      <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-12 pb-8 text-xs">
+      <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-10 pb-8 text-xs">
         <div
           className={`mx-auto space-y-10 ${
             viewMode === 'desktop'
-              ? 'max-w-[1680px] w-full px-5 sm:px-8'
-              : 'max-w-7xl px-4 sm:px-6'
+              ? 'max-w-[1840px] w-full px-4 sm:px-6 lg:px-8 2xl:px-10'
+              : 'msz-container px-4 sm:px-6 lg:px-8 2xl:px-10'
           }`}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
