@@ -43,10 +43,10 @@ import {
   getSubjectMeta,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
-import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
-import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
-import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
-import { getVideoLessonsForSubject } from '../data/studyLibrary/videoLessonsData';
+import type { getOfficialTextbooksForBoardClass as GetOfficialTextbooksFn } from '../data/studyLibrary/textbookLibraryData';
+import type { getStudyMaterialsForSubject as GetStudyMaterialsFn } from '../data/notes/studyMaterialsData';
+import type { getExamPapersForSubject as GetExamPapersFn } from '../data/studyLibrary/examPapersData';
+import type { getVideoLessonsForSubject as GetVideoLessonsFn } from '../data/studyLibrary/videoLessonsData';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import {
   SpecialCardIllustration,
@@ -400,23 +400,81 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   const currentSubjects = getSubjectsForClass(selectedClass, coursesEffectiveBoard);
   const studyPreviewSubjects = getSubjectsForClass(selectedClass, selectedBoard);
 
-  // Live Study Material preview datasets (100% real data, zero Firestore reads)
-  const previewTextbooks =
-    expandedSectionId === 'study-material'
-      ? getOfficialTextbooksForBoardClass(selectedBoard, selectedClass)
-      : [];
-  const previewChapters =
-    expandedSectionId === 'study-material'
-      ? getStudyMaterialsForSubject(selectedBoard, selectedClass, previewSubject)
-      : [];
-  const previewExamPapers =
-    expandedSectionId === 'study-material' || expandedSectionId === 'exam-zone'
-      ? getExamPapersForSubject(selectedBoard, selectedClass, previewSubject)
-      : null;
-  const previewVideos =
-    expandedSectionId === 'study-material'
-      ? getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject)
-      : [];
+  // Live Study Material preview datasets (loaded on demand when study-material or exam-zone is expanded so homepage startup never blocks on 1.3MB study library chunks)
+  const [studyPreviewLoaders, setStudyPreviewLoaders] = useState<{
+    getOfficialTextbooksForBoardClass: typeof GetOfficialTextbooksFn;
+    getStudyMaterialsForSubject: typeof GetStudyMaterialsFn;
+    getExamPapersForSubject: typeof GetExamPapersFn;
+    getVideoLessonsForSubject: typeof GetVideoLessonsFn;
+  } | null>(null);
+
+  useEffect(() => {
+    if (
+      (expandedSectionId === 'study-material' || expandedSectionId === 'exam-zone') &&
+      !studyPreviewLoaders
+    ) {
+      let cancelled = false;
+      Promise.all([
+        import('../data/studyLibrary/textbookLibraryData'),
+        import('../data/notes/studyMaterialsData'),
+        import('../data/studyLibrary/examPapersData'),
+        import('../data/studyLibrary/videoLessonsData'),
+      ])
+        .then(([tbMod, notesMod, papersMod, videosMod]) => {
+          if (cancelled) return;
+          setStudyPreviewLoaders({
+            getOfficialTextbooksForBoardClass: tbMod.getOfficialTextbooksForBoardClass,
+            getStudyMaterialsForSubject: notesMod.getStudyMaterialsForSubject,
+            getExamPapersForSubject: papersMod.getExamPapersForSubject,
+            getVideoLessonsForSubject: videosMod.getVideoLessonsForSubject,
+          });
+        })
+        .catch(() => {
+          // Ignore preview chunk error; full StudyMaterialsView handles retries
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [expandedSectionId, studyPreviewLoaders]);
+
+  const previewTextbooks = (() => {
+    if (expandedSectionId !== 'study-material' || !studyPreviewLoaders) return [];
+    try {
+      return studyPreviewLoaders.getOfficialTextbooksForBoardClass(selectedBoard, selectedClass);
+    } catch {
+      return [];
+    }
+  })();
+
+  const previewChapters = (() => {
+    if (expandedSectionId !== 'study-material' || !studyPreviewLoaders) return [];
+    try {
+      return studyPreviewLoaders.getStudyMaterialsForSubject(selectedBoard, selectedClass, previewSubject);
+    } catch {
+      return [];
+    }
+  })();
+
+  const previewExamPapers = (() => {
+    if ((expandedSectionId !== 'study-material' && expandedSectionId !== 'exam-zone') || !studyPreviewLoaders) {
+      return null;
+    }
+    try {
+      return studyPreviewLoaders.getExamPapersForSubject(selectedBoard, selectedClass, previewSubject);
+    } catch {
+      return null;
+    }
+  })();
+
+  const previewVideos = (() => {
+    if (expandedSectionId !== 'study-material' || !studyPreviewLoaders) return [];
+    try {
+      return studyPreviewLoaders.getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject);
+    } catch {
+      return [];
+    }
+  })();
 
   // Helper to get existing icon illustration and colour theme for any sub-action item
   const getSubItemIconVisuals = (

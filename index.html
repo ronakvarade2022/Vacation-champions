@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <link rel="preload" as="image" href="/assets/aistudio/IMG-20261117-WA0052_8bad2f82.jpg" type="image/jpeg" fetchpriority="high" />
+    <link rel="preload" as="image" href="/assets/aistudio/mystudyzone_hero_promo_clean.jpg" type="image/jpeg" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
@@ -71,6 +71,36 @@
       }
     </script>
     <script>
+      // Early compatibility shims for Smart TV / ViewBoard Chromium 74-108 WebViews
+      if (typeof globalThis === 'undefined') {
+        window.globalThis = window;
+      }
+      if (!String.prototype.replaceAll) {
+        String.prototype.replaceAll = function(search, replacement) {
+          if (search instanceof RegExp) {
+            return this.replace(search, replacement);
+          }
+          return this.split(String(search)).join(String(replacement));
+        };
+      }
+      if (!Object.hasOwn) {
+        Object.hasOwn = function(obj, prop) {
+          return Object.prototype.hasOwnProperty.call(Object(obj), prop);
+        };
+      }
+      if (!Array.prototype.at) {
+        Array.prototype.at = function(n) {
+          var i = Math.trunc(n) || 0;
+          if (i < 0) i += this.length;
+          if (i < 0 || i >= this.length) return undefined;
+          return this[i];
+        };
+      }
+      if (typeof window.structuredClone !== 'function') {
+        window.structuredClone = function(val) {
+          return val === undefined ? undefined : JSON.parse(JSON.stringify(val));
+        };
+      }
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
@@ -83,6 +113,10 @@
             console.debug('[Vite HMR Guard] Handled gracefully:', msg);
           }
         }
+      });
+      // Prevent Vite CSS/module preload errors from crashing lazy component rendering on Smart TVs
+      window.addEventListener('vite:preloadError', function(event) {
+        console.warn('[MyStudyZone Preload Notice]: Handled preload error gracefully.');
       });
       // Capture PWA beforeinstallprompt early so late-mounted components can always trigger native install
       window.__mszDeferredInstallPrompt = null;

@@ -9,7 +9,7 @@ import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallBu
 import { SectionLoadingFallback } from './components/SectionLoadingFallback';
 import { LiveAnnouncementTicker } from './components/LiveAnnouncementTicker';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
-import { lazyWithRetry } from './utils/lazyWithRetry';
+import { lazyWithRetry, sanitizeDiagnosticErrorMessage } from './utils/lazyWithRetry';
 import {
   useSmartTvNavigation,
   safeScrollToTop,
@@ -355,18 +355,24 @@ const AppContent: React.FC = () => {
     }
   }, [currentTab, activeRole, currentUser?.role, currentStudent?.id, currentStudent?.accountRole, currentStudent?.classLevel, activeBoard]);
 
-  // Warm-cache lightweight modals during idle time (skip on Data Saver / slow 2G mobile networks)
+  // Warm-cache lightweight modals during idle time (skip on Data Saver / slow 2G / Smart TV browsers)
   useEffect(() => {
+    if (isSmartTvOrSingleWindowBrowser()) {
+      return;
+    }
     const conn = typeof navigator !== 'undefined' ? (navigator as any).connection : undefined;
     if (conn?.saveData || conn?.effectiveType === '2g' || conn?.effectiveType === 'slow-2g') {
       return;
     }
 
     const idlePrefetch = (factory: () => Promise<any>, delay: number) => {
+      const safeRun = () => {
+        void factory().catch(() => {});
+      };
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        return (window as any).requestIdleCallback(() => { void factory(); }, { timeout: delay + 2000 });
+        return (window as any).requestIdleCallback(safeRun, { timeout: delay + 2000 });
       }
-      return setTimeout(() => { void factory(); }, delay);
+      return setTimeout(safeRun, delay);
     };
 
     const h1 = idlePrefetch(() => Promise.all([
@@ -1275,7 +1281,29 @@ const AppContent: React.FC = () => {
         )}
 
         {/* Live Interactive Visitor Demo Dashboard (All Classes 1st–10th preview, zero DB writes) */}
-        <Suspense fallback={<PortalLoadingCard />}>
+        <AppErrorBoundary
+          resetKey={currentTab}
+          onResetToHome={() => {
+            setHomeScrollTarget('home-overview');
+            setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
+            safeScrollToTop();
+          }}
+        >
+        <Suspense
+          fallback={
+            <PortalLoadingCard
+              onReturnHome={
+                currentTab !== 'dashboard' && currentTab !== 'public-home'
+                  ? () => {
+                      setHomeScrollTarget('home-overview');
+                      setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
+                      safeScrollToTop();
+                    }
+                  : undefined
+              }
+            />
+          }
+        >
           {currentTab === 'demo' ? (
             <DemoSectionView
               onUpgradeClick={() => openMembershipWithPlan('premium', publicClass, publicBoard)}
@@ -2093,6 +2121,7 @@ const AppContent: React.FC = () => {
           </>
         )}
         </Suspense>
+        </AppErrorBoundary>
       </main>
 
       {/* Global Modals (Mounted on-demand inside Suspense so initial page render is ultra-fast) */}
@@ -2346,55 +2375,237 @@ const AppContent: React.FC = () => {
   );
 };
 
-class AppErrorBoundary extends Component<
-  { children: ReactNode },
-  { hasError: boolean; message: string }
-> {
-  constructor(props: { children: ReactNode }) {
+interface AppErrorBoundaryProps {
+  children: ReactNode;
+  resetKey?: string;
+  onResetToHome?: () => void;
+}
+
+interface AppErrorBoundaryState {
+  hasError: boolean;
+  diagnosticMessage: string;
+  retryCount: number;
+}
+
+class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
+  constructor(props: AppErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, message: '' };
+    this.state = {
+      hasError: false,
+      diagnosticMessage: '',
+      retryCount: 0,
+    };
   }
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, message: error?.message || 'Unexpected loading issue' };
+  static getDerivedStateFromError(error: Error): Partial<AppErrorBoundaryState> {
+    return {
+      hasError: true,
+      diagnosticMessage: sanitizeDiagnosticErrorMessage(error),
+    };
+  }
+
+  componentDidUpdate(prevProps: AppErrorBoundaryProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({
+        hasError: false,
+        diagnosticMessage: '',
+      });
+    }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[MyStudyZone ErrorBoundary]:', error, info);
+    const safeMsg = sanitizeDiagnosticErrorMessage(error);
+    const safeStack = sanitizeDiagnosticErrorMessage(info?.componentStack || '');
+    console.error('[MyStudyZone ErrorBoundary]:', safeMsg, safeStack);
   }
+
+  private handleTryAgain = () => {
+    try {
+      sessionStorage.removeItem('msz_chunk_retry_ts');
+      sessionStorage.removeItem('msz_preload_recovery_ts');
+    } catch {
+      // Ignore storage access restrictions on Smart TV WebViews
+    }
+    this.setState((prev) => ({
+      hasError: false,
+      diagnosticMessage: '',
+      retryCount: prev.retryCount + 1,
+    }));
+  };
+
+  private handleReturnHome = () => {
+    try {
+      sessionStorage.removeItem('msz_chunk_retry_ts');
+      sessionStorage.removeItem('msz_preload_recovery_ts');
+    } catch {
+      // Ignore storage access restrictions
+    }
+    this.setState(
+      {
+        hasError: false,
+        diagnosticMessage: '',
+      },
+      () => {
+        if (this.props.onResetToHome) {
+          this.props.onResetToHome();
+        } else if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
+    );
+  };
+
+  private handleReloadPage = () => {
+    try {
+      sessionStorage.removeItem('msz_chunk_retry_ts');
+      sessionStorage.removeItem('msz_preload_recovery_ts');
+    } catch {
+      // Ignore storage errors
+    }
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white rounded-3xl border border-amber-200 shadow-lg p-6 text-center space-y-4">
-            <h1 className="text-xl font-display font-extrabold text-slate-900">
+        <div
+          className="min-h-[60vh] bg-amber-50 flex items-center justify-center p-4"
+          style={{
+            minHeight: this.props.onResetToHome ? '60vh' : '100vh',
+            backgroundColor: '#fffbeb',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            boxSizing: 'border-box',
+            fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          }}
+        >
+          <div
+            className="max-w-lg w-full bg-white rounded-3xl border border-amber-200 shadow-lg p-6 text-center space-y-4"
+            style={{
+              maxWidth: '520px',
+              width: '100%',
+              backgroundColor: '#ffffff',
+              borderRadius: '24px',
+              border: '2px solid #fde68a',
+              boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)',
+              padding: '28px',
+              textAlign: 'center',
+              boxSizing: 'border-box',
+            }}
+          >
+            <h1
+              className="text-xl font-display font-extrabold text-slate-900"
+              style={{
+                fontSize: '22px',
+                fontWeight: 800,
+                color: '#0f172a',
+                margin: '0 0 12px 0',
+              }}
+            >
               MyStudyZone Quick Recovery
             </h1>
-            <p className="text-sm text-slate-600">
+            <p
+              className="text-sm text-slate-600"
+              style={{
+                fontSize: '15px',
+                lineHeight: 1.55,
+                color: '#475569',
+                margin: '0 0 16px 0',
+              }}
+            >
               A temporary network or browser issue interrupted loading this view. Your account, tests, and progress are completely safe.
             </p>
-            <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm cursor-pointer"
+            {this.state.diagnosticMessage && (
+              <p
+                className="text-xs font-mono text-slate-500 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200 break-words"
+                style={{
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  color: '#64748b',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  border: '1px solid #e2e8f0',
+                  margin: '0 0 16px 0',
+                  wordBreak: 'break-word',
+                }}
               >
-                Reload Page
-              </button>
+                Diagnostic: {this.state.diagnosticMessage}
+              </p>
+            )}
+            <div
+              className="flex flex-col sm:flex-row flex-wrap gap-2.5 justify-center pt-1"
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '10px',
+                justifyContent: 'center',
+                paddingTop: '4px',
+              }}
+            >
               <button
                 type="button"
-                onClick={() => this.setState({ hasError: false, message: '' })}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm cursor-pointer"
+                onClick={this.handleTryAgain}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm cursor-pointer"
+                style={{
+                  padding: '11px 20px',
+                  borderRadius: '12px',
+                  backgroundColor: '#d97706',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
               >
                 Try Again
+              </button>
+              {this.props.onResetToHome && (
+                <button
+                  type="button"
+                  onClick={this.handleReturnHome}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm cursor-pointer"
+                  style={{
+                    padding: '11px 20px',
+                    borderRadius: '12px',
+                    backgroundColor: '#0f172a',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Return to Home Dashboard
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={this.handleReloadPage}
+                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm cursor-pointer"
+                style={{
+                  padding: '11px 20px',
+                  borderRadius: '12px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#1e293b',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  border: '1px solid #cbd5e1',
+                  cursor: 'pointer',
+                }}
+              >
+                Reload Page
               </button>
             </div>
           </div>
         </div>
       );
     }
-    return this.props.children;
+    return <React.Fragment key={this.state.retryCount}>{this.props.children}</React.Fragment>;
   }
 }
 

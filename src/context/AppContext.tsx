@@ -598,11 +598,32 @@ const INITIAL_ANNOUNCEMENTS: AnnouncementItem[] = [
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(key);
+    }
+  } catch {
+    // Ignore storage access errors on restricted Smart TV WebViews
+  }
+  return null;
+}
+
+function safeRemoveLocalStorage(key: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage access errors on restricted Smart TV WebViews
+  }
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeRole, setActiveRole] = useState<UserRole>(() => {
-    const isLoggedOut = localStorage.getItem('vc_is_logged_out');
+    const isLoggedOut = safeGetLocalStorage('vc_is_logged_out');
     if (isLoggedOut === 'true') return 'student';
-    const savedUser = localStorage.getItem('vc_current_user');
+    const savedUser = safeGetLocalStorage('vc_current_user');
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
@@ -625,11 +646,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Authenticated user session with role and linked IDs (signed out by default until verified login)
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
-    const isLoggedOut = localStorage.getItem('vc_is_logged_out');
+    const isLoggedOut = safeGetLocalStorage('vc_is_logged_out');
     if (isLoggedOut === 'true') {
       return null;
     }
-    const savedUser = localStorage.getItem('vc_current_user');
+    const savedUser = safeGetLocalStorage('vc_current_user');
     if (savedUser) {
       try {
         const parsed = JSON.parse(savedUser);
@@ -657,10 +678,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [parentsList, setParentsList] = useState<ParentProfile[]>(INITIAL_PARENTS);
 
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(() => {
-    const saved = localStorage.getItem('vc_announcements');
+    const saved = safeGetLocalStorage('vc_announcements');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {
         console.error('Error reading announcements:', e);
       }
@@ -669,10 +691,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [studentsList, setStudentsList] = useState<StudentProfile[]>(() => {
-    const saved = localStorage.getItem('vc_students_list');
+    const saved = safeGetLocalStorage('vc_students_list');
     if (saved) {
       try {
         const parsed: StudentProfile[] = JSON.parse(saved);
+        if (!Array.isArray(parsed)) return [];
         const usedCodes = new Set<string>();
         return parsed
           .filter(s => s && s.id && !LEGACY_SAMPLE_IDS.has(s.id))
@@ -722,12 +745,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [currentStudent, setCurrentStudent] = useState<StudentProfile | null>(() => {
-    const isLoggedOut = localStorage.getItem('vc_is_logged_out');
+    const isLoggedOut = safeGetLocalStorage('vc_is_logged_out');
     if (isLoggedOut === 'true') {
       return null;
     }
-    const savedUser = localStorage.getItem('vc_current_user');
-    const saved = localStorage.getItem('vc_current_student');
+    const savedUser = safeGetLocalStorage('vc_current_user');
+    const saved = safeGetLocalStorage('vc_current_student');
     if (saved && savedUser) {
       try {
         const parsed: StudentProfile = JSON.parse(saved);
@@ -751,7 +774,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'Class 1';
         let extraLocalActivatedKeys: BoardClassKey[] = [];
         try {
-          const rawLocalKeys = localStorage.getItem(`msz_activated_board_classes_${safeParsed.id}`);
+          const rawLocalKeys = safeGetLocalStorage(`msz_activated_board_classes_${safeParsed.id}`);
           if (rawLocalKeys) {
             const parsedLocalKeys = JSON.parse(rawLocalKeys);
             if (Array.isArray(parsedLocalKeys)) {
@@ -813,14 +836,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const safeSetLocalStorage = (key: string, value: string) => {
     try {
-      localStorage.setItem(key, value);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+      }
     } catch (err) {
       // Free up space by removing legacy oversized question caches if QuotaExceededError occurs
       try {
-        localStorage.removeItem('vc_questions_bank');
-        localStorage.removeItem('vc_questions_bank_v2');
-        localStorage.removeItem('vc_questions_bank_v3');
-        localStorage.setItem(key, value);
+        safeRemoveLocalStorage('vc_questions_bank');
+        safeRemoveLocalStorage('vc_questions_bank_v2');
+        safeRemoveLocalStorage('vc_questions_bank_v3');
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(key, value);
+        }
       } catch (retryErr) {
         console.warn(`LocalStorage quota limit reached for ${key}:`, retryErr);
       }
@@ -829,10 +856,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [allQuestions, setAllQuestions] = useState<QuizQuestion[]>(() => {
     try {
-      localStorage.removeItem('vc_questions_bank');
-      localStorage.removeItem('vc_questions_bank_v2');
-      localStorage.removeItem('vc_questions_bank_v3');
-      const savedCustom = localStorage.getItem('vc_custom_questions_v3');
+      safeRemoveLocalStorage('vc_questions_bank');
+      safeRemoveLocalStorage('vc_questions_bank_v2');
+      safeRemoveLocalStorage('vc_questions_bank_v3');
+      const savedCustom = safeGetLocalStorage('vc_custom_questions_v3');
       return savedCustom ? JSON.parse(savedCustom) : [];
     } catch {
       return [];
@@ -841,7 +868,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [rejectedDuplicates, setRejectedDuplicates] = useState<RejectedQuestionRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_rejected_questions');
+      const saved = safeGetLocalStorage('vc_rejected_questions');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -850,7 +877,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [allStories, setAllStories] = useState<StoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_stories');
+      const saved = safeGetLocalStorage('vc_custom_stories');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -859,7 +886,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [shivajiStories, setShivajiStories] = useState<ShivajiStory[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_shivaji_stories');
+      const saved = safeGetLocalStorage('vc_custom_shivaji_stories');
       const parsed = saved ? JSON.parse(saved) : [];
       return Array.isArray(parsed)
         ? parsed.filter((s): s is ShivajiStory => Boolean(s && typeof s.id === 'string' && s.title && s.paragraphs))
@@ -871,7 +898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [customScholarshipQuestions, setCustomScholarshipQuestions] = useState<CustomScholarshipQuestionRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_scholarship_questions');
+      const saved = safeGetLocalStorage('vc_custom_scholarship_questions');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -880,7 +907,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [publishedMsceMockTests, setPublishedMsceMockTests] = useState<Record<string, boolean>>(() => {
     try {
-      const saved = localStorage.getItem('vc_published_msce_mock_tests');
+      const saved = safeGetLocalStorage('vc_published_msce_mock_tests');
       if (saved) return JSON.parse(saved);
     } catch {}
     const initial: Record<string, boolean> = {};
@@ -893,7 +920,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [customMsceMockQuestions, setCustomMsceMockQuestions] = useState<MsceMockQuestion[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_msce_mock_questions');
+      const saved = safeGetLocalStorage('vc_custom_msce_mock_questions');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -902,7 +929,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tetCtetPreferences, setTetCtetPreferences] = useState<TetCtetUserPreferences>(() => {
     try {
-      const saved = localStorage.getItem('vc_tet_ctet_preferences');
+      const saved = safeGetLocalStorage('vc_tet_ctet_preferences');
       if (saved) return { ...DEFAULT_TET_CTET_PREFERENCES, ...JSON.parse(saved) };
     } catch {}
     return DEFAULT_TET_CTET_PREFERENCES;
@@ -910,7 +937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tetCtetGuestAttempts, setTetCtetGuestAttempts] = useState<TetCtetAttemptRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_tet_ctet_attempts');
+      const saved = safeGetLocalStorage('vc_tet_ctet_attempts');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -919,7 +946,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tetCtetBatches, setTetCtetBatches] = useState<Record<string, TetCtetBatchStatusRecord>>(() => {
     try {
-      const saved = localStorage.getItem('vc_tet_ctet_batches');
+      const saved = safeGetLocalStorage('vc_tet_ctet_batches');
       if (saved) return JSON.parse(saved);
     } catch {}
     return buildInitialTetCtetBatchesMetadata();
@@ -927,7 +954,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [customTetCtetQuestions, setCustomTetCtetQuestions] = useState<TetCtetQuestion[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_tet_ctet_questions');
+      const saved = safeGetLocalStorage('vc_custom_tet_ctet_questions');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -936,7 +963,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [rejectedTetCtetIds, setRejectedTetCtetIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_rejected_tet_ctet_ids');
+      const saved = safeGetLocalStorage('vc_rejected_tet_ctet_ids');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -945,7 +972,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [tetCtetEnforceGreenOnly, setTetCtetEnforceGreenOnly] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('vc_tet_ctet_enforce_green_only') === 'true';
+      return safeGetLocalStorage('vc_tet_ctet_enforce_green_only') === 'true';
     } catch {
       return false;
     }
@@ -953,7 +980,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [gkQuestions, setGkQuestions] = useState<CustomGkQuestionItem[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_gk_questions');
+      const saved = safeGetLocalStorage('vc_custom_gk_questions');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -962,7 +989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [learningPrograms, setLearningPrograms] = useState<SpecialLearningProgramItem[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_custom_learning_programs');
+      const saved = safeGetLocalStorage('vc_custom_learning_programs');
       if (!saved) return DEFAULT_LEARNING_PROGRAMS;
       const custom: SpecialLearningProgramItem[] = JSON.parse(saved);
       const map = new Map<string, SpecialLearningProgramItem>(DEFAULT_LEARNING_PROGRAMS.map(p => [p.id, p]));
@@ -975,7 +1002,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [allPuzzles, setAllPuzzles] = useState<PuzzleItem[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_puzzles_bank');
+      const saved = safeGetLocalStorage('vc_puzzles_bank');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -984,7 +1011,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [savedDrawings, setSavedDrawings] = useState<DrawingSubmission[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_saved_drawings');
+      const saved = safeGetLocalStorage('vc_saved_drawings');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -993,7 +1020,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [drawingTemplates, setDrawingTemplates] = useState<DrawingTemplate[]>(() => {
     try {
-      const saved = localStorage.getItem('vc_drawing_templates');
+      const saved = safeGetLocalStorage('vc_drawing_templates');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -1037,7 +1064,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const seed = svc.getInitialSeedQuestions();
         let merged: QuizQuestion[] = seed;
         try {
-          const savedCustom = localStorage.getItem('vc_custom_questions_v3');
+          const savedCustom = safeGetLocalStorage('vc_custom_questions_v3');
           if (savedCustom) {
             const parsedCustom: QuizQuestion[] = JSON.parse(savedCustom);
             const seedMap = new Map<string, QuizQuestion>(seed.map((s) => [s.id, s]));
@@ -1184,18 +1211,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const [allAttempts, setAllAttempts] = useState<QuizAttempt[]>(() => {
-    const saved = localStorage.getItem('vc_quiz_attempts');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = safeGetLocalStorage('vc_quiz_attempts');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
 
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(() => {
-    const saved = localStorage.getItem('vc_transactions');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = safeGetLocalStorage('vc_transactions');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
 
   const [notifications, setNotifications] = useState<InAppNotification[]>(() => {
-    const saved = localStorage.getItem('vc_notifications');
-    return saved ? JSON.parse(saved) : [
+    try {
+      const saved = safeGetLocalStorage('vc_notifications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [
       {
         id: 'notif-1',
         title: 'Welcome to MyStudyZone – An Interactive Learning Platform for Students!',
@@ -1217,7 +1260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => {
     try {
-      const saved = localStorage.getItem('vc_platform_settings');
+      const saved = safeGetLocalStorage('vc_platform_settings');
       if (!saved) return DEFAULT_SETTINGS;
       const parsed = JSON.parse(saved);
       return {
@@ -1380,19 +1423,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser) {
       safeSetLocalStorage('vc_current_user', JSON.stringify(currentUser));
     } else {
-      try {
-        localStorage.removeItem('vc_current_user');
-      } catch (e) {}
+      safeRemoveLocalStorage('vc_current_user');
     }
   }, [currentUser]);
 
   const forceInvalidateSessionState = (reasonMessage: string) => {
     clearLocalActiveSessionState();
-    try {
-      localStorage.removeItem('vc_current_student');
-      localStorage.removeItem('vc_current_user');
-      localStorage.setItem('vc_is_logged_out', 'true');
-    } catch {}
+    safeRemoveLocalStorage('vc_current_student');
+    safeRemoveLocalStorage('vc_current_user');
+    safeSetLocalStorage('vc_is_logged_out', 'true');
     setActiveDeviceSession(null);
     setCurrentStudent(null);
     setCurrentUser(null);
@@ -1404,9 +1443,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Detect copied localStorage tokens on initial mount immediately
   useEffect(() => {
     try {
-      const savedStuRaw = localStorage.getItem('vc_current_student');
-      const savedUsrRaw = localStorage.getItem('vc_current_user');
-      const isLoggedOut = localStorage.getItem('vc_is_logged_out') === 'true';
+      const savedStuRaw = safeGetLocalStorage('vc_current_student');
+      const savedUsrRaw = safeGetLocalStorage('vc_current_user');
+      const isLoggedOut = safeGetLocalStorage('vc_is_logged_out') === 'true';
       if (!isLoggedOut && savedStuRaw && savedUsrRaw) {
         const parsedStu = JSON.parse(savedStuRaw) as StudentProfile;
         const parsedUsr = JSON.parse(savedUsrRaw) as AuthenticatedUser;
@@ -2113,7 +2152,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setStudentsList(prev => [...prev, newStudent]);
-    localStorage.removeItem('vc_is_logged_out');
+    safeRemoveLocalStorage('vc_is_logged_out');
     setCurrentStudent(newStudent);
     setCurrentUser({
       uid: newStudent.id,
@@ -2288,7 +2327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const exists = prev.some(s => s.id === updated.id);
         return exists ? prev.map(s => (s.id === updated.id ? updated : s)) : [...prev, updated];
       });
-      localStorage.removeItem('vc_is_logged_out');
+      safeRemoveLocalStorage('vc_is_logged_out');
       setCurrentStudent(updated);
       setCurrentUser({
         uid: updated.id,
@@ -2432,7 +2471,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const exists = prev.some(s => s.id === updated.id);
         return exists ? prev.map(s => (s.id === updated.id ? updated : s)) : [...prev, updated];
       });
-      localStorage.removeItem('vc_is_logged_out');
+      safeRemoveLocalStorage('vc_is_logged_out');
       setCurrentStudent(updated);
       setCurrentUser({
         uid: updated.id,
@@ -2520,7 +2559,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    localStorage.removeItem('vc_is_logged_out');
+    safeRemoveLocalStorage('vc_is_logged_out');
     setCurrentUser({
       uid: fbRes.user.uid,
       email: cleanEmail,
@@ -2644,9 +2683,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     clearLocalActiveSessionState();
     clearStoredBrowserReferralCodes();
-    localStorage.removeItem('vc_current_student');
-    localStorage.removeItem('vc_current_user');
-    localStorage.setItem('vc_is_logged_out', 'true');
+    safeRemoveLocalStorage('vc_current_student');
+    safeRemoveLocalStorage('vc_current_user');
+    safeSetLocalStorage('vc_is_logged_out', 'true');
     setActiveDeviceSession(null);
     setCurrentStudent(null);
     setCurrentUser(null);
@@ -2674,9 +2713,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const s = studentsList.find(stu => stu.id === studentId);
     if (s) {
-      localStorage.removeItem('vc_is_logged_out');
+      safeRemoveLocalStorage('vc_is_logged_out');
       setCurrentStudent(s);
-      localStorage.setItem('vc_current_student', JSON.stringify(s));
+      safeSetLocalStorage('vc_current_student', JSON.stringify(s));
       setActiveRole(s.accountRole === 'teacher' ? 'teacher' : 'student');
     }
   };
@@ -3188,10 +3227,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    try {
-      const storageKey = `msz_activated_board_classes_${updatedStudent.id}`;
-      localStorage.setItem(storageKey, JSON.stringify(mergedStudentKeys));
-    } catch {}
+    const storageKey = `msz_activated_board_classes_${updatedStudent.id}`;
+    safeSetLocalStorage(storageKey, JSON.stringify(mergedStudentKeys));
 
     // Persist additional board & class activation securely to Firestore and backend
     switchStudentActiveClassInFirestore(
@@ -4438,9 +4475,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateStudentMedium = (medium: InstructionMedium) => {
-    try {
-      localStorage.setItem('msz_student_medium', medium);
-    } catch {}
+    safeSetLocalStorage('msz_student_medium', medium);
     if (!currentStudent) return;
     if (currentStudent.medium === medium) return;
     const updatedStudent: StudentProfile = {
@@ -4454,9 +4489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateStudentScholarshipMedium = (medium: MsceMedium) => {
-    try {
-      localStorage.setItem('vc_scholarship_medium', medium);
-    } catch {}
+    safeSetLocalStorage('vc_scholarship_medium', medium);
     if (!currentStudent) return;
     const updatedStudent: StudentProfile = {
       ...currentStudent,
@@ -4478,7 +4511,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     try {
-      const guestHistoryRaw = localStorage.getItem('vc_msce_mock_attempts');
+      const guestHistoryRaw = safeGetLocalStorage('vc_msce_mock_attempts');
       const parsedHistory: MsceMockAttemptRecord[] = guestHistoryRaw ? JSON.parse(guestHistoryRaw) : [];
       safeSetLocalStorage('vc_msce_mock_attempts', JSON.stringify([newAttempt, ...parsedHistory].slice(0, 200)));
     } catch {}
