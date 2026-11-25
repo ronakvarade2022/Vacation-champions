@@ -294,7 +294,7 @@ export const Header: React.FC<HeaderProps> = ({
               const registeredBaseBoard = getPrimaryBaseBoard(currentStudent);
               const registeredBaseClass = getPrimaryBaseClass(currentStudent);
               return (
-                <div className="relative">
+                <div className="relative hidden lg:block">
                   <button
                     type="button"
                     data-testid="header-board-class-switcher-btn"

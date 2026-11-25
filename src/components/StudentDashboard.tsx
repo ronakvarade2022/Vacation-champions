@@ -897,6 +897,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           );
         })()}
       </div>
+
+      {/* DIRECT PWA MOBILE APP INSTALL BANNER AT BOTTOM OF DASHBOARD */}
+      <PWAInstallButton variant="banner" />
     </div>
   );
 };

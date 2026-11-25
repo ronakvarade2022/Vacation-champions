@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  CheckCircle2,
   Download,
   ExternalLink,
   MoreVertical,
@@ -23,8 +22,6 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 }) => {
   const {
     isInstallable,
-    isInstalled,
-    isStandalone,
     isIOS,
     isIOSSafari,
     isAndroid,
@@ -35,13 +32,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
   const [isPrompting, setIsPrompting] = useState(false);
 
-  // If already running inside the installed standalone PWA, do not show install UI
-  if (isStandalone) {
-    return null;
-  }
-
   const handleInstallClick = async () => {
-    if (isInstalled || isPrompting) return;
+    if (isPrompting) return;
 
     if (isInstallable) {
       setIsPrompting(true);
@@ -56,39 +48,21 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       return;
     }
 
-    // Native beforeinstallprompt is unavailable (iOS Safari, in-app WebView, unsupported browser)
+    // Open the step-by-step mobile installation modal when native prompt is not currently queued
     setShowInstructionsModal(true);
   };
-
-  if (isInstalled) {
-    if (variant === 'header') {
-      return (
-        <div
-          data-testid="pwa-installed-badge-header"
-          className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 font-extrabold text-[11px] sm:text-xs whitespace-nowrap shrink-0 ${className}`}
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="hidden sm:inline">App Installed</span>
-          <span className="sm:hidden">Installed</span>
-        </div>
-      );
-    }
-    return (
-      <div
-        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 font-extrabold text-xs shadow-xs ${className}`}
-      >
-        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-        <span>App Already Installed</span>
-      </div>
-    );
-  }
 
   return (
     <>
       {variant === 'banner' ? (
         <section
           aria-label="Install MyStudyZone Mobile App"
-          className={`rounded-3xl bg-gradient-to-r from-[#fffbeb] via-[#fef3c7] to-[#e0f2fe] border-2 border-amber-300 shadow-sm px-4 py-3.5 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${className}`}
+          data-testid="pwa-install-card-banner"
+          style={{
+            backgroundColor: '#fef3c7',
+            backgroundImage: 'linear-gradient(to right, #fffbeb, #fef3c7, #e0f2fe)',
+          }}
+          className={`rounded-3xl bg-[#fef3c7] bg-gradient-to-r from-[#fffbeb] via-[#fef3c7] to-[#e0f2fe] border-2 border-amber-300 shadow-sm px-4 py-3.5 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${className}`}
         >
           <div className="flex items-center gap-3 min-w-0">
             <img
@@ -118,9 +92,15 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             onClick={() => void handleInstallClick()}
             disabled={isPrompting}
             data-testid="pwa-install-btn-banner"
-            className="w-full sm:w-auto px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#133870] to-[#1d4ed8] hover:brightness-110 disabled:opacity-70 text-white font-display font-black text-xs sm:text-sm tracking-wide shadow-md border-2 border-amber-300/80 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] shrink-0"
+            style={{
+              backgroundColor: '#0f2952',
+              backgroundImage: 'linear-gradient(to right, #0f2952, #133870, #1d4ed8)',
+              color: '#ffffff',
+            }}
+            className="w-full sm:w-auto px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-[#0f2952] bg-gradient-to-r from-[#0f2952] via-[#133870] to-[#1d4ed8] hover:brightness-110 disabled:opacity-70 text-white font-display font-black text-xs sm:text-sm tracking-wide shadow-md border-2 border-amber-300/80 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] shrink-0"
           >
-            <span>📲 INSTALL MYSTUDYZONE APP</span>
+            <Download className="w-4 h-4 shrink-0 text-amber-300" />
+            <span className="text-white">📲 INSTALL MYSTUDYZONE APP</span>
           </button>
         </section>
       ) : variant === 'header' ? (
