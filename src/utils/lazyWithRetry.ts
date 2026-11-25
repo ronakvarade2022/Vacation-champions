@@ -12,11 +12,15 @@ export function lazyWithRetry<T extends React.ComponentType<any>>(
         return await importer();
       } catch (secondError) {
         if (typeof window !== 'undefined') {
-          const reloadKey = 'msz_chunk_retry_ts';
-          const lastRetry = Number(sessionStorage.getItem(reloadKey) || '0');
-          if (Date.now() - lastRetry > 15_000) {
-            sessionStorage.setItem(reloadKey, String(Date.now()));
-            window.location.reload();
+          try {
+            const reloadKey = 'msz_chunk_retry_ts';
+            const lastRetry = Number(sessionStorage.getItem(reloadKey) || '0');
+            if (Date.now() - lastRetry > 15_000) {
+              sessionStorage.setItem(reloadKey, String(Date.now()));
+              window.location.reload();
+            }
+          } catch {
+            // Ignore sessionStorage restrictions on Smart TV WebViews
           }
         }
         throw secondError || firstError;

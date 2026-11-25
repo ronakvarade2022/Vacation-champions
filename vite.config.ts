@@ -170,6 +170,8 @@ export default defineConfig(() => {
       watch: null,
     },
     build: {
+      target: ['es2020', 'chrome80'],
+      cssTarget: 'chrome80',
       chunkSizeWarningLimit: 25000,
       rolldownOptions: {
         output: {

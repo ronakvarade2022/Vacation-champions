@@ -10,6 +10,11 @@ import { SectionLoadingFallback } from './components/SectionLoadingFallback';
 import { LiveAnnouncementTicker } from './components/LiveAnnouncementTicker';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
 import { lazyWithRetry } from './utils/lazyWithRetry';
+import {
+  useSmartTvNavigation,
+  safeScrollToTop,
+  safeScrollToElementById,
+} from './utils/smartTvCompatibility';
 
 const SubjectQuizView = lazyWithRetry(() =>
   import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
@@ -241,7 +246,7 @@ const AppContent: React.FC = () => {
   }) => {
     setAdditionalCurriculumContext(ctx || null);
     setCurrentTab('additional-curriculum');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    safeScrollToTop();
   };
 
   const handleSelectDashboardSection = (sectionId: MainMenuId) => {
@@ -249,12 +254,33 @@ const AppContent: React.FC = () => {
     if (sectionId === 'study-material') {
       setStudyInitialSectionTab(undefined);
       setCurrentTab('study-materials');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      safeScrollToTop();
       return;
     }
-    if (currentTab !== 'dashboard' && currentTab !== 'public-home') {
+    const wasOnDashboard = currentTab === 'dashboard' || currentTab === 'public-home';
+    if (!wasOnDashboard) {
       setCurrentTab('dashboard');
     }
+    if (sectionId === 'home') {
+      safeScrollToTop();
+      return;
+    }
+    setTimeout(
+      () => {
+        if (
+          !safeScrollToElementById('second-row-subsections', {
+            behavior: 'smooth',
+            block: 'nearest',
+          })
+        ) {
+          safeScrollToElementById('two-level-horizontal-navigation', {
+            behavior: 'smooth',
+            block: 'start',
+          });
+        }
+      },
+      wasOnDashboard ? 40 : 160
+    );
   };
 
   // Desktop Site / Mobile View preference
@@ -413,6 +439,46 @@ const AppContent: React.FC = () => {
     featureTitle: '',
     requiredPlan: 'premium',
     reasonMessage: '',
+  });
+
+  const isAnyModalOpen =
+    isResetModalOpen ||
+    upgradePrompt.isOpen ||
+    isMembershipOpen ||
+    isAuthOpen ||
+    isAuthModalOpen ||
+    isHelpDrawerOpen;
+
+  useSmartTvNavigation({
+    currentTab,
+    setCurrentTab,
+    defaultHomeTab:
+      activeRole === 'admin' && currentUser?.role === 'admin' ? 'admin' : 'dashboard',
+    isModalOpen: isAnyModalOpen,
+    closeTopModal: () => {
+      if (isResetModalOpen) {
+        setIsResetModalOpen(false);
+        return true;
+      }
+      if (upgradePrompt.isOpen) {
+        setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
+        return true;
+      }
+      if (isMembershipOpen) {
+        setIsMembershipOpen(false);
+        return true;
+      }
+      if (isAuthOpen || isAuthModalOpen) {
+        setIsAuthOpen(false);
+        setIsAuthModalOpen(false);
+        return true;
+      }
+      if (isHelpDrawerOpen) {
+        setIsHelpDrawerOpen(false);
+        return true;
+      }
+      return false;
+    },
   });
 
   const openMembershipWithPlan = (

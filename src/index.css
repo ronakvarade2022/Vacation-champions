@@ -5,12 +5,12 @@
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
     max-width: 100%;
-    overflow-x: clip;
+    overflow-x: hidden;
   }
 
   #root {
     max-width: 100%;
-    overflow-x: clip;
+    overflow-x: hidden;
   }
 
   /* Responsive Desktop & Mobile Preview Safe Layout */
@@ -19,7 +19,7 @@
   html.desktop-site-active #root {
     width: 100%;
     max-width: 100%;
-    overflow-x: clip;
+    overflow-x: hidden;
   }
 
   body {
@@ -39,16 +39,35 @@
     }
   }
 
-  button, a, [role="button"], select, input {
+  button, a, [role="button"], [role="tab"], select, input, textarea {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
+}
+
+/* Smart TV Remote & Keyboard High-Contrast Focus Ring */
+html.tv-nav-active button:focus,
+html.tv-nav-active a:focus,
+html.tv-nav-active [role="button"]:focus,
+html.tv-nav-active [role="tab"]:focus,
+html.tv-nav-active input:focus,
+html.tv-nav-active select:focus,
+html.tv-nav-active textarea:focus,
+html.tv-nav-active [tabindex="0"]:focus {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 5px rgba(15, 41, 82, 0.35) !important;
 }
 
 /* Below-the-fold section rendering optimization for fast mobile FCP/INP */
 .cv-auto-section {
   content-visibility: auto;
   contain-intrinsic-size: auto 420px;
+}
+
+html.tv-browser-detected .cv-auto-section {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 /* Custom scrollbars */

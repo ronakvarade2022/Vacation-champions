@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId, NavSubItemConfig } from '../data/navigationConfig';
+import { safeScrollToElementById } from '../utils/smartTvCompatibility';
 import {
   ALL_10_CLASSES,
   ALL_10_CLASSES_META,
@@ -321,6 +322,12 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
     if (onSelectMainSection) {
       onSelectMainSection(sectionId);
     }
+    setTimeout(() => {
+      safeScrollToElementById('second-row-subsections', {
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }, 30);
   };
 
   const triggerSubAction = (actionId: NavSubActionId) => {
@@ -922,7 +929,6 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                       aria-selected={isSubSelected}
                       aria-controls="third-area-subsection-content"
                       onClick={() => {
-                        setSelectedSubId(sub.id);
                         if (sub.id === 'course-maharashtra' && onSelectBoard) {
                           onSelectBoard('Maharashtra');
                         } else if (sub.id === 'course-cbse' && onSelectBoard) {
@@ -930,6 +936,40 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         } else if (sub.id === 'course-icse' && onSelectBoard) {
                           onSelectBoard('ICSE');
                         }
+
+                        const isInlinePreviewOnly =
+                          sub.id === 'home-overview' ||
+                          sub.id === 'home-portals' ||
+                          sub.id === 'course-maharashtra' ||
+                          sub.id === 'course-cbse' ||
+                          sub.id === 'course-icse';
+
+                        if (isSubSelected && sub.id !== 'home-overview' && sub.id !== 'home-portals') {
+                          if (sub.id === 'perf-leaderboard') {
+                            onNavigateTab('leaderboard');
+                          } else {
+                            triggerSubAction(sub.id as NavSubActionId);
+                          }
+                          return;
+                        }
+
+                        setSelectedSubId(sub.id);
+
+                        if (!isInlinePreviewOnly) {
+                          if (sub.id === 'perf-leaderboard') {
+                            onNavigateTab('leaderboard');
+                          } else {
+                            triggerSubAction(sub.id as NavSubActionId);
+                          }
+                          return;
+                        }
+
+                        setTimeout(() => {
+                          safeScrollToElementById('third-area-subsection-content', {
+                            behavior: 'smooth',
+                            block: 'nearest',
+                          });
+                        }, 30);
                       }}
                       className={`shrink-0 whitespace-nowrap min-h-[42px] rounded-xl px-3 py-1.5 transition-all cursor-pointer flex items-center gap-2 text-left border-2 ${
                         isSubSelected
@@ -964,7 +1004,11 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                             : 'bg-sky-100/90 text-[#0f2952]/80'
                         }`}
                       >
-                        {isSubSelected ? 'Selected' : sub.badgeText || 'Open'}
+                        {isSubSelected
+                          ? sub.id === 'home-overview' || sub.id === 'home-portals'
+                            ? 'Selected'
+                            : 'Open →'
+                          : sub.badgeText || 'Open'}
                       </span>
                     </button>
                   );
