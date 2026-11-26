@@ -147,7 +147,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const showStudentNavMenus =
+    Boolean(currentStudent && currentStudent.accountRole !== 'teacher') &&
     activeRole === 'student' &&
+    currentTab !== 'public-home' &&
     currentTab !== 'parent-zone' &&
     currentTab !== 'school-college-zone' &&
     currentTab !== 'coaching-zone' &&
@@ -204,7 +206,6 @@ export const Header: React.FC<HeaderProps> = ({
     setMobileMenuOpen(false);
     await logout();
     setCurrentTab('public-home');
-    onOpenAuth('login');
   };
 
   const triggerPortalClick = (role: Exclude<PortalRole, 'admin'>) => {
@@ -330,7 +331,26 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => {
             setOpenDropdownMenu(null);
             setMobileMenuOpen(false);
-            if (activeRole === 'admin') handleRoleChange('student');
+            if (!isUserLoggedIn) {
+              setCurrentTab('public-home');
+              return;
+            }
+            if (activeRole === 'parent') {
+              setCurrentTab('parent-zone');
+              return;
+            }
+            if (activeRole === 'school_admin') {
+              setCurrentTab('school-college-zone');
+              return;
+            }
+            if (activeRole === 'institute_admin') {
+              setCurrentTab('coaching-zone');
+              return;
+            }
+            if (activeRole === 'admin') {
+              setCurrentTab('admin');
+              return;
+            }
             onMenuAction('home-overview');
           }}
           className="flex items-center gap-2 sm:gap-3 xl:gap-3.5 cursor-pointer group shrink min-w-0 text-left"

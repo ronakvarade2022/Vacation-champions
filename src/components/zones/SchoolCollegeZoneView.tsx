@@ -4,6 +4,7 @@ import { INSTITUTION_ACADEMIC_MATERIALS, type InstitutionAcademicMaterial } from
 import { downloadTextAsPdf } from '../../utils/realFileExports';
 import {
   ArrowLeft,
+  ArrowRight,
   Award,
   Bell,
   BookOpen,
@@ -15,9 +16,11 @@ import {
   Lock,
   Plus,
   Printer,
+  Search,
   ShieldCheck,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 
 export interface InstitutionRecord {
@@ -146,6 +149,8 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
     INSTITUTION_ACADEMIC_MATERIALS[0]
   );
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [collegeSearchQuery, setCollegeSearchQuery] = useState<string>('');
+  const [collegeSearchOpen, setCollegeSearchOpen] = useState<boolean>(false);
 
   useEffect(() => {
     try { localStorage.setItem(INST_LIST_KEY, JSON.stringify(institutions)); } catch {}
@@ -408,6 +413,276 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* School & College Portal Scoped Search Bar */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full">
+              School &amp; College Portal Content Search
+            </span>
+            <h2 className="text-sm sm:text-base font-display font-black text-slate-900 mt-1">
+              Search Practical &amp; Viva Manuals, Campus ERP Modules, Students/Faculty Roster &amp; Circulars
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { label: 'Physics Lab', query: 'Physics' },
+              { label: 'Chemistry Viva', query: 'Chemistry' },
+              { label: 'GPA Report Card', query: 'GPA' },
+              { label: 'Attendance', query: 'Attendance' },
+              { label: 'Notices', query: 'Notice' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => {
+                  setCollegeSearchQuery(chip.query);
+                  setCollegeSearchOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-sky-50 text-[11px] font-bold text-slate-700 hover:text-sky-800 border border-slate-200 cursor-pointer"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setCollegeSearchOpen(true);
+          }}
+          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+        >
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={collegeSearchQuery}
+              onChange={(e) => {
+                setCollegeSearchQuery(e.target.value);
+                setCollegeSearchOpen(true);
+              }}
+              onFocus={() => setCollegeSearchOpen(true)}
+              placeholder="Search Practical Lab Manuals, Campus Roster, Timetable, Exams/GPA, or Notices..."
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white"
+            />
+            {collegeSearchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCollegeSearchQuery('');
+                  setCollegeSearchOpen(false);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-500 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="px-5 py-2.5 rounded-xl bg-sky-700 hover:bg-sky-800 text-white font-black text-xs sm:text-sm cursor-pointer flex items-center justify-center gap-1.5 shadow-xs shrink-0"
+          >
+            <Search className="w-4 h-4 text-amber-300" />
+            <span>Search College Portal</span>
+          </button>
+        </form>
+
+        {collegeSearchOpen && collegeSearchQuery.trim().length > 0 && (() => {
+          const q = collegeSearchQuery.trim().toLowerCase();
+          const matchedManuals = INSTITUTION_ACADEMIC_MATERIALS.filter(
+            (m) =>
+              m.title.toLowerCase().includes(q) ||
+              m.tier.toLowerCase().includes(q) ||
+              m.materialType.toLowerCase().includes(q) ||
+              m.streamOrSubject.toLowerCase().includes(q) ||
+              m.overview.toLowerCase().includes(q)
+          );
+
+          const matchedMembers = instMembers.filter(
+            (m) =>
+              m.fullName.toLowerCase().includes(q) ||
+              m.rollOrCode.toLowerCase().includes(q) ||
+              m.classOrDepartment.toLowerCase().includes(q) ||
+              m.role.toLowerCase().includes(q)
+          );
+
+          const matchedNotices = instNotices.filter(
+            (n) =>
+              n.title.toLowerCase().includes(q) ||
+              n.body.toLowerCase().includes(q) ||
+              n.audience.toLowerCase().includes(q)
+          );
+
+          const erpModules = [
+            {
+              title: 'Campus Overview & Divisions Management',
+              badge: 'Campus ERP',
+              desc: 'Academic year configuration, classes/divisions & campus attendance KPIs',
+              keywords: 'campus overview division department academic year school college',
+              action: () => setZoneTab('overview'),
+            },
+            {
+              title: 'Student & Faculty Roster + Daily Attendance',
+              badge: 'Roster',
+              desc: 'Enrol students & faculty and mark daily present/absent attendance',
+              keywords: 'student faculty roster attendance roll number department',
+              action: () => setZoneTab('roster'),
+            },
+            {
+              title: 'Timetable & Academic Calendar',
+              badge: 'Timetable',
+              desc: 'Weekly lecture schedule and semester assessment milestones',
+              keywords: 'timetable calendar schedule lecture practical period',
+              action: () => setZoneTab('timetable'),
+            },
+            {
+              title: 'Exam Marks, GPA & PDF Report Cards',
+              badge: 'Exams & GPA',
+              desc: 'Record unit/semester marks, compute GPA & download PDF report cards',
+              keywords: 'exam marks gpa report card grade result assessment pdf',
+              action: () => setZoneTab('exams'),
+            },
+            {
+              title: 'Campus Notices & Circulars Board',
+              badge: 'Notices',
+              desc: 'Publish official circulars for All Campus, Students, or Faculty',
+              keywords: 'notice circular announcement board campus',
+              action: () => setZoneTab('notices'),
+            },
+            {
+              title: 'Register New School / Junior / Degree College',
+              badge: 'Registration',
+              desc: 'Create an isolated multi-tenant campus workspace',
+              keywords: 'register new institution school junior degree college',
+              action: () => setZoneTab('register'),
+            },
+          ].filter(
+            (m) =>
+              m.title.toLowerCase().includes(q) ||
+              m.desc.toLowerCase().includes(q) ||
+              m.keywords.includes(q)
+          );
+
+          const totalMatches =
+            matchedManuals.length +
+            matchedMembers.length +
+            matchedNotices.length +
+            erpModules.length;
+
+          return (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 space-y-3 max-h-96 overflow-y-auto">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                <span>
+                  Found {totalMatches} matching School &amp; College Portal item{totalMatches === 1 ? '' : 's'} for &ldquo;{collegeSearchQuery}&rdquo;
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCollegeSearchOpen(false)}
+                  className="text-slate-500 hover:text-slate-900 font-black cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+
+              {totalMatches === 0 ? (
+                <div className="text-xs text-slate-600 py-3 text-center">
+                  No matching School &amp; College items found. Try searching &ldquo;Physics&rdquo;, &ldquo;Chemistry&rdquo;, &ldquo;GPA&rdquo;, &ldquo;Attendance&rdquo;, or &ldquo;Notice&rdquo;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {erpModules.map((mod) => (
+                    <button
+                      key={mod.title}
+                      type="button"
+                      onClick={() => {
+                        mod.action();
+                        setCollegeSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-sky-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-sky-100 text-sky-900">
+                          {mod.badge}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{mod.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{mod.desc}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-sky-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedManuals.map((man) => (
+                    <button
+                      key={man.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMaterial(man);
+                        setZoneTab('materials');
+                        setCollegeSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-900">
+                          {man.tier} · {man.streamOrSubject}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{man.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{man.overview}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-amber-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedMembers.map((mem) => (
+                    <button
+                      key={mem.id}
+                      type="button"
+                      onClick={() => {
+                        setZoneTab('roster');
+                        setCollegeSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900">
+                          {mem.role.toUpperCase()} · {mem.classOrDepartment}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{mem.fullName}</div>
+                        <div className="text-[11px] text-slate-500 truncate">ID: {mem.rollOrCode}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-emerald-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedNotices.map((not) => (
+                    <button
+                      key={not.id}
+                      type="button"
+                      onClick={() => {
+                        setZoneTab('notices');
+                        setCollegeSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-indigo-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900">
+                          Notice · {not.audience}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{not.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{not.body}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-indigo-700 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Sub-Tabs */}

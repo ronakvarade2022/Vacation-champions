@@ -5,6 +5,7 @@ import { saveParentMessageToFirestore } from '../../services/portalFirestoreServ
 import type { StudentProfile } from '../../types';
 import {
   ArrowLeft,
+  ArrowRight,
   Award,
   BookOpen,
   Calendar,
@@ -19,11 +20,13 @@ import {
   Mail,
   MessageSquare,
   Printer,
+  Search,
   Send,
   ShieldCheck,
   Sparkles,
   UserCheck,
   Users,
+  X,
 } from 'lucide-react';
 
 interface ParentLinkStorageRecord {
@@ -103,6 +106,8 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
   // Materials filter
   const [stageFilter, setStageFilter] = useState<string>('All');
   const [selectedGuide, setSelectedGuide] = useState<ParentingGuideItem>(PARENT_LEARNING_MATERIALS[0]);
+  const [parentSearchQuery, setParentSearchQuery] = useState<string>('');
+  const [parentSearchOpen, setParentSearchOpen] = useState<boolean>(false);
 
   // Parent-Teacher message composer
   const [noteInput, setNoteInput] = useState<string>('');
@@ -338,6 +343,268 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Parent Portal Scoped Search Bar */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
+              Parent Portal Content Search
+            </span>
+            <h2 className="text-sm sm:text-base font-display font-black text-slate-900 mt-1">
+              Search Parenting &amp; Study Guides, Linked Child Attendance, Homework, or Teacher Notes
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { label: 'Study Routine', query: 'Routine' },
+              { label: 'Exam Stress', query: 'Exam' },
+              { label: 'Screen Time', query: 'Screen' },
+              { label: 'Attendance', query: 'Attendance' },
+              { label: 'Homework', query: 'Homework' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => {
+                  setParentSearchQuery(chip.query);
+                  setParentSearchOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-[11px] font-bold text-slate-700 hover:text-rose-800 border border-slate-200 cursor-pointer"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setParentSearchOpen(true);
+          }}
+          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+        >
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={parentSearchQuery}
+              onChange={(e) => {
+                setParentSearchQuery(e.target.value);
+                setParentSearchOpen(true);
+              }}
+              onFocus={() => setParentSearchOpen(true)}
+              placeholder="Search Parenting Guides, Child Progress, Attendance, Homework, or Teacher Messages..."
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500 focus:bg-white"
+            />
+            {parentSearchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setParentSearchQuery('');
+                  setParentSearchOpen(false);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-500 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="px-5 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-black text-xs sm:text-sm cursor-pointer flex items-center justify-center gap-1.5 shadow-xs shrink-0"
+          >
+            <Search className="w-4 h-4 text-amber-300" />
+            <span>Search Parent Portal</span>
+          </button>
+        </form>
+
+        {parentSearchOpen && parentSearchQuery.trim().length > 0 && (() => {
+          const q = parentSearchQuery.trim().toLowerCase();
+          const matchedGuides = PARENT_LEARNING_MATERIALS.filter(
+            (g) =>
+              g.title.toLowerCase().includes(q) ||
+              g.category.toLowerCase().includes(q) ||
+              g.stage.toLowerCase().includes(q) ||
+              g.summary.toLowerCase().includes(q) ||
+              g.keyPrinciples.some((k) => k.toLowerCase().includes(q))
+          );
+
+          const matchedChildren = linkedChildren.filter(
+            (c) =>
+              c.name.toLowerCase().includes(q) ||
+              c.classLevel.toLowerCase().includes(q) ||
+              (c.board && c.board.toLowerCase().includes(q)) ||
+              q.includes('attendance') ||
+              q.includes('homework') ||
+              q.includes('progress')
+          );
+
+          const matchedNotes = notes.filter(
+            (n) =>
+              n.message.toLowerCase().includes(q) ||
+              n.studentName.toLowerCase().includes(q) ||
+              n.authorLabel.toLowerCase().includes(q)
+          );
+
+          const portalSections = [
+            {
+              title: 'Child Progress, Attendance & Homework Dashboard',
+              badge: 'Child Report',
+              desc: 'View attendance %, subject mastery, completed worksheets & teacher remarks',
+              keywords: 'child progress dashboard attendance homework mastery score report',
+              action: () => setParentTab('dashboard'),
+            },
+            {
+              title: 'Parenting & Home-Study Habit Guides',
+              badge: 'Guides',
+              desc: 'Research-backed daily routine, exam confidence & digital hygiene guides',
+              keywords: 'parenting guide routine exam stress screen time memory reading',
+              action: () => setParentTab('materials'),
+            },
+            {
+              title: 'Link Child Account (Email + Mobile Verification)',
+              badge: 'Child Linking',
+              desc: 'Securely link one or more student profiles to your parent account',
+              keywords: 'link child account student verification email mobile',
+              action: () => setParentTab('linking'),
+            },
+            {
+              title: 'Parent–Teacher Notes & Observation Messages',
+              badge: 'Messages',
+              desc: 'Send progress observations and communicate with your child’s class teacher',
+              keywords: 'teacher notes message communication parent feedback',
+              action: () => setParentTab('communication'),
+            },
+          ].filter(
+            (s) =>
+              s.title.toLowerCase().includes(q) ||
+              s.desc.toLowerCase().includes(q) ||
+              s.keywords.includes(q)
+          );
+
+          const totalMatches =
+            matchedGuides.length +
+            matchedChildren.length +
+            matchedNotes.length +
+            portalSections.length;
+
+          return (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 space-y-3 max-h-96 overflow-y-auto">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                <span>
+                  Found {totalMatches} matching Parent Portal item{totalMatches === 1 ? '' : 's'} for &ldquo;{parentSearchQuery}&rdquo;
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setParentSearchOpen(false)}
+                  className="text-slate-500 hover:text-slate-900 font-black cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+
+              {totalMatches === 0 ? (
+                <div className="text-xs text-slate-600 py-3 text-center">
+                  No matching Parent Portal items found. Try searching &ldquo;Routine&rdquo;, &ldquo;Attendance&rdquo;, &ldquo;Homework&rdquo;, or &ldquo;Exam&rdquo;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {portalSections.map((sec) => (
+                    <button
+                      key={sec.title}
+                      type="button"
+                      onClick={() => {
+                        sec.action();
+                        setParentSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-rose-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-900">
+                          {sec.badge}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{sec.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{sec.desc}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-rose-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedGuides.map((guide) => (
+                    <button
+                      key={guide.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedGuide(guide);
+                        setStageFilter('All');
+                        setParentTab('materials');
+                        setParentSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-900">
+                          {guide.stage} · {guide.category}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{guide.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{guide.summary}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-amber-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedChildren.map((child) => (
+                    <button
+                      key={child.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedChildId(child.id);
+                        setParentTab('dashboard');
+                        setParentSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900">
+                          Linked Child · {child.classLevel}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{child.name}</div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {child.board || 'Maharashtra'} · View Attendance &amp; Homework
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-emerald-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedNotes.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => {
+                        setParentTab('communication');
+                        setParentSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-indigo-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900">
+                          Message · {note.studentName}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{note.message}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{note.authorLabel}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-indigo-700 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Sub-navigation Tabs */}

@@ -63,7 +63,9 @@ interface SearchIndexEntry {
     | 'math'
     | 'science_diagram'
     | 'grammar'
-    | 'scholarship';
+    | 'scholarship'
+    | 'ai_tool'
+    | 'teaching_resource';
   title: string;
   subtitle: string;
   searchBlob: string;
@@ -72,6 +74,7 @@ interface SearchIndexEntry {
   subject?: SubjectName;
   chapterNumber?: number;
   targetTab: GlobalSearchTargetTab;
+  directRouteTab?: 'ai-tools' | 'document-studio' | 'qr-barcode-centre' | 'worksheets';
 }
 
 interface StudyLibraryGlobalSearchProps {
@@ -261,6 +264,69 @@ function buildStudyLibraryEntriesForScope(params: {
         subtitle: `Scholarship & Olympiad Hub · ${tr.targetClasses} · ${tr.officialAuthority}`,
         searchBlob: `${tr.examTitle} ${tr.officialAuthority} ${tr.targetClasses} ${tr.keyTopics.join(' ')} scholarship olympiad`.toLowerCase(),
         targetTab: 'scholarship_olympiad',
+      });
+    }
+
+    // AI Tools, Document/PDF Generators & Teaching Resources
+    const platformToolsAndResources: Array<{
+      id: string;
+      kind: 'ai_tool' | 'teaching_resource';
+      title: string;
+      subtitle: string;
+      keywords: string;
+      directRouteTab: 'ai-tools' | 'document-studio' | 'qr-barcode-centre' | 'worksheets';
+    }> = [
+      {
+        id: 'tool_ai_teacher_40',
+        kind: 'ai_tool',
+        title: '40 AI Teacher Productivity Tools (Lesson Plans, Question Papers & Rubrics)',
+        subtitle: 'AI Tools Studio · Generate board-aligned lesson plans, question papers, rubrics & remarks',
+        keywords: 'ai tools teacher lesson plan generator question paper rubric worksheet bilingual',
+        directRouteTab: 'ai-tools',
+      },
+      {
+        id: 'tool_ai_student_30',
+        kind: 'ai_tool',
+        title: '30 AI Student Study Tools (Concept Explainer, Summary, Essay & Doubt Solver)',
+        subtitle: 'AI Tools Studio · Instant chapter summaries, step-by-step math explanations & flashcards',
+        keywords: 'ai tools student doubt solver concept explainer essay summary flashcard',
+        directRouteTab: 'ai-tools',
+      },
+      {
+        id: 'tool_pdf_document_studio',
+        kind: 'teaching_resource',
+        title: 'Document, PDF, Word, Excel & Image Resizer Print Studio (19 Utilities)',
+        subtitle: 'Generators & Document Studio · Merge PDF, Split PDF, Passport Photo Maker & Print Preview',
+        keywords: 'pdf word excel print generator image resizer passport photo merge split compress teaching resource',
+        directRouteTab: 'document-studio',
+      },
+      {
+        id: 'tool_qr_barcode_centre',
+        kind: 'teaching_resource',
+        title: '15 QR Code & Barcode Generators (Student ID, Attendance & Library Labels)',
+        subtitle: 'Generators · Create printable A4 QR sheets, ISBN barcodes & classroom attendance tags',
+        keywords: 'qr code barcode generator attendance student id card label teaching resource',
+        directRouteTab: 'qr-barcode-centre',
+      },
+      {
+        id: 'tool_worksheets_teaching',
+        kind: 'teaching_resource',
+        title: 'Interactive Class-Wise Worksheets & Teaching Resources (Classes 1–10)',
+        subtitle: 'Teaching Resources · Auto-graded chapter worksheets across Maharashtra, CBSE & ICSE',
+        keywords: 'worksheets teaching resources classroom practice homework exercises',
+        directRouteTab: 'worksheets',
+      },
+    ];
+
+    for (const tool of platformToolsAndResources) {
+      entries.push({
+        id: tool.id,
+        kind: tool.kind,
+        title: tool.title,
+        subtitle: tool.subtitle,
+        searchBlob: `${tool.title} ${tool.subtitle} ${tool.keywords}`.toLowerCase(),
+        targetTab: 'chapter_notes',
+        directRouteTab: tool.directRouteTab,
       });
     }
   }
@@ -742,6 +808,11 @@ export const GlobalStudySearchBar: React.FC<GlobalStudySearchBarProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => {
+                    if (item.directRouteTab && onOpenToolTab) {
+                      onOpenToolTab(item.directRouteTab);
+                      setIsFocused(false);
+                      return;
+                    }
                     onJumpToResult({
                       board: item.board || defaultBoard,
                       classLevel: item.classLevel || defaultClass,

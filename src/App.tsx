@@ -376,7 +376,7 @@ const AppContent: React.FC = () => {
     if (currentStudent) {
       setPublicBoard(activeBoard);
       setPublicClass(currentStudent.classLevel);
-      if (currentTab === 'public-home') {
+      if (currentTab === 'public-home' || currentTab === 'portal-landing') {
         setCurrentTab('dashboard');
       }
     }
@@ -1170,6 +1170,35 @@ const AppContent: React.FC = () => {
   };
 
   const handleOpenPortalLanding = (portalRole: Exclude<PortalRole, 'admin'>) => {
+    // If user is already authenticated in this exact portal, open their existing dashboard directly
+    if (portalRole === 'student' && currentStudent && currentStudent.accountRole !== 'teacher') {
+      switchRole('student');
+      setCurrentTab('dashboard');
+      safeScrollToTop();
+      return;
+    }
+    if (portalRole === 'teacher' && currentStudent && currentStudent.accountRole === 'teacher') {
+      switchRole('teacher');
+      setCurrentTab('dashboard');
+      safeScrollToTop();
+      return;
+    }
+    if (portalRole === 'parent' && currentUser && activeRole === 'parent') {
+      setCurrentTab('parent-zone');
+      safeScrollToTop();
+      return;
+    }
+    if (portalRole === 'school_admin' && currentUser && activeRole === 'school_admin') {
+      setCurrentTab('school-college-zone');
+      safeScrollToTop();
+      return;
+    }
+    if (portalRole === 'institute_admin' && currentUser && activeRole === 'institute_admin') {
+      setCurrentTab('coaching-zone');
+      safeScrollToTop();
+      return;
+    }
+
     setActiveLandingPortal(portalRole);
     setCurrentTab('portal-landing');
     safeScrollToTop();
@@ -1329,8 +1358,66 @@ const AppContent: React.FC = () => {
             </div>
           )}
 
-        {/* Consistent Sub-Page Two-Level Horizontal Navigation Bar */}
-        {isLearningPortal &&
+        {/* Public Visitor Return-to-Homepage Bar on Public Subpages */}
+        {!currentStudent &&
+          !currentUser &&
+          currentTab !== 'public-home' &&
+          currentTab !== 'dashboard' &&
+          currentTab !== 'portal-landing' && (
+            <div className="mb-4 rounded-2xl bg-[#07152e] text-white border border-amber-400/50 px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentTab('public-home');
+                  safeScrollToTop();
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors"
+              >
+                &larr; Back to MyStudyZone Public Homepage
+              </button>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleNavigateTab('study-materials')}
+                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer"
+                >
+                  Study Library
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigateTab('ai-tools')}
+                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer"
+                >
+                  AI Tools
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigateTab('document-studio')}
+                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer"
+                >
+                  Generators
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModalWithTab('login', 'student')}
+                  className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold cursor-pointer"
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModalWithTab('register', 'student')}
+                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold cursor-pointer"
+                >
+                  Register
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* Consistent Sub-Page Two-Level Horizontal Navigation Bar (Authenticated Learning Portals Only) */}
+        {Boolean(currentStudent) &&
+          isLearningPortal &&
           currentTab !== 'public-home' &&
           currentTab !== 'portal-landing' &&
           currentTab !== 'dashboard' &&
@@ -1552,13 +1639,13 @@ const AppContent: React.FC = () => {
                   }
                 }
               }}
-              onOpenAuth={(tab) => openAuthModalWithTab(tab)}
+              onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab, regRole || 'student')}
               onOpenPanel={handleOpenRolePanel}
               onOpenPortalLanding={handleOpenPortalLanding}
               onOpenMembership={(targetClass, targetBoard) =>
                 openMembershipWithPlan('premium', targetClass, targetBoard)
               }
-              isAuthenticated={Boolean(currentStudent || currentUser?.role === 'admin')}
+              isAuthenticated={Boolean(currentStudent || currentUser)}
               currentRole={activeRole}
               currentUserName={currentStudent?.name || currentUser?.displayName}
               isDesktopMode={viewMode === 'desktop'}
@@ -2018,7 +2105,7 @@ const AppContent: React.FC = () => {
                     handleNavigateTab('study-materials', subject);
                   }
                 }}
-                onOpenAuth={(tab) => openAuthModalWithTab(tab)}
+                onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab, regRole || 'student')}
                 onOpenPanel={handleOpenRolePanel}
                 onOpenPortalLanding={handleOpenPortalLanding}
                 onOpenMembership={(targetClass, targetBoard) =>

@@ -79,6 +79,7 @@ interface ReferenceShowcaseSectionsProps {
   onMenuAction?: (actionId: NavSubActionId) => void;
   onOpenAuth: (defaultTab: 'login' | 'register' | 'teacher' | 'admin') => void;
   onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
+  onOpenPortalLanding?: (portalRole: Exclude<PortalRole, 'admin'>) => void;
   isAuthenticated?: boolean;
   currentRole?: PortalRole;
   currentUserName?: string;
@@ -212,6 +213,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   onMenuAction,
   onOpenAuth,
   onOpenPanel,
+  onOpenPortalLanding,
   isAuthenticated = false,
   currentRole = 'student',
   currentUserName,
@@ -826,8 +828,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
 
       {/* =====================================================================
           SECOND SECTION – ATTACHED MYSTUDYZONE PROMOTIONAL BANNER
-          Uses exact attached reference image (/assets/aistudio/IMG-20261117-WA0052_8bad2f82.jpg)
-          Positioned below top header/portal selection and above the main navigation menu.
+          Positioned inside the authenticated Student Dashboard overview.
           ===================================================================== */}
       <section
         aria-label="Welcome to MyStudyZone Promotional Banner"

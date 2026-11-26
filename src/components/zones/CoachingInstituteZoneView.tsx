@@ -14,6 +14,7 @@ import type {
 } from '../../data/skillPrograms/skillProgramsTypes';
 import {
   ArrowLeft,
+  ArrowRight,
   Award,
   BookOpen,
   Building2,
@@ -34,6 +35,7 @@ import {
   Sparkles,
   Trophy,
   Users,
+  X,
 } from 'lucide-react';
 
 const ENROLLMENTS_STORAGE_KEY = 'msz_skill_enrollments_v1';
@@ -114,6 +116,8 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
   const [zoneMode, setZoneMode] = useState<'programs' | 'institute'>(initialMode);
   const [selectedCategory, setSelectedCategory] = useState<'All' | SkillProgramCategory>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [instituteSearchQuery, setInstituteSearchQuery] = useState<string>('');
+  const [instituteSearchOpen, setInstituteSearchOpen] = useState<boolean>(false);
 
   // Program Explorer & Learning Player state
   const [selectedProgram, setSelectedProgram] = useState<SkillProgramSummary | null>(null);
@@ -560,6 +564,326 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
               : 'Every student can enrol independently in Abacus, Vedic Maths, Phonics, Chess, Rubik\'s Cube, Coding, Yoga, Olympiad & more — zero institute required!'}
           </p>
         </div>
+      </div>
+
+      {/* Coaching & Skill Institute Portal Scoped Search Bar */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-teal-800 bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-full">
+              Coaching &amp; Skill Institute Portal Search
+            </span>
+            <h2 className="text-sm sm:text-base font-display font-black text-slate-900 mt-1">
+              Search 18 Skill Development Programs, Core Labs (Vedic Maths, Abacus, Phonics), Batches, Students &amp; Fee Ledger
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { label: 'Abacus', query: 'Abacus' },
+              { label: 'Vedic Maths', query: 'Vedic Maths' },
+              { label: 'Phonics', query: 'Phonics' },
+              { label: 'Batches', query: 'Batches' },
+              { label: 'Fee Ledger', query: 'Fee' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => {
+                  setInstituteSearchQuery(chip.query);
+                  setInstituteSearchOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-teal-50 text-[11px] font-bold text-slate-700 hover:text-teal-800 border border-slate-200 cursor-pointer"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setInstituteSearchOpen(true);
+            if (zoneMode === 'programs') {
+              setSearchQuery(instituteSearchQuery);
+            }
+          }}
+          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+        >
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={instituteSearchQuery}
+              onChange={(e) => {
+                setInstituteSearchQuery(e.target.value);
+                setInstituteSearchOpen(true);
+              }}
+              onFocus={() => setInstituteSearchOpen(true)}
+              placeholder="Search 18 Skill Programs (Abacus, Vedic Maths, Chess, Coding...), Institute Batches, Students, or Fees..."
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white"
+            />
+            {instituteSearchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setInstituteSearchQuery('');
+                  setInstituteSearchOpen(false);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-500 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-black text-xs sm:text-sm cursor-pointer flex items-center justify-center gap-1.5 shadow-xs shrink-0"
+          >
+            <Search className="w-4 h-4 text-amber-300" />
+            <span>Search Institute Portal</span>
+          </button>
+        </form>
+
+        {instituteSearchOpen && instituteSearchQuery.trim().length > 0 && (() => {
+          const q = instituteSearchQuery.trim().toLowerCase();
+          const matchedPrograms = ALL_18_SKILL_PROGRAMS.filter(
+            (p) =>
+              p.title.toLowerCase().includes(q) ||
+              p.tagline.toLowerCase().includes(q) ||
+              p.category.toLowerCase().includes(q)
+          );
+
+          const matchedBatches = instituteBatches.filter(
+            (b) =>
+              b.batchName.toLowerCase().includes(q) ||
+              b.programId.toLowerCase().includes(q) ||
+              b.trainerName.toLowerCase().includes(q) ||
+              b.schedule.toLowerCase().includes(q)
+          );
+
+          const matchedInstStudents = activeInstStudents.filter(
+            (s) =>
+              s.name.toLowerCase().includes(q) ||
+              s.grade.toLowerCase().includes(q) ||
+              s.programId.toLowerCase().includes(q)
+          );
+
+          const erpAndLabModules = [
+            {
+              title: 'Interactive Vedic Maths Speed Drill Lab',
+              badge: 'Interactive Lab',
+              desc: '16 Sutras, step-by-step mental math solver & 60-second timer drills',
+              keywords: 'vedic maths speed drill mental math sutra lab',
+              action: () =>
+                onOpenCoreSkillLab
+                  ? onOpenCoreSkillLab('vedic-maths')
+                  : onNavigateTab('core-skills-lab'),
+            },
+            {
+              title: 'Interactive Japanese Soroban Abacus Simulator',
+              badge: 'Interactive Lab',
+              desc: 'Live clickable 7-rod Heaven & Earth beads abacus with target challenges',
+              keywords: 'abacus soroban beads simulator mental calculation lab',
+              action: () =>
+                onOpenCoreSkillLab
+                  ? onOpenCoreSkillLab('abacus')
+                  : onNavigateTab('core-skills-lab'),
+            },
+            {
+              title: 'Interactive 4-Level Phonics & Pronunciation Audio Studio',
+              badge: 'Interactive Lab',
+              desc: 'Web Speech API pronunciation, blending cards & word builder',
+              keywords: 'phonics reading pronunciation audio speaking lab',
+              action: () =>
+                onOpenCoreSkillLab
+                  ? onOpenCoreSkillLab('phonics')
+                  : onNavigateTab('core-skills-lab'),
+            },
+            {
+              title: 'Institute Batches & Schedule Allocation',
+              badge: 'Academy ERP',
+              desc: 'Create & manage coaching batches, timings, and assigned trainers',
+              keywords: 'batch schedule timing trainer allocation coaching',
+              action: () => {
+                setZoneMode('institute');
+                setSelectedProgram(null);
+                setInstSubTab('batches');
+              },
+            },
+            {
+              title: 'Enrolled Academy Students & Daily Attendance',
+              badge: 'Academy ERP',
+              desc: 'Enrol coaching students, mark daily batch attendance & issue certificates',
+              keywords: 'student attendance enrollment certificate academy',
+              action: () => {
+                setZoneMode('institute');
+                setSelectedProgram(null);
+                setInstSubTab('students');
+              },
+            },
+            {
+              title: 'Academy Fee Collection & Pending Balance Ledger',
+              badge: 'Fee Ledger',
+              desc: 'Track collected fees, pending balances & record installment payments',
+              keywords: 'fee ledger payment balance installment collection',
+              action: () => {
+                setZoneMode('institute');
+                setSelectedProgram(null);
+                setInstSubTab('fees');
+              },
+            },
+            {
+              title: 'Custom Courses & Trainer Assignment',
+              badge: 'Courses & Faculty',
+              desc: 'Create custom academy courses, assign trainers & attach study notes',
+              keywords: 'custom course trainer faculty syllabus quiz',
+              action: () => {
+                setZoneMode('institute');
+                setSelectedProgram(null);
+                setInstSubTab('courses');
+              },
+            },
+            {
+              title: 'Register Coaching Institute / Skill Academy',
+              badge: 'Registration',
+              desc: 'Register an Abacus centre, Vedic Maths academy, or coaching institute',
+              keywords: 'register coaching institute skill academy centre',
+              action: () => {
+                setZoneMode('institute');
+                setSelectedProgram(null);
+                setInstSubTab('register');
+              },
+            },
+          ].filter(
+            (m) =>
+              m.title.toLowerCase().includes(q) ||
+              m.desc.toLowerCase().includes(q) ||
+              m.keywords.includes(q)
+          );
+
+          const totalMatches =
+            matchedPrograms.length +
+            matchedBatches.length +
+            matchedInstStudents.length +
+            erpAndLabModules.length;
+
+          return (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 space-y-3 max-h-96 overflow-y-auto">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                <span>
+                  Found {totalMatches} matching Coaching &amp; Skill Institute item{totalMatches === 1 ? '' : 's'} for &ldquo;{instituteSearchQuery}&rdquo;
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setInstituteSearchOpen(false)}
+                  className="text-slate-500 hover:text-slate-900 font-black cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+
+              {totalMatches === 0 ? (
+                <div className="text-xs text-slate-600 py-3 text-center">
+                  No matching items found. Try searching &ldquo;Abacus&rdquo;, &ldquo;Vedic Maths&rdquo;, &ldquo;Phonics&rdquo;, &ldquo;Chess&rdquo;, &ldquo;Batches&rdquo;, or &ldquo;Fee&rdquo;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {erpAndLabModules.map((mod) => (
+                    <button
+                      key={mod.title}
+                      type="button"
+                      onClick={() => {
+                        mod.action();
+                        setInstituteSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-teal-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-teal-100 text-teal-900">
+                          {mod.badge}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{mod.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{mod.desc}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-teal-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedPrograms.map((prog) => (
+                    <button
+                      key={prog.id}
+                      type="button"
+                      onClick={() => {
+                        setZoneMode('programs');
+                        void openProgramPlayer(prog);
+                        setInstituteSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-900">
+                          Program #{prog.number} · {prog.category}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{prog.title}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{prog.tagline}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-amber-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedBatches.map((batch) => (
+                    <button
+                      key={batch.id}
+                      type="button"
+                      onClick={() => {
+                        setZoneMode('institute');
+                        setSelectedProgram(null);
+                        setInstSubTab('batches');
+                        setInstituteSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-indigo-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900">
+                          Batch · {batch.programId}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{batch.batchName}</div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          Trainer: {batch.trainerName} · {batch.schedule}
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-indigo-700 shrink-0" />
+                    </button>
+                  ))}
+
+                  {matchedInstStudents.map((stu) => (
+                    <button
+                      key={stu.id}
+                      type="button"
+                      onClick={() => {
+                        setZoneMode('institute');
+                        setSelectedProgram(null);
+                        setInstSubTab('students');
+                        setInstituteSearchOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-200 text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900">
+                          Academy Student · {stu.grade}
+                        </span>
+                        <div className="text-xs font-black text-slate-900 truncate mt-1">{stu.name}</div>
+                        <div className="text-[11px] text-slate-500 truncate">Program: {stu.programId}</div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-emerald-700 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {zoneNotice && (

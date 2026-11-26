@@ -1,8 +1,8 @@
 import React from 'react';
 import type { ClassLevel, EducationBoard, PortalRole, SubjectName } from '../types';
+import type { AuthModalTab, PortalRegisterRole } from './AuthModal';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
-import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
-import { FiveZonesHubStrip } from './zones/FiveZonesHubStrip';
+import { InteractiveWallpaperHero } from './InteractiveWallpaperHero';
 import { PWAInstallButton } from './PWAInstallButton';
 
 export type HomeScrollTarget =
@@ -24,7 +24,7 @@ interface PublicHomeDashboardProps {
   onClearScrollTarget?: () => void;
   onOpenDemo: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
   onNavigateZone: (tab: string, subSection?: string, subject?: SubjectName) => void;
-  onOpenAuth: (defaultTab: 'login' | 'register' | 'teacher' | 'admin') => void;
+  onOpenAuth: (defaultTab: AuthModalTab, registerRole?: PortalRegisterRole) => void;
   onOpenPanel: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
   onOpenPortalLanding?: (portalRole: Exclude<PortalRole, 'admin'>) => void;
   onOpenMembership: (targetClass: ClassLevel, targetBoard: EducationBoard) => void;
@@ -40,75 +40,44 @@ interface PublicHomeDashboardProps {
   onGlobalSearchJump?: (target: import('./StudyLibraryGlobalSearch').GlobalSearchJumpTarget) => void;
 }
 
+/**
+ * PUBLIC HOMEPAGE (https://mystudyzone.in)
+ * Renders ONLY the new MyStudyZone high-resolution educational wallpaper homepage
+ * with real interactive controls and global search.
+ * The private detailed user dashboards (StudentDashboard, TeacherDashboard, ParentZoneView,
+ * SchoolCollegeZoneView, CoachingInstituteZoneView) remain strictly inside their respective
+ * authenticated user portals.
+ */
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   selectedBoard,
   selectedClass,
-  onSelectBoard,
-  onSelectClass,
-  onOpenDemo,
   onNavigateZone,
   onOpenAuth,
   onOpenPanel,
   onOpenPortalLanding,
-  onOpenMembership,
   isAuthenticated = false,
   currentRole = 'student',
   currentUserName,
-  isDesktopMode = false,
-  onToggleViewMode,
-  onMenuAction,
-  activeMainSection,
-  onSelectMainSection,
-  activeSubActionId,
   onGlobalSearchJump,
 }) => {
   return (
-    <div className={`${isDesktopMode ? 'space-y-8' : 'space-y-10'} pb-12`}>
-      {/* SECTION 1: FOCUSED HOME DASHBOARD */}
-      <div id="home-overview">
-        <ReferenceShowcaseSections
-          selectedBoard={selectedBoard}
-          selectedClass={selectedClass}
-          onSelectBoard={onSelectBoard}
-          onSelectClass={onSelectClass}
-          onOpenDemo={(tab) => onOpenDemo(tab || 'live-quiz')}
-          onNavigateTab={(tab, subSection, subject) =>
-            onNavigateZone(tab, subSection || 'overview', subject)
-          }
-          onGlobalSearchJump={onGlobalSearchJump}
-          onMenuAction={onMenuAction}
-          onOpenAuth={onOpenAuth}
-          onOpenPanel={onOpenPanel}
-          isAuthenticated={isAuthenticated}
-          currentRole={currentRole}
-          currentUserName={currentUserName}
-          onOpenMembership={(targetClass, targetBoard) =>
-            onOpenMembership(targetClass || selectedClass, targetBoard || selectedBoard)
-          }
-          onStartLearningClick={() => onNavigateZone('all-courses')}
-          viewMode={isDesktopMode ? 'desktop' : 'auto'}
-          onToggleViewMode={onToggleViewMode}
-          activeMainSection={activeMainSection}
-          onSelectMainSection={onSelectMainSection}
-          activeSubActionId={activeSubActionId}
-          progressMetrics={{
-            isLoggedIn: false,
-            coursesCompleted: 0,
-            practiceTests: 0,
-            achievements: 0,
-            progressPercent: 0,
-          }}
-        />
-      </div>
-
-      {/* FIVE MAJOR EDUCATIONAL ZONES HUB */}
-      <FiveZonesHubStrip
-        onNavigateZone={(tab) => onNavigateZone(tab)}
-        onOpenTeacherPortal={() => onOpenPanel('teacher', 'login')}
+    <div id="home-overview" className="space-y-6 pb-10">
+      <InteractiveWallpaperHero
+        selectedBoard={selectedBoard}
+        selectedClass={selectedClass}
+        isAuthenticated={isAuthenticated}
+        currentRole={currentRole}
+        currentUserName={currentUserName}
+        onNavigateTab={(tab, subSection, subject) =>
+          onNavigateZone(tab, subSection || 'overview', subject)
+        }
+        onGlobalSearchJump={onGlobalSearchJump}
+        onOpenAuth={onOpenAuth}
+        onOpenPanel={onOpenPanel}
         onOpenPortalLanding={onOpenPortalLanding}
       />
 
-      {/* DIRECT PWA MOBILE APP INSTALL BANNER */}
+      {/* Direct PWA Mobile App Install Banner (Auto-hidden when installed) */}
       <PWAInstallButton variant="banner" />
     </div>
   );

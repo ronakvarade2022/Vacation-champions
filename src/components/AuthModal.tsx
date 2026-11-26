@@ -506,7 +506,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
     onSuccess?.();
-    onPortalAuthSuccess?.('student');
+    onPortalAuthSuccess?.(res.student?.accountRole === 'teacher' ? 'teacher' : 'student');
     onClose();
   };
 
@@ -577,6 +577,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
     onSuccess?.();
+    onPortalAuthSuccess?.(roleForRecovery);
     onClose();
   };
 
@@ -627,6 +628,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const targetInfo = getClassSubscriptionInfo(loggedStudent, regClass, undefined, regBoard);
 
     onSuccess?.();
+    onPortalAuthSuccess?.(
+      existingAccountMatch.accountRole === 'teacher' || regRoleType === 'teacher'
+        ? 'teacher'
+        : 'student'
+    );
     onClose();
 
     if (targetInfo.isAccessible) {
@@ -1794,15 +1800,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {/* 1. Account Type Selection Across All 5 Portals */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Select Portal Account Type *
+                  Select Portal Registration Type *
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
-                    { role: 'student' as const, label: 'Student' },
-                    { role: 'teacher' as const, label: 'Teacher / TET' },
-                    { role: 'parent' as const, label: 'Parent' },
-                    { role: 'school_admin' as const, label: 'School / College' },
-                    { role: 'institute_admin' as const, label: 'Coaching Inst.' },
+                    { role: 'student' as const, label: 'Student Registration' },
+                    { role: 'teacher' as const, label: 'Teacher Registration' },
+                    { role: 'parent' as const, label: 'Parent Registration' },
+                    { role: 'school_admin' as const, label: 'College Registration' },
+                    { role: 'institute_admin' as const, label: 'Institute Registration' },
                   ].map((item) => (
                     <button
                       key={item.role}
@@ -1813,13 +1819,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         else if (item.role === 'student') setRegAvatar('🌟');
                         setError('');
                       }}
-                      className={`p-2.5 rounded-xl border-2 text-xs font-extrabold transition-all cursor-pointer ${
+                      className={`p-2.5 rounded-xl border-2 text-xs font-extrabold transition-all cursor-pointer text-left flex items-center justify-between ${
                         regRoleType === item.role
                           ? 'border-indigo-600 bg-indigo-50 text-indigo-950 shadow-xs'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                       }`}
                     >
-                      {item.label}
+                      <span>{item.label}</span>
+                      {regRoleType === item.role && (
+                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                      )}
                     </button>
                   ))}
                 </div>
@@ -1865,10 +1874,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* 1. Student Name / Teacher Name */}
+              {/* 1. Role-Specific Full Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  {regRoleType === 'teacher' ? 'Teacher Full Name *' : 'Student Full Name *'}
+                  {regRoleType === 'teacher'
+                    ? 'Teacher Full Name *'
+                    : regRoleType === 'parent'
+                    ? 'Parent / Guardian Full Name *'
+                    : regRoleType === 'school_admin'
+                    ? 'College / School Administrator Full Name *'
+                    : regRoleType === 'institute_admin'
+                    ? 'Institute Director / Owner Full Name *'
+                    : 'Student Full Name *'}
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1876,7 +1893,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type="text"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder={regRoleType === 'teacher' ? 'e.g. Prof. Meera Joshi' : 'e.g. Aarav Patil'}
+                    placeholder={
+                      regRoleType === 'teacher'
+                        ? 'e.g. Prof. Meera Joshi'
+                        : regRoleType === 'parent'
+                        ? 'e.g. Rajesh Patil'
+                        : regRoleType === 'school_admin'
+                        ? 'e.g. Dr. Suresh Deshmukh'
+                        : regRoleType === 'institute_admin'
+                        ? 'e.g. Vikram Kulkarni'
+                        : 'e.g. Aarav Patil'
+                    }
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
                     required={!existingAccountMatch}
                   />
@@ -2538,23 +2565,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
               )}
 
-              {/* 6. School Name (OPTIONAL for both Students and Teachers) & City */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    School Name <span className="text-slate-400 font-semibold">(Optional)</span>
-                  </label>
-                  <div className="relative">
-                    <School className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={regSchool}
-                      onChange={(e) => setRegSchool(e.target.value)}
-                      placeholder="Optional school name"
-                      className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
-                    />
+              {/* 6. School Name (OPTIONAL for Students and Teachers only) & City */}
+              <div
+                className={`grid grid-cols-1 ${
+                  regRoleType === 'student' || regRoleType === 'teacher' ? 'sm:grid-cols-2' : ''
+                } gap-3`}
+              >
+                {(regRoleType === 'student' || regRoleType === 'teacher') && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      School Name <span className="text-slate-400 font-semibold">(Optional)</span>
+                    </label>
+                    <div className="relative">
+                      <School className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={regSchool}
+                        onChange={(e) => setRegSchool(e.target.value)}
+                        placeholder="Optional school name"
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     City / District <span className="text-slate-400 font-semibold">(Optional)</span>
