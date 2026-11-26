@@ -150,7 +150,6 @@ export const InteractiveWallpaperHero: React.FC<InteractiveWallpaperHeroProps> =
   onOpenPortalLanding,
 }) => {
   const [portalSelectorMode, setPortalSelectorMode] = useState<'register' | 'login' | null>(null);
-  // Explicit Portrait (Mobile View) vs Landscape Horizontal (Desktop Site) state
   const [layoutOrientation, setLayoutOrientation] = useState<'portrait' | 'landscape'>(() => {
     if (isDesktopMode) return 'landscape';
     if (typeof window !== 'undefined' && window.innerWidth < 768) return 'portrait';
@@ -206,86 +205,76 @@ export const InteractiveWallpaperHero: React.FC<InteractiveWallpaperHeroProps> =
   const isPortrait = layoutOrientation === 'portrait';
 
   return (
-    <div className="w-full min-h-screen bg-[#040d1f] flex items-center justify-center overflow-x-hidden">
-      <section
-        aria-label="MyStudyZone Public Wallpaper Homepage"
-        className={`relative overflow-hidden bg-[#07152e] text-white flex flex-col justify-between transition-all duration-200 ${
-          isPortrait
-            ? 'w-full max-w-[430px] min-h-screen sm:min-h-[92vh] sm:my-3 sm:rounded-3xl border-2 border-amber-400/80 shadow-2xl'
-            : 'w-full min-h-screen'
-        }`}
-      >
-        {/* 1. HIGH-RESOLUTION CLEAN EDUCATIONAL WALLPAPER COVERING FULL SCREEN */}
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none select-none"
-          style={{
-            backgroundImage: `url('/assets/aistudio/mystudyzone_hero_wallpaper_clean.jpg')`,
-          }}
-          aria-hidden="true"
-        />
+    <section
+      aria-label="MyStudyZone Full-Screen Public Wallpaper Homepage"
+      className="relative w-full min-h-screen h-screen overflow-y-auto overflow-x-hidden bg-[#07152e] text-white flex flex-col justify-between select-none"
+    >
+      {/* 1. FULL-SCREEN HIGH-RESOLUTION EDUCATIONAL WALLPAPER (Covers 100% of visible screen with zero empty margins) */}
+      <div
+        className="fixed inset-0 w-screen h-screen bg-cover bg-center bg-no-repeat pointer-events-none select-none"
+        style={{
+          backgroundImage: `url('/assets/aistudio/mystudyzone_hero_wallpaper_clean.jpg')`,
+        }}
+        aria-hidden="true"
+      />
 
-        {/* Subtle centre readability vignette preserving schoolgirl (left) and AI robot (right) */}
-        <div
-          className={`absolute inset-0 pointer-events-none ${
-            isPortrait
-              ? 'bg-gradient-to-b from-[#061229]/85 via-[#071938]/70 to-[#061229]/90'
-              : 'bg-gradient-to-b from-[#061229]/70 via-[#071938]/45 to-[#061229]/80 lg:bg-[radial-gradient(ellipse_at_center,rgba(7,25,56,0.68)_0%,rgba(6,18,41,0.28)_58%,rgba(6,18,41,0.52)_100%)]'
-          }`}
-          aria-hidden="true"
-        />
+      {/* Balanced centre vignette keeping the schoolgirl (left) and AI robot (right) bright and vivid */}
+      <div
+        className="fixed inset-0 w-screen h-screen pointer-events-none bg-gradient-to-b from-[#061229]/60 via-[#071938]/35 to-[#061229]/75 lg:bg-[radial-gradient(ellipse_at_center,rgba(7,25,56,0.58)_0%,rgba(6,18,41,0.22)_58%,rgba(6,18,41,0.5)_100%)]"
+        aria-hidden="true"
+      />
 
-        {/* 2. TOP BAR: ONLY MOBILE VIEW (PORTRAIT) & DESKTOP SITE (LANDSCAPE HORIZONTAL) AT TOP RIGHT CORNER */}
-        <div className="relative z-20 px-3 sm:px-6 pt-3 sm:pt-4 flex items-center justify-end">
-          <div
-            role="group"
-            aria-label="Homepage Display Orientation Switcher"
-            className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-[#06132b]/90 backdrop-blur-md border border-amber-400/50 shadow-lg"
+      {/* 2. TOP RIGHT CORNER: ONLY MOBILE VIEW (PORTRAIT) & DESKTOP VIEW (LANDSCAPE) BUTTONS */}
+      <div className="relative z-20 w-full px-4 sm:px-8 pt-3 sm:pt-5 flex items-center justify-end">
+        <div
+          role="group"
+          aria-label="Mobile View Portrait and Desktop View Landscape Switcher"
+          className="inline-flex items-center gap-2 p-1.5 rounded-2xl bg-[#06132b]/90 backdrop-blur-md border-2 border-amber-400/70 shadow-xl"
+        >
+          <button
+            type="button"
+            onClick={handleSelectPortraitMobile}
+            aria-pressed={isPortrait}
+            title="Mobile View (Portrait)"
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
+              isPortrait
+                ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 shadow-md'
+                : 'text-slate-100 hover:text-amber-300 hover:bg-white/10'
+            }`}
           >
-            <button
-              type="button"
-              onClick={handleSelectPortraitMobile}
-              aria-pressed={isPortrait}
-              title="Switch to Mobile View (Vertical Portrait Mode)"
-              className={`min-h-[34px] px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
-                isPortrait
-                  ? 'bg-amber-400 text-slate-950 shadow-sm'
-                  : 'text-slate-200 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5 shrink-0" />
-              <span>Mobile View</span>
-            </button>
+            <Smartphone className="w-4 h-4 shrink-0" />
+            <span>Mobile View (Portrait)</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={handleSelectLandscapeDesktop}
-              aria-pressed={!isPortrait}
-              title="Switch to Desktop Site (Horizontal Landscape Mode)"
-              className={`min-h-[34px] px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
-                !isPortrait
-                  ? 'bg-amber-400 text-slate-950 shadow-sm'
-                  : 'text-slate-200 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5 shrink-0" />
-              <span>Desktop Site</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSelectLandscapeDesktop}
+            aria-pressed={!isPortrait}
+            title="Desktop View (Landscape)"
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
+              !isPortrait
+                ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 shadow-md'
+                : 'text-slate-100 hover:text-amber-300 hover:bg-white/10'
+            }`}
+          >
+            <Monitor className="w-4 h-4 shrink-0" />
+            <span>Desktop View (Landscape)</span>
+          </button>
         </div>
+      </div>
 
-        {/* 3. CENTRAL HERO CONTENT + ALL 5 PORTAL CARDS ADJUSTED TO FIT ON SCREEN */}
+      {/* 3. CENTRAL HERO TITLE & WELL-SPACED 5 PORTAL CARDS ACROSS THE SCREEN */}
+      <div className="relative z-10 flex-1 w-full flex flex-col items-center justify-center px-4 sm:px-8 lg:px-14 py-4">
         <div
-          className={`relative z-10 flex-1 flex flex-col items-center justify-center text-center ${
-            isPortrait
-              ? 'px-3.5 py-4 space-y-4'
-              : 'px-4 sm:px-8 lg:px-[16%] xl:px-[18%] py-4 sm:py-6 space-y-5 sm:space-y-6'
+          className={`w-full mx-auto flex flex-col items-center text-center ${
+            isPortrait ? 'max-w-[520px] space-y-5' : 'max-w-[1360px] space-y-7 lg:space-y-9'
           }`}
         >
-          {/* Title & Golden Tagline */}
-          <div className="space-y-1.5 max-w-2xl">
+          {/* Main Title & Tagline (Positioned between the schoolgirl on the left and AI robot on the right) */}
+          <div className="space-y-2 max-w-2xl mx-auto">
             <h1
-              className={`font-display font-black tracking-tight drop-shadow-[0_4px_16px_rgba(0,0,0,0.65)] ${
-                isPortrait ? 'text-3xl' : 'text-3xl sm:text-5xl lg:text-6xl'
+              className={`font-display font-black tracking-tight drop-shadow-[0_4px_18px_rgba(0,0,0,0.75)] ${
+                isPortrait ? 'text-4xl sm:text-5xl' : 'text-4xl sm:text-6xl lg:text-7xl'
               }`}
             >
               <span className="text-white">MyStudy</span>
@@ -293,18 +282,18 @@ export const InteractiveWallpaperHero: React.FC<InteractiveWallpaperHeroProps> =
             </h1>
             <p
               className={`font-display font-extrabold text-white drop-shadow-md ${
-                isPortrait ? 'text-xs' : 'text-sm sm:text-xl'
+                isPortrait ? 'text-sm sm:text-base' : 'text-base sm:text-2xl'
               }`}
             >
               Your Complete Learning &amp; Productivity Platform
             </p>
-            <p className="text-[11px] sm:text-sm font-bold text-sky-200 tracking-wide">
+            <p className="text-xs sm:text-base font-bold text-sky-200 tracking-wide drop-shadow-xs">
               Study &bull; Teach &bull; Create &bull; Learn with AI
             </p>
-            <div className="pt-1">
+            <div className="pt-1.5">
               <span
-                className={`inline-block rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-400 text-slate-950 font-display font-black shadow-md border border-amber-200 ${
-                  isPortrait ? 'px-4 py-1 text-[11px]' : 'px-5 sm:px-7 py-1.5 text-xs sm:text-sm'
+                className={`inline-block rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-400 text-slate-950 font-display font-black shadow-lg border border-amber-200 ${
+                  isPortrait ? 'px-5 py-1.5 text-xs' : 'px-7 py-2 text-xs sm:text-base'
                 }`}
               >
                 Smart Learning for a Brighter Future
@@ -312,13 +301,13 @@ export const InteractiveWallpaperHero: React.FC<InteractiveWallpaperHeroProps> =
             </div>
           </div>
 
-          {/* 4. ALL FIVE CLICKABLE PORTAL CARDS FITTING COMPLETELY ON THE HOMEPAGE SCREEN */}
+          {/* 4. FIVE PORTAL CARDS PROPERLY SPACED ACROSS THE DASHBOARD SCREEN (Not crowded together) */}
           <div
             aria-label="Five Main MyStudyZone Education Portals"
             className={
               isPortrait
-                ? 'w-full grid grid-cols-2 gap-2.5'
-                : 'w-full max-w-5xl grid grid-cols-5 gap-2 sm:gap-3.5 overflow-x-auto py-1'
+                ? 'w-full grid grid-cols-2 gap-4 sm:gap-5 pt-1'
+                : 'w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 sm:gap-5 lg:gap-7 pt-2'
             }
           >
             {FIVE_PORTAL_CARDS.map((card, idx) => {
@@ -336,50 +325,50 @@ export const InteractiveWallpaperHero: React.FC<InteractiveWallpaperHeroProps> =
                       openPortalDestination(card.role);
                     }
                   }}
-                  className={`group rounded-2xl bg-gradient-to-b ${card.gradient} border-2 text-white shadow-xl hover:scale-[1.03] active:scale-[0.99] transition-all flex flex-col items-center justify-between text-center cursor-pointer ${
+                  className={`group rounded-3xl bg-gradient-to-b ${card.gradient} border-2 text-white shadow-2xl hover:-translate-y-1 hover:scale-[1.02] active:scale-[0.99] transition-all flex flex-col items-center justify-between text-center cursor-pointer ${
                     isPortrait
-                      ? `p-2.5 gap-1.5 ${isLastInPortrait ? 'col-span-2 max-w-[210px] mx-auto w-full' : ''}`
-                      : 'p-2.5 sm:p-3.5 gap-2 min-w-[118px]'
+                      ? `p-4 gap-3 ${isLastInPortrait ? 'col-span-2 max-w-[250px] mx-auto w-full' : ''}`
+                      : 'p-4 sm:p-5 gap-3.5'
                   }`}
                 >
-                  <div className="w-full flex flex-col items-center justify-center text-center gap-1">
+                  <div className="w-full flex flex-col items-center justify-center text-center gap-2.5">
                     <div
-                      className={`rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center shadow-inner group-hover:bg-white/25 transition-colors ${
-                        isPortrait ? 'w-9 h-9' : 'w-10 h-10 sm:w-12 sm:h-12'
+                      className={`rounded-2xl bg-white/15 border border-white/30 flex items-center justify-center shadow-inner group-hover:bg-white/25 transition-colors ${
+                        isPortrait ? 'w-12 h-12' : 'w-13 h-13 sm:w-14 sm:h-14'
                       }`}
                     >
-                      <Icon className={isPortrait ? 'w-4 h-4 text-white' : 'w-5 h-5 sm:w-6 sm:h-6 text-white'} />
+                      <Icon className={isPortrait ? 'w-6 h-6 text-white' : 'w-6 h-6 sm:w-7 sm:h-7 text-white'} />
                     </div>
-                    <div>
+                    <div className="space-y-0.5">
                       <div
                         className={`font-display font-black leading-tight text-white ${
-                          isPortrait ? 'text-xs' : 'text-xs sm:text-base'
+                          isPortrait ? 'text-base' : 'text-base sm:text-lg lg:text-xl'
                         }`}
                       >
                         {card.title}
                       </div>
-                      <div className="text-[10px] sm:text-[11px] font-bold text-white/90 leading-tight mt-0.5">
+                      <div className="text-xs font-bold text-white/90 leading-snug">
                         {card.subtitle}
                       </div>
                     </div>
                   </div>
 
-                  {/* Direct Instant Clickable Login / Register inside each Portal Card */}
+                  {/* Well-spaced Login & Register buttons inside each Portal Card */}
                   <div
-                    className="w-full grid grid-cols-2 gap-1 pt-1 border-t border-white/20"
+                    className="w-full grid grid-cols-2 gap-2 pt-2.5 border-t border-white/25"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       type="button"
                       onClick={() => onOpenAuth(card.loginTab, card.role)}
-                      className="py-1 px-1 rounded-lg bg-black/30 hover:bg-black/50 text-[10px] font-extrabold text-white cursor-pointer transition-colors"
+                      className="py-1.5 px-2 rounded-xl bg-black/30 hover:bg-black/50 text-[11px] font-extrabold text-white cursor-pointer transition-colors"
                     >
                       Login
                     </button>
                     <button
                       type="button"
                       onClick={() => onOpenAuth('register', card.role)}
-                      className="py-1 px-1 rounded-lg bg-white/20 hover:bg-amber-400 hover:text-slate-950 text-[10px] font-extrabold text-white cursor-pointer transition-colors"
+                      className="py-1.5 px-2 rounded-xl bg-white/20 hover:bg-amber-400 hover:text-slate-950 text-[11px] font-extrabold text-white cursor-pointer transition-colors"
                     >
                       Register
                     </button>
@@ -389,117 +378,113 @@ export const InteractiveWallpaperHero: React.FC<InteractiveWallpaperHeroProps> =
             })}
           </div>
         </div>
+      </div>
 
-        {/* Bottom Script Tagline */}
-        <div className="relative z-10 pb-3 sm:pb-5 text-center">
-          <p
-            className={`font-display font-extrabold text-amber-200/95 tracking-wide drop-shadow-sm ${
-              isPortrait ? 'text-xs' : 'text-sm sm:text-lg'
-            }`}
-          >
-            One Platform... Endless Possibilities...
-          </p>
-        </div>
+      {/* Bottom Tagline over the Wallpaper */}
+      <div className="relative z-10 pb-4 sm:pb-6 text-center">
+        <p className="font-display font-extrabold text-sm sm:text-xl text-amber-200/95 tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+          One Platform... Endless Possibilities...
+        </p>
+      </div>
 
-        {/* FIVE-PORTAL REGISTRATION / LOGIN SELECTOR MODAL */}
-        {portalSelectorMode && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={
-              portalSelectorMode === 'register'
-                ? 'Select Your Portal Registration Type'
-                : 'Select Your Portal Login'
-            }
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"
-          >
-            <div className="bg-[#081836] border-2 border-amber-400/80 rounded-3xl max-w-2xl w-full p-5 sm:p-7 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-start justify-between gap-3 border-b border-sky-400/25 pb-4">
-                <div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Five Independent MyStudyZone Portals</span>
-                  </span>
-                  <h2 className="text-xl sm:text-2xl font-display font-black text-white mt-1">
-                    {portalSelectorMode === 'register'
-                      ? 'Select Your Portal Registration'
-                      : 'Select Your Portal to Sign In'}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-sky-200 mt-0.5">
-                    {portalSelectorMode === 'register'
-                      ? 'Choose your role below to open its dedicated registration form:'
-                      : 'Choose your registered portal below to open your dashboard:'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPortalSelectorMode(null)}
-                  aria-label="Close portal selector"
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {PORTAL_REGISTRATION_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      key={opt.role}
-                      type="button"
-                      onClick={() => {
-                        const mode = portalSelectorMode;
-                        setPortalSelectorMode(null);
-                        if (mode === 'register') {
-                          onOpenAuth('register', opt.role);
-                        } else {
-                          onOpenAuth(opt.loginTab, opt.role);
-                        }
-                      }}
-                      className={`group rounded-2xl bg-gradient-to-br ${opt.gradient} border p-4 text-left hover:scale-[1.01] hover:brightness-110 transition-all cursor-pointer flex items-start gap-3.5 shadow-lg`}
-                    >
-                      <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
-                        <Icon className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-display font-black text-sm sm:text-base text-white">
-                            {portalSelectorMode === 'register' ? opt.registerTitle : opt.loginTitle}
-                          </span>
-                          <ArrowRight className="w-4 h-4 text-amber-300 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                        </div>
-                        <p className="text-[11px] text-white/90 leading-snug mt-1">
-                          {opt.subtitle}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="pt-2 border-t border-sky-400/20 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="text-sky-200 font-semibold">
-                  {portalSelectorMode === 'register'
-                    ? 'Already have a registered account?'
-                    : 'Need to create a new portal account?'}
+      {/* FIVE-PORTAL REGISTRATION / LOGIN SELECTOR MODAL */}
+      {portalSelectorMode && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            portalSelectorMode === 'register'
+              ? 'Select Your Portal Registration Type'
+              : 'Select Your Portal Login'
+          }
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"
+        >
+          <div className="bg-[#081836] border-2 border-amber-400/80 rounded-3xl max-w-2xl w-full p-5 sm:p-7 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-sky-400/25 pb-4">
+              <div>
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Five Independent MyStudyZone Portals</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPortalSelectorMode(portalSelectorMode === 'register' ? 'login' : 'register')
-                  }
-                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black cursor-pointer"
-                >
+                <h2 className="text-xl sm:text-2xl font-display font-black text-white mt-1">
                   {portalSelectorMode === 'register'
-                    ? 'Switch to Portal Login →'
-                    : 'Switch to Portal Registration →'}
-                </button>
+                    ? 'Select Your Portal Registration'
+                    : 'Select Your Portal to Sign In'}
+                </h2>
+                <p className="text-xs sm:text-sm text-sky-200 mt-0.5">
+                  {portalSelectorMode === 'register'
+                    ? 'Choose your role below to open its dedicated registration form:'
+                    : 'Choose your registered portal below to open your dashboard:'}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setPortalSelectorMode(null)}
+                aria-label="Close portal selector"
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {PORTAL_REGISTRATION_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.role}
+                    type="button"
+                    onClick={() => {
+                      const mode = portalSelectorMode;
+                      setPortalSelectorMode(null);
+                      if (mode === 'register') {
+                        onOpenAuth('register', opt.role);
+                      } else {
+                        onOpenAuth(opt.loginTab, opt.role);
+                      }
+                    }}
+                    className={`group rounded-2xl bg-gradient-to-br ${opt.gradient} border p-4 text-left hover:scale-[1.01] hover:brightness-110 transition-all cursor-pointer flex items-start gap-3.5 shadow-lg`}
+                  >
+                    <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+                      <Icon className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-display font-black text-sm sm:text-base text-white">
+                          {portalSelectorMode === 'register' ? opt.registerTitle : opt.loginTitle}
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-amber-300 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </div>
+                      <p className="text-[11px] text-white/90 leading-snug mt-1">
+                        {opt.subtitle}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-sky-400/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-sky-200 font-semibold">
+                {portalSelectorMode === 'register'
+                  ? 'Already have a registered account?'
+                  : 'Need to create a new portal account?'}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setPortalSelectorMode(portalSelectorMode === 'register' ? 'login' : 'register')
+                }
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black cursor-pointer"
+              >
+                {portalSelectorMode === 'register'
+                  ? 'Switch to Portal Login →'
+                  : 'Switch to Portal Registration →'}
+              </button>
             </div>
           </div>
-        )}
-      </section>
-    </div>
+        </div>
+      )}
+    </section>
   );
 };

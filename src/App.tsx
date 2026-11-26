@@ -233,7 +233,7 @@ const AppContent: React.FC = () => {
     }
   }, [firebaseConnectionStatus]);
 
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [currentTab, setCurrentTab] = useState<string>('public-home');
   const [activeLandingPortal, setActiveLandingPortal] = useState<Exclude<PortalRole, 'admin'>>('student');
   const [initialCoreSkillProgram, setInitialCoreSkillProgram] = useState<'vedic-maths' | 'abacus' | 'phonics'>('vedic-maths');
   const [quizInitialSubject, setQuizInitialSubject] = useState<SubjectName | undefined>(undefined);
@@ -372,30 +372,47 @@ const AppContent: React.FC = () => {
   const isLearningPortal = activeRole === 'student' || activeRole === 'teacher';
   const isTeacherPortal = activeRole === 'teacher' || currentStudent?.accountRole === 'teacher';
 
+  const hadExplicitAuthModalActionRef = React.useRef<boolean>(false);
+  useEffect(() => {
+    if (isAuthOpen || isAuthModalOpen) {
+      hadExplicitAuthModalActionRef.current = true;
+    }
+  }, [isAuthOpen, isAuthModalOpen]);
+
   useEffect(() => {
     if (currentStudent) {
       setPublicBoard(activeBoard);
       setPublicClass(currentStudent.classLevel);
-      if (currentTab === 'public-home' || currentTab === 'portal-landing') {
+      if (
+        hadExplicitAuthModalActionRef.current &&
+        (currentTab === 'public-home' || currentTab === 'portal-landing')
+      ) {
+        hadExplicitAuthModalActionRef.current = false;
         setCurrentTab('dashboard');
       }
     }
   }, [currentStudent?.id, activeBoard]);
 
   useEffect(() => {
+    if (!hadExplicitAuthModalActionRef.current || !currentUser?.uid) return;
+
     if (activeRole === 'admin' && currentUser?.role === 'admin' && (currentTab === 'public-home' || currentTab === 'explore-zone' || currentTab === 'dashboard' || currentTab === 'portal-landing')) {
+      hadExplicitAuthModalActionRef.current = false;
       setCurrentTab('admin');
       return;
     }
     if (activeRole === 'parent' && currentUser && (currentTab === 'public-home' || currentTab === 'portal-landing' || currentTab === 'dashboard')) {
+      hadExplicitAuthModalActionRef.current = false;
       setCurrentTab('parent-zone');
       return;
     }
     if (activeRole === 'school_admin' && currentUser && (currentTab === 'public-home' || currentTab === 'portal-landing' || currentTab === 'dashboard')) {
+      hadExplicitAuthModalActionRef.current = false;
       setCurrentTab('school-college-zone');
       return;
     }
     if (activeRole === 'institute_admin' && currentUser && (currentTab === 'public-home' || currentTab === 'portal-landing' || currentTab === 'dashboard')) {
+      hadExplicitAuthModalActionRef.current = false;
       setCurrentTab('coaching-zone');
     }
   }, [activeRole, currentUser?.uid, currentUser?.role]);
@@ -1272,7 +1289,7 @@ const AppContent: React.FC = () => {
               }`
         }
       >
-        {sessionSecurityNotice && (
+        {!isPublicHomepageView && sessionSecurityNotice && (
           <div className="mb-6 rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
@@ -1310,7 +1327,8 @@ const AppContent: React.FC = () => {
           </div>
         )}
 
-        {!dismissedConnBanner &&
+        {!isPublicHomepageView &&
+          !dismissedConnBanner &&
           (firebaseConnectionStatus === 'offline' ||
             firebaseConnectionStatus === 'error' ||
             firebaseConnectionStatus === 'reconnecting') && (
