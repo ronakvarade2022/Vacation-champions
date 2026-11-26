@@ -41,11 +41,12 @@ interface MembershipModalProps {
   initialPlanSku?: PlanSkuId;
   initialSelectedClass?: ClassLevel;
   initialSelectedBoard?: EducationBoard;
+  initialShowAllPlans?: boolean;
   onRequestAuth?: (defaultTab?: 'login' | 'register') => void;
   onSwitchActiveClass?: (cls: ClassLevel, board?: EducationBoard) => void;
 }
 
-type ModalPlanGroupTab = 'classes' | 'tet_ctet' | 'scholarship';
+type ModalPlanGroupTab = 'all' | 'classes' | 'tet_ctet' | 'scholarship';
 
 function resolveGroupTabForSku(sku: PlanSkuId): ModalPlanGroupTab {
   if (sku === 'BOARD_CLASS') return 'classes';
@@ -59,6 +60,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
   initialPlanSku = 'BOARD_CLASS',
   initialSelectedClass,
   initialSelectedBoard,
+  initialShowAllPlans = false,
   onRequestAuth,
   onSwitchActiveClass,
 }) => {
@@ -66,7 +68,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
 
   const [selectedPlanSku, setSelectedPlanSku] = useState<PlanSkuId>(initialPlanSku || 'BOARD_CLASS');
   const [planGroupTab, setPlanGroupTab] = useState<ModalPlanGroupTab>(() =>
-    resolveGroupTabForSku(initialPlanSku || 'BOARD_CLASS')
+    initialShowAllPlans ? 'all' : resolveGroupTabForSku(initialPlanSku || 'BOARD_CLASS')
   );
   const [tetCtetDuration, setTetCtetDuration] = useState<'6m' | '1y'>('6m');
 
@@ -119,7 +121,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     if (isOpen) {
       const nextSku: PlanSkuId = initialPlanSku || 'BOARD_CLASS';
       setSelectedPlanSku(nextSku);
-      setPlanGroupTab(resolveGroupTabForSku(nextSku));
+      setPlanGroupTab(initialShowAllPlans ? 'all' : resolveGroupTabForSku(nextSku));
       if (
         nextSku === 'TET_1Y' ||
         nextSku === 'CTET_1Y' ||
@@ -171,7 +173,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
     return () => {
       clearQrTimers();
     };
-  }, [isOpen, initialPlanSku, initialSelectedClass, initialSelectedBoard, currentStudent?.board, currentStudent?.classLevel, currentStudent?.referredByCode]);
+  }, [isOpen, initialPlanSku, initialSelectedClass, initialSelectedBoard, initialShowAllPlans, currentStudent?.board, currentStudent?.classLevel, currentStudent?.referredByCode]);
 
   // QR Code active countdown timer & auto-polling effect
   useEffect(() => {
@@ -555,9 +557,24 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
             </div>
           )}
 
-          {/* Plan Category Group Switcher (Classes 1-10 | TET & CTET Plans | Scholarship Plans) */}
+          {/* Plan Category Group Switcher (All Plans | Classes 1-10 | TET & CTET Plans | Scholarship Plans) */}
           {step === 'select' && (
-            <div className="mb-5 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+            <div className="mb-5 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <button
+                type="button"
+                data-testid="membership-tab-all-plans"
+                onClick={() => {
+                  setPlanGroupTab('all');
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  planGroupTab === 'all'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-xs'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                <Layers className="w-4 h-4 shrink-0" />
+                <span>All Plans (Student &amp; Teacher)</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -570,7 +587,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                <GraduationCap className="w-4 h-4 text-amber-400" />
+                <GraduationCap className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Classes 1–10 (₹99)</span>
               </button>
               <button
@@ -589,8 +606,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                <Award className="w-4 h-4 text-amber-400" />
-                <span>TET &amp; CTET Plans (6M / 1Y)</span>
+                <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>TET &amp; CTET (6M / 1Y)</span>
               </button>
               <button
                 type="button"
@@ -604,7 +621,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                     : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                <Sparkles className="w-4 h-4 text-amber-300" />
+                <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
                 <span>Scholarship (Std 4 &amp; 7)</span>
               </button>
             </div>
@@ -831,6 +848,439 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({
                   <span className="text-xs sm:text-sm font-black">
                     Generating Razorpay {gatewayMode} payment request for {activeCatalogItem.title} – ₹{activeCatalogItem.amountInr} ({activeCatalogItem.validityDays} Days)...
                   </span>
+                </div>
+              )}
+
+              {/* ALL PLANS (STUDENT & TEACHER PLANS TOGETHER) */}
+              {planGroupTab === 'all' && (
+                <div className="space-y-6">
+                  {/* Quick Active Status Banner for Logged-In Users */}
+                  {currentStudent && (
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{currentStudent.avatar || '🌟'}</span>
+                        <div>
+                          <p className="text-xs font-bold text-slate-500">
+                            {currentStudent.accountRole === 'teacher' ? 'Teacher Account' : 'Student Account'}:{' '}
+                            <strong className="text-slate-900">{currentStudent.name}</strong> ({getBoardShortLabel(targetBoard)} • {targetClass})
+                          </p>
+                          <p className="text-sm font-black text-indigo-950">
+                            Current Status:{' '}
+                            <span className={targetClassInfo.isPaidActive ? 'text-emerald-700' : 'text-amber-700'}>
+                              {targetClassInfo.isPaidActive
+                                ? `${planInfo.planDisplayName} (${planInfo.daysRemainingDisplay})`
+                                : planInfo.planDisplayName}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+                        <label className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5">
+                          <span className="text-slate-500">Board:</span>
+                          <select
+                            value={targetBoard}
+                            onChange={(e) => setTargetBoard(e.target.value as EducationBoard)}
+                            className="font-black text-slate-900 bg-transparent focus:outline-none cursor-pointer"
+                          >
+                            {BOARD_META_LIST.map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {getBoardShortLabel(b.id)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5">
+                          <span className="text-slate-500">Class:</span>
+                          <select
+                            value={targetClass}
+                            onChange={(e) => setTargetClass(e.target.value as ClassLevel)}
+                            className="font-black text-slate-900 bg-transparent focus:outline-none cursor-pointer"
+                          >
+                            {ALL_CLASS_LEVELS.map((cls) => (
+                              <option key={cls} value={cls}>
+                                {cls}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SECTION A: STUDENT & SCHOOL PLANS (Classes 1–10 + Scholarship) */}
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                          <GraduationCap className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
+                            Student Plans (Classes 1–10 &amp; MSCE Scholarship)
+                          </h3>
+                          <p className="text-[11px] text-slate-600 font-medium">
+                            Maharashtra State Board, CBSE &amp; ICSE · Includes Free Base Demo, ₹99 Annual Class Plan &amp; Scholarship Combo
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Student Card 1: Free Plan */}
+                      <div className="p-5 rounded-3xl border-2 border-emerald-300 bg-emerald-50/40 flex flex-col justify-between gap-4">
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900">
+                              Free Demo Plan
+                            </span>
+                            <span className="text-[11px] font-black text-emerald-700">Lifetime</span>
+                          </div>
+                          <h4 className="text-base font-black text-slate-900">
+                            FREE PLAN – ₹0 – Lifetime
+                          </h4>
+                          <div className="p-3 rounded-2xl bg-white border border-emerald-200 flex items-baseline gap-1.5">
+                            <span className="text-2xl font-black text-slate-900">₹0</span>
+                            <span className="text-xs font-bold text-emerald-700">/ Forever</span>
+                          </div>
+                          <ul className="space-y-1.5 text-xs text-slate-700 font-semibold">
+                            <li className="flex items-start gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                              <span>2 Free Demo Worksheets (English &amp; Math)</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                              <span>Brain Puzzles, Sudoku &amp; Preview Study Notes</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                              <span>Free Sample Mock Tests for Scholarship &amp; TET/CTET</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div className="w-full py-2.5 rounded-xl bg-emerald-100 text-emerald-900 font-black text-xs text-center border border-emerald-300">
+                          ✓ Included Free Forever
+                        </div>
+                      </div>
+
+                      {/* Student Card 2: Class Annual Plan (₹99) */}
+                      <div
+                        onClick={() => setSelectedPlanSku('BOARD_CLASS')}
+                        className={`p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 cursor-pointer transition-all ${
+                          selectedPlanSku === 'BOARD_CLASS'
+                            ? 'border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 shadow-lg ring-2 ring-amber-300'
+                            : 'border-amber-300 bg-white hover:border-amber-400'
+                        }`}
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900">
+                              Most Popular • Student
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white">
+                              SAVE 50%
+                            </span>
+                          </div>
+                          <h4 className="text-base font-black text-slate-900">
+                            Board &amp; Class Annual Plan ({getBoardShortLabel(targetBoard)} • {targetClass})
+                          </h4>
+                          <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-center justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-slate-400 line-through">₹199</span>
+                                <span className="text-2xl font-black text-amber-600">₹99</span>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-600 block">
+                                12 Months (365 Days) Validity
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPlanGroupTab('classes');
+                                setSelectedPlanSku('BOARD_CLASS');
+                              }}
+                              className="px-2 py-1 rounded-lg bg-white border border-amber-300 text-[10px] font-black text-amber-900 hover:bg-amber-100 cursor-pointer"
+                            >
+                              Change Class
+                            </button>
+                          </div>
+                          <ul className="space-y-1.5 text-xs text-slate-700 font-semibold">
+                            {PLAN_CATALOG.BOARD_CLASS.highlights.map((hl) => (
+                              <li key={hl} className="flex items-start gap-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                <span>{hl}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="pt-2 border-t border-slate-100 space-y-2">
+                          {currentStudent ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={isCreatingOrder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleInitiateCheckout('BOARD_CLASS');
+                                }}
+                                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                <CreditCard className="w-3.5 h-3.5" />
+                                <span>BUY NOW (₹99)</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isCreatingOrder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleInitiateQrPayment('BOARD_CLASS');
+                                }}
+                                className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-[11px] border border-amber-200 cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <QrCode className="w-3 h-3 text-amber-700" />
+                                <span>Pay via UPI QR (₹99)</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                resetModal();
+                                onRequestAuth?.('login');
+                              }}
+                              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                            >
+                              Sign In to Unlock (₹99)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Student Card 3: Scholarship Combo (₹99) */}
+                      {(() => {
+                        const schItem = PLAN_CATALOG.SCHOLARSHIP_COMBO;
+                        const isSel = selectedPlanSku === schItem.sku;
+                        return (
+                          <div
+                            onClick={() => setSelectedPlanSku(schItem.sku)}
+                            className={`p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 cursor-pointer transition-all ${
+                              isSel
+                                ? 'border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 shadow-lg ring-2 ring-amber-300'
+                                : 'border-slate-200 bg-white hover:border-amber-300'
+                            }`}
+                          >
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-slate-900 text-amber-300">
+                                  Std 4th + 7th Combo
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white">
+                                  {schItem.discountBadge}
+                                </span>
+                              </div>
+                              <h4 className="text-base font-black text-slate-900">
+                                {schItem.title}
+                              </h4>
+                              <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-center justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-bold text-slate-400 line-through">
+                                      ₹{schItem.originalAmountInr}
+                                    </span>
+                                    <span className="text-2xl font-black text-amber-600">
+                                      ₹{schItem.amountInr}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-slate-600 block">
+                                    Validity: {schItem.validityLabel} ({schItem.validityDays} Days)
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                                  50% OFF
+                                </span>
+                              </div>
+                              <ul className="space-y-1.5 text-xs text-slate-700 font-semibold">
+                                {schItem.highlights.map((hl) => (
+                                  <li key={hl} className="flex items-start gap-1.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span>{hl}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="pt-2 border-t border-slate-100 space-y-2">
+                              {currentStudent ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isCreatingOrder}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleInitiateCheckout(schItem.sku);
+                                    }}
+                                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                                  >
+                                    <CreditCard className="w-3.5 h-3.5" />
+                                    <span>BUY NOW (₹{schItem.amountInr})</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isCreatingOrder}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleInitiateQrPayment(schItem.sku);
+                                    }}
+                                    className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-[11px] border border-amber-200 cursor-pointer flex items-center justify-center gap-1"
+                                  >
+                                    <QrCode className="w-3 h-3 text-amber-700" />
+                                    <span>Pay via UPI QR (₹{schItem.amountInr})</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    resetModal();
+                                    onRequestAuth?.('login');
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                                >
+                                  Sign In to Unlock (₹{schItem.amountInr})
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* SECTION B: TEACHER & EDUCATOR PLANS (MAHA TET & CTET — 6M & 1Y) */}
+                  <div className="space-y-3 pt-4 border-t border-slate-200">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center">
+                          <Award className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <h3 className="text-sm sm:text-base font-display font-black text-slate-900">
+                            Teacher &amp; Educator Plans (MAHA TET &amp; CTET — 6 Months &amp; 1 Year)
+                          </h3>
+                          <p className="text-[11px] text-slate-600 font-medium">
+                            All 6 Teacher Eligibility Plans with Paper 1 &amp; Paper 2 Full CBT Mock Tests, Bilingual Notes &amp; Solutions
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {PLAN_CATALOG_LIST.filter((item) => item.audience === 'teacher').map((item) => {
+                        const isSelected = selectedPlanSku === item.sku;
+                        const unlockedAlready =
+                          item.unlockedCategories.length > 0 &&
+                          item.unlockedCategories.every((catId) => hasCategoryAccess(currentStudent, catId));
+                        return (
+                          <div
+                            key={item.sku}
+                            onClick={() => setSelectedPlanSku(item.sku)}
+                            className={`p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 shadow-lg ring-2 ring-amber-300'
+                                : unlockedAlready
+                                ? 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400'
+                                : 'border-slate-200 bg-white hover:border-indigo-300'
+                            }`}
+                          >
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900">
+                                  Teacher • {item.validityLabel}
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-xs">
+                                  {item.discountBadge}
+                                </span>
+                              </div>
+                              <div>
+                                <h4 className="text-base font-black text-slate-900">{item.title}</h4>
+                                <p className="text-xs text-slate-600 mt-0.5">{item.subtitle}</p>
+                              </div>
+                              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-bold text-slate-400 line-through">
+                                      ₹{item.originalAmountInr}
+                                    </span>
+                                    <span className="text-2xl font-black text-amber-600">
+                                      ₹{item.amountInr}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-slate-500 block">
+                                    Validity: {item.validityLabel} ({item.validityDays} Days)
+                                  </span>
+                                </div>
+                                <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                                  50% OFF
+                                </span>
+                              </div>
+                              <ul className="space-y-1.5 text-xs text-slate-700 font-semibold">
+                                {item.highlights.map((hl) => (
+                                  <li key={hl} className="flex items-start gap-1.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span>{hl}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="pt-2 border-t border-slate-100 space-y-2">
+                              {currentStudent ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isCreatingOrder}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleInitiateCheckout(item.sku);
+                                    }}
+                                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                                  >
+                                    <CreditCard className="w-3.5 h-3.5" />
+                                    <span>BUY NOW (₹{item.amountInr})</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isCreatingOrder}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleInitiateQrPayment(item.sku);
+                                    }}
+                                    className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-[11px] border border-amber-200 cursor-pointer flex items-center justify-center gap-1"
+                                  >
+                                    <QrCode className="w-3 h-3 text-amber-700" />
+                                    <span>Pay via UPI QR (₹{item.amountInr})</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    resetModal();
+                                    onRequestAuth?.('login');
+                                  }}
+                                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs cursor-pointer"
+                                >
+                                  Sign In to Unlock (₹{item.amountInr})
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 

@@ -154,6 +154,7 @@ const AppContent: React.FC = () => {
   const [membershipPlanSku, setMembershipPlanSku] = useState<PlanSkuId>('BOARD_CLASS');
   const [membershipTargetClass, setMembershipTargetClass] = useState<ClassLevel | undefined>(undefined);
   const [membershipTargetBoard, setMembershipTargetBoard] = useState<EducationBoard | undefined>(undefined);
+  const [membershipShowAllPlans, setMembershipShowAllPlans] = useState<boolean>(false);
 
   // Public Home Dashboard & Navigation Explorer State
   const [publicBoard, setPublicBoard] = useState<EducationBoard>('Maharashtra');
@@ -439,12 +440,14 @@ const AppContent: React.FC = () => {
     _plan: 'basic' | 'premium' = 'premium',
     targetClass?: ClassLevel,
     targetBoard?: EducationBoard,
-    planSku: PlanSkuId = 'BOARD_CLASS'
+    planSku: PlanSkuId = 'BOARD_CLASS',
+    showAllPlans: boolean = false
   ) => {
     setMembershipInitialPlan('premium');
     setMembershipPlanSku(planSku || 'BOARD_CLASS');
     setMembershipTargetClass(targetClass || currentStudent?.classLevel || publicClass);
     setMembershipTargetBoard(targetBoard || (currentStudent ? activeBoard : publicBoard));
+    setMembershipShowAllPlans(showAllPlans);
     setIsMembershipOpen(true);
   };
 
@@ -1020,7 +1023,9 @@ const AppContent: React.FC = () => {
         activeMenuId={getActiveMenuId()}
         onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
         onOpenPanel={handleOpenRolePanel}
-        onOpenMembership={(targetClass, targetBoard) => openMembershipWithPlan('premium', targetClass, targetBoard)}
+        onOpenMembership={(targetClass, targetBoard, showAllPlans) =>
+          openMembershipWithPlan('premium', targetClass, targetBoard, 'BOARD_CLASS', Boolean(showAllPlans))
+        }
         viewMode={viewMode}
         onToggleViewMode={() =>
           setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))
@@ -2071,11 +2076,15 @@ const AppContent: React.FC = () => {
         {isMembershipOpen && (
           <MembershipModal
             isOpen={isMembershipOpen}
-            onClose={() => setIsMembershipOpen(false)}
+            onClose={() => {
+              setIsMembershipOpen(false);
+              setMembershipShowAllPlans(false);
+            }}
             initialSelectedPlan={membershipInitialPlan}
             initialPlanSku={membershipPlanSku}
             initialSelectedClass={membershipTargetClass}
             initialSelectedBoard={membershipTargetBoard}
+            initialShowAllPlans={membershipShowAllPlans}
             onRequestAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
           />
         )}

@@ -57,7 +57,11 @@ interface HeaderProps {
   onSelectMainSection?: (sectionId: MainMenuId) => void;
   onOpenAuth: (defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot') => void;
   onOpenPanel: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
-  onOpenMembership: (targetClass?: ClassLevel, targetBoard?: EducationBoard) => void;
+  onOpenMembership: (
+    targetClass?: ClassLevel,
+    targetBoard?: EducationBoard,
+    showAllPlans?: boolean
+  ) => void;
   activeMenuId?: MainMenuId;
   viewMode: 'auto' | 'desktop';
   onToggleViewMode: () => void;
@@ -283,8 +287,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </button>
 
-        {/* Right Actions Area (Always keeps Login/Logout button visible in mobile, desktop & Smart TV frames) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 xl:gap-2.5 shrink-0">
+        {/* Right Actions Area (Always keeps Upgrade Plan, Share App, Install App & Login/Logout buttons visible in mobile, desktop & Smart TV frames) */}
+        <div className="flex items-center justify-end flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 xl:gap-2.5 shrink-0">
           {/* Signed-in Active Board & Class Switcher Pill (Visible on Mobile, Tablet & Desktop) */}
           {isLearningRole &&
             currentStudent &&
@@ -544,38 +548,47 @@ export const Header: React.FC<HeaderProps> = ({
               );
             })()}
 
-          {/* Signed-in Plan Badge / Upgrade Button */}
-          {currentStudent &&
-            (() => {
-              const pInfo = getStudentPlanInfo(
-                currentStudent,
-                undefined,
-                currentStudent.classLevel,
-                activeBoard
-              );
-              if (pInfo.effectivePlan === 'free') {
-                return (
-                  <button
-                    type="button"
-                    onClick={() => onOpenMembership(currentStudent.classLevel, activeBoard)}
-                    className="hidden lg:flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <Crown className="w-3.5 h-3.5" />
-                    <span>Upgrade ₹99</span>
-                  </button>
-                );
-              }
-              return (
-                <button
-                  type="button"
-                  onClick={() => onOpenMembership(currentStudent.classLevel, activeBoard)}
-                  className="hidden lg:flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                >
-                  <Crown className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>₹99 ({pInfo.daysRemaining}d)</span>
-                </button>
-              );
-            })()}
+          {/* Always-visible Upgrade Plan Button right near Active Class Menu (Shows All Student & Teacher Plans) */}
+          {(() => {
+            const pInfo = currentStudent
+              ? getStudentPlanInfo(
+                  currentStudent,
+                  undefined,
+                  currentStudent.classLevel,
+                  activeBoard
+                )
+              : null;
+            const hasPaidActive = Boolean(pInfo && pInfo.effectivePlan !== 'free');
+            return (
+              <button
+                type="button"
+                data-testid="header-upgrade-plan-btn"
+                onClick={() =>
+                  onOpenMembership(currentStudent?.classLevel, activeBoard, true)
+                }
+                title={
+                  hasPaidActive && pInfo
+                    ? `Active Plan (${pInfo.daysRemaining}d left) — Click to view or upgrade all Student & Teacher plans`
+                    : 'View & Upgrade Student & Teacher Subscription Plans'
+                }
+                style={{
+                  backgroundColor: '#f59e0b',
+                  backgroundImage: 'linear-gradient(to right, #fbbf24, #f59e0b)',
+                  color: '#0f172a',
+                }}
+                className="min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-amber-400 bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-105 text-slate-950 font-extrabold text-[11px] sm:text-xs shadow-xs border border-amber-500 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
+              >
+                <Crown className="w-3.5 h-3.5 shrink-0 text-slate-950" />
+                <span className="hidden sm:inline text-slate-950">Upgrade Plan</span>
+                <span className="sm:hidden text-slate-950">Plans</span>
+                {hasPaidActive && pInfo && (
+                  <span className="hidden xl:inline-block px-1.5 py-0.5 rounded-full bg-emerald-700 text-white text-[10px] font-black leading-none">
+                    {pInfo.daysRemaining}d
+                  </span>
+                )}
+              </button>
+            );
+          })()}
 
           {/* Notification Bell (Authenticated Users Only) */}
           {(currentStudent || currentUser) && (
