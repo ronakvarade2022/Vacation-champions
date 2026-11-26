@@ -221,7 +221,7 @@ html.tv-browser-detected .cv-auto-section {
 }
 
 @media (max-width: 767px) {
-  html:not(.desktop-site-active):not(.tv-browser-detected) main {
+  html:not(.desktop-site-active):not(.tv-browser-detected) main:not(.msz-public-home-main) {
     padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
 }

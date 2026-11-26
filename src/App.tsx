@@ -1281,7 +1281,7 @@ const AppContent: React.FC = () => {
       <main
         className={
           isPublicHomepageView
-            ? 'flex-1 w-full p-0 m-0'
+            ? 'msz-public-home-main flex-1 w-full p-0 m-0'
             : `flex-1 w-full mx-auto pt-4 sm:pt-6 pb-10 ${
                 viewMode === 'desktop'
                   ? 'max-w-[1840px] px-4 sm:px-6 lg:px-8 2xl:px-10'
