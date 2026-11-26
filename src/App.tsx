@@ -2549,15 +2549,13 @@ const AppContent: React.FC = () => {
         )}
       </Suspense>
 
-      {/* Unified AI-Powered Help & Support Assistant (Visible inside portals, hidden on initial full-screen homepage) */}
-      {!isPublicHomepageView && (
-        <HelpSupportAssistant
-          isOpen={isHelpDrawerOpen}
-          onOpenChange={setIsHelpDrawerOpen}
-          onNavigateAction={handleHelpSupportNavigation}
-          activeTab={currentTab}
-        />
-      )}
+      {/* Unified AI-Powered Help & Support Assistant (Section 6 on the homepage and across all portals) */}
+      <HelpSupportAssistant
+        isOpen={isHelpDrawerOpen}
+        onOpenChange={setIsHelpDrawerOpen}
+        onNavigateAction={handleHelpSupportNavigation}
+        activeTab={currentTab}
+      />
 
       {/* Non-intrusive PWA Offline Connectivity Banner */}
       <PWAOfflineIndicator />
@@ -2575,8 +2573,7 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      {/* Professional Education Platform Footer (Visible inside portals/subpages, hidden on initial full-screen homepage) */}
-      {!isPublicHomepageView && (
+      {/* Professional Education Platform Footer (Section 7 on the homepage and across all portals/subpages) */}
       <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-10 pb-8 text-xs">
         <div
           className={`mx-auto space-y-10 ${
@@ -2729,7 +2726,6 @@ const AppContent: React.FC = () => {
           </div>
         </div>
       </footer>
-      )}
     </div>
   );
 };

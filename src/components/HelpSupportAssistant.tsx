@@ -279,7 +279,7 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
     <>
       {/* Non-overlapping Docked HELP & SUPPORT Bar (Never floats over main content) */}
       {!isOpen && (
-        <div className="w-full no-print bg-amber-50/40 border-t border-amber-200/60 py-3 px-4 sm:px-6 lg:px-8">
+        <div className="w-full no-print bg-[#fefce8] border-t border-amber-200/80 py-3 px-4 sm:px-6 lg:px-8">
           <div className="msz-container flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#0f2952]">
               <LifeBuoy className="w-4 h-4 text-amber-600 shrink-0" />
