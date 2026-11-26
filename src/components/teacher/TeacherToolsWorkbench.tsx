@@ -26,6 +26,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { ALL_10_CLASSES } from '../../data/classCurriculumConfig';
+import { downloadTextAsPdf } from '../../utils/realFileExports';
 import type { EducationBoard } from '../../types';
 
 const TEACHER_SAVED_KEY = 'msz_teacher_tools_saved_v1';
@@ -932,6 +933,21 @@ TEACHER PRODUCTIVITY & QUALITY LOG
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>Copy Output</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadTextAsPdf({
+                      title: activeTool.name,
+                      subtitle: `${toolBoard} · ${toolClass} · ${toolSubject}`,
+                      sections: [{ heading: activeTool.name, body: generatedToolOutput }],
+                      filename: `${activeTool.id.toLowerCase()}-${toolClass.toLowerCase().replace(/\s+/g, '-')}`,
+                    });
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Download PDF</span>
                 </button>
                 <button
                   type="button"

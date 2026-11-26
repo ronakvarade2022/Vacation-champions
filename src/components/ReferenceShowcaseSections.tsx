@@ -34,7 +34,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
-import type { ChapterStudyMaterial, ClassLevel, EducationBoard, OfficialTextbookResource, SubjectName } from '../types';
+import type { ChapterStudyMaterial, ClassLevel, EducationBoard, OfficialTextbookResource, PortalRole, SubjectName } from '../types';
 import type { getExamPapersForSubject as getExamPapersForSubjectFn } from '../data/studyLibrary/examPapersData';
 import type { getVideoLessonsForSubject as getVideoLessonsForSubjectFn } from '../data/studyLibrary/videoLessonsData';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId, NavSubItemConfig } from '../data/navigationConfig';
@@ -76,7 +76,7 @@ interface ReferenceShowcaseSectionsProps {
   onOpenAuth: (defaultTab: 'login' | 'register' | 'teacher' | 'admin') => void;
   onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
   isAuthenticated?: boolean;
-  currentRole?: 'student' | 'teacher' | 'admin';
+  currentRole?: PortalRole;
   currentUserName?: string;
   onOpenMembership: (targetClass: ClassLevel, targetBoard: EducationBoard) => void;
   onStartLearningClick: () => void;

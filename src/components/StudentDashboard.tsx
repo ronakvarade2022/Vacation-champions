@@ -41,7 +41,6 @@ import {
 } from '../data/classCurriculumConfig';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
-import { FiveZonesHubStrip } from './zones/FiveZonesHubStrip';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface StudentDashboardProps {
@@ -215,7 +214,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-600 font-medium mt-1">
-                🔥 {currentStudent.streakDays} Day Streak &bull; {currentStudent.points} XP &bull;{' '}
+                🔥 {currentStudent.streakDays} Day Streak · {currentStudent.points} XP ·{' '}
+                {currentStudent.medium ? `${currentStudent.medium} Medium · ` : ''}
                 {getActivatedBoardClassesList(currentStudent).length} Paid Class Activation
                 {getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 's'}
               </p>
@@ -231,7 +231,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
                 >
                   <Users className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Teacher Class &amp; Student Command Center</span>
+                  <span>Teacher Command Center</span>
                 </button>
                 <button
                   type="button"
@@ -239,69 +239,25 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
                 >
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>Teacher Lesson Planner</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab('tet-ctet')}
-                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span>TET &amp; CTET Zone</span>
+                  <span>Lesson Planner</span>
                 </button>
               </>
             )}
             <button
               type="button"
-              onClick={() => onNavigateTab('study-materials')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Free Study Library</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('worksheets')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Online Worksheets</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('additional-curriculum')}
+              onClick={() => onNavigateTab('ai-tools')}
               className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Additional Curriculum</span>
+              <span>AI Tools Studio (10 Tools)</span>
             </button>
             <button
               type="button"
-              onClick={() => onNavigateTab('profile')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+              onClick={() => onNavigateTab('core-skills-lab')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
             >
-              <User className="w-3.5 h-3.5" />
-              <span>My Account</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('help-support')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-            >
-              <Headphones className="w-3.5 h-3.5" />
-              <span>HELP &amp; SUPPORT</span>
-            </button>
-            <PWAInstallButton variant="compact" />
-            <button
-              type="button"
-              onClick={() =>
-                onOpenMembership('premium', currentStudent.classLevel, selectedCurriculumBoard)
-              }
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-            >
-              <Crown className="w-3.5 h-3.5 text-amber-300" />
-              <span>Unlock Board / Class (₹99)</span>
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Vedic Maths · Abacus · Phonics</span>
             </button>
           </div>
         </div>
@@ -898,18 +854,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           );
         })()}
       </div>
-
-      {/* FIVE MAJOR EDUCATIONAL ZONES HUB */}
-      <FiveZonesHubStrip
-        onNavigateZone={(tab) => onNavigateTab(tab)}
-        onOpenTeacherPortal={() => {
-          if (currentStudent.accountRole === 'teacher') {
-            onNavigateTab('teacher-dashboard');
-          } else if (onOpenPanel) {
-            onOpenPanel('teacher', 'login');
-          }
-        }}
-      />
 
       {/* DIRECT PWA MOBILE APP INSTALL BANNER AT BOTTOM OF DASHBOARD */}
       <PWAInstallButton variant="banner" />

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useApp } from '../../context/AppContext';
 import { ALL_18_SKILL_PROGRAMS } from '../../data/skillPrograms/skillProgramsCatalog';
+import { downloadTextAsPdf } from '../../utils/realFileExports';
 import type {
   CoachingInstituteRecord,
   IndependentSkillEnrollment,
@@ -19,17 +21,18 @@ import {
   ClipboardCheck,
   Clock,
   CreditCard,
+  Download,
   Eye,
   EyeOff,
   FileText,
   GraduationCap,
   Layers,
+  Lock,
   Plus,
   Printer,
   Search,
   Sparkles,
   Trophy,
-  UserCheck,
   Users,
 } from 'lucide-react';
 
@@ -37,6 +40,17 @@ const ENROLLMENTS_STORAGE_KEY = 'msz_skill_enrollments_v1';
 const INSTITUTES_STORAGE_KEY = 'msz_coaching_institutes_v1';
 const BATCHES_STORAGE_KEY = 'msz_coaching_batches_v1';
 const INST_STUDENTS_STORAGE_KEY = 'msz_coaching_students_v1';
+const INST_CUSTOM_COURSES_KEY = 'msz_coaching_custom_courses_v1';
+const INST_TRAINERS_KEY = 'msz_coaching_trainers_v1';
+
+interface InstituteCustomCourse {
+  id: string;
+  instituteId: string;
+  title: string;
+  trainer: string;
+  materialNote: string;
+  quizTitle: string;
+}
 
 const CATEGORIES: Array<'All' | SkillProgramCategory> = [
   'All',
@@ -80,7 +94,8 @@ export interface CoachingInstituteZoneViewProps {
   userName: string;
   initialMode?: 'programs' | 'institute';
   onNavigateTab: (tab: string) => void;
-  onOpenAuth?: (tab?: 'login' | 'teacher' | 'register') => void;
+  onOpenAuth?: (tab?: 'login' | 'teacher' | 'institute_admin' | 'register', registerRole?: 'student' | 'institute_admin') => void;
+  onOpenCoreSkillLab?: (programId: 'vedic-maths' | 'abacus' | 'phonics') => void;
   onBackHome: () => void;
 }
 
@@ -89,8 +104,13 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
   userName,
   initialMode = 'programs',
   onNavigateTab,
+  onOpenAuth,
+  onOpenCoreSkillLab,
   onBackHome,
 }) => {
+  const { activeRole } = useApp();
+  const isInstituteAdminAuthorized =
+    activeRole === 'institute_admin' || activeRole === 'admin';
   const [zoneMode, setZoneMode] = useState<'programs' | 'institute'>(initialMode);
   const [selectedCategory, setSelectedCategory] = useState<'All' | SkillProgramCategory>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -126,7 +146,18 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
     const list = safeReadJson<CoachingInstituteRecord[]>(INSTITUTES_STORAGE_KEY, []);
     return list[0]?.id || '';
   });
-  const [instSubTab, setInstSubTab] = useState<'batches' | 'students' | 'fees' | 'register'>('batches');
+  const [instSubTab, setInstSubTab] = useState<'batches' | 'students' | 'fees' | 'courses' | 'register'>('batches');
+  const [customCourses, setCustomCourses] = useState<InstituteCustomCourse[]>(() =>
+    safeReadJson<InstituteCustomCourse[]>(INST_CUSTOM_COURSES_KEY, [])
+  );
+  const [trainers, setTrainers] = useState<Array<{ id: string; instituteId: string; name: string; specialty: string }>>(() =>
+    safeReadJson(INST_TRAINERS_KEY, [])
+  );
+  const [newCourseTitle, setNewCourseTitle] = useState('');
+  const [newCourseMaterial, setNewCourseMaterial] = useState('');
+  const [newCourseQuiz, setNewCourseQuiz] = useState('');
+  const [newTrainerName, setNewTrainerName] = useState('');
+  const [newTrainerSpec, setNewTrainerSpec] = useState('Abacus & Vedic Maths');
 
   // Institute registration form state
   const [regInstName, setRegInstName] = useState<string>('');
@@ -166,6 +197,14 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
   useEffect(() => {
     safeWriteJson(INST_STUDENTS_STORAGE_KEY, instituteStudents);
   }, [instituteStudents]);
+
+  useEffect(() => {
+    safeWriteJson(INST_CUSTOM_COURSES_KEY, customCourses);
+  }, [customCourses]);
+
+  useEffect(() => {
+    safeWriteJson(INST_TRAINERS_KEY, trainers);
+  }, [trainers]);
 
   const myEnrollments = useMemo(
     () => enrollments.filter((e) => e.userId === userId),
@@ -555,7 +594,21 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
               })}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {onOpenCoreSkillLab &&
+                (selectedProgram.id === 'vedic-maths' ||
+                  selectedProgram.id === 'abacus' ||
+                  selectedProgram.id === 'phonics') && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenCoreSkillLab(selectedProgram.id as 'vedic-maths' | 'abacus' | 'phonics')
+                    }
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                  >
+                    Open Interactive Practice Studio
+                  </button>
+                )}
               {selectedProgram.recommendedLinkedRoute && (
                 <button
                   type="button"
@@ -983,14 +1036,41 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
                   <p className="text-xs text-slate-600">{selectedProgram.certificationRule}</p>
                 </div>
                 {activeEnrollment?.certificateCode && (
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>Print Certificate</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadTextAsPdf({
+                          title: `Certificate of Skill Achievement - ${selectedProgram.title}`,
+                          subtitle: `Awarded to ${activeEnrollment.studentName}`,
+                          metaLines: [
+                            `Certificate ID: ${activeEnrollment.certificateCode}`,
+                            `Category: ${selectedProgram.category} | Quiz Score: ${activeEnrollment.quizBestScore}/${activeEnrollment.quizTotal}`,
+                            `Date Issued: ${activeEnrollment.certificateIssuedAt || new Date().toISOString().slice(0, 10)}`,
+                          ],
+                          sections: [
+                            {
+                              heading: 'Verification Statement',
+                              body: `This certifies that ${activeEnrollment.studentName} has successfully completed the curriculum assessment for ${selectedProgram.title} on MyStudyZone Coaching & Skill Development Zone (mystudyzone.in).`,
+                            },
+                          ],
+                          filename: `certificate_${selectedProgram.id}_${activeEnrollment.studentName}`,
+                        })
+                      }
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -1125,6 +1205,20 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
                     >
                       {enr ? 'Continue Course' : 'Enrol & Start Learning'}
                     </button>
+                    {onOpenCoreSkillLab &&
+                      (prog.id === 'vedic-maths' ||
+                        prog.id === 'abacus' ||
+                        prog.id === 'phonics') && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenCoreSkillLab(prog.id as 'vedic-maths' | 'abacus' | 'phonics')
+                          }
+                          className="py-2 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                        >
+                          Practice Lab
+                        </button>
+                      )}
                   </div>
                 </div>
               );
@@ -1134,7 +1228,48 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
       )}
 
       {/* VIEW 3: COACHING INSTITUTE & SKILL ACADEMY OWNER PORTAL */}
-      {zoneMode === 'institute' && (
+      {zoneMode === 'institute' && !isInstituteAdminAuthorized && (
+        <div className="bg-white rounded-3xl p-8 border border-amber-200 text-center space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">
+            Coaching Institute Portal Authentication Required
+          </h2>
+          <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+            Sign in or register as a Coaching &amp; Skill Institute Administrator to manage batches, trainers, fee ledgers, and issue certificates. Independent students can continue using the 18 Skill Programs freely!
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {onOpenAuth && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('institute_admin')}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black cursor-pointer"
+                >
+                  Coaching Institute Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('register', 'institute_admin')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black cursor-pointer"
+                >
+                  Register Coaching Institute
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setZoneMode('programs')}
+              className="px-5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-black cursor-pointer"
+            >
+              Browse 18 Skill Programs
+            </button>
+          </div>
+        </div>
+      )}
+
+      {zoneMode === 'institute' && isInstituteAdminAuthorized && (
         <div className="space-y-5">
           {/* Sub-Tabs & Institute Selector */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
@@ -1142,6 +1277,7 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
               {[
                 { id: 'batches' as const, label: `Batches & Schedule (${instituteBatches.length})`, icon: Layers },
                 { id: 'students' as const, label: `Student Roster & Attendance (${activeInstStudents.length})`, icon: Users },
+                { id: 'courses' as const, label: `Courses, Trainers & Quizzes`, icon: BookOpen },
                 { id: 'fees' as const, label: 'Fee Ledger & Certificates', icon: CreditCard },
                 { id: 'register' as const, label: '+ Register Institute', icon: Plus },
               ].map((t) => {
@@ -1165,17 +1301,22 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
             </div>
 
             {institutes.length > 0 && (
-              <select
-                value={activeInstitute?.id || ''}
-                onChange={(e) => setActiveInstituteId(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 text-xs font-black cursor-pointer"
-              >
-                {institutes.map((inst) => (
-                  <option key={inst.id} value={inst.id}>
-                    {inst.instituteName} ({inst.city})
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black">
+                  Status: {(activeInstitute as any)?.verificationStatus || 'PENDING_VERIFICATION'}
+                </span>
+                <select
+                  value={activeInstitute?.id || ''}
+                  onChange={(e) => setActiveInstituteId(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 text-xs font-black cursor-pointer"
+                >
+                  {institutes.map((inst) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.instituteName} ({inst.city})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
 
@@ -1508,6 +1649,125 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
             </div>
           )}
 
+          {/* CUSTOM COURSES, TRAINERS, MATERIALS & QUIZZES TAB */}
+          {activeInstitute && instSubTab === 'courses' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 text-xs">
+              <div className="lg:col-span-6 bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-3">
+                <h2 className="text-sm font-black text-slate-900">
+                  Manage Custom Courses, Materials &amp; Quizzes
+                </h2>
+                <input
+                  type="text"
+                  value={newCourseTitle}
+                  onChange={(e) => setNewCourseTitle(e.target.value)}
+                  placeholder="Course title (e.g. Level 2 Rapid Soroban)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+                <input
+                  type="text"
+                  value={newCourseQuiz}
+                  onChange={(e) => setNewCourseQuiz(e.target.value)}
+                  placeholder="Quiz / Assignment prompt title"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+                <textarea
+                  rows={2}
+                  value={newCourseMaterial}
+                  onChange={(e) => setNewCourseMaterial(e.target.value)}
+                  placeholder="Study notes / weekly practice instructions..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newCourseTitle.trim()) return;
+                    setCustomCourses((prev) => [
+                      {
+                        id: `crs_${Date.now().toString(36)}`,
+                        instituteId: activeInstitute.id,
+                        title: newCourseTitle.trim(),
+                        trainer: activeInstitute.directorName,
+                        materialNote: newCourseMaterial.trim() || 'Weekly practice sheets',
+                        quizTitle: newCourseQuiz.trim() || 'Unit Evaluation',
+                      },
+                      ...prev,
+                    ]);
+                    setNewCourseTitle('');
+                    setNewCourseMaterial('');
+                    setNewCourseQuiz('');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black cursor-pointer"
+                >
+                  + Add Custom Course &amp; Materials
+                </button>
+
+                <div className="space-y-2 pt-2">
+                  {customCourses
+                    .filter((c) => c.instituteId === activeInstitute.id)
+                    .map((c) => (
+                      <div key={c.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                        <div className="font-black text-slate-900">{c.title}</div>
+                        <div className="text-slate-600">Material: {c.materialNote}</div>
+                        <div className="text-indigo-700 font-bold">Assessment: {c.quizTitle}</div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              <div className="lg:col-span-6 bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-3">
+                <h2 className="text-sm font-black text-slate-900">Trainers &amp; Faculty Directory</h2>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="text"
+                    value={newTrainerName}
+                    onChange={(e) => setNewTrainerName(e.target.value)}
+                    placeholder="Trainer full name"
+                    className="flex-1 min-w-[140px] px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                  <input
+                    type="text"
+                    value={newTrainerSpec}
+                    onChange={(e) => setNewTrainerSpec(e.target.value)}
+                    placeholder="Specialization"
+                    className="flex-1 min-w-[140px] px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newTrainerName.trim()) return;
+                      setTrainers((prev) => [
+                        {
+                          id: `trn_${Date.now().toString(36)}`,
+                          instituteId: activeInstitute.id,
+                          name: newTrainerName.trim(),
+                          specialty: newTrainerSpec.trim() || 'Skill Trainer',
+                        },
+                        ...prev,
+                      ]);
+                      setNewTrainerName('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white font-black cursor-pointer"
+                  >
+                    + Add Trainer
+                  </button>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  {trainers
+                    .filter((t) => t.instituteId === activeInstitute.id)
+                    .map((t) => (
+                      <div key={t.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                        <span className="font-black text-slate-900">{t.name}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold">
+                          {t.specialty}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* FEE LEDGER & CERTIFICATES TAB */}
           {activeInstitute && instSubTab === 'fees' && (
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
@@ -1554,10 +1814,29 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
                           )}
                           <button
                             type="button"
-                            onClick={() => handleIssueInstituteCertificate(stu.id)}
+                            onClick={() => {
+                              handleIssueInstituteCertificate(stu.id);
+                              if (stu.certificateCode) {
+                                downloadTextAsPdf({
+                                  title: `Institute Completion Certificate - ${stu.name}`,
+                                  subtitle: activeInstitute.instituteName,
+                                  metaLines: [
+                                    `Certificate ID: ${stu.certificateCode} | Grade: ${stu.grade}`,
+                                    `Director: ${activeInstitute.directorName} | City: ${activeInstitute.city}`,
+                                  ],
+                                  sections: [
+                                    {
+                                      heading: 'Certification',
+                                      body: `This certifies that ${stu.name} (${stu.grade}) has successfully completed training at ${activeInstitute.instituteName} (${activeInstitute.instituteType}).`,
+                                    },
+                                  ],
+                                  filename: `institute_certificate_${stu.name}`,
+                                });
+                              }
+                            }}
                             className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black cursor-pointer"
                           >
-                            {stu.certificateCode ? 'Certificate Ready' : 'Issue Certificate'}
+                            {stu.certificateCode ? 'Download PDF Certificate' : 'Issue Certificate'}
                           </button>
                         </div>
                       </div>

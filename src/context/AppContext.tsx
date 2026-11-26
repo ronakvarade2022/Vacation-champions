@@ -34,7 +34,8 @@ import {
   SectionVisibilityConfig,
   SpecialLearningProgramItem,
   CustomScholarshipQuestionRecord,
-  CustomGkQuestionItem
+  CustomGkQuestionItem,
+  PortalRole
 } from '../types';
 import type { InstructionMedium } from '../types/lessonPlanner';
 import { mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
@@ -60,6 +61,7 @@ import {
 import type { ShivajiStory } from '../data/shivajiStoriesData';
 import { 
   auth,
+  db,
   FirestoreConnectionState,
   FirestoreConnectionStatus,
   getFirestoreConnectionState,
@@ -67,6 +69,7 @@ import {
   testFirestoreConnection, 
   triggerFirestoreReconnect,
   saveScholarshipAttemptToFirestore,
+  registerFirebaseEmailUser,
   loginFirebaseEmailUser,
   sendFirebasePasswordReset,
   confirmFirebasePasswordReset,
@@ -81,6 +84,15 @@ import {
   ensureStudentReferralCodeInFirestore,
   onAuthStateChanged
 } from '../services/firebase';
+import { doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
+import {
+  fetchParentProfileFromFirestore,
+  fetchPortalRoleRecord,
+  findLocalPortalAccountByEmailOrMobile,
+  lookupStudentForParentLinking,
+  saveParentProfileToFirestore,
+  savePortalRoleRecord,
+} from '../services/portalFirestoreService';
 import {
   DEFAULT_SECTION_VISIBILITY,
   ensureDefaultPlatformConfigIfAdmin,
@@ -188,7 +200,7 @@ import {
   canPublishStudentLearningContent,
 } from '../data/contentPublicationFreeze';
 
-export type UserRole = 'student' | 'teacher' | 'admin';
+export type UserRole = PortalRole;
 
 interface RejectedQuestionRecord {
   id: string;
@@ -305,6 +317,35 @@ interface AppContextType {
     }
   ) => RegistrationResult;
   loginWithEmail: (email: string, password?: string, preferredRole?: 'student' | 'teacher') => Promise<{ success: boolean; message: string; student?: StudentProfile; blockedByActiveDevice?: boolean }>;
+  registerPortalAccount: (params: {
+    role: 'parent' | 'school_admin' | 'institute_admin';
+    name: string;
+    email: string;
+    mobile: string;
+    password: string;
+    city?: string;
+    relationship?: 'Mother' | 'Father' | 'Guardian';
+    linkedStudentEmail?: string;
+    linkedStudentMobile?: string;
+    institutionName?: string;
+    institutionType?: 'School (Std 1–10)' | 'Higher Secondary / Jr College (Std 11–12)' | 'Degree College / UG';
+    affiliationOrUniversity?: string;
+    principalName?: string;
+    classesCount?: number;
+    address?: string;
+    instituteName?: string;
+    instituteType?: 'Abacus & Vedic Maths Centre' | 'Coaching Class' | 'Skill Academy' | 'Multi-Program Institute';
+    programIdsOffered?: string[];
+  }) => Promise<{ success: boolean; message: string; role?: PortalRole; user?: AuthenticatedUser }>;
+  loginPortalAccount: (
+    email: string,
+    password: string,
+    expectedRole?: Exclude<PortalRole, 'admin'>
+  ) => Promise<{ success: boolean; message: string; role?: PortalRole; blockedByActiveDevice?: boolean }>;
+  linkParentChildVerified: (
+    studentEmailOrId: string,
+    studentMobile: string
+  ) => Promise<{ success: boolean; message: string; linkedStudent?: StudentProfile }>;
   recoverAccount: (email: string) => Promise<{ success: boolean; message: string; student?: StudentProfile }>;
   completePasswordReset: (oobCode: string, newPassword: string) => Promise<{ success: boolean; message: string; email?: string; student?: StudentProfile }>;
   logout: () => Promise<void>;
@@ -628,8 +669,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed = JSON.parse(savedUser);
         if (parsed?.uid && LEGACY_SAMPLE_IDS.has(parsed.uid)) return 'student';
-        if (parsed?.role === 'teacher') return 'teacher';
-        if (parsed?.role === 'admin') return 'admin';
+        if (
+          parsed?.role === 'teacher' ||
+          parsed?.role === 'parent' ||
+          parsed?.role === 'school_admin' ||
+          parsed?.role === 'institute_admin' ||
+          parsed?.role === 'admin'
+        ) {
+          return parsed.role;
+        }
       } catch {}
     }
     return 'student';
@@ -657,11 +705,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!parsed || !parsed.uid || LEGACY_SAMPLE_IDS.has(parsed.uid)) {
           return null;
         }
-        if (parsed?.role === 'parent') {
-          parsed.role = 'student';
-        }
-        // Prevent copied localStorage tokens from booting an unauthorized session on another device
-        if (parsed?.role !== 'admin') {
+        // Prevent copied localStorage tokens from booting an unauthorized session on student/teacher device locks
+        if (parsed?.role === 'student' || parsed?.role === 'teacher') {
           const localSess = getLocalActiveSessionState();
           if (localSess && !verifyLocalSessionNotCopied(parsed.uid).valid) {
             return null;
@@ -675,7 +720,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return null;
   });
 
-  const [parentsList, setParentsList] = useState<ParentProfile[]>(INITIAL_PARENTS);
+  const [parentsList, setParentsList] = useState<ParentProfile[]>(() => {
+    const saved = safeGetLocalStorage('vc_parents_list');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return INITIAL_PARENTS;
+  });
 
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(() => {
     const saved = safeGetLocalStorage('vc_announcements');
@@ -1619,6 +1673,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      // Check portal_roles / parents first so Parent, School Admin & Institute Admin sessions restore cleanly without converting to Student
+      const portalRoleDoc = await fetchPortalRoleRecord(fbUser.uid, fbEmail || undefined).catch(() => null);
+      if (
+        portalRoleDoc &&
+        (portalRoleDoc.role === 'parent' ||
+          portalRoleDoc.role === 'school_admin' ||
+          portalRoleDoc.role === 'institute_admin')
+      ) {
+        let linkedIds: string[] = [];
+        if (portalRoleDoc.role === 'parent') {
+          const parentDoc = await fetchParentProfileFromFirestore(fbUser.uid).catch(() => null);
+          if (parentDoc) {
+            linkedIds = parentDoc.linkedStudentIds || [];
+            setParentsList((prev) => {
+              const exists = prev.some((p) => p.id === parentDoc.id);
+              return exists
+                ? prev.map((p) => (p.id === parentDoc.id ? parentDoc : p))
+                : [...prev, parentDoc];
+            });
+          }
+        }
+        setCurrentStudent(null);
+        setActiveDeviceSession(null);
+        setCurrentUser({
+          uid: fbUser.uid,
+          email: portalRoleDoc.email || fbEmail,
+          displayName: portalRoleDoc.displayName || fbUser.displayName || fbEmail,
+          mobile: portalRoleDoc.mobile,
+          role: portalRoleDoc.role,
+          institutionId: portalRoleDoc.institutionId,
+          instituteId: portalRoleDoc.instituteId,
+          linkedStudentIds: linkedIds,
+          isVerified: true,
+        });
+        setActiveRole(portalRoleDoc.role);
+        return;
+      }
+
       let resolvedProfile: StudentProfile | null = null;
       const fbProfile = await fetchStudentProfileFromFirestore(fbUser.uid, fbEmail || undefined).catch(() => null);
       if (fbProfile) {
@@ -1662,6 +1754,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         studentId: resolvedProfile.id,
         board: resolvedProfile.board,
         classLevel: resolvedProfile.classLevel,
+        medium: resolvedProfile.medium,
+        qualification: resolvedProfile.qualification,
+        teachingSubjects: resolvedProfile.teachingSubjects,
+        classesTaught: resolvedProfile.classesTaught,
         isVerified: true
       });
       setActiveRole(accountRole);
@@ -2090,6 +2186,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
+    const portalDup = findLocalPortalAccountByEmailOrMobile(cleanEmail, cleanMobile);
+    if (portalDup) {
+      return {
+        success: false,
+        duplicateField: portalDup.email.toLowerCase() === cleanEmail ? 'email' : 'mobile',
+        message: `This ${portalDup.email.toLowerCase() === cleanEmail ? 'email address' : 'mobile number'} is already registered under a ${portalDup.role.replace('_', ' ')} account (${portalDup.displayName}). Please sign in through that portal.`
+      };
+    }
+
     // 4. Create & Activate Brand-New Student or Teacher Account (School Name is OPTIONAL)
     const phoneOwnershipVerified = Boolean(options?.isPhoneVerified);
     const emailOwnershipVerified = Boolean(options?.isEmailVerified);
@@ -2116,6 +2221,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       board: resolvedBoard,
       primaryBoard: resolvedBoard,
       primaryClassLevel: data.classLevel,
+      medium: data.medium || 'English',
       activatedClasses: [],
       activatedClassKeys: [],
       classSubscriptions: {},
@@ -2158,16 +2264,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uid: newStudent.id,
       email: newStudent.email,
       displayName: newStudent.name,
+      mobile: newStudent.mobile,
       role: resolvedAccountRole,
       studentId: newStudent.id,
       board: resolvedBoard,
       classLevel: newStudent.classLevel,
+      medium: newStudent.medium,
+      qualification: newStudent.qualification,
+      teachingSubjects: newStudent.teachingSubjects,
+      classesTaught: newStudent.classesTaught,
       isVerified: true
     });
     setActiveRole(resolvedAccountRole);
 
     saveStudentProfileToFirestore(newStudent).catch(err => {
       console.warn('Firestore profile save warning:', err);
+    });
+    void savePortalRoleRecord({
+      id: newUid,
+      role: resolvedAccountRole,
+      displayName: newStudent.name,
+      email: cleanEmail,
+      mobile: cleanMobile,
+      city: newStudent.city,
+      board: resolvedBoard,
+      classLevel: newStudent.classLevel,
+      medium: newStudent.medium,
+      qualification: newStudent.qualification,
+      teachingSubjects: newStudent.teachingSubjects,
+      classesTaught: newStudent.classesTaught,
+      createdAt: nowIso,
+      updatedAt: nowIso,
     });
 
     addNotification(
@@ -2527,6 +2654,415 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       message: res.message,
       teacher: res.student,
       blockedByActiveDevice: res.blockedByActiveDevice
+    };
+  };
+
+  // Unified Registration & Login for Parent, School/College Admin, and Coaching/Skill Institute Admin Portals
+  const registerPortalAccount: AppContextType['registerPortalAccount'] = async (params) => {
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanMobile = params.mobile.replace(/\D/g, '').slice(-10);
+    const cleanName = params.name.trim();
+
+    if (cleanName.length < 2) {
+      return { success: false, message: 'Please enter a valid full name.' };
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return { success: false, message: 'Please enter a valid email address.' };
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
+      return { success: false, message: 'Please enter a valid 10-digit Indian mobile number.' };
+    }
+    if (!params.password || params.password.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters long.' };
+    }
+
+    // Strict duplicate check across Student/Teacher profiles, local portal accounts, and Firestore
+    const dupStudent = studentsList.find(
+      (s) =>
+        s.email.trim().toLowerCase() === cleanEmail ||
+        s.mobile.replace(/\D/g, '').slice(-10) === cleanMobile
+    );
+    if (dupStudent) {
+      return {
+        success: false,
+        message: `This ${dupStudent.email.toLowerCase() === cleanEmail ? 'email' : 'mobile number'} is already registered under "${dupStudent.name}" (${dupStudent.accountRole === 'teacher' ? 'Teacher' : 'Student'}). Please sign in or use a separate email & mobile.`,
+      };
+    }
+
+    const dupPortal = findLocalPortalAccountByEmailOrMobile(cleanEmail, cleanMobile);
+    if (dupPortal) {
+      return {
+        success: false,
+        message: `This email or mobile is already registered as a ${dupPortal.role.replace('_', ' ')} account (${dupPortal.displayName}). Please sign in instead.`,
+      };
+    }
+
+    const serverDup = await checkExistingAccountApi(cleanEmail, cleanMobile).catch(() => ({
+      exists: false,
+      matchedPair: false,
+    }));
+    if (serverDup.exists) {
+      return {
+        success: false,
+        message:
+          (serverDup as any).message ||
+          'An account with this email or mobile number already exists. Please sign in to that portal instead.',
+      };
+    }
+
+    isHandlingAuthFlowRef.current = true;
+    try {
+      const fbRes = await registerFirebaseEmailUser(cleanEmail, params.password);
+      if (!fbRes.success || !fbRes.user) {
+        return {
+          success: false,
+          message: fbRes.error || 'Could not create portal account. Please retry.',
+        };
+      }
+
+      const uid = fbRes.user.uid;
+      const nowIso = new Date().toISOString();
+      let institutionId: string | undefined;
+      let instituteId: string | undefined;
+      let linkedIds: string[] = [];
+
+      if (params.role === 'parent') {
+        if (params.linkedStudentEmail && params.linkedStudentMobile) {
+          const linkCheck = await lookupStudentForParentLinking({
+            studentEmailOrId: params.linkedStudentEmail,
+            studentMobile: params.linkedStudentMobile,
+            localStudents: studentsList,
+          });
+          if (linkCheck.found && linkCheck.student) {
+            linkedIds = [linkCheck.student.id];
+          }
+        }
+        const parentProfile: ParentProfile = {
+          id: uid,
+          firebaseUid: uid,
+          name: cleanName,
+          email: cleanEmail,
+          mobile: cleanMobile,
+          relationship: params.relationship || 'Mother',
+          city: (params.city || '').trim() || undefined,
+          linkedStudentIds: linkedIds,
+          isVerified: true,
+          registeredAt: nowIso,
+          updatedAt: nowIso,
+        };
+        setParentsList((prev) => [...prev.filter((p) => p.id !== uid), parentProfile]);
+        await saveParentProfileToFirestore(parentProfile);
+      } else if (params.role === 'school_admin') {
+        const instName = (params.institutionName || '').trim();
+        if (!instName) {
+          return { success: false, message: 'School or College Name is required.' };
+        }
+        institutionId = `inst_${uid.slice(0, 14)}`;
+        const instPayload = {
+          id: institutionId,
+          ownerUserId: uid,
+          institutionName: instName,
+          institutionType: params.institutionType || 'School (Std 1–10)',
+          affiliationOrUniversity:
+            (params.affiliationOrUniversity || '').trim() || 'Maharashtra State Board',
+          city: (params.city || '').trim() || 'Pune',
+          address: (params.address || '').trim() || undefined,
+          principalName: (params.principalName || '').trim() || cleanName,
+          contactEmailOrPhone: cleanMobile,
+          departmentsOrClasses: [
+            'Std 1',
+            'Std 2',
+            'Std 3',
+            'Std 4',
+            'Std 5',
+            'Std 6',
+            'Std 7',
+            'Std 8',
+          ],
+          academicYear: '2025-26',
+          classesCount: Math.max(1, Math.min(100, Number(params.classesCount) || 10)),
+          verificationStatus: 'PENDING_VERIFICATION',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        try {
+          localStorage.setItem(
+            `msz_school_institution_v1_${uid}`,
+            JSON.stringify(instPayload)
+          );
+          await firestoreSetDoc(
+            firestoreDoc(db, 'institutions', institutionId),
+            JSON.parse(JSON.stringify(instPayload)),
+            { merge: true }
+          );
+        } catch {
+          // Local storage preserves created school profile
+        }
+      } else if (params.role === 'institute_admin') {
+        const instName = (params.instituteName || '').trim();
+        if (!instName) {
+          return { success: false, message: 'Coaching / Skill Institute Name is required.' };
+        }
+        instituteId = `coach_${uid.slice(0, 14)}`;
+        const coachPayload = {
+          id: instituteId,
+          ownerUserId: uid,
+          instituteName: instName,
+          instituteType: params.instituteType || 'Multi-Program Institute',
+          city: (params.city || '').trim() || 'Pune',
+          address: (params.address || '').trim() || undefined,
+          contactPhone: cleanMobile,
+          directorName: cleanName,
+          programIdsOffered:
+            params.programIdsOffered && params.programIdsOffered.length > 0
+              ? params.programIdsOffered.slice(0, 18)
+              : ['abacus', 'vedic_maths', 'phonics'],
+          published: true,
+          verificationStatus: 'PENDING_VERIFICATION',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        try {
+          localStorage.setItem(
+            `msz_coaching_institute_v1_${uid}`,
+            JSON.stringify(coachPayload)
+          );
+          await firestoreSetDoc(
+            firestoreDoc(db, 'coaching_institutes', instituteId),
+            JSON.parse(JSON.stringify(coachPayload)),
+            { merge: true }
+          );
+        } catch {
+          // Local storage preserves created coaching institute profile
+        }
+      }
+
+      await savePortalRoleRecord({
+        id: uid,
+        role: params.role,
+        displayName: cleanName,
+        email: cleanEmail,
+        mobile: cleanMobile,
+        city: (params.city || '').trim() || undefined,
+        relationship: params.relationship,
+        institutionId,
+        instituteId,
+        verificationStatus:
+          params.role === 'school_admin' || params.role === 'institute_admin'
+            ? 'PENDING_VERIFICATION'
+            : 'VERIFIED',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+
+      const authUser: AuthenticatedUser = {
+        uid,
+        email: cleanEmail,
+        displayName: cleanName,
+        mobile: cleanMobile,
+        role: params.role,
+        institutionId,
+        instituteId,
+        linkedStudentIds: linkedIds,
+        isVerified: true,
+      };
+
+      safeRemoveLocalStorage('vc_is_logged_out');
+      setCurrentStudent(null);
+      setActiveDeviceSession(null);
+      setCurrentUser(authUser);
+      setActiveRole(params.role);
+
+      return {
+        success: true,
+        role: params.role,
+        user: authUser,
+        message: `Welcome ${cleanName}! Your ${params.role.replace('_', ' ')} portal account is active.`,
+      };
+    } finally {
+      isHandlingAuthFlowRef.current = false;
+    }
+  };
+
+  const loginPortalAccount: AppContextType['loginPortalAccount'] = async (
+    email,
+    password,
+    expectedRole
+  ) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return { success: false, message: 'Please enter a valid registered email address.' };
+    }
+    if (!password || password.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters.' };
+    }
+
+    if (expectedRole === 'student' || expectedRole === 'teacher') {
+      const res = await loginWithEmail(cleanEmail, password, expectedRole);
+      return {
+        success: res.success,
+        message: res.message,
+        role: res.student?.accountRole || expectedRole,
+        blockedByActiveDevice: res.blockedByActiveDevice,
+      };
+    }
+
+    isHandlingAuthFlowRef.current = true;
+    try {
+      const fbRes = await loginFirebaseEmailUser(cleanEmail, password);
+      if (!fbRes.success || !fbRes.user) {
+        return {
+          success: false,
+          message: fbRes.error || 'Incorrect email or password.',
+        };
+      }
+
+      const uid = fbRes.user.uid;
+      const [portalDoc, parentDoc, studentDoc] = await Promise.all([
+        fetchPortalRoleRecord(uid, cleanEmail).catch(() => null),
+        fetchParentProfileFromFirestore(uid).catch(() => null),
+        fetchStudentProfileFromFirestore(uid, cleanEmail).catch(() => null),
+      ]);
+
+      let detectedRole: Exclude<PortalRole, 'admin'> =
+        portalDoc?.role ||
+        (parentDoc
+          ? 'parent'
+          : studentDoc?.accountRole === 'teacher'
+          ? 'teacher'
+          : studentDoc
+          ? 'student'
+          : expectedRole || 'parent');
+
+      if (expectedRole && portalDoc?.role && portalDoc.role !== expectedRole) {
+        await signOutFirebaseUser();
+        return {
+          success: false,
+          message: `This email belongs to a ${portalDoc.role.replace('_', ' ').toUpperCase()} account. Please use that portal login instead.`,
+        };
+      }
+      const studentAccountRole: PortalRole = studentDoc?.accountRole || 'student';
+      if (expectedRole && !portalDoc?.role && studentDoc && (expectedRole as PortalRole) !== studentAccountRole) {
+        await signOutFirebaseUser();
+        return {
+          success: false,
+          message: `This email is registered as a ${studentAccountRole.toUpperCase()} account. Please open the matching portal.`,
+        };
+      }
+
+      if (detectedRole === 'student' || detectedRole === 'teacher') {
+        isHandlingAuthFlowRef.current = false;
+        const stuRes = await loginWithEmail(cleanEmail, password, detectedRole);
+        return {
+          success: stuRes.success,
+          message: stuRes.message,
+          role: detectedRole,
+          blockedByActiveDevice: stuRes.blockedByActiveDevice,
+        };
+      }
+
+      const linkedIds = parentDoc?.linkedStudentIds || [];
+      if (parentDoc) {
+        setParentsList((prev) => {
+          const exists = prev.some((p) => p.id === parentDoc.id);
+          return exists
+            ? prev.map((p) => (p.id === parentDoc.id ? parentDoc : p))
+            : [...prev, parentDoc];
+        });
+      }
+
+      const authUser: AuthenticatedUser = {
+        uid,
+        email: cleanEmail,
+        displayName:
+          portalDoc?.displayName ||
+          parentDoc?.name ||
+          fbRes.user.displayName ||
+          cleanEmail.split('@')[0],
+        mobile: portalDoc?.mobile || parentDoc?.mobile,
+        role: detectedRole,
+        institutionId: portalDoc?.institutionId,
+        instituteId: portalDoc?.instituteId,
+        linkedStudentIds: linkedIds,
+        isVerified: true,
+      };
+
+      safeRemoveLocalStorage('vc_is_logged_out');
+      setCurrentStudent(null);
+      setActiveDeviceSession(null);
+      setCurrentUser(authUser);
+      setActiveRole(detectedRole);
+
+      return {
+        success: true,
+        role: detectedRole,
+        message: `Signed in successfully to ${detectedRole.replace('_', ' ')} Portal.`,
+      };
+    } finally {
+      isHandlingAuthFlowRef.current = false;
+    }
+  };
+
+  const linkParentChildVerified: AppContextType['linkParentChildVerified'] = async (
+    studentEmailOrId,
+    studentMobile
+  ) => {
+    if (!currentUser || currentUser.role !== 'parent') {
+      return {
+        success: false,
+        message: 'Sign in with a Parent Portal account to verify and link a student.',
+      };
+    }
+    const lookup = await lookupStudentForParentLinking({
+      studentEmailOrId,
+      studentMobile,
+      localStudents: studentsList,
+    });
+    if (!lookup.found || !lookup.student) {
+      return {
+        success: false,
+        message: lookup.reason || 'Student verification failed.',
+      };
+    }
+
+    const stu = lookup.student;
+    setStudentsList((prev) =>
+      prev.some((s) => s.id === stu.id) ? prev : [...prev, stu]
+    );
+
+    const existingParent = parentsList.find((p) => p.id === currentUser.uid) || {
+      id: currentUser.uid,
+      firebaseUid: currentUser.uid,
+      name: currentUser.displayName,
+      email: currentUser.email,
+      mobile: currentUser.mobile || '',
+      linkedStudentIds: currentUser.linkedStudentIds || [],
+      isVerified: true,
+      registeredAt: new Date().toISOString(),
+    };
+
+    const nextLinked = Array.from(
+      new Set([...(existingParent.linkedStudentIds || []), stu.id])
+    );
+    const updatedParent: ParentProfile = {
+      ...existingParent,
+      linkedStudentIds: nextLinked,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setParentsList((prev) => [
+      ...prev.filter((p) => p.id !== updatedParent.id),
+      updatedParent,
+    ]);
+    setCurrentUser((prev) =>
+      prev ? { ...prev, linkedStudentIds: nextLinked } : prev
+    );
+    await saveParentProfileToFirestore(updatedParent);
+
+    return {
+      success: true,
+      linkedStudent: stu,
+      message: `Linked ${stu.name} (${stu.board || 'Maharashtra'} • ${stu.classLevel}) to your Parent dashboard.`,
     };
   };
 
@@ -4904,6 +5440,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       checkAccountForMultiClassRegistration,
       registerStudent,
       loginWithEmail,
+      registerPortalAccount,
+      loginPortalAccount,
+      linkParentChildVerified,
       recoverAccount,
       completePasswordReset,
       logout,

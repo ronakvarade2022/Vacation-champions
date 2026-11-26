@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClassLevel, EducationBoard, SubjectName } from '../types';
+import type { ClassLevel, EducationBoard, PortalRole, SubjectName } from '../types';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 import { FiveZonesHubStrip } from './zones/FiveZonesHubStrip';
@@ -26,9 +26,10 @@ interface PublicHomeDashboardProps {
   onNavigateZone: (tab: string, subSection?: string, subject?: SubjectName) => void;
   onOpenAuth: (defaultTab: 'login' | 'register' | 'teacher' | 'admin') => void;
   onOpenPanel: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
+  onOpenPortalLanding?: (portalRole: Exclude<PortalRole, 'admin'>) => void;
   onOpenMembership: (targetClass: ClassLevel, targetBoard: EducationBoard) => void;
   isAuthenticated?: boolean;
-  currentRole?: 'student' | 'teacher' | 'admin';
+  currentRole?: PortalRole;
   currentUserName?: string;
   isDesktopMode?: boolean;
   onToggleViewMode?: () => void;
@@ -47,6 +48,7 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   onNavigateZone,
   onOpenAuth,
   onOpenPanel,
+  onOpenPortalLanding,
   onOpenMembership,
   isAuthenticated = false,
   currentRole = 'student',
@@ -100,6 +102,7 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
       <FiveZonesHubStrip
         onNavigateZone={(tab) => onNavigateZone(tab)}
         onOpenTeacherPortal={() => onOpenPanel('teacher', 'login')}
+        onOpenPortalLanding={onOpenPortalLanding}
       />
 
       {/* DIRECT PWA MOBILE APP INSTALL BANNER */}

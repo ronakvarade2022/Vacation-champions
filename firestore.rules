@@ -71,6 +71,12 @@ service cloud.firestore {
              (!('board' in data) || (data.board in ['Maharashtra', 'CBSE', 'ICSE'])) &&
              (!('primaryBoard' in data) || (data.primaryBoard in ['Maharashtra', 'CBSE', 'ICSE'])) &&
              (!('classLevel' in data) || (data.classLevel is string && data.classLevel.size() <= 20)) &&
+             (!('medium' in data) || (data.medium in ['English', 'Marathi', 'Hindi', 'Semi-English'])) &&
+             (!('qualification' in data) || (data.qualification is string && data.qualification.size() <= 100)) &&
+             (!('city' in data) || (data.city is string && data.city.size() <= 80)) &&
+             (!('parentLinkCode' in data) || (data.parentLinkCode is string && data.parentLinkCode.size() <= 32)) &&
+             (!('teachingSubjects' in data) || (data.teachingSubjects is list && data.teachingSubjects.size() <= 30)) &&
+             (!('classesTaught' in data) || (data.classesTaught is list && data.classesTaught.size() <= 12)) &&
              (!('plan' in data) || (data.plan in ['free', 'basic', 'premium'])) &&
              (!('selectedTeacherCategories' in data) || (data.selectedTeacherCategories is list && data.selectedTeacherCategories.size() <= 12));
     }
@@ -80,8 +86,17 @@ service cloud.firestore {
       return data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              !('isAdmin' in data) &&
              !('role' in data) &&
+             !('passwordHash' in data) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 150;
+             data.email is string && data.email.size() <= 150 &&
+             (!('firebaseUid' in data) || (data.firebaseUid is string && data.firebaseUid.size() <= 128)) &&
+             (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 20)) &&
+             (!('relationship' in data) || (data.relationship in ['Mother', 'Father', 'Guardian'])) &&
+             (!('city' in data) || (data.city is string && data.city.size() <= 80)) &&
+             (!('linkedStudentIds' in data) || (data.linkedStudentIds is list && data.linkedStudentIds.size() <= 20)) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('registeredAt' in data) || (data.registeredAt is string && data.registeredAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
     }
 
     // QuizAttempt Schema Validator
@@ -435,6 +450,17 @@ service cloud.firestore {
       allow create: if isValidId(parentId) && isValidParentProfile(incoming()) && (isAdmin() || isOwner(parentId));
       allow update: if isValidId(parentId) && isValidParentProfile(incoming()) && (isOwner(parentId) || isAdmin()) && incoming().id == existing().id;
       allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow get, list: if isValidId(parentId) && (isOwner(parentId) || isAdmin());
+        allow create: if isValidId(parentId) && isValidId(messageId) &&
+                         (isOwner(parentId) || isAdmin()) &&
+                         incoming().id == messageId &&
+                         incoming().studentId is string && incoming().studentId.size() <= 128 &&
+                         incoming().subject is string && incoming().subject.size() > 0 && incoming().subject.size() <= 160 &&
+                         incoming().body is string && incoming().body.size() > 0 && incoming().body.size() <= 1500;
+        allow delete: if isValidId(parentId) && isValidId(messageId) && (isOwner(parentId) || isAdmin());
+      }
     }
 
     // 3. Collection: /admins/{adminId}
@@ -1144,16 +1170,24 @@ service cloud.firestore {
 
     function isValidCoachingInstitute(data) {
       return data.keys().hasAll(['id', 'ownerUserId', 'instituteName', 'instituteType', 'city', 'contactPhone', 'directorName', 'programIdsOffered', 'published', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['id', 'ownerUserId', 'instituteName', 'instituteType', 'city', 'contactPhone', 'directorName', 'programIdsOffered', 'published', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly([
+               'id', 'ownerUserId', 'instituteName', 'instituteType', 'city', 'address',
+               'contactPhone', 'directorName', 'programIdsOffered', 'published',
+               'verificationStatus', 'customCourses', 'trainers', 'createdAt', 'updatedAt'
+             ]) &&
              isValidId(data.id) &&
              isValidId(data.ownerUserId) &&
              data.instituteName is string && data.instituteName.size() > 0 && data.instituteName.size() <= 150 &&
              data.instituteType in ['Abacus & Vedic Maths Centre', 'Coaching Class', 'Skill Academy', 'Multi-Program Institute'] &&
              data.city is string && data.city.size() > 0 && data.city.size() <= 80 &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 200)) &&
              data.contactPhone is string && data.contactPhone.size() <= 20 &&
              data.directorName is string && data.directorName.size() > 0 && data.directorName.size() <= 100 &&
-             data.programIdsOffered is list && data.programIdsOffered.size() <= 18 &&
+             data.programIdsOffered is list && data.programIdsOffered.size() <= 30 &&
              data.published is bool &&
+             (!('verificationStatus' in data) || (data.verificationStatus in ['PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'])) &&
+             (!('customCourses' in data) || (data.customCourses is list && data.customCourses.size() <= 30)) &&
+             (!('trainers' in data) || (data.trainers is list && data.trainers.size() <= 50)) &&
              data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 50 &&
              data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
              !('passwordHash' in data) &&
@@ -1200,16 +1234,25 @@ service cloud.firestore {
 
     function isValidSchoolInstitution(data) {
       return data.keys().hasAll(['id', 'ownerUserId', 'institutionName', 'institutionType', 'affiliationOrUniversity', 'city', 'principalName', 'contactEmailOrPhone', 'departmentsOrClasses', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['id', 'ownerUserId', 'institutionName', 'institutionType', 'affiliationOrUniversity', 'city', 'principalName', 'contactEmailOrPhone', 'departmentsOrClasses', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly([
+               'id', 'ownerUserId', 'institutionName', 'institutionType', 'affiliationOrUniversity',
+               'city', 'address', 'principalName', 'contactEmailOrPhone', 'departmentsOrClasses',
+               'academicYear', 'classesCount', 'divisions', 'verificationStatus', 'createdAt', 'updatedAt'
+             ]) &&
              isValidId(data.id) &&
              isValidId(data.ownerUserId) &&
              data.institutionName is string && data.institutionName.size() > 0 && data.institutionName.size() <= 160 &&
              data.institutionType in ['School (Std 1–10)', 'Higher Secondary / Jr College (Std 11–12)', 'Degree College / UG'] &&
              data.affiliationOrUniversity is string && data.affiliationOrUniversity.size() > 0 && data.affiliationOrUniversity.size() <= 150 &&
              data.city is string && data.city.size() > 0 && data.city.size() <= 80 &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 200)) &&
              data.principalName is string && data.principalName.size() > 0 && data.principalName.size() <= 100 &&
              data.contactEmailOrPhone is string && data.contactEmailOrPhone.size() > 0 && data.contactEmailOrPhone.size() <= 150 &&
              data.departmentsOrClasses is list && data.departmentsOrClasses.size() <= 40 &&
+             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20)) &&
+             (!('classesCount' in data) || (data.classesCount is number && data.classesCount >= 1 && data.classesCount <= 100)) &&
+             (!('divisions' in data) || (data.divisions is list && data.divisions.size() <= 60)) &&
+             (!('verificationStatus' in data) || (data.verificationStatus in ['PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'])) &&
              data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 50 &&
              data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
              !('passwordHash' in data) &&
@@ -1438,6 +1481,62 @@ service cloud.firestore {
                                !('phone' in incoming()) &&
                                !('passwordHash' in incoming());
       allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    // 24. Additive Collection: /portal_roles/{userId}
+    // Maps Firebase Auth UIDs to strict 5-portal roles (never allows self-assigning 'admin' or self-verifying institutions)
+    function isValidPortalRoleRecord(data) {
+      return data.keys().hasAll(['id', 'role', 'displayName', 'email', 'mobile', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly([
+               'id', 'role', 'displayName', 'email', 'mobile', 'city',
+               'board', 'classLevel', 'medium', 'qualification', 'teachingSubjects',
+               'classesTaught', 'relationship', 'institutionId', 'instituteId',
+               'verificationStatus', 'createdAt', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             data.role in ['student', 'teacher', 'parent', 'school_admin', 'institute_admin'] &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 150 &&
+             data.mobile is string && data.mobile.size() <= 20 &&
+             (!('city' in data) || (data.city is string && data.city.size() <= 80)) &&
+             (!('board' in data) || (data.board in ['Maharashtra', 'CBSE', 'ICSE'])) &&
+             (!('classLevel' in data) || (data.classLevel is string && data.classLevel.size() <= 20)) &&
+             (!('medium' in data) || (data.medium in ['English', 'Marathi', 'Hindi', 'Semi-English'])) &&
+             (!('qualification' in data) || (data.qualification is string && data.qualification.size() <= 100)) &&
+             (!('teachingSubjects' in data) || (data.teachingSubjects is list && data.teachingSubjects.size() <= 30)) &&
+             (!('classesTaught' in data) || (data.classesTaught is list && data.classesTaught.size() <= 12)) &&
+             (!('relationship' in data) || (data.relationship in ['Mother', 'Father', 'Guardian'])) &&
+             (!('institutionId' in data) || (data.institutionId is string && data.institutionId.size() <= 128)) &&
+             (!('instituteId' in data) || (data.instituteId is string && data.instituteId.size() <= 128)) &&
+             (!('verificationStatus' in data) || (data.verificationStatus in ['PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'])) &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             data.updatedAt is string && data.updatedAt.size() <= 50 &&
+             !('isAdmin' in data) &&
+             !('passwordHash' in data);
+    }
+
+    match /portal_roles/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.id == request.auth.uid);
+      allow create: if isValidId(userId) &&
+                       isValidPortalRoleRecord(incoming()) &&
+                       incoming().id == userId && (
+                         isAdmin() || (
+                           isOwner(userId) &&
+                           incoming().role != 'admin' &&
+                           (!('verificationStatus' in incoming()) || incoming().verificationStatus == 'PENDING_VERIFICATION')
+                         )
+                       );
+      allow update: if isValidId(userId) &&
+                       isValidPortalRoleRecord(incoming()) &&
+                       incoming().id == existing().id && (
+                         isAdmin() || (
+                           isOwner(userId) &&
+                           incoming().role == existing().role &&
+                           (!('verificationStatus' in existing()) || incoming().verificationStatus == existing().verificationStatus)
+                         )
+                       );
+      allow delete: if isValidId(userId) && isAdmin();
     }
   }
 }

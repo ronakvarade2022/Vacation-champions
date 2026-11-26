@@ -249,6 +249,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <h1 className="text-2xl sm:text-3xl font-display font-black tracking-tight text-white">
               Welcome, {currentStudent?.name || 'Teacher'}!
             </h1>
+            {(currentStudent?.qualification || (currentStudent?.teachingSubjects && currentStudent.teachingSubjects.length > 0) || (currentStudent?.classesTaught && currentStudent.classesTaught.length > 0)) && (
+              <p className="text-xs font-bold text-emerald-200">
+                {[
+                  currentStudent?.qualification ? `Qualification: ${currentStudent.qualification}` : '',
+                  currentStudent?.teachingSubjects?.length ? `Subjects: ${currentStudent.teachingSubjects.join(', ')}` : '',
+                  currentStudent?.classesTaught?.length ? `Classes: ${currentStudent.classesTaught.join(', ')}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
               Manage your classroom roster, track student learning streak and worksheet completion,
               dispatch assignments, and access the verified 3-Tab Lesson Planner for Maharashtra,
@@ -267,6 +278,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <span>Student View Preview</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => onNavigateTab('ai-tools')}
+              className="px-4 py-2.5 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>AI Tools Studio</span>
+            </button>
 
             <button
               type="button"

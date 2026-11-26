@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PARENT_LEARNING_MATERIALS, type ParentingGuideItem } from '../../data/parentZone/parentLearningMaterials';
+import { saveParentMessageToFirestore } from '../../services/portalFirestoreService';
 import type { StudentProfile } from '../../types';
 import {
   ArrowLeft,
@@ -57,7 +58,7 @@ function readJson<T>(key: string, fallback: T): T {
 
 export interface ParentZoneViewProps {
   onNavigateTab: (tab: string) => void;
-  onOpenAuth?: (tab?: 'login' | 'register') => void;
+  onOpenAuth?: (tab?: 'login' | 'parent' | 'register', registerRole?: 'student' | 'parent') => void;
   onBackHome: () => void;
 }
 
@@ -66,13 +67,26 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
   onOpenAuth,
   onBackHome,
 }) => {
-  const { currentUser, currentStudent, studentsList } = useApp();
+  const {
+    activeRole,
+    currentUser,
+    currentStudent,
+    studentsList,
+    linkParentChildVerified,
+  } = useApp();
+
+  const isParentPortalAuthorized =
+    activeRole === 'parent' ||
+    activeRole === 'admin' ||
+    Boolean(currentStudent && currentStudent.accountRole !== 'teacher');
 
   const effectiveParentId = currentUser?.uid || currentStudent?.id || 'guest_parent';
   const effectiveParentEmail = (currentUser?.email || currentStudent?.parentEmail || currentStudent?.email || '').toLowerCase();
   const effectiveParentName = currentUser?.displayName || currentStudent?.parentName || 'Parent / Guardian';
 
-  const [parentTab, setParentTab] = useState<'dashboard' | 'materials' | 'linking' | 'communication'>('dashboard');
+  const [parentTab, setParentTab] = useState<'dashboard' | 'materials' | 'linking' | 'communication'>(() =>
+    isParentPortalAuthorized ? 'dashboard' : 'materials'
+  );
 
   const [allParentLinks, setAllParentLinks] = useState<Record<string, ParentLinkStorageRecord>>(() =>
     readJson<Record<string, ParentLinkStorageRecord>>(PARENT_LINKS_KEY, {})
@@ -139,38 +153,31 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
   );
 
   // Secure parent-child verification link (no duplicate student records created)
-  const handleLinkChild = (e: React.FormEvent) => {
+  const handleLinkChild = async (e: React.FormEvent) => {
     e.preventDefault();
     const qEmailOrId = linkQueryEmail.trim().toLowerCase();
     const qPhone = linkVerifyMobile.replace(/\D/g, '').slice(-10);
 
-    if (!qEmailOrId || qPhone.length < 6) {
+    if (!qEmailOrId || qPhone.length !== 10) {
       setLinkNotice({
         type: 'err',
-        text: 'Enter the student\'s registered email/ID and last 10 digits of verified mobile for security.',
+        text: "Enter the student's registered email/ID/link-code and exact 10-digit registered mobile number for security.",
       });
       return;
     }
 
-    const matched = studentsList.find((s) => {
-      if (s.accountRole === 'teacher') return false;
-      const matchesIdentity =
-        s.email.toLowerCase() === qEmailOrId ||
-        s.id.toLowerCase() === qEmailOrId ||
-        (s.parentEmail && s.parentEmail.toLowerCase() === qEmailOrId);
-      const studentPhone = (s.mobile || '').replace(/\D/g, '').slice(-10);
-      const matchesPhone = studentPhone.endsWith(qPhone) || studentPhone === qPhone;
-      return Boolean(matchesIdentity && matchesPhone);
-    });
-
-    if (!matched) {
+    const res = await linkParentChildVerified(qEmailOrId, qPhone);
+    if (!res.success || !res.linkedStudent) {
       setLinkNotice({
         type: 'err',
-        text: 'No matching Student account found with that Email/ID and registered mobile number. Zero unverified links permitted.',
+        text:
+          res.message ||
+          'No matching Student account found with that Email/ID and registered mobile number. Zero unverified links permitted.',
       });
       return;
     }
 
+    const matched = res.linkedStudent;
     setAllParentLinks((prev) => {
       const existing = prev[effectiveParentId] || {
         parentUserId: effectiveParentId,
@@ -197,25 +204,41 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
     setLinkVerifyMobile('');
     setLinkNotice({
       type: 'ok',
-      text: `Verified & securely linked child profile: ${matched.name} (${matched.board || 'Maharashtra'} · ${matched.classLevel}).`,
+      text: res.message,
     });
     setParentTab('dashboard');
   };
 
-  const handleSendNote = (e: React.FormEvent) => {
+  const handleSendNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeChild || !noteInput.trim()) return;
+    const messageBody = noteInput.trim();
+    const noteId = `ptn_${Date.now().toString(36)}`;
+    const sentAtIso = new Date().toISOString();
     const newNote: ParentTeacherNote = {
-      id: `ptn_${Date.now().toString(36)}`,
+      id: noteId,
       parentUserId: effectiveParentId,
       studentId: activeChild.id,
       studentName: activeChild.name,
       authorLabel: `${effectiveParentName} (Parent)`,
-      message: noteInput.trim(),
+      message: messageBody,
       createdAt: new Date().toLocaleString(),
     };
     setNotes((prev) => [newNote, ...prev]);
     setNoteInput('');
+
+    if (currentUser?.uid) {
+      await saveParentMessageToFirestore(currentUser.uid, {
+        id: noteId,
+        studentId: activeChild.id,
+        studentName: activeChild.name,
+        recipient: 'Class Teacher',
+        subject: `Progress Note (${activeChild.classLevel})`,
+        body: messageBody,
+        sentAt: sentAtIso,
+        status: 'SENT',
+      });
+    }
   };
 
   const filteredGuides = useMemo(() => {
@@ -261,14 +284,23 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Authorized Child Linking Only</span>
             </span>
-            {!currentUser && !currentStudent && onOpenAuth && (
-              <button
-                type="button"
-                onClick={() => onOpenAuth('login')}
-                className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
-              >
-                Sign In to Sync Children
-              </button>
+            {!isParentPortalAuthorized && onOpenAuth && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('parent')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                >
+                  Parent Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('register', 'parent')}
+                  className="px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-black cursor-pointer border border-white/20"
+                >
+                  Register Parent
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -381,8 +413,50 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
         </div>
       )}
 
+      {/* AUTH GATE FOR PROTECTED PARENT TABS (Parenting Guides remain public) */}
+      {parentTab !== 'materials' && !isParentPortalAuthorized ? (
+        <div className="bg-white rounded-3xl p-8 border border-rose-200 text-center space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">
+            Parent Portal Authentication Required
+          </h2>
+          <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+            Sign in or register as a Parent to link your child’s progress, attendance, homework feedback, and teacher notes. Parenting Guides are freely readable anytime.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {onOpenAuth && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('parent')}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black cursor-pointer"
+                >
+                  Parent Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('register', 'parent')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black cursor-pointer"
+                >
+                  Create Parent Account
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setParentTab('materials')}
+              className="px-5 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-black cursor-pointer"
+            >
+              Browse Free Parenting Guides
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* TAB 1: CHILD DASHBOARD (Authorized Linked Child Only) */}
-      {parentTab === 'dashboard' && (
+      {parentTab === 'dashboard' && isParentPortalAuthorized && (
         <div className="space-y-5">
           {!activeChild ? (
             <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-4">
@@ -621,7 +695,7 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
       )}
 
       {/* TAB 3: SECURE MULTI-CHILD LINKING */}
-      {parentTab === 'linking' && (
+      {parentTab === 'linking' && isParentPortalAuthorized && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <form
             onSubmit={handleLinkChild}
@@ -698,7 +772,7 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
       )}
 
       {/* TAB 4: PARENT-TEACHER COMMUNICATION LOG */}
-      {parentTab === 'communication' && (
+      {parentTab === 'communication' && isParentPortalAuthorized && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
           <h2 className="text-base font-black text-slate-900">
             Parent–Teacher Communication &amp; Progress Notes

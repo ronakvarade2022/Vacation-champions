@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useApp } from '../../context/AppContext';
 import { INSTITUTION_ACADEMIC_MATERIALS, type InstitutionAcademicMaterial } from '../../data/schoolCollege/academicMaterialsCatalog';
+import { downloadTextAsPdf } from '../../utils/realFileExports';
 import {
   ArrowLeft,
   Award,
@@ -9,13 +11,12 @@ import {
   Calendar,
   CheckCircle2,
   ChevronRight,
-  ClipboardList,
-  FileText,
-  GraduationCap,
-  Layers,
+  Download,
+  Lock,
   Plus,
   Printer,
   ShieldCheck,
+  Trash2,
   Users,
 } from 'lucide-react';
 
@@ -29,6 +30,8 @@ export interface InstitutionRecord {
   principalName: string;
   contactEmailOrPhone: string;
   departmentsOrClasses: string[];
+  academicYear?: string;
+  verificationStatus?: 'PENDING_VERIFICATION' | 'VERIFIED';
   createdAt: string;
 }
 
@@ -70,14 +73,20 @@ function readJson<T>(key: string, fallback: T): T {
 export interface SchoolCollegeZoneViewProps {
   userId: string;
   userName: string;
+  onOpenAuth?: (tab?: 'school_admin' | 'register', registerRole?: 'school_admin') => void;
   onBackHome: () => void;
 }
 
 export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
   userId,
   userName,
+  onOpenAuth,
   onBackHome,
 }) => {
+  const { activeRole } = useApp();
+  const isSchoolAdminAuthorized =
+    activeRole === 'school_admin' || activeRole === 'admin';
+
   const [institutions, setInstitutions] = useState<InstitutionRecord[]>(() =>
     readJson<InstitutionRecord[]>(INST_LIST_KEY, [])
   );
@@ -95,7 +104,14 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
 
   const [zoneTab, setZoneTab] = useState<
     'overview' | 'roster' | 'timetable' | 'exams' | 'notices' | 'materials' | 'register'
-  >(() => (readJson<InstitutionRecord[]>(INST_LIST_KEY, []).length === 0 ? 'materials' : 'overview'));
+  >(() =>
+    !isSchoolAdminAuthorized || readJson<InstitutionRecord[]>(INST_LIST_KEY, []).length === 0
+      ? 'materials'
+      : 'overview'
+  );
+
+  const [newDivisionInput, setNewDivisionInput] = useState<string>('');
+  const [regAcademicYear, setRegAcademicYear] = useState<string>('2026–27');
 
   // Registration Form State
   const [regName, setRegName] = useState<string>('');
@@ -173,6 +189,8 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       principalName: regPrincipal.trim() || userName || 'Principal',
       contactEmailOrPhone: regContact.trim() || 'Campus Office',
       departmentsOrClasses: depts.length > 0 ? depts : ['Division A'],
+      academicYear: regAcademicYear.trim() || '2026–27',
+      verificationStatus: 'PENDING_VERIFICATION',
       createdAt: new Date().toISOString().slice(0, 10),
     };
     setInstitutions((prev) => [created, ...prev]);
@@ -181,6 +199,45 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
     setRegCity('');
     setZoneTab('overview');
     setStatusBanner(`Created isolated multi-tenant portal for "${created.institutionName}" (${created.id}).`);
+  };
+
+  const handleAddDivision = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeInstitution || !newDivisionInput.trim()) return;
+    const val = newDivisionInput.trim();
+    if (activeInstitution.departmentsOrClasses.includes(val)) return;
+    setInstitutions((prev) =>
+      prev.map((inst) =>
+        inst.id === activeInstitution.id
+          ? { ...inst, departmentsOrClasses: [...inst.departmentsOrClasses, val] }
+          : inst
+      )
+    );
+    setNewDivisionInput('');
+    setStatusBanner(`Added division/department "${val}".`);
+  };
+
+  const handleRemoveDivision = (divName: string) => {
+    if (!activeInstitution) return;
+    setInstitutions((prev) =>
+      prev.map((inst) =>
+        inst.id === activeInstitution.id
+          ? {
+              ...inst,
+              departmentsOrClasses: inst.departmentsOrClasses.filter((d) => d !== divName),
+            }
+          : inst
+      )
+    );
+  };
+
+  const handleChangeAcademicYear = (year: string) => {
+    if (!activeInstitution) return;
+    setInstitutions((prev) =>
+      prev.map((inst) =>
+        inst.id === activeInstitution.id ? { ...inst, academicYear: year } : inst
+      )
+    );
   };
 
   const handleAddMember = (e: React.FormEvent) => {
@@ -265,17 +322,34 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
+            {activeInstitution && (
+              <span className="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-bold">
+                Status: {activeInstitution.verificationStatus || 'PENDING_VERIFICATION'}
+              </span>
+            )}
             <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs font-bold flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Multi-Tenant Campus Isolation</span>
             </span>
-            <button
-              type="button"
-              onClick={() => setZoneTab('register')}
-              className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
-            >
-              + Register School / College
-            </button>
+            {isSchoolAdminAuthorized ? (
+              <button
+                type="button"
+                onClick={() => setZoneTab('register')}
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+              >
+                + Register School / College
+              </button>
+            ) : (
+              onOpenAuth && (
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('school_admin')}
+                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                >
+                  Institution Admin Login
+                </button>
+              )
+            )}
           </div>
         </div>
 
@@ -465,8 +539,50 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
         </div>
       )}
 
+      {/* INSTITUTION AUTH GATE FOR MANAGEMENT TABS */}
+      {zoneTab !== 'materials' && !isSchoolAdminAuthorized ? (
+        <div className="bg-white rounded-3xl p-8 border border-sky-200 text-center space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">
+            School &amp; College Administrator Authentication Required
+          </h2>
+          <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+            Campus rosters, attendance, timetables, GPA marksheets, and circulars are restricted to School &amp; College accounts. Academic Practical &amp; Viva Manuals remain free to browse.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {onOpenAuth && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('school_admin')}
+                  className="px-5 py-2.5 rounded-xl bg-sky-700 hover:bg-sky-800 text-white text-xs font-black cursor-pointer"
+                >
+                  School &amp; College Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('register', 'school_admin')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black cursor-pointer"
+                >
+                  Register School / College Account
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setZoneTab('materials')}
+              className="px-5 py-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-black cursor-pointer"
+            >
+              Browse Practical &amp; Viva Manuals
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* REGISTER INSTITUTION TAB */}
-      {zoneTab === 'register' && (
+      {isSchoolAdminAuthorized && zoneTab === 'register' && (
         <form
           onSubmit={handleRegisterInstitution}
           className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4 max-w-3xl text-xs"
@@ -561,7 +677,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       )}
 
       {/* GUARD FOR INSTITUTION MANAGEMENT TABS IF NONE REGISTERED YET */}
-      {zoneTab !== 'materials' && zoneTab !== 'register' && !activeInstitution && (
+      {isSchoolAdminAuthorized && zoneTab !== 'materials' && zoneTab !== 'register' && !activeInstitution && (
         <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-3">
           <Building2 className="w-10 h-10 mx-auto text-sky-600" />
           <h2 className="text-base font-black text-slate-900">Register Your School or College First</h2>
@@ -579,7 +695,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       )}
 
       {/* CAMPUS OVERVIEW TAB */}
-      {activeInstitution && zoneTab === 'overview' && (
+      {isSchoolAdminAuthorized && activeInstitution && zoneTab === 'overview' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
@@ -597,13 +713,26 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
               </div>
             </div>
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">Tenant ID</span>
-              <div className="text-xs font-black text-emerald-700 truncate">{activeInstitution.id}</div>
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Academic Year</span>
+              <select
+                value={activeInstitution.academicYear || '2026–27'}
+                onChange={(e) => handleChangeAcademicYear(e.target.value)}
+                className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs font-black text-emerald-700 cursor-pointer"
+              >
+                <option value="2025–26">2025–26</option>
+                <option value="2026–27">2026–27</option>
+                <option value="2027–28">2027–28</option>
+              </select>
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-3 text-xs">
-            <h2 className="text-sm font-black text-slate-900">Campus Profile &amp; Active Divisions</h2>
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-black text-slate-900">Campus Profile &amp; Active Classes / Divisions</h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px]">
+                {activeInstitution.verificationStatus || 'PENDING_VERIFICATION'} · Tenant {activeInstitution.id}
+              </span>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                 <span className="text-slate-500 font-bold">Type &amp; Affiliation</span>
@@ -620,10 +749,40 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
                 <div className="font-black text-slate-900 mt-0.5">{activeInstitution.city}</div>
               </div>
             </div>
-            <div className="flex flex-wrap gap-1.5 pt-2">
+
+            <form onSubmit={handleAddDivision} className="flex flex-wrap gap-2 pt-1">
+              <input
+                type="text"
+                value={newDivisionInput}
+                onChange={(e) => setNewDivisionInput(e.target.value)}
+                placeholder="Add new Class / Division / Dept (e.g. Std 10 Div B)"
+                className="flex-1 min-w-[220px] px-3 py-2 rounded-xl border border-slate-200"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-sky-700 hover:bg-sky-800 text-white font-black cursor-pointer"
+              >
+                + Add Class / Division
+              </button>
+            </form>
+
+            <div className="flex flex-wrap gap-1.5 pt-1">
               {activeInstitution.departmentsOrClasses.map((d) => (
-                <span key={d} className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-900 font-bold">
-                  {d}
+                <span
+                  key={d}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-900 font-bold"
+                >
+                  <span>{d}</span>
+                  {activeInstitution.departmentsOrClasses.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDivision(d)}
+                      title={`Remove ${d}`}
+                      className="text-rose-600 hover:text-rose-800 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </span>
               ))}
             </div>
@@ -632,7 +791,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       )}
 
       {/* ROSTER & ATTENDANCE TAB */}
-      {activeInstitution && zoneTab === 'roster' && (
+      {isSchoolAdminAuthorized && activeInstitution && zoneTab === 'roster' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <form
             onSubmit={handleAddMember}
@@ -737,7 +896,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       )}
 
       {/* TIMETABLE & ACADEMIC CALENDAR */}
-      {activeInstitution && zoneTab === 'timetable' && (
+      {isSchoolAdminAuthorized && activeInstitution && zoneTab === 'timetable' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-black text-slate-900">
@@ -786,7 +945,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       )}
 
       {/* EXAMS, GPA & REPORT CARDS TAB */}
-      {activeInstitution && zoneTab === 'exams' && (
+      {isSchoolAdminAuthorized && activeInstitution && zoneTab === 'exams' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <form
             onSubmit={handleSaveExamResult}
@@ -870,17 +1029,47 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
 
             {printingReportStudent && (
               <div className="p-5 rounded-2xl border-2 border-indigo-300 bg-indigo-50/40 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <strong className="text-sm text-slate-950">
                     OFFICIAL ACADEMIC REPORT CARD — {activeInstitution.institutionName}
                   </strong>
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="px-3 py-1 rounded-lg bg-slate-900 text-white font-bold cursor-pointer"
-                  >
-                    Print / PDF
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const grade =
+                          typeof printingReportStudent.latestMarksPct === 'number'
+                            ? computeGradeAndGpa(printingReportStudent.latestMarksPct)
+                            : { grade: 'N/A', gpa: 'N/A' };
+                        downloadTextAsPdf({
+                          title: `Academic Report Card - ${printingReportStudent.fullName}`,
+                          subtitle: `${activeInstitution.institutionName} (${activeInstitution.academicYear || '2026–27'})`,
+                          metaLines: [
+                            `Roll / Code: ${printingReportStudent.rollOrCode} | Division: ${printingReportStudent.classOrDepartment}`,
+                            `Affiliation: ${activeInstitution.affiliationOrUniversity} | Principal: ${activeInstitution.principalName}`,
+                          ],
+                          sections: [
+                            {
+                              heading: 'Attendance & Academic Performance',
+                              body: `Attendance: ${printingReportStudent.attendancePresent} / ${printingReportStudent.attendanceTotal} sessions\nExamination: ${printingReportStudent.latestExamName || 'Term Evaluation'}\nScore: ${printingReportStudent.latestMarksPct ?? '--'}%\nGrade: ${grade.grade}\nGPA: ${grade.gpa}`,
+                            },
+                          ],
+                          filename: `report_card_${printingReportStudent.fullName}`,
+                        });
+                      }}
+                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3 py-1 rounded-lg bg-slate-900 text-white font-bold cursor-pointer"
+                    >
+                      Print
+                    </button>
+                  </div>
                 </div>
                 <div>
                   Student: <strong>{printingReportStudent.fullName}</strong> ({printingReportStudent.rollOrCode}) ·{' '}
@@ -897,7 +1086,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
       )}
 
       {/* NOTICES TAB */}
-      {activeInstitution && zoneTab === 'notices' && (
+      {isSchoolAdminAuthorized && activeInstitution && zoneTab === 'notices' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <form
             onSubmit={handlePublishNotice}

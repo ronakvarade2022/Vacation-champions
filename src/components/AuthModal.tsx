@@ -4,7 +4,7 @@ import {
   Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin, Smartphone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { CategoryId, ClassLevel, EducationBoard } from '../types';
+import { CategoryId, ClassLevel, EducationBoard, PortalRole, SubjectName } from '../types';
 import {
   auth,
   registerFirebaseEmailUser,
@@ -22,18 +22,37 @@ import {
   getClassSubscriptionInfo
 } from '../utils/subscriptionAccess';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
+import { ALL_18_SKILL_PROGRAMS } from '../data/skillPrograms/skillProgramsCatalog';
+
+export type AuthModalTab =
+  | 'login'
+  | 'teacher'
+  | 'parent'
+  | 'school_admin'
+  | 'institute_admin'
+  | 'register'
+  | 'admin'
+  | 'forgot';
+
+export type PortalRegisterRole =
+  | 'student'
+  | 'teacher'
+  | 'parent'
+  | 'school_admin'
+  | 'institute_admin';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot';
-  initialRegisterRole?: 'student' | 'teacher';
+  defaultTab?: AuthModalTab;
+  initialRegisterRole?: PortalRegisterRole;
   initialEmail?: string;
   initialBoard?: EducationBoard;
   initialClass?: ClassLevel;
   initialReferralCode?: string;
   onClearReferralCode?: () => void;
   onSuccess?: () => void;
+  onPortalAuthSuccess?: (role: PortalRole) => void;
   onExistingAccountProceedToSubscription?: (targetClass: ClassLevel, targetBoard?: EducationBoard) => void;
 }
 
@@ -103,6 +122,23 @@ const TEACHER_CATEGORY_OPTIONS: {
   },
 ];
 
+const TEACHER_SUBJECT_CHIPS: SubjectName[] = [
+  'Mathematics',
+  'Science',
+  'English',
+  'Marathi',
+  'Hindi',
+  'Social Studies',
+  'Computer Knowledge',
+];
+
+const MEDIUM_OPTIONS: Array<'English' | 'Marathi' | 'Hindi' | 'Semi-English'> = [
+  'English',
+  'Marathi',
+  'Hindi',
+  'Semi-English',
+];
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -114,6 +150,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialReferralCode,
   onClearReferralCode,
   onSuccess,
+  onPortalAuthSuccess,
   onExistingAccountProceedToSubscription,
 }) => {
   const {
@@ -124,6 +161,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     loginWithEmail,
     loginAsTeacher,
     loginAsAdmin,
+    registerPortalAccount,
+    loginPortalAccount,
     recoverAccount,
     acquireSessionAfterRegistration,
     recoverBlockedDeviceSession,
@@ -131,7 +170,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     updateTeacherSelectedCategories,
   } = useApp();
 
-  const [tab, setTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>(defaultTab);
+  const [tab, setTab] = useState<AuthModalTab>(defaultTab);
 
   // Student Login State
   const [loginEmail, setLoginEmail] = useState(initialEmail);
@@ -143,12 +182,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [teacherPassword, setTeacherPassword] = useState('');
   const [showTeacherPassword, setShowTeacherPassword] = useState(false);
 
+  // Portal (Parent / School / Coaching) Login State
+  const [portalLoginEmail, setPortalLoginEmail] = useState('');
+  const [portalLoginPassword, setPortalLoginPassword] = useState('');
+  const [showPortalLoginPassword, setShowPortalLoginPassword] = useState(false);
+
   // Forgot Password State (Registered Email Address)
   const [resetEmail, setResetEmail] = useState(initialEmail);
   const [resetEmailSentCount, setResetEmailSentCount] = useState(0);
 
-  // Register State (Student & Teacher Class-Wise Registration — School Name OPTIONAL)
-  const [regRoleType, setRegRoleType] = useState<'student' | 'teacher'>('student');
+  // Register State (All 5 Portals)
+  const [regRoleType, setRegRoleType] = useState<PortalRegisterRole>('student');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regMobile, setRegMobile] = useState('');
@@ -157,12 +201,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regClass, setRegClass] = useState<ClassLevel>('Class 5');
   const [regBoard, setRegBoard] = useState<EducationBoard>('Maharashtra');
+  const [regMedium, setRegMedium] = useState<'English' | 'Marathi' | 'Hindi' | 'Semi-English'>('English');
   const [regAvatar, setRegAvatar] = useState('🌟');
   const [regSchool, setRegSchool] = useState('');
   const [regCity, setRegCity] = useState('Pune');
   const [regTeacherCategories, setRegTeacherCategories] = useState<CategoryId[]>(
     ALL_TEACHER_REGISTRATION_CATEGORIES
   );
+  // Teacher professional fields
+  const [regQualification, setRegQualification] = useState('');
+  const [regTeachingSubjects, setRegTeachingSubjects] = useState<SubjectName[]>(['Mathematics', 'Science']);
+  const [regClassesTaught, setRegClassesTaught] = useState<ClassLevel[]>(['Class 5', 'Class 6']);
+
+  // Parent registration fields
+  const [regRelationship, setRegRelationship] = useState<'Mother' | 'Father' | 'Guardian'>('Mother');
+  const [regLinkedStudentEmail, setRegLinkedStudentEmail] = useState('');
+  const [regLinkedStudentMobile, setRegLinkedStudentMobile] = useState('');
+
+  // School & College registration fields
+  const [regInstitutionName, setRegInstitutionName] = useState('');
+  const [regInstitutionType, setRegInstitutionType] = useState<
+    'School (Std 1–10)' | 'Higher Secondary / Jr College (Std 11–12)' | 'Degree College / UG'
+  >('School (Std 1–10)');
+  const [regAffiliation, setRegAffiliation] = useState('Maharashtra State Board / CBSE / University');
+  const [regPrincipalName, setRegPrincipalName] = useState('');
+  const [regClassesCount, setRegClassesCount] = useState<number>(10);
+  const [regAddress, setRegAddress] = useState('');
+
+  // Coaching Institute registration fields
+  const [regInstituteName, setRegInstituteName] = useState('');
+  const [regInstituteType, setRegInstituteType] = useState<
+    'Abacus & Vedic Maths Centre' | 'Coaching Class' | 'Skill Academy' | 'Multi-Program Institute'
+  >('Abacus & Vedic Maths Centre');
+  const [regProgramsOffered, setRegProgramsOffered] = useState<string[]>([
+    'abacus',
+    'vedic-maths',
+    'phonics',
+  ]);
+
   const [regReferralCode, setRegReferralCode] = useState('');
   const [referralValidationInfo, setReferralValidationInfo] = useState<{
     checked: boolean;
@@ -233,7 +309,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
   useEffect(() => {
-    if (!isOpen || tab !== 'register') return;
+    if (!isOpen || tab !== 'register' || (regRoleType !== 'student' && regRoleType !== 'teacher')) {
+      setExistingAccountMatch(null);
+      return;
+    }
     const cleanEmail = regEmail.trim().toLowerCase();
     const cleanMobile = regMobile.replace(/\D/g, '').slice(-10);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || !/^[6-9]\d{9}$/.test(cleanMobile)) {
@@ -275,7 +354,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isOpen, tab, regEmail, regMobile, regClass, regBoard]);
+  }, [isOpen, tab, regRoleType, regEmail, regMobile, regClass, regBoard]);
 
   // Live validate referral code when entered or captured from URL
   useEffect(() => {
@@ -427,6 +506,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
     onSuccess?.();
+    onPortalAuthSuccess?.('student');
+    onClose();
+  };
+
+  // --- Parent / School / Coaching Portal Login ---
+  const handlePortalLogin = async (
+    e: React.FormEvent,
+    expectedRole: 'parent' | 'school_admin' | 'institute_admin'
+  ) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+    if (!isValidEmail(portalLoginEmail)) {
+      setError('Please enter your registered email address.');
+      return;
+    }
+    if (!portalLoginPassword) {
+      setError('Please enter your password.');
+      return;
+    }
+    setIsLoading(true);
+    const res = await loginPortalAccount(portalLoginEmail.trim(), portalLoginPassword, expectedRole);
+    setIsLoading(false);
+    if (!res.success) {
+      setError(res.message);
+      return;
+    }
+    onSuccess?.();
+    onPortalAuthSuccess?.(expectedRole);
     onClose();
   };
 
@@ -528,13 +636,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // --- 3. Student & Teacher Class-Wise & Board-Wise Registration ---
+  // --- 3. All 5 Portals Registration Handler ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
 
-    const roleLabel = regRoleType === 'teacher' ? 'Teacher' : 'Student';
     const cleanEmail = regEmail.trim().toLowerCase();
     if (!isValidEmail(cleanEmail)) {
       setError('Please enter a valid email address.');
@@ -546,6 +653,127 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('Mobile number is compulsory. Please enter a valid 10-digit Indian mobile number.');
       return;
     }
+
+    // Handle Parent / School & College / Coaching Institute registrations cleanly
+    if (
+      regRoleType === 'parent' ||
+      regRoleType === 'school_admin' ||
+      regRoleType === 'institute_admin'
+    ) {
+      if (!regName.trim() || regName.trim().length < 2) {
+        setError('Please enter your full name.');
+        return;
+      }
+      if (regPassword.length < 6) {
+        setError('Password must be at least 6 characters long.');
+        return;
+      }
+      if (regPassword !== regConfirmPassword) {
+        setError('Passwords do not match. Please re-enter.');
+        return;
+      }
+      if (regRoleType === 'school_admin' && !regInstitutionName.trim()) {
+        setError('Please enter your School or College name.');
+        return;
+      }
+      if (regRoleType === 'institute_admin' && !regInstituteName.trim()) {
+        setError('Please enter your Coaching / Skill Institute name.');
+        return;
+      }
+
+      setIsLoading(true);
+      const regRes = await registerPortalAccount({
+        role: regRoleType,
+        name: regName.trim(),
+        email: cleanEmail,
+        mobile: cleanMobile,
+        password: regPassword,
+        city: regCity.trim() || 'Pune',
+        relationship: regRoleType === 'parent' ? regRelationship : undefined,
+        linkedStudentEmail:
+          regRoleType === 'parent' ? regLinkedStudentEmail.trim() || undefined : undefined,
+        linkedStudentMobile:
+          regRoleType === 'parent' ? regLinkedStudentMobile.trim() || undefined : undefined,
+        institutionName:
+          regRoleType === 'school_admin' ? regInstitutionName.trim() : undefined,
+        institutionType: regRoleType === 'school_admin' ? regInstitutionType : undefined,
+        affiliationOrUniversity:
+          regRoleType === 'school_admin' ? regAffiliation.trim() : undefined,
+        principalName:
+          regRoleType === 'school_admin'
+            ? regPrincipalName.trim() || regName.trim()
+            : undefined,
+        classesCount: regRoleType === 'school_admin' ? Number(regClassesCount) || 10 : undefined,
+        address: regAddress.trim() || undefined,
+        instituteName:
+          regRoleType === 'institute_admin' ? regInstituteName.trim() : undefined,
+        instituteType: regRoleType === 'institute_admin' ? regInstituteType : undefined,
+        programIdsOffered:
+          regRoleType === 'institute_admin' ? regProgramsOffered : undefined,
+      });
+      setIsLoading(false);
+
+      if (!regRes.success) {
+        setError(regRes.message);
+        return;
+      }
+
+      // Seed local campus / academy workspace for instant portal usability
+      if (regRoleType === 'school_admin' && regRes.user?.uid) {
+        try {
+          const raw = localStorage.getItem('msz_institutions_v1');
+          const list = raw ? JSON.parse(raw) : [];
+          if (!list.some((item: any) => item.ownerUserId === regRes.user!.uid)) {
+            list.unshift({
+              id: `sch_${Date.now().toString(36)}`,
+              ownerUserId: regRes.user.uid,
+              institutionName: regInstitutionName.trim(),
+              institutionType: regInstitutionType,
+              affiliationOrUniversity: regAffiliation.trim() || 'State / CBSE / University',
+              city: regCity.trim() || 'Pune',
+              principalName: regPrincipalName.trim() || regName.trim(),
+              contactEmailOrPhone: `${cleanEmail} / ${cleanMobile}`,
+              departmentsOrClasses: ['Std 8 Div A', 'Std 9 Div A', 'Std 10 Div A'],
+              academicYear: '2026–27',
+              verificationStatus: 'PENDING_VERIFICATION',
+              createdAt: new Date().toISOString().slice(0, 10),
+            });
+            localStorage.setItem('msz_institutions_v1', JSON.stringify(list));
+          }
+        } catch {}
+      }
+
+      if (regRoleType === 'institute_admin' && regRes.user?.uid) {
+        try {
+          const raw = localStorage.getItem('msz_coaching_institutes_v1');
+          const list = raw ? JSON.parse(raw) : [];
+          if (!list.some((item: any) => item.ownerUserId === regRes.user!.uid)) {
+            list.unshift({
+              id: `inst_${Date.now().toString(36)}`,
+              ownerUserId: regRes.user.uid,
+              instituteName: regInstituteName.trim(),
+              instituteType: regInstituteType,
+              city: regCity.trim() || 'Pune',
+              contactPhone: cleanMobile,
+              directorName: regName.trim(),
+              programIdsOffered:
+                regProgramsOffered.length > 0 ? regProgramsOffered : ['abacus', 'vedic-maths'],
+              verificationStatus: 'PENDING_VERIFICATION',
+              createdAt: new Date().toISOString().slice(0, 10),
+              published: true,
+            });
+            localStorage.setItem('msz_coaching_institutes_v1', JSON.stringify(list));
+          }
+        } catch {}
+      }
+
+      onSuccess?.();
+      onPortalAuthSuccess?.(regRoleType);
+      onClose();
+      return;
+    }
+
+    const roleLabel = regRoleType === 'teacher' ? 'Teacher' : 'Student';
 
     // Check if this Email + Mobile belongs to an existing account before blocking or creating duplicates
     setIsLoading(true);
@@ -695,9 +923,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         mobile: cleanMobile,
         board: regBoard,
         classLevel: regClass,
-        accountRole: regRoleType,
+        medium: regMedium,
+        city: regCity.trim() || 'Pune',
+        accountRole: regRoleType === 'teacher' ? 'teacher' : 'student',
         selectedTeacherCategories:
           regRoleType === 'teacher' ? regTeacherCategories : undefined,
+        qualification: regRoleType === 'teacher' ? regQualification.trim() || undefined : undefined,
+        teachingSubjects:
+          regRoleType === 'teacher' && regTeachingSubjects.length > 0
+            ? regTeachingSubjects
+            : undefined,
+        classesTaught:
+          regRoleType === 'teacher' && regClassesTaught.length > 0
+            ? regClassesTaught
+            : undefined,
         avatar: regAvatar || (regRoleType === 'teacher' ? '👩‍🏫' : '🌟'),
         schoolName: regSchool.trim(), // Optional — may be empty string
         parentName: '',
@@ -772,6 +1011,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClearReferralCode?.();
     setIsLoading(false);
     onSuccess?.();
+    onPortalAuthSuccess?.(regRoleType === 'teacher' ? 'teacher' : 'student');
     onClose();
   };
 
@@ -877,6 +1117,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setShowDeviceRecovery(false);
     setRecoveryMobile('');
     onSuccess?.();
+    onPortalAuthSuccess?.('teacher');
     onClose();
   };
 
@@ -892,6 +1133,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
     onSuccess?.();
+    onPortalAuthSuccess?.('admin');
     onClose();
   };
 
@@ -909,10 +1151,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4" /> MyStudyZone – An Interactive Learning Platform for Students
           </div>
-          <h2 className="text-2xl font-black">
+          <h2 className="text-xl sm:text-2xl font-black">
             {tab === 'login' && 'Student Portal Login'}
             {tab === 'teacher' && 'Teacher Portal Login'}
-            {tab === 'register' && (regRoleType === 'teacher' ? 'Teacher / TET Aspirant Registration' : 'Student Registration (Classes 1 to 10)')}
+            {tab === 'parent' && 'Parent Portal Login'}
+            {tab === 'school_admin' && 'School & College Portal Login'}
+            {tab === 'institute_admin' && 'Coaching Institute Portal Login'}
+            {tab === 'register' &&
+              (regRoleType === 'teacher'
+                ? 'Teacher / TET Aspirant Registration'
+                : regRoleType === 'parent'
+                ? 'Parent Account Registration'
+                : regRoleType === 'school_admin'
+                ? 'School & College Registration'
+                : regRoleType === 'institute_admin'
+                ? 'Coaching Institute Registration'
+                : 'Student Registration (Classes 1 to 10)')}
             {tab === 'forgot' && 'Forgot / Reset Password'}
             {tab === 'admin' && 'Platform Admin Console'}
           </h2>
@@ -921,59 +1175,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </p>
           <p className="text-indigo-100 text-xs sm:text-sm mt-1">
             {tab === 'login' && 'Sign in with your registered Email Address & Password'}
-            {tab === 'teacher' && 'Access Classes 1–10, 4th & 7th Scholarship, MAHA TET, and CTET Papers 1 & 2 on one Teacher account'}
-            {tab === 'register' && 'Select Class 1st to 10th • Use your existing Mobile & Email anytime to add classes or exam plans'}
+            {tab === 'teacher' && 'Access Classes 1–10, 4th & 7th Scholarship, MAHA TET, and CTET Papers 1 & 2'}
+            {tab === 'parent' && 'Sign in to view your linked child’s attendance, homework & progress'}
+            {tab === 'school_admin' && 'Sign in to manage your school or college campus workspace'}
+            {tab === 'institute_admin' && 'Sign in to manage batches, trainers, fee ledgers & certificates'}
+            {tab === 'register' && 'Select your portal role below for tailored registration'}
             {tab === 'forgot' && 'Enter your registered email address to receive a secure Firebase password reset link'}
             {tab === 'admin' && 'Authorized Administrator sign-in to manage platform settings'}
           </p>
         </div>
 
-        {/* Navigation Tabs (Student Portal, Teacher Portal, New Registration, Admin — NO Parent Portal) */}
-        <div className="flex flex-wrap border-b border-slate-200 bg-slate-50 px-4 pt-3 gap-1.5">
-          <button
-            type="button"
-            onClick={() => { setTab('login'); setError(''); setSuccessMsg(''); }}
-            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
-              tab === 'login' || tab === 'forgot'
-                ? 'bg-white text-indigo-600 border-t border-x border-slate-200 -mb-px'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🎓 Student Login
-          </button>
-          <button
-            type="button"
-            onClick={() => { setTab('teacher'); setError(''); setSuccessMsg(''); }}
-            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
-              tab === 'teacher'
-                ? 'bg-white text-emerald-700 border-t border-x border-slate-200 -mb-px'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            👩‍🏫 Teacher Login
-          </button>
-          <button
-            type="button"
-            onClick={() => { setTab('register'); setError(''); setSuccessMsg(''); }}
-            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors cursor-pointer ${
-              tab === 'register'
-                ? 'bg-white text-indigo-600 border-t border-x border-slate-200 -mb-px'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            ✨ Register (Student / Teacher)
-          </button>
-          <button
-            type="button"
-            onClick={() => { setTab('admin'); setError(''); setSuccessMsg(''); }}
-            className={`px-3 py-2 text-xs font-bold rounded-t-xl transition-colors ml-auto cursor-pointer ${
-              tab === 'admin'
-                ? 'bg-white text-rose-600 border-t border-x border-slate-200 -mb-px'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Admin
-          </button>
+        {/* Navigation Tabs (All 5 Portals + Register + Admin) */}
+        <div className="flex flex-wrap border-b border-slate-200 bg-slate-50 px-3 pt-2.5 gap-1">
+          {[
+            { id: 'login' as const, label: 'Student' },
+            { id: 'teacher' as const, label: 'Teacher' },
+            { id: 'parent' as const, label: 'Parent' },
+            { id: 'school_admin' as const, label: 'School' },
+            { id: 'institute_admin' as const, label: 'Coaching' },
+            { id: 'register' as const, label: 'Register' },
+            { id: 'admin' as const, label: 'Admin' },
+          ].map((item) => {
+            const isAct = tab === item.id || (item.id === 'login' && tab === 'forgot');
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setTab(item.id);
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                className={`px-2.5 py-2 text-[11px] font-bold rounded-t-xl transition-colors cursor-pointer ${
+                  isAct
+                    ? 'bg-white text-indigo-700 border-t border-x border-slate-200 -mb-px'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Body */}
@@ -1449,59 +1691,154 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </form>
           )}
 
-          {/* ==================== NEW REGISTRATION TAB (STUDENT & TEACHER) ==================== */}
-          {tab === 'register' && (
-            <form onSubmit={handleRegister} className="space-y-3.5">
-              {/* 1. Account Type Selection at the Beginning of Registration: Student vs Teacher / TET Aspirant */}
+          {/* ==================== PARENT / SCHOOL / COACHING PORTAL LOGIN TABS ==================== */}
+          {(tab === 'parent' || tab === 'school_admin' || tab === 'institute_admin') && (
+            <form onSubmit={(e) => handlePortalLogin(e, tab)} className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                {tab === 'parent' &&
+                  'Sign in to your Parent account to monitor linked student attendance, homework feedback, and progress.'}
+                {tab === 'school_admin' &&
+                  'Sign in with your School / College Administrator credentials to access your isolated campus workspace.'}
+                {tab === 'institute_admin' &&
+                  'Sign in to manage coaching batches, trainers, fee ledgers, and course completion certificates.'}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Select Account Type *
+                  Registered Email Address
                 </label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    value={portalLoginEmail}
+                    onChange={(e) => setPortalLoginEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm font-medium"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showPortalLoginPassword ? 'text' : 'password'}
+                    value={portalLoginPassword}
+                    onChange={(e) => setPortalLoginPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-sm font-medium"
+                    required
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      setRegRoleType('student');
-                      if (regAvatar === '👩‍🏫' || regAvatar === '👨‍🏫') setRegAvatar('🌟');
-                    }}
-                    className={`p-3 rounded-2xl border-2 text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      regRoleType === 'student'
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-950 shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
+                    onClick={() => setShowPortalLoginPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
-                    <span>🎓 Student</span>
+                    {showPortalLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+                </div>
+                <div className="mt-2 flex items-center justify-end">
                   <button
                     type="button"
                     onClick={() => {
-                      setRegRoleType('teacher');
-                      setRegAvatar('👩‍🏫');
+                      setTab('forgot');
+                      setResetEmail(portalLoginEmail);
+                      setError('');
                     }}
-                    className={`p-3 rounded-2xl border-2 text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      regRoleType === 'teacher'
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
+                    className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
                   >
-                    <span>👩‍🏫 Teacher / TET Aspirant</span>
+                    Forgot Password?
                   </button>
                 </div>
               </div>
 
-              {/* Free Registration & Access Info Banner */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg cursor-pointer"
+              >
+                {isLoading
+                  ? 'Signing In...'
+                  : tab === 'parent'
+                  ? 'Sign In to Parent Portal'
+                  : tab === 'school_admin'
+                  ? 'Sign In to School & College Portal'
+                  : 'Sign In to Coaching Institute Portal'}
+              </button>
+
+              <p className="text-center text-xs text-slate-500">
+                New account needed?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegRoleType(tab);
+                    setTab('register');
+                    setError('');
+                  }}
+                  className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                >
+                  Register {tab === 'parent' ? 'Parent' : tab === 'school_admin' ? 'School / College' : 'Coaching Institute'} Account
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* ==================== NEW REGISTRATION TAB (ALL 5 PORTALS) ==================== */}
+          {tab === 'register' && (
+            <form onSubmit={handleRegister} className="space-y-3.5">
+              {/* 1. Account Type Selection Across All 5 Portals */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Select Portal Account Type *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { role: 'student' as const, label: 'Student' },
+                    { role: 'teacher' as const, label: 'Teacher / TET' },
+                    { role: 'parent' as const, label: 'Parent' },
+                    { role: 'school_admin' as const, label: 'School / College' },
+                    { role: 'institute_admin' as const, label: 'Coaching Inst.' },
+                  ].map((item) => (
+                    <button
+                      key={item.role}
+                      type="button"
+                      onClick={() => {
+                        setRegRoleType(item.role);
+                        if (item.role === 'teacher') setRegAvatar('👩‍🏫');
+                        else if (item.role === 'student') setRegAvatar('🌟');
+                        setError('');
+                      }}
+                      className={`p-2.5 rounded-xl border-2 text-xs font-extrabold transition-all cursor-pointer ${
+                        regRoleType === item.role
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-950 shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Role Registration Summary Banner */}
               <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
                 <span className="text-[11px] font-bold text-indigo-950 leading-snug">
-                  {regRoleType === 'teacher' ? (
-                    <>
-                      <strong>Free Teacher / TET Aspirant Registration:</strong> Select multiple applicable categories below (Classes 1–10, 4th &amp; 7th Scholarship, Maharashtra TET, CTET Paper 1, CTET Paper 2, or Both CTET Papers). All selected categories appear on your Teacher Dashboard with free preview tests; paid mock tests unlock per purchased plan.
-                    </>
-                  ) : (
-                    <>
-                      <strong>Free Student Registration (Classes 1 to 10):</strong> Select your class from <strong>Class 1 to Class 10</strong> below. Class 4 students automatically get access to the <strong>4th Scholarship</strong> section, and Class 7 students get access to the <strong>7th Scholarship</strong> section!
-                    </>
-                  )}
+                  {regRoleType === 'teacher' &&
+                    'Free Teacher / TET Registration: Add qualification, subjects & classes taught and pick your categories.'}
+                  {regRoleType === 'student' &&
+                    'Free Student Registration (Classes 1–10): Choose your Board, Medium & Class. Existing Email+Mobile lets you add more classes anytime.'}
+                  {regRoleType === 'parent' &&
+                    'Parent Registration: Securely link a child via their registered email/ID and mobile number without creating duplicate student accounts.'}
+                  {regRoleType === 'school_admin' &&
+                    'School & College Registration: Creates an isolated multi-tenant campus workspace (starts with PENDING_VERIFICATION status).'}
+                  {regRoleType === 'institute_admin' &&
+                    'Coaching & Skill Institute Registration: Launches your batch, trainer, fee ledger, and certificate portal (PENDING_VERIFICATION status).'}
                 </span>
               </div>
 
@@ -1712,79 +2049,363 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {/* 5A. Teacher / TET Aspirant Multi-Category Selection (Shown when Teacher / TET Aspirant is selected) */}
+              {/* 5A. Teacher / TET Aspirant Multi-Category + Professional Fields */}
               {regRoleType === 'teacher' && (
-                <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
                     <div>
-                      <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider">
-                        Select Teacher / TET Aspirant Categories *
+                      <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Qualification <span className="text-slate-400 font-semibold">(e.g. M.Sc, B.Ed, D.Ed)</span>
                       </label>
-                      <p className="text-[11px] text-slate-600 font-medium">
-                        Select one or multiple applicable categories for your Teacher Dashboard:
-                      </p>
+                      <input
+                        type="text"
+                        value={regQualification}
+                        onChange={(e) => setRegQualification(e.target.value)}
+                        placeholder="e.g. B.Sc, B.Ed"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setRegTeacherCategories(
-                          regTeacherCategories.length === ALL_TEACHER_REGISTRATION_CATEGORIES.length
-                            ? ['maha_tet']
-                            : ALL_TEACHER_REGISTRATION_CATEGORIES
-                        )
-                      }
-                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black cursor-pointer shrink-0"
-                    >
-                      {regTeacherCategories.length === ALL_TEACHER_REGISTRATION_CATEGORIES.length
-                        ? 'Select Only TET'
-                        : 'Select All'}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {TEACHER_CATEGORY_OPTIONS.map((opt) => {
-                      const isChecked = isTeacherOptionSelected(opt.id);
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => toggleTeacherCategoryOption(opt.id)}
-                          className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                            isChecked
-                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                              : 'bg-white text-slate-800 border-slate-200 hover:border-emerald-400'
-                          }`}
-                        >
-                          <div
-                            className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center shrink-0 border ${
-                              isChecked
-                                ? 'bg-white text-emerald-700 border-white'
-                                : 'bg-slate-50 border-slate-300 text-transparent'
-                            }`}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-xs font-black block leading-tight">
-                              {opt.label}
-                            </span>
-                            <span
-                              className={`text-[10px] block leading-snug mt-0.5 ${
-                                isChecked ? 'text-emerald-100' : 'text-slate-500'
+                    <div>
+                      <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Subjects Taught
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {TEACHER_SUBJECT_CHIPS.map((subj) => {
+                          const active = regTeachingSubjects.includes(subj);
+                          return (
+                            <button
+                              key={subj}
+                              type="button"
+                              onClick={() =>
+                                setRegTeachingSubjects((prev) =>
+                                  active ? prev.filter((s) => s !== subj) : [...prev, subj]
+                                )
+                              }
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                                active
+                                  ? 'bg-emerald-600 text-white border-emerald-700'
+                                  : 'bg-white text-slate-700 border-slate-200'
                               }`}
                             >
-                              {opt.subtitle}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                              {subj}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Classes Taught
+                      </label>
+                      <div className="flex flex-wrap gap-1">
+                        {CLASS_LEVELS.map((cls) => {
+                          const active = regClassesTaught.includes(cls);
+                          return (
+                            <button
+                              key={cls}
+                              type="button"
+                              onClick={() =>
+                                setRegClassesTaught((prev) =>
+                                  active ? prev.filter((c) => c !== cls) : [...prev, cls]
+                                )
+                              }
+                              className={`px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer ${
+                                active
+                                  ? 'bg-emerald-600 text-white border-emerald-700'
+                                  : 'bg-white text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {cls}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider">
+                          Select Teacher / TET Aspirant Categories *
+                        </label>
+                        <p className="text-[11px] text-slate-600 font-medium">
+                          Select one or multiple applicable categories for your Teacher Dashboard:
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRegTeacherCategories(
+                            regTeacherCategories.length === ALL_TEACHER_REGISTRATION_CATEGORIES.length
+                              ? ['maha_tet']
+                              : ALL_TEACHER_REGISTRATION_CATEGORIES
+                          )
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black cursor-pointer shrink-0"
+                      >
+                        {regTeacherCategories.length === ALL_TEACHER_REGISTRATION_CATEGORIES.length
+                          ? 'Select Only TET'
+                          : 'Select All'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {TEACHER_CATEGORY_OPTIONS.map((opt) => {
+                        const isChecked = isTeacherOptionSelected(opt.id);
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => toggleTeacherCategoryOption(opt.id)}
+                            className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                              isChecked
+                                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                : 'bg-white text-slate-800 border-slate-200 hover:border-emerald-400'
+                            }`}
+                          >
+                            <div
+                              className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center shrink-0 border ${
+                                isChecked
+                                  ? 'bg-white text-emerald-700 border-white'
+                                  : 'bg-slate-50 border-slate-300 text-transparent'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-black block leading-tight">
+                                {opt.label}
+                              </span>
+                              <span
+                                className={`text-[10px] block leading-snug mt-0.5 ${
+                                  isChecked ? 'text-emerald-100' : 'text-slate-500'
+                                }`}
+                              >
+                                {opt.subtitle}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* 5B. Select Education Board & Class from Class 1 to Class 10 */}
-              {(regRoleType === 'student' || regTeacherCategories.includes('all_classes')) && (
+              {/* 5P. Parent-Specific Fields */}
+              {regRoleType === 'parent' && (
+                <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-2.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Relationship</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['Mother', 'Father', 'Guardian'] as const).map((rel) => (
+                        <button
+                          key={rel}
+                          type="button"
+                          onClick={() => setRegRelationship(rel)}
+                          className={`py-2 rounded-xl border font-bold cursor-pointer ${
+                            regRelationship === rel
+                              ? 'bg-rose-600 text-white border-rose-700'
+                              : 'bg-white text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {rel}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Child Registered Email (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        value={regLinkedStudentEmail}
+                        onChange={(e) => setRegLinkedStudentEmail(e.target.value)}
+                        placeholder="child@example.com"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Child Registered Mobile (Optional)
+                      </label>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={regLinkedStudentMobile}
+                        onChange={(e) => setRegLinkedStudentMobile(e.target.value.replace(/\D/g, ''))}
+                        placeholder="10-digit child mobile"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5S. School & College Fields */}
+              {regRoleType === 'school_admin' && (
+                <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200 space-y-2.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">School / College Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={regInstitutionName}
+                      onChange={(e) => setRegInstitutionName(e.target.value)}
+                      placeholder="e.g. Sahyadri Vidyalaya & Junior College"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Institution Type</label>
+                      <select
+                        value={regInstitutionType}
+                        onChange={(e) =>
+                          setRegInstitutionType(
+                            e.target.value as
+                              | 'School (Std 1–10)'
+                              | 'Higher Secondary / Jr College (Std 11–12)'
+                              | 'Degree College / UG'
+                          )
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      >
+                        <option value="School (Std 1–10)">School (Std 1–10)</option>
+                        <option value="Higher Secondary / Jr College (Std 11–12)">
+                          Higher Secondary / Jr College (Std 11–12)
+                        </option>
+                        <option value="Degree College / UG">Degree College / UG</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Affiliation / Board</label>
+                      <input
+                        type="text"
+                        value={regAffiliation}
+                        onChange={(e) => setRegAffiliation(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Principal / Head Name</label>
+                      <input
+                        type="text"
+                        value={regPrincipalName}
+                        onChange={(e) => setRegPrincipalName(e.target.value)}
+                        placeholder="Principal full name"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Approx. Classes / Divisions</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={regClassesCount}
+                        onChange={(e) => setRegClassesCount(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Campus Address</label>
+                    <input
+                      type="text"
+                      value={regAddress}
+                      onChange={(e) => setRegAddress(e.target.value)}
+                      placeholder="Street / Area"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 5I. Coaching & Skill Institute Fields */}
+              {regRoleType === 'institute_admin' && (
+                <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2.5 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Coaching / Institute Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={regInstituteName}
+                        onChange={(e) => setRegInstituteName(e.target.value)}
+                        placeholder="e.g. BrightMind Abacus Academy"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Institute Type</label>
+                      <select
+                        value={regInstituteType}
+                        onChange={(e) =>
+                          setRegInstituteType(
+                            e.target.value as
+                              | 'Abacus & Vedic Maths Centre'
+                              | 'Coaching Class'
+                              | 'Skill Academy'
+                              | 'Multi-Program Institute'
+                          )
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                      >
+                        <option value="Abacus & Vedic Maths Centre">Abacus &amp; Vedic Maths Centre</option>
+                        <option value="Coaching Class">Coaching Class</option>
+                        <option value="Skill Academy">Skill Academy</option>
+                        <option value="Multi-Program Institute">Multi-Program Institute</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Campus / Centre Address</label>
+                    <input
+                      type="text"
+                      value={regAddress}
+                      onChange={(e) => setRegAddress(e.target.value)}
+                      placeholder="Area / Branch address"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Courses Offered ({regProgramsOffered.length} selected)
+                    </label>
+                    <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-2 rounded-xl bg-white border border-slate-200">
+                      {ALL_18_SKILL_PROGRAMS.map((p) => {
+                        const checked = regProgramsOffered.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() =>
+                              setRegProgramsOffered((prev) =>
+                                checked ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border cursor-pointer ${
+                              checked
+                                ? 'bg-amber-500 text-slate-950 border-amber-600'
+                                : 'bg-slate-50 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {p.number}. {p.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5B. Select Education Board, Medium & Class (Student / Teacher) */}
+              {(regRoleType === 'student' ||
+                (regRoleType === 'teacher' && regTeacherCategories.includes('all_classes'))) && (
               <div className="space-y-2.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -1814,6 +2435,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Medium Selector (Student / Teacher) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Instruction Medium
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {MEDIUM_OPTIONS.map((med) => (
+                      <button
+                        key={med}
+                        type="button"
+                        onClick={() => setRegMedium(med)}
+                        className={`py-2 px-1.5 rounded-xl border text-[11px] font-bold cursor-pointer ${
+                          regMedium === med
+                            ? 'bg-indigo-600 text-white border-indigo-700'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        {med}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1982,6 +2626,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   ? 'Creating Account...'
                   : regRoleType === 'teacher'
                   ? `Register Teacher / TET Aspirant (${regTeacherCategories.length} Categor${regTeacherCategories.length === 1 ? 'y' : 'ies'} Selected)`
+                  : regRoleType === 'parent'
+                  ? 'Create Parent Portal Account'
+                  : regRoleType === 'school_admin'
+                  ? 'Register School & College Portal'
+                  : regRoleType === 'institute_admin'
+                  ? 'Register Coaching Institute Portal'
                   : `Register Student (${getBoardShortLabel(regBoard)} • Standard ${formatStandardOrdinal(regClass)})`}
               </button>
             </form>

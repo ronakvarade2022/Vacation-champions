@@ -1,14 +1,18 @@
 import React from 'react';
 import { Building2, GraduationCap, HeartHandshake, Sparkles, Users, Wrench } from 'lucide-react';
 
+import type { PortalRole } from '../../types';
+
 export interface FiveZonesHubStripProps {
   onNavigateZone: (tab: string) => void;
   onOpenTeacherPortal?: () => void;
+  onOpenPortalLanding?: (portalRole: Exclude<PortalRole, 'admin'>) => void;
 }
 
 export const FiveZonesHubStrip: React.FC<FiveZonesHubStripProps> = ({
   onNavigateZone,
   onOpenTeacherPortal,
+  onOpenPortalLanding,
 }) => {
   const zones = [
     {
@@ -19,7 +23,8 @@ export const FiveZonesHubStrip: React.FC<FiveZonesHubStripProps> = ({
       icon: GraduationCap,
       accent: 'border-indigo-200 bg-indigo-50/70 hover:border-indigo-400',
       iconBg: 'bg-indigo-600 text-white',
-      onClick: () => onNavigateZone('study-materials'),
+      onClick: () =>
+        onOpenPortalLanding ? onOpenPortalLanding('student') : onNavigateZone('study-materials'),
     },
     {
       id: 'teacher-zone',
@@ -29,7 +34,12 @@ export const FiveZonesHubStrip: React.FC<FiveZonesHubStripProps> = ({
       icon: Wrench,
       accent: 'border-teal-200 bg-teal-50/70 hover:border-teal-400',
       iconBg: 'bg-teal-600 text-white',
-      onClick: () => (onOpenTeacherPortal ? onOpenTeacherPortal() : onNavigateZone('teacher-dashboard')),
+      onClick: () =>
+        onOpenPortalLanding
+          ? onOpenPortalLanding('teacher')
+          : onOpenTeacherPortal
+            ? onOpenTeacherPortal()
+            : onNavigateZone('teacher-dashboard'),
     },
     {
       id: 'parent-zone',
@@ -39,7 +49,8 @@ export const FiveZonesHubStrip: React.FC<FiveZonesHubStripProps> = ({
       icon: HeartHandshake,
       accent: 'border-rose-200 bg-rose-50/70 hover:border-rose-400',
       iconBg: 'bg-rose-600 text-white',
-      onClick: () => onNavigateZone('parent-zone'),
+      onClick: () =>
+        onOpenPortalLanding ? onOpenPortalLanding('parent') : onNavigateZone('parent-zone'),
     },
     {
       id: 'school-college-zone',
@@ -49,7 +60,10 @@ export const FiveZonesHubStrip: React.FC<FiveZonesHubStripProps> = ({
       icon: Building2,
       accent: 'border-sky-200 bg-sky-50/70 hover:border-sky-400',
       iconBg: 'bg-sky-700 text-white',
-      onClick: () => onNavigateZone('school-college-zone'),
+      onClick: () =>
+        onOpenPortalLanding
+          ? onOpenPortalLanding('school_admin')
+          : onNavigateZone('school-college-zone'),
     },
     {
       id: 'coaching-zone',
@@ -59,7 +73,10 @@ export const FiveZonesHubStrip: React.FC<FiveZonesHubStripProps> = ({
       icon: Sparkles,
       accent: 'border-amber-300 bg-amber-50/80 hover:border-amber-500',
       iconBg: 'bg-amber-500 text-slate-950',
-      onClick: () => onNavigateZone('coaching-zone'),
+      onClick: () =>
+        onOpenPortalLanding
+          ? onOpenPortalLanding('institute_admin')
+          : onNavigateZone('coaching-zone'),
     },
   ];
 

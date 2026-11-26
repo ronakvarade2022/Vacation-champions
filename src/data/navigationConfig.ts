@@ -34,6 +34,8 @@ export type NavSubActionId =
   | 'sl-additional-curriculum'
   | 'sl-creative'
   | 'sl-programs'
+  | 'sl-ai-tools'
+  | 'sl-core-skills-lab'
   // SECTION 4: STUDY MATERIAL
   | 'sm-textbook-learning'
   | 'sm-notes'
@@ -253,6 +255,18 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         label: 'Additional Curriculum (10 Subjects)',
         description: 'MY STUDYZONE ADDITIONAL CURRICULUM: 200 enrichment chapters, worksheets & 800 MCQs (Classes 1–10)',
         badgeText: '10 Subjects',
+      },
+      {
+        id: 'sl-ai-tools',
+        label: 'AI Tools Studio (10 Tools)',
+        description: 'Real Gemini-powered PDF, Worksheet, Question Paper, Notes, Presentation, Quiz, Resume & Image studio',
+        badgeText: '10 AI Tools',
+      },
+      {
+        id: 'sl-core-skills-lab',
+        label: 'Vedic Maths, Abacus & Phonics',
+        description: 'Interactive Soroban 7-rod Abacus, 16 Vedic Sutras speed drills & 4-level spoken Phonics lab',
+        badgeText: 'Interactive Lab',
       },
       {
         id: 'sl-creative',

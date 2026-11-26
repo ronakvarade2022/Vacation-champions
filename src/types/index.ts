@@ -158,6 +158,12 @@ export interface StudentProfile {
   attendanceRecords?: AttendanceRecord[];
   assignments?: AssignmentItem[];
   feeRecords?: FeeRecord[];
+  // Teacher qualification & specialization fields (optional additive fields)
+  qualification?: string;
+  teachingSubjects?: SubjectName[];
+  classesTaught?: ClassLevel[];
+  city?: string;
+  parentLinkCode?: string;
   // MSCE Pune Scholarship Examination Medium & Full Mock Attempt History
   scholarshipMedium?: 'English' | 'Marathi' | 'Hindi';
   msceMockAttempts?: import('../data/msceMockExamEngine').MsceMockAttemptRecord[];
@@ -476,12 +482,16 @@ export interface EducationalVideoLesson {
 
 export interface ParentProfile {
   id: string;
+  firebaseUid?: string;
   name: string;
   email: string;
   mobile: string;
+  relationship?: 'Mother' | 'Father' | 'Guardian';
+  city?: string;
   linkedStudentIds: string[];
   isVerified: boolean;
   registeredAt: string;
+  updatedAt?: string;
 }
 
 export interface AttendanceRecord {
@@ -534,14 +544,29 @@ export interface AnnouncementItem {
   author: string;
 }
 
+export type PortalRole =
+  | 'student'
+  | 'teacher'
+  | 'parent'
+  | 'school_admin'
+  | 'institute_admin'
+  | 'admin';
+
 export interface AuthenticatedUser {
   uid: string;
   email: string;
-  role: 'student' | 'teacher' | 'admin';
+  role: PortalRole;
   displayName: string;
+  mobile?: string;
   studentId?: string; // If student or teacher
   board?: EducationBoard;
   classLevel?: ClassLevel;
+  medium?: 'English' | 'Marathi' | 'Hindi' | 'Semi-English';
+  qualification?: string;
+  teachingSubjects?: SubjectName[];
+  classesTaught?: ClassLevel[];
+  institutionId?: string;
+  instituteId?: string;
   linkedStudentIds?: string[];
   isVerified: boolean;
 }

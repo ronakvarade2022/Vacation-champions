@@ -50,6 +50,8 @@ import { BrandBookCapLogo } from './DashboardIllustrations';
 import { PWAInstallButton } from './PWAInstallButton';
 import { ShareMyAppModal } from './ShareMyAppFeature';
 
+import type { PortalRole } from '../types';
+
 interface HeaderProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
@@ -57,6 +59,8 @@ interface HeaderProps {
   onSelectMainSection?: (sectionId: MainMenuId) => void;
   onOpenAuth: (defaultTab?: 'login' | 'teacher' | 'register' | 'admin' | 'forgot') => void;
   onOpenPanel: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
+  onOpenPortalLanding?: (portalRole: Exclude<PortalRole, 'admin'>) => void;
+  activeLandingPortal?: Exclude<PortalRole, 'admin'>;
   onOpenMembership: (
     targetClass?: ClassLevel,
     targetBoard?: EducationBoard,
@@ -74,6 +78,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectMainSection,
   onOpenAuth,
   onOpenPanel,
+  onOpenPortalLanding,
+  activeLandingPortal,
   onOpenMembership,
   activeMenuId,
   viewMode,
@@ -140,7 +146,12 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const isLearningRole = activeRole === 'student' || activeRole === 'teacher';
+  const showStudentNavMenus =
+    activeRole === 'student' &&
+    currentTab !== 'parent-zone' &&
+    currentTab !== 'school-college-zone' &&
+    currentTab !== 'coaching-zone' &&
+    currentTab !== 'portal-landing';
 
   const handleRoleChange = (role: UserRole) => {
     const res = switchRole(role);
@@ -179,6 +190,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   const isTeacherAccount = currentStudent?.accountRole === 'teacher' || activeRole === 'teacher';
   const isStudentAccount = Boolean(currentStudent && currentStudent.accountRole !== 'teacher' && activeRole === 'student');
+  const isParentActive = activeRole === 'parent' || currentTab === 'parent-zone' || (currentTab === 'portal-landing' && activeLandingPortal === 'parent');
+  const isSchoolActive = activeRole === 'school_admin' || currentTab === 'school-college-zone' || (currentTab === 'portal-landing' && activeLandingPortal === 'school_admin');
+  const isCoachingActive = activeRole === 'institute_admin' || currentTab === 'coaching-zone' || (currentTab === 'portal-landing' && activeLandingPortal === 'institute_admin');
   const isAdminActive = Boolean(currentUser?.role === 'admin' && activeRole === 'admin');
   const isUserLoggedIn = Boolean(currentStudent || currentUser);
 
@@ -193,53 +207,99 @@ export const Header: React.FC<HeaderProps> = ({
     onOpenAuth('login');
   };
 
+  const triggerPortalClick = (role: Exclude<PortalRole, 'admin'>) => {
+    setOpenDropdownMenu(null);
+    setMobileMenuOpen(false);
+    if (onOpenPortalLanding) {
+      onOpenPortalLanding(role);
+      return;
+    }
+    if (role === 'student' || role === 'teacher') {
+      onOpenPanel(role, 'login');
+    } else if (role === 'parent') {
+      setCurrentTab('parent-zone');
+    } else if (role === 'school_admin') {
+      setCurrentTab('school-college-zone');
+    } else {
+      setCurrentTab('coaching-zone');
+    }
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs w-full">
-      {/* Top Role Portals Bar: Always-visible Student Portal, Teacher Portal & Admin Portal (Desktop, Smart TV & Mobile 360px safe) */}
+      {/* Top 5 Education Portals + Admin Bar (Desktop, Smart TV & Mobile 360px safe) */}
       <div className="bg-slate-900 text-white border-b border-slate-800">
         <div className={`${containerWidthClass} px-2.5 sm:px-6 lg:px-8 py-1.5 xl:py-2 flex items-center justify-between gap-2`}>
-          <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] xl:text-xs 2xl:text-sm font-semibold text-slate-300 truncate">
-            <BookOpenCheck className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-amber-400 shrink-0" />
-            <span>Classes 1–10 · 4th &amp; 7th Scholarship · MAHA TET · CTET Portals</span>
+          <span className="hidden xl:inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 truncate">
+            <BookOpenCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>5 Independent Education Portals · Classes 1–10 · Teachers · Parents · Schools · Coaching</span>
           </span>
 
           <div
             role="navigation"
-            aria-label="Portal Access"
-            className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-2 xl:gap-2.5 w-full md:w-auto sm:justify-end"
+            aria-label="5 Education Portals Access"
+            className="flex items-center gap-1.5 overflow-x-auto pb-0.5 w-full xl:w-auto xl:justify-end"
           >
             <button
               type="button"
-              onClick={() => {
-                setOpenDropdownMenu(null);
-                setMobileMenuOpen(false);
-                onOpenPanel('student', 'login');
-              }}
-              className={`min-h-[34px] xl:min-h-[38px] px-2 sm:px-3 xl:px-4 py-1 xl:py-1.5 rounded-lg text-[10px] sm:text-xs xl:text-[13px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
-                isStudentAccount
+              onClick={() => triggerPortalClick('student')}
+              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                isStudentAccount || (currentTab === 'portal-landing' && activeLandingPortal === 'student')
                   ? 'bg-indigo-600 text-white border-indigo-400 shadow-xs'
                   : 'bg-white/10 hover:bg-indigo-600/80 text-white border-white/15'
               }`}
             >
-              <GraduationCap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 shrink-0" />
-              <span>Student Portal</span>
+              <GraduationCap className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span>Student</span>
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                setOpenDropdownMenu(null);
-                setMobileMenuOpen(false);
-                onOpenPanel('teacher', 'login');
-              }}
-              className={`min-h-[34px] xl:min-h-[38px] px-2 sm:px-3 xl:px-4 py-1 xl:py-1.5 rounded-lg text-[10px] sm:text-xs xl:text-[13px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
-                isTeacherAccount
+              onClick={() => triggerPortalClick('teacher')}
+              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                isTeacherAccount || (currentTab === 'portal-landing' && activeLandingPortal === 'teacher')
                   ? 'bg-emerald-600 text-white border-emerald-400 shadow-xs'
                   : 'bg-white/10 hover:bg-emerald-600/80 text-white border-white/15'
               }`}
             >
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-300 shrink-0" />
-              <span>Teacher Portal</span>
+              <Users className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              <span>Teacher</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => triggerPortalClick('parent')}
+              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                isParentActive
+                  ? 'bg-rose-600 text-white border-rose-400 shadow-xs'
+                  : 'bg-white/10 hover:bg-rose-600/80 text-white border-white/15'
+              }`}
+            >
+              <span>Parent</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => triggerPortalClick('school_admin')}
+              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                isSchoolActive
+                  ? 'bg-sky-600 text-white border-sky-400 shadow-xs'
+                  : 'bg-white/10 hover:bg-sky-600/80 text-white border-white/15'
+              }`}
+            >
+              <span>School &amp; College</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => triggerPortalClick('institute_admin')}
+              className={`min-h-[32px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                isCoachingActive
+                  ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-xs'
+                  : 'bg-white/10 hover:bg-amber-500/80 hover:text-slate-950 text-white border-white/15'
+              }`}
+            >
+              <span>Coaching Institute</span>
             </button>
 
             <button
@@ -249,14 +309,14 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenPanel('admin', 'login');
               }}
-              className={`min-h-[34px] xl:min-h-[38px] px-2 sm:px-3 xl:px-4 py-1 xl:py-1.5 rounded-lg text-[10px] sm:text-xs xl:text-[13px] font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[32px] px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 isAdminActive
                   ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-xs'
-                  : 'bg-white/10 hover:bg-amber-500/80 hover:text-slate-950 text-white border-white/15'
+                  : 'bg-white/5 hover:bg-white/15 text-slate-300 border-white/10'
               }`}
             >
-              <ShieldCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isAdminActive ? 'text-slate-950' : 'text-amber-300'}`} />
-              <span>Admin Portal</span>
+              <ShieldCheck className={`w-3 h-3 shrink-0 ${isAdminActive ? 'text-slate-950' : 'text-amber-300'}`} />
+              <span>Admin</span>
             </button>
           </div>
         </div>
@@ -289,8 +349,8 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions Area (Always keeps Upgrade Plan, Share App, Install App & Login/Logout buttons visible in mobile, desktop & Smart TV frames) */}
         <div className="flex items-center justify-end flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 xl:gap-2.5 shrink-0">
-          {/* Signed-in Active Board & Class Switcher Pill (Visible on Mobile, Tablet & Desktop) */}
-          {isLearningRole &&
+          {/* Signed-in Active Board & Class Switcher Pill (Student & Teacher Learning Portals Only) */}
+          {showStudentNavMenus &&
             currentStudent &&
             (() => {
               const accessiblePairs = getAccessibleBoardClassesList(currentStudent);
@@ -834,7 +894,7 @@ export const Header: React.FC<HeaderProps> = ({
           />
 
           {/* Mobile Hamburger Menu Button */}
-          {isLearningRole && (
+          {showStudentNavMenus && (
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -884,8 +944,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Desktop & Smart TV Navigation Bar (Full-Width Horizontal Row of All Main Section Tabs) */}
-      {isLearningRole && (
+      {/* Desktop & Smart TV Navigation Bar (Student Learning Sections — Isolated from Parent/School/Coaching/Admin Portals) */}
+      {showStudentNavMenus && (
         <div className="hidden md:block border-t border-slate-100 bg-slate-50/90">
           <nav
             ref={navContainerRef}
@@ -936,7 +996,7 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Mobile Hamburger Drawer with Expandable Sub-Menus */}
-      {isLearningRole && mobileMenuOpen && (
+      {showStudentNavMenus && mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-slate-200 px-4 py-4 space-y-3 max-h-[82vh] overflow-y-auto shadow-lg">
           {/* Quick Priority Mobile Actions */}
           <div className="grid grid-cols-3 gap-2">

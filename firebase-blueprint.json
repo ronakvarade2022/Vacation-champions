@@ -43,7 +43,13 @@
         "referralLink": { "type": "string", "maxLength": 200 },
         "linkedParentId": { "type": "string", "maxLength": 128 },
         "attendanceRate": { "type": "number" },
-        "feeStatus": { "type": "string", "enum": ["PAID", "PARTIAL", "DUE"] }
+        "feeStatus": { "type": "string", "enum": ["PAID", "PARTIAL", "DUE"] },
+        "medium": { "type": "string", "enum": ["English", "Marathi", "Hindi", "Semi-English"] },
+        "qualification": { "type": "string", "maxLength": 100 },
+        "teachingSubjects": { "type": "array", "items": { "type": "string", "maxLength": 60 } },
+        "classesTaught": { "type": "array", "items": { "type": "string", "maxLength": 20 } },
+        "city": { "type": "string", "maxLength": 80 },
+        "parentLinkCode": { "type": "string", "maxLength": 32 }
       },
       "required": ["id", "name", "email", "classLevel"]
     },
@@ -53,11 +59,16 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
+        "firebaseUid": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 100 },
         "email": { "type": "string", "maxLength": 150 },
         "mobile": { "type": "string", "maxLength": 20 },
+        "relationship": { "type": "string", "enum": ["Mother", "Father", "Guardian"] },
+        "city": { "type": "string", "maxLength": 80 },
+        "linkedStudentIds": { "type": "array", "items": { "type": "string", "maxLength": 128 } },
         "isVerified": { "type": "boolean" },
-        "registeredAt": { "type": "string", "maxLength": 50 }
+        "registeredAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "name", "email"]
     },
@@ -662,6 +673,25 @@
         "updatedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" }
       },
       "required": ["id", "zonesEnabled", "pricingTierLabels", "programPublishedMap", "updatedAt", "updatedByUid"]
+    },
+    "PortalRoleRecord": {
+      "title": "PortalRoleRecord",
+      "description": "Role-based account registry mapping Firebase UIDs to one of the 5 education portals.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["student", "teacher", "parent", "school_admin", "institute_admin"] },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "mobile": { "type": "string", "maxLength": 20 },
+        "city": { "type": "string", "maxLength": 80 },
+        "verificationStatus": { "type": "string", "enum": ["PENDING_VERIFICATION", "VERIFIED", "REJECTED"] },
+        "institutionId": { "type": "string", "maxLength": 128 },
+        "instituteId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "role", "displayName", "email", "mobile", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -800,6 +830,10 @@
     "/five_zones_cms/{configId}": {
       "schema": { "$ref": "#/entities/FiveZonesCmsConfig" },
       "description": "Central 5-Zone portal & 18-program CMS governance configuration managed exclusively by Admin."
+    },
+    "/portal_roles/{userId}": {
+      "schema": { "$ref": "#/entities/PortalRoleRecord" },
+      "description": "Role-based portal access registry mapping each Firebase UID to its portal role."
     }
   }
 }

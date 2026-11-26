@@ -137,11 +137,27 @@ const SchoolCollegeZoneView = lazyWithRetry(() =>
     default: m.SchoolCollegeZoneView,
   }))
 );
+const PortalLandingViews = lazyWithRetry(() =>
+  import('./components/portals/PortalLandingViews').then((m) => ({
+    default: m.PortalLandingViews,
+  }))
+);
+const AIToolsHubView = lazyWithRetry(() =>
+  import('./components/aiTools/AIToolsHubView').then((m) => ({
+    default: m.AIToolsHubView,
+  }))
+);
+const CoreSkillLabView = lazyWithRetry(() =>
+  import('./components/skillPrograms/CoreSkillLabView').then((m) => ({
+    default: m.CoreSkillLabView,
+  }))
+);
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
   <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
 );
-import { ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
+import { ClassLevel, EducationBoard, PlanSkuId, PortalRole, SubjectName, QuizLevel, SpecialLearningSectionId } from './types';
+import type { AuthModalTab, PortalRegisterRole } from './components/AuthModal';
 import type { InstructionMedium } from './types/lessonPlanner';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationConfig';
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
@@ -176,6 +192,8 @@ const FEATURE_TITLES: Record<string, string> = {
   'ai-academy': 'AI Learning Academy & Future Skills',
   'additional-curriculum': 'MY STUDYZONE ADDITIONAL CURRICULUM (10 Subjects · Classes 1–10)',
   'teacher-dashboard': 'Teacher & Educator Command Center (Classes 1–10)',
+  'ai-tools': '10 Real AI Study & Educator Tools Studio',
+  'core-skills-lab': 'Vedic Maths, Abacus & Phonics Interactive Lab',
   certificates: 'Official Champion Certificates & Leaderboard',
   leaderboard: 'Official Champion Certificates & Leaderboard',
   referrals: 'Learn • Share • Grow • Earn Referral Hub',
@@ -207,11 +225,13 @@ const AppContent: React.FC = () => {
   }, [firebaseConnectionStatus]);
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [activeLandingPortal, setActiveLandingPortal] = useState<Exclude<PortalRole, 'admin'>>('student');
+  const [initialCoreSkillProgram, setInitialCoreSkillProgram] = useState<'vedic-maths' | 'abacus' | 'phonics'>('vedic-maths');
   const [quizInitialSubject, setQuizInitialSubject] = useState<SubjectName | undefined>(undefined);
   const [quizInitialLevel, setQuizInitialLevel] = useState<QuizLevel | undefined>(undefined);
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
-  const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'teacher' | 'register' | 'admin' | 'forgot'>('login');
-  const [authInitialRegisterRole, setAuthInitialRegisterRole] = useState<'student' | 'teacher'>('student');
+  const [authDefaultTab, setAuthDefaultTab] = useState<AuthModalTab>('login');
+  const [authInitialRegisterRole, setAuthInitialRegisterRole] = useState<PortalRegisterRole>('student');
   const [authInitialEmail, setAuthInitialEmail] = useState<string>('');
   const [capturedReferralCode, setCapturedReferralCode] = useState<string>(() => {
     clearStoredBrowserReferralCodes();
@@ -338,10 +358,22 @@ const AppContent: React.FC = () => {
   }, [currentStudent?.id, activeBoard]);
 
   useEffect(() => {
-    if (activeRole === 'admin' && currentUser?.role === 'admin' && (currentTab === 'public-home' || currentTab === 'explore-zone' || currentTab === 'dashboard')) {
+    if (activeRole === 'admin' && currentUser?.role === 'admin' && (currentTab === 'public-home' || currentTab === 'explore-zone' || currentTab === 'dashboard' || currentTab === 'portal-landing')) {
       setCurrentTab('admin');
+      return;
     }
-  }, [activeRole, currentUser?.role]);
+    if (activeRole === 'parent' && currentUser && (currentTab === 'public-home' || currentTab === 'portal-landing' || currentTab === 'dashboard')) {
+      setCurrentTab('parent-zone');
+      return;
+    }
+    if (activeRole === 'school_admin' && currentUser && (currentTab === 'public-home' || currentTab === 'portal-landing' || currentTab === 'dashboard')) {
+      setCurrentTab('school-college-zone');
+      return;
+    }
+    if (activeRole === 'institute_admin' && currentUser && (currentTab === 'public-home' || currentTab === 'portal-landing' || currentTab === 'dashboard')) {
+      setCurrentTab('coaching-zone');
+    }
+  }, [activeRole, currentUser?.uid, currentUser?.role]);
 
   useEffect(() => {
     const handleReturnToDashboard = () => {
@@ -359,7 +391,13 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (currentTab === 'admin' || (activeRole === 'admin' && currentUser?.role === 'admin')) {
       document.title = 'MyStudyZone – Admin Portal (mystudyzone.in)';
-    } else if (currentStudent?.accountRole === 'teacher') {
+    } else if (activeRole === 'parent' || currentTab === 'parent-zone') {
+      document.title = 'MyStudyZone – Parent & Family Zone (mystudyzone.in)';
+    } else if (activeRole === 'school_admin' || currentTab === 'school-college-zone') {
+      document.title = 'MyStudyZone – School & College Zone (mystudyzone.in)';
+    } else if (activeRole === 'institute_admin' || currentTab === 'coaching-zone') {
+      document.title = 'MyStudyZone – Coaching & Skill Institute Zone (mystudyzone.in)';
+    } else if (currentStudent?.accountRole === 'teacher' || activeRole === 'teacher') {
       document.title = 'MyStudyZone – Teacher Portal (mystudyzone.in)';
     } else if (currentStudent) {
       document.title = `MyStudyZone – Student Portal • ${activeBoard} ${currentStudent.classLevel}`;
@@ -522,8 +560,8 @@ const AppContent: React.FC = () => {
   };
 
   const openAuthModalWithTab = (
-    defaultTab: 'login' | 'teacher' | 'register' | 'admin' | 'forgot' = 'login',
-    registerRole: 'student' | 'teacher' = 'student'
+    defaultTab: AuthModalTab = 'login',
+    registerRole: PortalRegisterRole = 'student'
   ) => {
     setAuthInitialRegisterRole(registerRole);
     setAuthDefaultTab(defaultTab);
@@ -559,8 +597,9 @@ const AppContent: React.FC = () => {
     }
 
     const alwaysOpenTabs = new Set([
-      'demo', 'demo-mock-tests', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
-      'coaching-zone', 'parent-zone', 'school-college-zone',
+      'demo', 'demo-mock-tests', 'dashboard', 'dashboard-student-preview', 'public-home', 'portal-landing',
+      'explore-zone', 'all-courses', 'other-programs',
+      'coaching-zone', 'parent-zone', 'school-college-zone', 'ai-tools', 'core-skills-lab',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'teacher-dashboard', 'additional-curriculum',
@@ -825,6 +864,15 @@ const AppContent: React.FC = () => {
         handleNavigateTab('future-skills');
         return;
       }
+      case 'sl-ai-tools': {
+        handleNavigateTab('ai-tools');
+        return;
+      }
+      case 'sl-core-skills-lab': {
+        setInitialCoreSkillProgram('vedic-maths');
+        handleNavigateTab('core-skills-lab');
+        return;
+      }
       case 'sl-additional-curriculum': {
         openAdditionalCurriculum({
           board: currentStudent ? activeBoard : publicBoard,
@@ -1014,6 +1062,8 @@ const AppContent: React.FC = () => {
       currentTab === 'sudoku' ||
       currentTab === 'future-skills' ||
       currentTab === 'ai-academy' ||
+      currentTab === 'ai-tools' ||
+      currentTab === 'core-skills-lab' ||
       currentTab === 'other-programs'
     ) {
       return 'special-learning';
@@ -1080,6 +1130,12 @@ const AppContent: React.FC = () => {
     openAuthModalWithTab(intent === 'register' ? 'register' : 'login', 'student');
   };
 
+  const handleOpenPortalLanding = (portalRole: Exclude<PortalRole, 'admin'>) => {
+    setActiveLandingPortal(portalRole);
+    setCurrentTab('portal-landing');
+    safeScrollToTop();
+  };
+
   const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
   const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
 
@@ -1094,6 +1150,8 @@ const AppContent: React.FC = () => {
         activeMenuId={getActiveMenuId()}
         onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
         onOpenPanel={handleOpenRolePanel}
+        onOpenPortalLanding={handleOpenPortalLanding}
+        activeLandingPortal={currentTab === 'portal-landing' ? activeLandingPortal : undefined}
         onOpenMembership={(targetClass, targetBoard, showAllPlans) =>
           openMembershipWithPlan('premium', targetClass, targetBoard, 'BOARD_CLASS', Boolean(showAllPlans))
         }
@@ -1233,7 +1291,12 @@ const AppContent: React.FC = () => {
           )}
 
         {/* Consistent Sub-Page Two-Level Horizontal Navigation Bar */}
-        {isLearningPortal && currentTab !== 'public-home' && currentTab !== 'dashboard' && currentTab !== 'lesson-planner' && (
+        {isLearningPortal &&
+          currentTab !== 'public-home' &&
+          currentTab !== 'portal-landing' &&
+          currentTab !== 'dashboard' &&
+          currentTab !== 'dashboard-student-preview' &&
+          currentTab !== 'lesson-planner' && (
           <SubPageConsistencyBar
             activeSectionId={currentTab === 'referrals' ? 'referrals' : getActiveMenuId()}
             activeSubActionId={
@@ -1252,6 +1315,10 @@ const AppContent: React.FC = () => {
                 ? 'sl-gk'
                 : currentTab === 'future-skills' || currentTab === 'ai-academy'
                 ? 'sl-ai-academy'
+                : currentTab === 'ai-tools'
+                ? 'sl-ai-tools'
+                : currentTab === 'core-skills-lab'
+                ? 'sl-core-skills-lab'
                 : currentTab === 'additional-curriculum'
                 ? 'sl-additional-curriculum'
                 : currentTab === 'other-programs'
@@ -1377,6 +1444,8 @@ const AppContent: React.FC = () => {
                   'sudoku',
                   'future-skills',
                   'ai-academy',
+                  'ai-tools',
+                  'core-skills-lab',
                   'referrals',
                   'faqs',
                 ]);
@@ -1440,6 +1509,7 @@ const AppContent: React.FC = () => {
               }}
               onOpenAuth={(tab) => openAuthModalWithTab(tab)}
               onOpenPanel={handleOpenRolePanel}
+              onOpenPortalLanding={handleOpenPortalLanding}
               onOpenMembership={(targetClass, targetBoard) =>
                 openMembershipWithPlan('premium', targetClass, targetBoard)
               }
@@ -1542,12 +1612,69 @@ const AppContent: React.FC = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
+          ) : currentTab === 'portal-landing' ? (
+            <PortalLandingViews
+              portalRole={activeLandingPortal}
+              onSelectPortalRole={(role) => setActiveLandingPortal(role)}
+              isSignedInAsThisPortal={Boolean(
+                currentUser &&
+                  (activeRole === activeLandingPortal ||
+                    (activeLandingPortal === 'teacher' && currentStudent?.accountRole === 'teacher') ||
+                    (activeLandingPortal === 'student' && currentStudent && currentStudent.accountRole !== 'teacher'))
+              )}
+              onOpenActiveDashboard={() => {
+                if (activeLandingPortal === 'parent') setCurrentTab('parent-zone');
+                else if (activeLandingPortal === 'school_admin') setCurrentTab('school-college-zone');
+                else if (activeLandingPortal === 'institute_admin') setCurrentTab('coaching-zone');
+                else setCurrentTab('dashboard');
+                safeScrollToTop();
+              }}
+              onLoginPortal={(role) => {
+                if (role === 'student') openAuthModalWithTab('login', 'student');
+                else if (role === 'teacher') openAuthModalWithTab('teacher', 'teacher');
+                else if (role === 'parent') openAuthModalWithTab('parent', 'parent');
+                else if (role === 'school_admin') openAuthModalWithTab('school_admin', 'school_admin');
+                else openAuthModalWithTab('institute_admin', 'institute_admin');
+              }}
+              onRegisterPortal={(role) => {
+                openAuthModalWithTab('register', role);
+              }}
+              onExploreResources={(targetTab) => handleNavigateTab(targetTab)}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
+          ) : currentTab === 'ai-tools' ? (
+            <AIToolsHubView
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
+          ) : currentTab === 'core-skills-lab' ? (
+            <CoreSkillLabView
+              initialProgram={initialCoreSkillProgram}
+              userId={currentStudent?.id || currentUser?.uid}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
           ) : currentTab === 'coaching-zone' ? (
             <CoachingInstituteZoneView
               userId={currentStudent?.id || currentUser?.uid || 'guest_learner'}
               userName={currentStudent?.name || currentUser?.displayName || 'Learner'}
+              initialMode={activeRole === 'institute_admin' ? 'institute' : 'programs'}
               onNavigateTab={(t) => handleNavigateTab(t)}
-              onOpenAuth={(tab) => openAuthModalWithTab(tab || 'login')}
+              onOpenCoreSkillLab={(programId) => {
+                setInitialCoreSkillProgram(programId);
+                handleNavigateTab('core-skills-lab');
+              }}
+              onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'login', regRole || 'student')}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
@@ -1557,7 +1684,7 @@ const AppContent: React.FC = () => {
           ) : currentTab === 'parent-zone' ? (
             <ParentZoneView
               onNavigateTab={(t) => handleNavigateTab(t)}
-              onOpenAuth={(tab) => openAuthModalWithTab(tab || 'login')}
+              onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'parent', regRole || 'parent')}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
@@ -1568,6 +1695,7 @@ const AppContent: React.FC = () => {
             <SchoolCollegeZoneView
               userId={currentStudent?.id || currentUser?.uid || 'guest_admin'}
               userName={currentStudent?.name || currentUser?.displayName || 'Institution Admin'}
+              onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'school_admin', regRole || 'school_admin')}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
@@ -1753,6 +1881,8 @@ const AppContent: React.FC = () => {
                     'sudoku',
                     'future-skills',
                     'ai-academy',
+                    'ai-tools',
+                    'core-skills-lab',
                     'referrals',
                     'faqs',
                   ]);
@@ -1808,6 +1938,7 @@ const AppContent: React.FC = () => {
                 }}
                 onOpenAuth={(tab) => openAuthModalWithTab(tab)}
                 onOpenPanel={handleOpenRolePanel}
+                onOpenPortalLanding={handleOpenPortalLanding}
                 onOpenMembership={(targetClass, targetBoard) =>
                   openMembershipWithPlan('premium', targetClass, targetBoard)
                 }
@@ -1822,11 +1953,48 @@ const AppContent: React.FC = () => {
               />
             )}
 
+            {/* Isolated Portal Views for Parent, School & College, and Coaching Institute Roles */}
+            {activeRole === 'parent' && (
+              <ParentZoneView
+                onNavigateTab={(t) => handleNavigateTab(t)}
+                onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'parent', regRole || 'parent')}
+                onBackHome={() => {
+                  handleOpenPortalLanding('parent');
+                }}
+              />
+            )}
+            {activeRole === 'school_admin' && (
+              <SchoolCollegeZoneView
+                userId={currentUser?.uid || 'guest_admin'}
+                userName={currentUser?.displayName || 'Institution Admin'}
+                onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'school_admin', regRole || 'school_admin')}
+                onBackHome={() => {
+                  handleOpenPortalLanding('school_admin');
+                }}
+              />
+            )}
+            {activeRole === 'institute_admin' && (
+              <CoachingInstituteZoneView
+                userId={currentUser?.uid || 'guest_institute'}
+                userName={currentUser?.displayName || 'Institute Admin'}
+                initialMode="institute"
+                onNavigateTab={(t) => handleNavigateTab(t)}
+                onOpenCoreSkillLab={(programId) => {
+                  setInitialCoreSkillProgram(programId);
+                  handleNavigateTab('core-skills-lab');
+                }}
+                onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'institute_admin', regRole || 'institute_admin')}
+                onBackHome={() => {
+                  handleOpenPortalLanding('institute_admin');
+                }}
+              />
+            )}
+
             {/* Authenticated Student Portal & Teacher Portal Content */}
             {isLearningPortal && currentStudent && (
               <>
-                {/* Dedicated Teacher Portal Workspace Header Banner */}
-                {isTeacherPortal && (
+                {/* Dedicated Teacher Portal Workspace Quick Header (visible on sub-pages, avoiding duplicate Welcome banner on TeacherDashboard) */}
+                {isTeacherPortal && currentTab !== 'dashboard' && currentTab !== 'teacher-dashboard' && (
                   <div className="mb-6 rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 sm:p-6 shadow-lg border border-emerald-400/30 space-y-4">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div className="space-y-1.5">
@@ -2082,7 +2250,19 @@ const AppContent: React.FC = () => {
                   </div>
                 )}
 
-                {currentTab === 'dashboard' && (
+                {/* Isolated Portal Dashboards: Teachers get TeacherDashboard directly on 'dashboard'; Students get StudentDashboard */}
+                {currentTab === 'dashboard' && isTeacherPortal && (
+                  <TeacherDashboard
+                    onNavigateTab={handleNavigateTab}
+                    onOpenAdditionalCurriculum={openAdditionalCurriculum}
+                    onSwitchToStudentView={() => {
+                      setCurrentTab('dashboard-student-preview');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  />
+                )}
+
+                {currentTab === 'dashboard' && !isTeacherPortal && (
                   <StudentDashboard
                     onNavigateTab={handleNavigateTab}
                     onOpenMembership={(plan, targetClass, targetBoard, planSku) =>
@@ -2097,6 +2277,40 @@ const AppContent: React.FC = () => {
                     activeSubActionId={activeSubActionId || undefined}
                     onOpenPanel={handleOpenRolePanel}
                   />
+                )}
+
+                {currentTab === 'dashboard-student-preview' && isTeacherPortal && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl bg-emerald-950 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-xs font-semibold">
+                        Educator Student-View Preview · Currently viewing as {getBoardShortLabel(activeBoard)} {currentStudent.classLevel}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentTab('dashboard');
+                          safeScrollToTop();
+                        }}
+                        className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold cursor-pointer"
+                      >
+                        Return to Teacher Command Center
+                      </button>
+                    </div>
+                    <StudentDashboard
+                      onNavigateTab={handleNavigateTab}
+                      onOpenMembership={(plan, targetClass, targetBoard, planSku) =>
+                        openMembershipWithPlan(plan || 'premium', targetClass, targetBoard, planSku)
+                      }
+                      viewMode={viewMode}
+                      onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
+                      onMenuAction={handleMenuAction}
+                      onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
+                      activeMainSection={dashboardMainSection}
+                      onSelectMainSection={handleSelectDashboardSection}
+                      activeSubActionId={activeSubActionId || undefined}
+                      onOpenPanel={handleOpenRolePanel}
+                    />
+                  </div>
                 )}
 
                 {currentTab === 'quizzes' && (
@@ -2133,7 +2347,7 @@ const AppContent: React.FC = () => {
                     onNavigateTab={handleNavigateTab}
                     onOpenAdditionalCurriculum={openAdditionalCurriculum}
                     onSwitchToStudentView={() => {
-                      setCurrentTab('dashboard');
+                      setCurrentTab('dashboard-student-preview');
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   />
@@ -2227,6 +2441,14 @@ const AppContent: React.FC = () => {
             initialClass={publicClass}
             initialReferralCode={capturedReferralCode}
             onClearReferralCode={() => setCapturedReferralCode('')}
+            onPortalAuthSuccess={(role) => {
+              if (role === 'parent') setCurrentTab('parent-zone');
+              else if (role === 'school_admin') setCurrentTab('school-college-zone');
+              else if (role === 'institute_admin') setCurrentTab('coaching-zone');
+              else if (role === 'admin') setCurrentTab('admin');
+              else setCurrentTab('dashboard');
+              safeScrollToTop();
+            }}
             onExistingAccountProceedToSubscription={(targetClass, targetBoard) => {
               openMembershipWithPlan('premium', targetClass, targetBoard);
             }}

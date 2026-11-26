@@ -94,6 +94,11 @@ import {
   handleSupportChatRequest,
   handleSupportTicketSubmission
 } from './server/supportAssistant.ts';
+import {
+  getAiServiceStatus,
+  handleAiImageGenerate,
+  handleAiTextGenerate
+} from './server/aiToolsService.ts';
 
 dotenv.config();
 
@@ -2271,16 +2276,53 @@ app.post('/api/auth/check-existing-account', async (req: Request, res: Response)
       });
     }
 
-    const [emailMatch, mobileMatch] = await Promise.all([
+    const [
+      emailMatch,
+      mobileMatch,
+      portalEmailMatch,
+      portalMobileMatch,
+      parentEmailMatch,
+      parentMobileMatch,
+    ] = await Promise.all([
       rawEmail
         ? serverQueryEqualsLimit1('students', 'email', rawEmail).catch(() => null)
         : Promise.resolve(null),
       rawMobileDigits.length >= 10
         ? serverQueryEqualsLimit1('students', 'mobile', rawMobileDigits).catch(() => null)
-        : Promise.resolve(null)
+        : Promise.resolve(null),
+      rawEmail
+        ? serverQueryEqualsLimit1('portal_roles', 'email', rawEmail).catch(() => null)
+        : Promise.resolve(null),
+      rawMobileDigits.length >= 10
+        ? serverQueryEqualsLimit1('portal_roles', 'mobile', rawMobileDigits).catch(() => null)
+        : Promise.resolve(null),
+      rawEmail
+        ? serverQueryEqualsLimit1('parents', 'email', rawEmail).catch(() => null)
+        : Promise.resolve(null),
+      rawMobileDigits.length >= 10
+        ? serverQueryEqualsLimit1('parents', 'mobile', rawMobileDigits).catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     if (!emailMatch && !mobileMatch) {
+      if (portalEmailMatch || portalMobileMatch || parentEmailMatch || parentMobileMatch) {
+        const mismatchField =
+          portalEmailMatch || parentEmailMatch ? 'email' : 'mobile';
+        const detectedRole =
+          portalEmailMatch?.data?.role ||
+          portalMobileMatch?.data?.role ||
+          'parent';
+        return res.json({
+          success: true,
+          exists: true,
+          matchedPair: false,
+          mismatchField,
+          accountRole: detectedRole,
+          activeClasses: [],
+          activeClassKeys: [],
+          message: `This ${mismatchField === 'email' ? 'email address' : 'mobile number'} is already registered under a ${String(detectedRole).replace('_', ' ')} portal account. Please sign in to that portal instead of creating a duplicate account.`,
+        });
+      }
       return res.json({
         success: true,
         exists: false,
@@ -3699,6 +3741,48 @@ app.post('/api/support/tickets', async (req: Request, res: Response) => {
       success: false,
       persisted: false,
       error: 'Unable to submit your support request right now. Please try again shortly.',
+    });
+  }
+});
+
+// 11b. Real Server-Side AI Tools Endpoints (Zero Fake AI)
+app.get('/api/ai/status', (_req: Request, res: Response) => {
+  return res.json({
+    success: true,
+    ...getAiServiceStatus(),
+  });
+});
+
+app.post('/api/ai/generate', async (req: Request, res: Response) => {
+  try {
+    const result = await handleAiTextGenerate(
+      (req.body || {}) as Record<string, unknown>,
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err: any) {
+    console.error('[AI Generate Route Error]:', err);
+    return res.status(500).json({
+      success: false,
+      errorCode: 'INTERNAL_ERROR',
+      message: 'Unexpected AI server error.',
+    });
+  }
+});
+
+app.post('/api/ai/image', async (req: Request, res: Response) => {
+  try {
+    const result = await handleAiImageGenerate(
+      (req.body || {}) as Record<string, unknown>,
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err: any) {
+    console.error('[AI Image Route Error]:', err);
+    return res.status(500).json({
+      success: false,
+      errorCode: 'INTERNAL_ERROR',
+      message: 'Unexpected AI image server error.',
     });
   }
 });
