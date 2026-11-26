@@ -148,6 +148,46 @@ export async function fetchExternalChapterBundle(params: {
   return req;
 }
 
+export function applyExternalChapterSummaries<
+  T extends { chapterNumber: number; chapterTitle: string; overview: string }
+>(baseSummaries: T[], externalBundle: ExternalChapterBundlePayload | null): T[] {
+  if (!externalBundle || !Array.isArray(externalBundle.chapters) || externalBundle.chapters.length === 0) {
+    return baseSummaries;
+  }
+  const byNumber = new Map<number, ChapterStudyMaterial>();
+  for (const ch of externalBundle.chapters) {
+    byNumber.set(ch.chapterNumber, ch);
+  }
+  return baseSummaries.map((base) => {
+    const verifiedOverride = byNumber.get(base.chapterNumber);
+    if (!verifiedOverride) return base;
+    return {
+      ...base,
+      chapterTitle: verifiedOverride.chapterTitle || base.chapterTitle,
+      overview: verifiedOverride.overview || base.overview,
+    };
+  });
+}
+
+export function mergeSingleExternalVerifiedChapter(
+  baseChapter: ChapterStudyMaterial | null,
+  chapterNumber: number,
+  externalBundle: ExternalChapterBundlePayload | null
+): ChapterStudyMaterial | null {
+  if (!externalBundle || !Array.isArray(externalBundle.chapters) || externalBundle.chapters.length === 0) {
+    return baseChapter;
+  }
+  const verifiedOverride = externalBundle.chapters.find((c) => c.chapterNumber === chapterNumber);
+  if (!verifiedOverride) return baseChapter;
+  if (!baseChapter) return verifiedOverride;
+  return {
+    ...baseChapter,
+    ...verifiedOverride,
+    officialTextbook: verifiedOverride.officialTextbook || baseChapter.officialTextbook,
+    completenessStatus: verifiedOverride.completenessStatus || 'COMPLETE',
+  };
+}
+
 export function mergeExternalVerifiedChapters(
   baseChapters: ChapterStudyMaterial[],
   externalBundle: ExternalChapterBundlePayload | null

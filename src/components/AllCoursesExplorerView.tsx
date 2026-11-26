@@ -6,7 +6,7 @@ import {
   getSubjectsForClass,
   getSubjectMeta,
 } from '../data/classCurriculumConfig';
-import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
+import { getStudyMaterialChaptersIndex } from '../data/notes/studyMaterialsData';
 import { useApp } from '../context/AppContext';
 import {
   FREE_ALLOWED_SUBJECTS,
@@ -321,7 +321,7 @@ export const AllCoursesExplorerView: React.FC<AllCoursesExplorerViewProps> = ({
           const meta = getSubjectMeta(subjectName, selectedBoard);
           const isFreeSub = FREE_ALLOWED_SUBJECTS.includes(subjectName);
           const effectiveMedium = (currentStudent?.medium as InstructionMedium) || 'English';
-          const chapters = getStudyMaterialsForSubject(
+          const chapters = getStudyMaterialChaptersIndex(
             selectedBoard,
             selectedClass,
             subjectName,

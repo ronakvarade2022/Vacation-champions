@@ -34,7 +34,9 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
-import { ClassLevel, EducationBoard, SubjectName } from '../types';
+import type { ChapterStudyMaterial, ClassLevel, EducationBoard, OfficialTextbookResource, SubjectName } from '../types';
+import type { getExamPapersForSubject as getExamPapersForSubjectFn } from '../data/studyLibrary/examPapersData';
+import type { getVideoLessonsForSubject as getVideoLessonsForSubjectFn } from '../data/studyLibrary/videoLessonsData';
 import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId, NavSubItemConfig } from '../data/navigationConfig';
 import { safeScrollToElementById } from '../utils/smartTvCompatibility';
 import {
@@ -43,10 +45,6 @@ import {
   getSubjectMeta,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
-import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
-import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
-import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
-import { getVideoLessonsForSubject } from '../data/studyLibrary/videoLessonsData';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import {
   SpecialCardIllustration,
@@ -400,44 +398,96 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   const currentSubjects = getSubjectsForClass(selectedClass, coursesEffectiveBoard);
   const studyPreviewSubjects = getSubjectsForClass(selectedClass, selectedBoard);
 
-  // Live Study Material preview datasets (wrapped safely in try/catch)
-  const previewTextbooks = (() => {
-    if (expandedSectionId !== 'study-material') return [];
-    try {
-      return getOfficialTextbooksForBoardClass(selectedBoard, selectedClass);
-    } catch {
-      return [];
-    }
-  })();
+  // On-demand Study Material / Exam preview datasets (loaded asynchronously only when section opens)
+  const [previewBundle, setPreviewBundle] = useState<{
+    key: string;
+    textbooks: OfficialTextbookResource[];
+    chapters: ChapterStudyMaterial[];
+    examPapers: ReturnType<typeof getExamPapersForSubjectFn> | null;
+    videos: ReturnType<typeof getVideoLessonsForSubjectFn>;
+  }>({
+    key: '',
+    textbooks: [],
+    chapters: [],
+    examPapers: null,
+    videos: [],
+  });
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewLoadError, setPreviewLoadError] = useState<boolean>(false);
+  const [previewRetryNonce, setPreviewRetryNonce] = useState<number>(0);
 
-  const previewChapters = (() => {
-    if (expandedSectionId !== 'study-material') return [];
-    try {
-      return getStudyMaterialsForSubject(selectedBoard, selectedClass, previewSubject);
-    } catch {
-      return [];
-    }
-  })();
+  useEffect(() => {
+    const needsPreviewData =
+      expandedSectionId === 'study-material' || expandedSectionId === 'exam-zone';
+    if (!needsPreviewData) return;
 
-  const previewExamPapers = (() => {
-    if (expandedSectionId !== 'study-material' && expandedSectionId !== 'exam-zone') {
-      return null;
-    }
-    try {
-      return getExamPapersForSubject(selectedBoard, selectedClass, previewSubject);
-    } catch {
-      return null;
-    }
-  })();
+    const targetKey = `${expandedSectionId}|${selectedBoard}|${selectedClass}|${previewSubject}`;
+    if (previewBundle.key === targetKey && !previewLoadError) return;
 
-  const previewVideos = (() => {
-    if (expandedSectionId !== 'study-material') return [];
-    try {
-      return getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject);
-    } catch {
-      return [];
-    }
-  })();
+    let active = true;
+    setPreviewLoading(true);
+    setPreviewLoadError(false);
+
+    Promise.all([
+      import('../data/studyLibrary/textbookLibraryData'),
+      import('../data/notes/studyMaterialsData'),
+      import('../data/studyLibrary/examPapersData'),
+      import('../data/studyLibrary/videoLessonsData'),
+    ])
+      .then(([tbMod, smMod, epMod, vidMod]) => {
+        if (!active) return;
+        const textbooks =
+          expandedSectionId === 'study-material'
+            ? tbMod.getOfficialTextbooksForBoardClass(selectedBoard, selectedClass).slice(0, 6)
+            : [];
+        const chapters =
+          expandedSectionId === 'study-material'
+            ? smMod.getStudyMaterialsForSubject(
+                selectedBoard,
+                selectedClass,
+                previewSubject,
+                undefined,
+                undefined,
+                4
+              )
+            : [];
+        const examPapers = epMod.getExamPapersForSubject(selectedBoard, selectedClass, previewSubject);
+        const videos =
+          expandedSectionId === 'study-material'
+            ? vidMod.getVideoLessonsForSubject(selectedBoard, selectedClass, previewSubject).slice(0, 4)
+            : [];
+        setPreviewBundle({
+          key: targetKey,
+          textbooks,
+          chapters,
+          examPapers,
+          videos,
+        });
+        setPreviewLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPreviewLoadError(true);
+        setPreviewLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    expandedSectionId,
+    selectedBoard,
+    selectedClass,
+    previewSubject,
+    previewRetryNonce,
+    previewBundle.key,
+    previewLoadError,
+  ]);
+
+  const previewTextbooks = previewBundle.textbooks;
+  const previewChapters = previewBundle.chapters;
+  const previewExamPapers = previewBundle.examPapers;
+  const previewVideos = previewBundle.videos;
 
   // Helper to get existing icon illustration and colour theme for any sub-action item
   const getSubItemIconVisuals = (
@@ -1765,6 +1815,25 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                           })}
                         </div>
                       )}
+
+                    {previewLoading && (
+                      <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs font-bold text-[#0f2952] flex items-center gap-2">
+                        <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#0f2952] border-t-transparent animate-spin shrink-0" />
+                        <span>Loading {selectedBoard} {selectedClass} · {previewSubject} study preview...</span>
+                      </div>
+                    )}
+                    {previewLoadError && (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-950 flex flex-wrap items-center justify-between gap-2">
+                        <span>Could not load study preview chunk cleanly.</span>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewRetryNonce((n) => n + 1)}
+                          className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs cursor-pointer"
+                        >
+                          Retry Preview
+                        </button>
+                      </div>
+                    )}
 
                     {/* 1. Textbooks & Syllabus */}
                     {activeSub.id === 'sm-textbook-learning' && (

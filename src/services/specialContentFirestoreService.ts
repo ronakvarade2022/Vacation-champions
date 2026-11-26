@@ -98,7 +98,7 @@ const PLATFORM_CFG_CACHE_KEY = 'vc_cache_platform_cfg_v1';
 const PLATFORM_CFG_PERSISTENT_KEY = 'vc_cache_platform_cfg_persistent_v1';
 const SPECIAL_CONTENT_CACHE_KEY = 'vc_cache_special_content_v1';
 const SPECIAL_CONTENT_PERSISTENT_KEY = 'vc_cache_special_content_persistent_v1';
-const CACHE_TTL_MS = 120_000; // 2 minutes safe cache TTL
+const CACHE_TTL_MS = 300_000; // 5 minutes safe cache TTL to reduce redundant Firestore reads
 
 let memPlatformConfigCache: {
   ts: number;
@@ -611,11 +611,23 @@ export async function saveAnnouncementTickerConfigToFirestore(
   }
 }
 
+let sharedTickerPollTimer: number | null = null;
+
 export function subscribeAnnouncementTickerConfig(
   onUpdate: (config: LiveAnnouncementTickerConfig | null) => void
 ): () => void {
   let active = true;
   tickerSubscribers.add(onUpdate);
+
+  const notifyAllSubscribers = (config: LiveAnnouncementTickerConfig) => {
+    tickerSubscribers.forEach((cb) => {
+      try {
+        cb(config);
+      } catch {
+        // ignore subscriber errors
+      }
+    });
+  };
 
   const pullLatestTicker = (forceRefresh = false) => {
     void loadPlatformConfigDetailed({ forceRefresh }).then((res) => {
@@ -627,7 +639,7 @@ export function subscribeAnnouncementTickerConfig(
     });
   };
 
-  // Initial load from cache/server/REST fallback without opening a concurrent watch target
+  // Initial load uses 5-minute TTL cache & in-flight deduplication cleanly
   pullLatestTicker(false);
 
   let bc: BroadcastChannel | null = null;
@@ -660,25 +672,32 @@ export function subscribeAnnouncementTickerConfig(
 
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', onStorage);
+    if (sharedTickerPollTimer === null) {
+      sharedTickerPollTimer = window.setInterval(() => {
+        if (
+          tickerSubscribers.size > 0 &&
+          (typeof document === 'undefined' || document.visibilityState === 'visible')
+        ) {
+          void loadPlatformConfigDetailed({ forceRefresh: false }).then((res) => {
+            if (res.config?.announcementTicker) {
+              writeCachedTickerConfig(res.config.announcementTicker);
+              notifyAllSubscribers(res.config.announcementTicker);
+            }
+          });
+        }
+      }, CACHE_TTL_MS);
+    }
   }
-
-  const pollInterval =
-    typeof window !== 'undefined'
-      ? window.setInterval(() => {
-          if (active && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
-            pullLatestTicker(true);
-          }
-        }, 60_000)
-      : null;
 
   return () => {
     active = false;
     tickerSubscribers.delete(onUpdate);
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', onStorage);
-    }
-    if (pollInterval !== null && typeof window !== 'undefined') {
-      window.clearInterval(pollInterval);
+      if (tickerSubscribers.size === 0 && sharedTickerPollTimer !== null) {
+        window.clearInterval(sharedTickerPollTimer);
+        sharedTickerPollTimer = null;
+      }
     }
     if (bc) {
       try {

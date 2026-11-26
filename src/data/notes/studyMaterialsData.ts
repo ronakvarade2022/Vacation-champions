@@ -6,6 +6,7 @@ import {
   ChapterStudyMaterial,
   ClassLevel,
   EducationBoard,
+  OfficialTextbookResource,
   SubjectName,
 } from '../../types';
 import type { InstructionMedium } from '../../types/lessonPlanner';
@@ -610,19 +611,124 @@ function buildChapterQABank(
   ];
 }
 
+export interface ChapterIndexSummary {
+  id: string;
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  chapterNumber: number;
+  chapterTitle: string;
+  textbookRef: string;
+  overview: string;
+  officialTextbook?: OfficialTextbookResource;
+  isSyllabusVerified: boolean;
+}
+
+const MAX_CACHED_SUBJECT_BUNDLES = 8;
+const MAX_CACHED_SINGLE_CHAPTERS = 48;
+const subjectMaterialsLruCache = new Map<string, ChapterStudyMaterial[]>();
+const singleChapterLruCache = new Map<string, ChapterStudyMaterial>();
+
+function setBoundedMapEntry<T>(cache: Map<string, T>, key: string, value: T, limit: number): void {
+  if (cache.has(key)) {
+    cache.delete(key);
+  } else if (cache.size >= limit) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, value);
+}
+
+function buildSingleChapterStudyMaterial(params: {
+  board: EducationBoard;
+  classLevel: ClassLevel;
+  subject: SubjectName;
+  chapterNumber: number;
+  chapterTitle: string;
+  officialTextbook: OfficialTextbookResource;
+  classNumber: number;
+  boardStage: string;
+  shortCode: string;
+  subjectDescription: string;
+  isSyllabusVerified: boolean;
+}): ChapterStudyMaterial {
+  const {
+    board,
+    classLevel,
+    subject,
+    chapterNumber,
+    chapterTitle,
+    officialTextbook,
+    classNumber,
+    boardStage,
+    shortCode,
+    subjectDescription,
+    isSyllabusVerified,
+  } = params;
+  const chapterId = `NOTES-${board.toUpperCase()}-C${classNumber}-${shortCode}-CH${chapterNumber}`;
+
+  const pkg = isMathematicsSubject(subject)
+    ? buildMathematicsChapterCompletePackage({
+        board,
+        classLevel,
+        subject,
+        chapterNumber,
+        chapterTitle,
+        chapterIdPrefix: chapterId,
+        isSyllabusVerified,
+      })
+    : buildSubjectChapterCompletePackage({
+        board,
+        classLevel,
+        subject,
+        chapterNumber,
+        chapterTitle,
+        chapterIdPrefix: chapterId,
+        isSyllabusVerified,
+      });
+
+  return {
+    id: chapterId,
+    board,
+    classLevel,
+    subject,
+    chapterNumber,
+    chapterTitle,
+    textbookRef: `${officialTextbook.bookTitle} (${officialTextbook.syllabusCode})`,
+    overview: `${board} Board • ${classLevel} (${subject}) • Chapter ${chapterNumber}: ${chapterTitle}. Prepared per ${boardStage} guidelines (${subjectDescription}). 100% Free Study Material Library access.`,
+    keyPoints: pkg.keyPoints,
+    formulasAndRules: pkg.formulasAndRules,
+    solvedExamples: pkg.solvedExamples,
+    revisionChecklist: pkg.revisionChecklist,
+    isFreePreview: true,
+    officialTextbook,
+    detailedExplanation: pkg.detailedExplanation,
+    keyDefinitions: pkg.keyDefinitions,
+    chapterSummary: pkg.chapterSummary,
+    shortRevisionNotes: pkg.shortRevisionNotes,
+    qaBank: pkg.qaBank,
+    topicWiseExplanations: pkg.topicWiseExplanations,
+    difficultWordsAndMeanings: pkg.difficultWordsAndMeanings,
+    diagramsAndVisuals: pkg.diagramsAndVisuals,
+    textbookExerciseSolutions: pkg.textbookExerciseSolutions,
+    classNotebookExercises: pkg.classNotebookExercises,
+    additionalPracticeQuestions: pkg.additionalPracticeQuestions,
+    completenessStatus: pkg.qualityControlReport.qualityStatus,
+    qualityControlReport: pkg.qualityControlReport,
+  };
+}
+
 /**
- * Generates complete, 100% Free Chapter-Wise Study Materials
- * (Official Textbook Link, Detailed Chapter Notes, Short Revision Notes, Solved Examples,
- * Definitions Glossary, Revision Checklist, and 9-Format Question & Answer Bank)
- * for ANY (board, classLevel, subject) across Maharashtra, CBSE, and ICSE (Classes 1 to 10).
+ * Lightweight metadata-only chapter list (zero note/solution generation cost).
+ * Used by navigation tabs, chapter sidebars, and course directories to stay instantaneous on mobile.
  */
-export function getStudyMaterialsForSubject(
+export function getStudyMaterialChaptersIndex(
   board: EducationBoard,
   classLevel: ClassLevel,
   subject: SubjectName,
   medium?: InstructionMedium,
   useVerifiedPipelineOverride?: boolean
-): ChapterStudyMaterial[] {
+): ChapterIndexSummary[] {
   const chapters = getRichChaptersForSubject(
     board,
     classLevel,
@@ -650,27 +756,6 @@ export function getStudyMaterialsForSubject(
   return chapters.map((chapterTitle, index) => {
     const chapterNumber = index + 1;
     const chapterId = `NOTES-${board.toUpperCase()}-C${classMeta.classNumber}-${subjMeta.shortCode}-CH${chapterNumber}`;
-
-    const pkg = isMathematicsSubject(subject)
-      ? buildMathematicsChapterCompletePackage({
-          board,
-          classLevel,
-          subject,
-          chapterNumber,
-          chapterTitle,
-          chapterIdPrefix: chapterId,
-          isSyllabusVerified,
-        })
-      : buildSubjectChapterCompletePackage({
-          board,
-          classLevel,
-          subject,
-          chapterNumber,
-          chapterTitle,
-          chapterIdPrefix: chapterId,
-          isSyllabusVerified,
-        });
-
     return {
       id: chapterId,
       board,
@@ -680,25 +765,162 @@ export function getStudyMaterialsForSubject(
       chapterTitle,
       textbookRef: `${officialTextbook.bookTitle} (${officialTextbook.syllabusCode})`,
       overview: `${board} Board • ${classLevel} (${subject}) • Chapter ${chapterNumber}: ${chapterTitle}. Prepared per ${classMeta.boardStage} guidelines (${subjMeta.description}). 100% Free Study Material Library access.`,
-      keyPoints: pkg.keyPoints,
-      formulasAndRules: pkg.formulasAndRules,
-      solvedExamples: pkg.solvedExamples,
-      revisionChecklist: pkg.revisionChecklist,
-      isFreePreview: true,
       officialTextbook,
-      detailedExplanation: pkg.detailedExplanation,
-      keyDefinitions: pkg.keyDefinitions,
-      chapterSummary: pkg.chapterSummary,
-      shortRevisionNotes: pkg.shortRevisionNotes,
-      qaBank: pkg.qaBank,
-      topicWiseExplanations: pkg.topicWiseExplanations,
-      difficultWordsAndMeanings: pkg.difficultWordsAndMeanings,
-      diagramsAndVisuals: pkg.diagramsAndVisuals,
-      textbookExerciseSolutions: pkg.textbookExerciseSolutions,
-      classNotebookExercises: pkg.classNotebookExercises,
-      additionalPracticeQuestions: pkg.additionalPracticeQuestions,
-      completenessStatus: pkg.qualityControlReport.qualityStatus,
-      qualityControlReport: pkg.qualityControlReport,
+      isSyllabusVerified,
     };
   });
+}
+
+/**
+ * On-demand single-chapter generator with bounded LRU cache.
+ * Generates notes, definitions, and full textbook exercise solutions ONLY for the requested chapter.
+ */
+export function getStudyMaterialForChapter(
+  board: EducationBoard,
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  chapterNumber: number,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean
+): ChapterStudyMaterial | null {
+  const subjectKey = `${board}|${classLevel}|${subject}|${medium || 'English'}|${String(useVerifiedPipelineOverride ?? 'auto')}`;
+  const fullCached = subjectMaterialsLruCache.get(subjectKey);
+  if (fullCached && fullCached.length > 0) {
+    const match = fullCached.find((c) => c.chapterNumber === chapterNumber);
+    if (match) return match;
+  }
+
+  const chapterKey = `${subjectKey}|CH:${chapterNumber}`;
+  const cachedSingle = singleChapterLruCache.get(chapterKey);
+  if (cachedSingle) {
+    setBoundedMapEntry(singleChapterLruCache, chapterKey, cachedSingle, MAX_CACHED_SINGLE_CHAPTERS);
+    return cachedSingle;
+  }
+
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (chapters.length === 0) return null;
+
+  const safeIdx = Math.min(Math.max(0, chapterNumber - 1), chapters.length - 1);
+  const resolvedChapterNumber = safeIdx + 1;
+  const chapterTitle = chapters[safeIdx];
+  const officialTextbook = getOfficialTextbookForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  const classMeta = getClassCurriculumMeta(classLevel, board);
+  const subjMeta = getSubjectMeta(subject, board);
+  const centralEntry = getCentralSyllabusEntry(board, classLevel, subject);
+  const isSyllabusVerified = Boolean(
+    !centralEntry || centralEntry.verificationStatus === 'VERIFIED'
+  );
+
+  const built = buildSingleChapterStudyMaterial({
+    board,
+    classLevel,
+    subject,
+    chapterNumber: resolvedChapterNumber,
+    chapterTitle,
+    officialTextbook,
+    classNumber: classMeta.classNumber,
+    boardStage: classMeta.boardStage,
+    shortCode: subjMeta.shortCode,
+    subjectDescription: subjMeta.description,
+    isSyllabusVerified,
+  });
+
+  setBoundedMapEntry(singleChapterLruCache, `${subjectKey}|CH:${resolvedChapterNumber}`, built, MAX_CACHED_SINGLE_CHAPTERS);
+  return built;
+}
+
+/**
+ * Generates complete, 100% Free Chapter-Wise Study Materials
+ * (Official Textbook Link, Detailed Chapter Notes, Short Revision Notes, Solved Examples,
+ * Definitions Glossary, Revision Checklist, and 9-Format Question & Answer Bank)
+ * for ANY (board, classLevel, subject) across Maharashtra, CBSE, and ICSE (Classes 1 to 10).
+ */
+export function getStudyMaterialsForSubject(
+  board: EducationBoard,
+  classLevel: ClassLevel,
+  subject: SubjectName,
+  medium?: InstructionMedium,
+  useVerifiedPipelineOverride?: boolean,
+  maxChapters?: number
+): ChapterStudyMaterial[] {
+  const subjectKey = `${board}|${classLevel}|${subject}|${medium || 'English'}|${String(useVerifiedPipelineOverride ?? 'auto')}`;
+  const fullCached = subjectMaterialsLruCache.get(subjectKey);
+  if (fullCached) {
+    setBoundedMapEntry(subjectMaterialsLruCache, subjectKey, fullCached, MAX_CACHED_SUBJECT_BUNDLES);
+    return typeof maxChapters === 'number' && maxChapters > 0
+      ? fullCached.slice(0, maxChapters)
+      : fullCached;
+  }
+
+  const chapters = getRichChaptersForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  if (chapters.length === 0) {
+    return [];
+  }
+  const officialTextbook = getOfficialTextbookForSubject(
+    board,
+    classLevel,
+    subject,
+    medium,
+    useVerifiedPipelineOverride
+  );
+  const classMeta = getClassCurriculumMeta(classLevel, board);
+  const subjMeta = getSubjectMeta(subject, board);
+  const centralEntry = getCentralSyllabusEntry(board, classLevel, subject);
+  const isSyllabusVerified = Boolean(
+    !centralEntry || centralEntry.verificationStatus === 'VERIFIED'
+  );
+
+  const limit =
+    typeof maxChapters === 'number' && maxChapters > 0
+      ? Math.min(maxChapters, chapters.length)
+      : chapters.length;
+
+  const builtList: ChapterStudyMaterial[] = [];
+  for (let index = 0; index < limit; index++) {
+    const chapterNumber = index + 1;
+    const chapterKey = `${subjectKey}|CH:${chapterNumber}`;
+    const existingSingle = singleChapterLruCache.get(chapterKey);
+    if (existingSingle) {
+      builtList.push(existingSingle);
+      continue;
+    }
+    const built = buildSingleChapterStudyMaterial({
+      board,
+      classLevel,
+      subject,
+      chapterNumber,
+      chapterTitle: chapters[index],
+      officialTextbook,
+      classNumber: classMeta.classNumber,
+      boardStage: classMeta.boardStage,
+      shortCode: subjMeta.shortCode,
+      subjectDescription: subjMeta.description,
+      isSyllabusVerified,
+    });
+    setBoundedMapEntry(singleChapterLruCache, chapterKey, built, MAX_CACHED_SINGLE_CHAPTERS);
+    builtList.push(built);
+  }
+
+  if (limit === chapters.length) {
+    setBoundedMapEntry(subjectMaterialsLruCache, subjectKey, builtList, MAX_CACHED_SUBJECT_BUNDLES);
+  }
+  return builtList;
 }

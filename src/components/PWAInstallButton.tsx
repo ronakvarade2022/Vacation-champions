@@ -70,6 +70,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               alt="MyStudyZone Official App Icon"
               width={48}
               height={48}
+              loading="lazy"
+              decoding="async"
               className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl border border-amber-300 bg-white shadow-xs shrink-0 object-contain"
             />
             <div className="min-w-0">
@@ -168,6 +170,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   alt="MyStudyZone Icon"
                   width={40}
                   height={40}
+                  loading="lazy"
+                  decoding="async"
                   className="w-10 h-10 rounded-xl bg-white p-0.5 shrink-0"
                 />
                 <div className="min-w-0">

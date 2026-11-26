@@ -85,18 +85,17 @@ interface StudyLibraryGlobalSearchProps {
 const BOARDS: EducationBoard[] = ['Maharashtra', 'CBSE', 'ICSE'];
 
 let cachedGlobalIndex: { key: string; entries: SearchIndexEntry[] } | null = null;
+const cachedScopedIndexes = new Map<string, SearchIndexEntry[]>();
 
-function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
-  const modeKey = isVerifiedSyllabusPipelineEnabled() ? 'central_v2' : 'legacy_v2';
-  if (cachedGlobalIndex && cachedGlobalIndex.key === modeKey) {
-    return cachedGlobalIndex.entries;
-  }
-
+function buildStudyLibraryEntriesForScope(params: {
+  boards: EducationBoard[];
+  classes: ClassLevel[];
+  includeSpecialHubs: boolean;
+}): SearchIndexEntry[] {
   const entries: SearchIndexEntry[] = [];
 
-  // 1. All 3 Boards × 10 Classes Textbooks, Chapters, Solutions, Exam Papers, Video Lessons & Worksheets
-  for (const board of BOARDS) {
-    for (const classLevel of ALL_10_CLASSES) {
+  for (const board of params.boards) {
+    for (const classLevel of params.classes) {
       const textbooks = getOfficialTextbooksForBoardClass(board, classLevel);
       for (const tb of textbooks) {
         entries.push({
@@ -216,59 +215,93 @@ function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
     }
   }
 
-  // 2. Math Formulas Hub
-  for (const topic of MATH_FORMULA_TOPICS) {
-    const formulaNames = topic.formulas.map((f) => `${f.name} ${f.formula}`).join(' ');
-    entries.push({
-      id: `math_${topic.id}`,
-      kind: 'math',
-      title: topic.title,
-      subtitle: `Mathematics Formula Hub · ${topic.stage} · ${topic.formulas.length} Formulas`,
-      searchBlob: `${topic.title} ${topic.stage} ${formulaNames} math formula theorem`.toLowerCase(),
-      targetTab: 'math_hub',
-    });
+  // 2. Special Hubs (included when building default or global index)
+  if (params.includeSpecialHubs) {
+    for (const topic of MATH_FORMULA_TOPICS) {
+      const formulaNames = topic.formulas.map((f) => `${f.name} ${f.formula}`).join(' ');
+      entries.push({
+        id: `math_${topic.id}`,
+        kind: 'math',
+        title: topic.title,
+        subtitle: `Mathematics Formula Hub · ${topic.stage} · ${topic.formulas.length} Formulas`,
+        searchBlob: `${topic.title} ${topic.stage} ${formulaNames} math formula theorem`.toLowerCase(),
+        targetTab: 'math_hub',
+      });
+    }
+
+    for (const diag of SCIENCE_DIAGRAMS_LIST) {
+      const partsBlob = diag.keyParts.map((p) => `${p.label} ${p.functionText}`).join(' ');
+      entries.push({
+        id: `diag_${diag.id}`,
+        kind: 'science_diagram',
+        title: diag.title,
+        subtitle: `Science SVG Diagram · ${diag.discipline} · ${diag.stage}`,
+        searchBlob: `${diag.title} ${diag.discipline} ${diag.stage} ${partsBlob} diagram svg science`.toLowerCase(),
+        targetTab: 'science_diagrams',
+      });
+    }
+
+    for (const mod of ENGLISH_GRAMMAR_MODULES) {
+      const rulesBlob = mod.rules.map((r) => `${r.heading} ${r.formulaOrRule}`).join(' ');
+      entries.push({
+        id: `gram_${mod.id}`,
+        kind: 'grammar',
+        title: mod.title,
+        subtitle: `English Grammar Hub · ${mod.stage} · ${mod.rules.length} Core Rules`,
+        searchBlob: `${mod.title} ${mod.stage} ${rulesBlob} english grammar tenses voice speech`.toLowerCase(),
+        targetTab: 'english_grammar',
+      });
+    }
+
+    for (const tr of SCHOLARSHIP_OLYMPIAD_TRACKS) {
+      entries.push({
+        id: `sch_${tr.id}`,
+        kind: 'scholarship',
+        title: tr.examTitle,
+        subtitle: `Scholarship & Olympiad Hub · ${tr.targetClasses} · ${tr.officialAuthority}`,
+        searchBlob: `${tr.examTitle} ${tr.officialAuthority} ${tr.targetClasses} ${tr.keyTopics.join(' ')} scholarship olympiad`.toLowerCase(),
+        targetTab: 'scholarship_olympiad',
+      });
+    }
   }
 
-  // 3. Science Diagrams (12 SVGs)
-  for (const diag of SCIENCE_DIAGRAMS_LIST) {
-    const partsBlob = diag.keyParts.map((p) => `${p.label} ${p.functionText}`).join(' ');
-    entries.push({
-      id: `diag_${diag.id}`,
-      kind: 'science_diagram',
-      title: diag.title,
-      subtitle: `Science SVG Diagram · ${diag.discipline} · ${diag.stage}`,
-      searchBlob: `${diag.title} ${diag.discipline} ${diag.stage} ${partsBlob} diagram svg science`.toLowerCase(),
-      targetTab: 'science_diagrams',
-    });
-  }
-
-  // 4. English Grammar Hub
-  for (const mod of ENGLISH_GRAMMAR_MODULES) {
-    const rulesBlob = mod.rules.map((r) => `${r.heading} ${r.formulaOrRule}`).join(' ');
-    entries.push({
-      id: `gram_${mod.id}`,
-      kind: 'grammar',
-      title: mod.title,
-      subtitle: `English Grammar Hub · ${mod.stage} · ${mod.rules.length} Core Rules`,
-      searchBlob: `${mod.title} ${mod.stage} ${rulesBlob} english grammar tenses voice speech`.toLowerCase(),
-      targetTab: 'english_grammar',
-    });
-  }
-
-  // 5. Scholarship & Olympiad Hub
-  for (const tr of SCHOLARSHIP_OLYMPIAD_TRACKS) {
-    entries.push({
-      id: `sch_${tr.id}`,
-      kind: 'scholarship',
-      title: tr.examTitle,
-      subtitle: `Scholarship & Olympiad Hub · ${tr.targetClasses} · ${tr.officialAuthority}`,
-      searchBlob: `${tr.examTitle} ${tr.officialAuthority} ${tr.targetClasses} ${tr.keyTopics.join(' ')} scholarship olympiad`.toLowerCase(),
-      targetTab: 'scholarship_olympiad',
-    });
-  }
-
-  cachedGlobalIndex = { key: modeKey, entries };
   return entries;
+}
+
+function getScopedOrGlobalStudyLibraryIndex(params: {
+  includeAllBoards: boolean;
+  defaultBoard: EducationBoard;
+  defaultClass: ClassLevel;
+}): SearchIndexEntry[] {
+  const modeKey = isVerifiedSyllabusPipelineEnabled() ? 'central_v2' : 'legacy_v2';
+  if (params.includeAllBoards) {
+    if (cachedGlobalIndex && cachedGlobalIndex.key === modeKey) {
+      return cachedGlobalIndex.entries;
+    }
+    const fullEntries = buildStudyLibraryEntriesForScope({
+      boards: BOARDS,
+      classes: ALL_10_CLASSES,
+      includeSpecialHubs: true,
+    });
+    cachedGlobalIndex = { key: modeKey, entries: fullEntries };
+    return fullEntries;
+  }
+
+  const scopeKey = `${modeKey}|${params.defaultBoard}|${params.defaultClass}`;
+  const cachedScoped = cachedScopedIndexes.get(scopeKey);
+  if (cachedScoped) return cachedScoped;
+
+  const scopedEntries = buildStudyLibraryEntriesForScope({
+    boards: [params.defaultBoard],
+    classes: [params.defaultClass],
+    includeSpecialHubs: true,
+  });
+  if (cachedScopedIndexes.size >= 12) {
+    const oldest = cachedScopedIndexes.keys().next().value;
+    if (oldest) cachedScopedIndexes.delete(oldest);
+  }
+  cachedScopedIndexes.set(scopeKey, scopedEntries);
+  return scopedEntries;
 }
 
 export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> = ({
@@ -279,16 +312,27 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
   onJumpToResult,
 }) => {
   const [query, setQuery] = useState<string>('');
-  const [boardFilter, setBoardFilter] = useState<'ALL' | EducationBoard>('ALL');
-  const [classFilter, setClassFilter] = useState<'ALL' | ClassLevel>('ALL');
+  const [boardFilter, setBoardFilter] = useState<'ALL' | EducationBoard>(defaultBoard);
+  const [classFilter, setClassFilter] = useState<'ALL' | ClassLevel>(defaultClass);
   const [kindFilter, setKindFilter] = useState<'ALL' | SearchIndexEntry['kind']>('ALL');
+  const [visibleLimit, setVisibleLimit] = useState<number>(25);
+
+  const needsAllBoardsIndex =
+    boardFilter === 'ALL' ||
+    classFilter === 'ALL' ||
+    boardFilter !== defaultBoard ||
+    classFilter !== defaultClass;
 
   const allEntries = useMemo(() => {
     if (!isOpen) return [];
-    return buildGlobalStudyLibraryIndex();
-  }, [isOpen]);
+    return getScopedOrGlobalStudyLibraryIndex({
+      includeAllBoards: needsAllBoardsIndex,
+      defaultBoard,
+      defaultClass,
+    });
+  }, [isOpen, needsAllBoardsIndex, defaultBoard, defaultClass]);
 
-  const results = useMemo(() => {
+  const allMatchedResults = useMemo(() => {
     if (!isOpen) return [];
     const tokens = query
       .trim()
@@ -303,7 +347,6 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
       if (classFilter !== 'ALL' && item.classLevel && item.classLevel !== classFilter) continue;
 
       if (tokens.length === 0) {
-        // When query is empty, show curated items relevant to user's current board & class plus special hubs
         if (
           !item.board ||
           (item.board === defaultBoard && item.classLevel === defaultClass)
@@ -316,10 +359,15 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
           matched.push(item);
         }
       }
-      if (matched.length >= 45) break;
+      if (matched.length >= 100) break;
     }
     return matched;
   }, [isOpen, allEntries, query, boardFilter, classFilter, kindFilter, defaultBoard, defaultClass]);
+
+  const results = useMemo(
+    () => allMatchedResults.slice(0, visibleLimit),
+    [allMatchedResults, visibleLimit]
+  );
 
   if (!isOpen) return null;
 
@@ -442,9 +490,27 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
             </select>
 
             <span className="ml-auto text-[11px] font-semibold text-slate-500 tabular-nums">
-              Showing {results.length} match{results.length === 1 ? '' : 'es'}
+              Showing {results.length} of {allMatchedResults.length} match{allMatchedResults.length === 1 ? '' : 'es'}
             </span>
           </div>
+          {!needsAllBoardsIndex && (
+            <div className="flex items-center justify-between gap-2 text-[11px] text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1.5">
+              <span>
+                Searching fast index for <strong>{defaultBoard} · {defaultClass}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setBoardFilter('ALL');
+                  setClassFilter('ALL');
+                  setVisibleLimit(25);
+                }}
+                className="font-black underline cursor-pointer shrink-0"
+              >
+                Search All 3 Boards &amp; 10 Classes
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Results List */}
@@ -461,36 +527,49 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
               </p>
             </div>
           ) : (
-            results.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  onJumpToResult({
-                    board: item.board,
-                    classLevel: item.classLevel,
-                    subject: item.subject,
-                    chapterNumber: item.chapterNumber,
-                    tab: item.targetTab,
-                  });
-                  onClose();
-                }}
-                className="w-full py-3 px-3 hover:bg-indigo-50/70 rounded-xl text-left flex items-center justify-between gap-3 transition-colors cursor-pointer group"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="mt-0.5">{renderKindIcon(item.kind)}</div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-indigo-700 truncate">
-                      {item.title}
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                      {item.subtitle}
-                    </p>
+            <>
+              {results.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    onJumpToResult({
+                      board: item.board,
+                      classLevel: item.classLevel,
+                      subject: item.subject,
+                      chapterNumber: item.chapterNumber,
+                      tab: item.targetTab,
+                    });
+                    onClose();
+                  }}
+                  className="w-full py-3 px-3 hover:bg-indigo-50/70 rounded-xl text-left flex items-center justify-between gap-3 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="mt-0.5">{renderKindIcon(item.kind)}</div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-indigo-700 truncate">
+                        {item.title}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                        {item.subtitle}
+                      </p>
+                    </div>
                   </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
+                </button>
+              ))}
+              {results.length < allMatchedResults.length && (
+                <div className="pt-3 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleLimit((prev) => prev + 25)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold cursor-pointer"
+                  >
+                    Show 25 More Results ({allMatchedResults.length - results.length} remaining)
+                  </button>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
-              </button>
-            ))
+              )}
+            </>
           )}
         </div>
       </div>

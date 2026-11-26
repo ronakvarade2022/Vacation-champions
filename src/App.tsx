@@ -18,12 +18,24 @@ import {
 } from './utils/smartTvCompatibility';
 
 import type { StudyLibrarySectionTab } from './components/StudyMaterialsView';
-import { HelpSupportView } from './components/HelpSupportView';
-import { GrievanceRedressalView } from './components/GrievanceRedressalView';
-import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
-import { AboutUsView } from './components/AboutUsView';
-import { ContactUsView } from './components/ContactUsView';
-import { FaqsView } from './components/FaqsView';
+const HelpSupportView = lazyWithRetry(() =>
+  import('./components/HelpSupportView').then((m) => ({ default: m.HelpSupportView }))
+);
+const GrievanceRedressalView = lazyWithRetry(() =>
+  import('./components/GrievanceRedressalView').then((m) => ({ default: m.GrievanceRedressalView }))
+);
+const TermsAndPrivacyView = lazyWithRetry(() =>
+  import('./components/TermsAndPrivacyView').then((m) => ({ default: m.TermsAndPrivacyView }))
+);
+const AboutUsView = lazyWithRetry(() =>
+  import('./components/AboutUsView').then((m) => ({ default: m.AboutUsView }))
+);
+const ContactUsView = lazyWithRetry(() =>
+  import('./components/ContactUsView').then((m) => ({ default: m.ContactUsView }))
+);
+const FaqsView = lazyWithRetry(() =>
+  import('./components/FaqsView').then((m) => ({ default: m.FaqsView }))
+);
 
 const SubjectQuizView = lazyWithRetry(() =>
   import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))

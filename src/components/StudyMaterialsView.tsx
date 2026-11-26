@@ -57,7 +57,11 @@ import {
   getSubjectsForClass,
   getSubjectMeta,
 } from '../data/classCurriculumConfig';
-import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
+import {
+  getStudyMaterialChaptersIndex,
+  getStudyMaterialForChapter,
+  type ChapterIndexSummary,
+} from '../data/notes/studyMaterialsData';
 import { getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
 import { getChapterPracticeTest } from '../data/studyLibrary/chapterTestsData';
 import { getExamPapersForSubject } from '../data/studyLibrary/examPapersData';
@@ -98,8 +102,9 @@ import {
 } from '../utils/studyLibraryLocalStore';
 import { evaluateChapterCompleteness } from '../data/notes/chapterNotebookAndSolutionsBuilder';
 import {
+  applyExternalChapterSummaries,
   fetchExternalChapterBundle,
-  mergeExternalVerifiedChapters,
+  mergeSingleExternalVerifiedChapter,
   type ExternalChapterBundlePayload,
 } from '../services/studyContentDeliveryService';
 
@@ -303,10 +308,15 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
 
   const [externalChapterBundle, setExternalChapterBundle] =
     useState<ExternalChapterBundlePayload | null>(null);
+  const [externalBundleLoading, setExternalBundleLoading] = useState<boolean>(false);
+  const [externalBundleError, setExternalBundleError] = useState<boolean>(false);
+  const [externalBundleRetryNonce, setExternalBundleRetryNonce] = useState<number>(0);
 
   useEffect(() => {
     let active = true;
     setExternalChapterBundle(null);
+    setExternalBundleLoading(true);
+    setExternalBundleError(false);
     fetchExternalChapterBundle({
       board: selectedBoard,
       classLevel: selectedClass,
@@ -314,19 +324,24 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
       medium: effectiveMedium,
     })
       .then((bundle) => {
-        if (active) setExternalChapterBundle(bundle);
+        if (!active) return;
+        setExternalChapterBundle(bundle);
+        setExternalBundleLoading(false);
       })
       .catch(() => {
-        if (active) setExternalChapterBundle(null);
+        if (!active) return;
+        setExternalChapterBundle(null);
+        setExternalBundleError(true);
+        setExternalBundleLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [selectedBoard, selectedClass, selectedSubject, effectiveMedium]);
+  }, [selectedBoard, selectedClass, selectedSubject, effectiveMedium, externalBundleRetryNonce]);
 
-  const baseChapters = useMemo(
+  const baseChapterIndex = useMemo(
     () =>
-      getStudyMaterialsForSubject(
+      getStudyMaterialChaptersIndex(
         selectedBoard,
         selectedClass,
         selectedSubject,
@@ -335,10 +350,25 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
   );
 
-  const chapters = useMemo(
-    () => mergeExternalVerifiedChapters(baseChapters, externalChapterBundle),
-    [baseChapters, externalChapterBundle]
-  );
+  const chapters: ChapterIndexSummary[] = useMemo(() => {
+    if (baseChapterIndex.length === 0 && externalChapterBundle?.chapters?.length) {
+      return [...externalChapterBundle.chapters]
+        .sort((a, b) => a.chapterNumber - b.chapterNumber)
+        .map((ch) => ({
+          id: ch.id,
+          board: ch.board,
+          classLevel: ch.classLevel,
+          subject: ch.subject,
+          chapterNumber: ch.chapterNumber,
+          chapterTitle: ch.chapterTitle,
+          textbookRef: ch.textbookRef || '',
+          overview: ch.overview,
+          officialTextbook: ch.officialTextbook,
+          isSyllabusVerified: true,
+        }));
+    }
+    return applyExternalChapterSummaries(baseChapterIndex, externalChapterBundle);
+  }, [baseChapterIndex, externalChapterBundle]);
 
   const inlineAdditional = useMemo(
     () =>
@@ -467,15 +497,38 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     return chapters.filter(
       (c) =>
         c.chapterTitle.toLowerCase().includes(q) ||
-        c.overview.toLowerCase().includes(q) ||
-        c.keyPoints.some((pt) => pt.toLowerCase().includes(q))
+        c.overview.toLowerCase().includes(q)
     );
   }, [chapters, searchQuery]);
 
-  const activeChapter = chapters[selectedChapterIdx] || chapters[0];
+  const activeChapterSummary = chapters[selectedChapterIdx] || chapters[0];
+  const activeChapter = useMemo(() => {
+    if (!activeChapterSummary) return undefined;
+    const baseChapter = getStudyMaterialForChapter(
+      selectedBoard,
+      selectedClass,
+      selectedSubject,
+      activeChapterSummary.chapterNumber,
+      effectiveMedium
+    );
+    return (
+      mergeSingleExternalVerifiedChapter(
+        baseChapter,
+        activeChapterSummary.chapterNumber,
+        externalChapterBundle
+      ) || undefined
+    );
+  }, [
+    activeChapterSummary?.chapterNumber,
+    selectedBoard,
+    selectedClass,
+    selectedSubject,
+    effectiveMedium,
+    externalChapterBundle,
+  ]);
   const boardMeta = getEducationBoardMeta(selectedBoard);
   const subjectMeta = getSubjectMeta(selectedSubject, selectedBoard);
-  const activeTextbook = activeChapter?.officialTextbook;
+  const activeTextbook = activeChapter?.officialTextbook || activeChapterSummary?.officialTextbook;
 
   const activeChapterTest = useMemo(() => {
     if (!activeChapter) return null;
@@ -648,14 +701,16 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
         </div>
       </section>
 
-      {/* Global Cross-Library Search Modal (0 Firestore Reads) */}
-      <StudyLibraryGlobalSearch
-        isOpen={isGlobalSearchOpen}
-        onClose={() => setIsGlobalSearchOpen(false)}
-        defaultBoard={selectedBoard}
-        defaultClass={selectedClass}
-        onJumpToResult={handleGlobalSearchJump}
-      />
+      {/* Global Cross-Library Search Modal (0 Firestore Reads, Mounted Only When Open) */}
+      {isGlobalSearchOpen && (
+        <StudyLibraryGlobalSearch
+          isOpen={isGlobalSearchOpen}
+          onClose={() => setIsGlobalSearchOpen(false)}
+          defaultBoard={selectedBoard}
+          defaultClass={selectedClass}
+          onJumpToResult={handleGlobalSearchJump}
+        />
+      )}
 
       {/* Icon-Based One-Line Quick Navigation Bar across all learning material types */}
       <QuickStudyZoneIconBar
@@ -861,6 +916,25 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
           </div>
         </div>
       </section>
+
+      {externalBundleLoading && (
+        <div className="rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2 text-xs font-bold text-[#0f2952] flex items-center gap-2">
+          <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#0f2952] border-t-transparent animate-spin shrink-0" />
+          <span>Loading verified chapter pack for {selectedBoard} · {selectedClass} · {selectedSubject}...</span>
+        </div>
+      )}
+      {externalBundleError && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-xs font-bold text-amber-950 flex flex-wrap items-center justify-between gap-2">
+          <span>External verified chapter pack is temporarily unavailable.</span>
+          <button
+            type="button"
+            onClick={() => setExternalBundleRetryNonce((n) => n + 1)}
+            className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs cursor-pointer"
+          >
+            Retry Download
+          </button>
+        </div>
+      )}
 
       {/* =====================================================================
           PROMINENT CLASS-WISE EXERCISE NOTES & NOTEBOOK QUICK-LAUNCH BAR

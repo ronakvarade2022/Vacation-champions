@@ -25,7 +25,6 @@ import {
   getSubjectMeta,
   getSubjectsForClass,
 } from '../data/classCurriculumConfig';
-import { getStudyMaterialsForSubject } from '../data/notes/studyMaterialsData';
 import { getAllWorksheetsForClass } from '../data/worksheetsData';
 import { ALL_BADGES, calculateLevel } from '../data/badgesData';
 import { EDUCATION_ILLUSTRATIONS } from '../data/educationIllustrations';
@@ -160,11 +159,6 @@ export const PublicZoneExplorerView: React.FC<PublicZoneExplorerViewProps> = ({
   const effectiveSubject = subjects.includes(previewSubject)
     ? previewSubject
     : subjects[0] || 'English';
-
-  const chapters = useMemo(
-    () => getStudyMaterialsForSubject(selectedBoard, selectedClass, effectiveSubject),
-    [selectedBoard, selectedClass, effectiveSubject]
-  );
 
   const zoneInfo = ZONE_META[zone];
   const zoneVisual =

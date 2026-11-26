@@ -239,6 +239,8 @@ export default defineConfig(() => {
             '**/data-study-library-*',
             '**/data-verified-syllabus-*',
             '**/data-additional-curriculum-*',
+            '**/lesson-planner-engine-*',
+            '**/pdf-exporters-*',
             '**/admin-*',
           ],
           navigateFallback: '/index.html',
@@ -350,9 +352,11 @@ export default defineConfig(() => {
               !d.includes('data-scholarship-') &&
               !d.includes('data-worksheets') &&
               !d.includes('data-questions-') &&
-              !d.includes('data-study-library-') &&
+              !d.includes('data-study-library') &&
               !d.includes('data-verified-syllabus') &&
               !d.includes('data-additional-curriculum') &&
+              !d.includes('lesson-planner-engine') &&
+              !d.includes('pdf-exporters') &&
               !d.includes('data-stories') &&
               !d.includes('data-drawings') &&
               !d.includes('admin-')
@@ -364,7 +368,7 @@ export default defineConfig(() => {
         output: {
           manualChunks(id: string) {
             if (id.includes('node_modules')) {
-              if (id.includes('/firebase/') || id.includes('/@firebase/')) {
+              if (/[\\/]node_modules[\\/].*@?firebase/.test(id)) {
                 return 'vendor-firebase';
               }
               if (
@@ -380,17 +384,7 @@ export default defineConfig(() => {
             if (id.includes('AdminQuestionErrorReportsSection')) {
               return 'admin-question-reports';
             }
-            // Keep lightweight curriculum, utils & TET syllabus metadata out of heavy bank chunks
-            if (
-              id.includes('src/utils/') ||
-              id.includes('src/data/tetCtetSyllabi') ||
-              id.includes('src/data/boards/boardMeta') ||
-              id.includes('src/data/boards/cbseCurriculumConfig') ||
-              id.includes('src/data/boards/icseCurriculumConfig') ||
-              id.includes('src/data/classCurriculumConfig')
-            ) {
-              return 'data-curriculum-meta';
-            }
+            // Isolate heavy verified syllabus registry/entries before generic utils/meta rules
             if (id.includes('src/data/verifiedSyllabus/')) {
               return 'data-verified-syllabus';
             }
@@ -402,6 +396,27 @@ export default defineConfig(() => {
               id.includes('src/data/studyLibrary/')
             ) {
               return 'data-study-library';
+            }
+            // Isolate heavy teacher lesson planner engine & printable A4 PDF exporters so they never preload on landing
+            if (id.includes('src/utils/lessonPlanner/')) {
+              return 'lesson-planner-engine';
+            }
+            if (
+              id.includes('lessonPlanPdfExporter') ||
+              id.includes('studyMaterialPdfExporter')
+            ) {
+              return 'pdf-exporters';
+            }
+            // Keep lightweight curriculum, utils & TET syllabus metadata out of heavy bank chunks
+            if (
+              id.includes('src/utils/') ||
+              id.includes('src/data/tetCtetSyllabi') ||
+              id.includes('src/data/boards/boardMeta') ||
+              id.includes('src/data/boards/cbseCurriculumConfig') ||
+              id.includes('src/data/boards/icseCurriculumConfig') ||
+              id.includes('src/data/classCurriculumConfig')
+            ) {
+              return 'data-curriculum-meta';
             }
             if (id.includes('src/data/tetCtetVerifiedBatchManifest') || id.includes('src/data/tetCtetCentralAuditEngine')) {
               return 'data-tet-manifest';

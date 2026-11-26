@@ -917,11 +917,16 @@ export async function fetchCloudStudentAdditionalProgress(
  * Merges cloud Additional Curriculum CMS overrides, class assignments, and isolated student
  * progress into localStorage cleanly without mutating official board syllabi or core student docs.
  */
+const ADDITIONAL_HYDRATION_TTL_MS = 300_000; // 5 minutes
+const hydrationResultCache = new Map<string, { ts: number; result: AdditionalCloudHydrationResult }>();
+const inFlightHydrationRequests = new Map<string, Promise<AdditionalCloudHydrationResult>>();
+
 export async function hydrateAdditionalCurriculumFromCloud(options?: {
   studentId?: string;
   board?: string;
   classLevel?: string;
   isAdminUser?: boolean;
+  forceRefresh?: boolean;
 }): Promise<AdditionalCloudHydrationResult> {
   if (!ADDITIONAL_CURRICULUM_CLOUD_SYNC_ENABLED) {
     return {
@@ -944,17 +949,39 @@ export async function hydrateAdditionalCurriculumFromCloud(options?: {
     };
   }
 
-  let subjectsSynced = 0;
-  let chaptersSynced = 0;
-  let assignmentsSynced = 0;
-  let progressSynced = 0;
-  let lastErrorCode: string | undefined;
+  const cacheKey = [
+    auth.currentUser.uid,
+    options?.studentId || 'guest',
+    options?.board || '',
+    options?.classLevel || '',
+    options?.isAdminUser ? 'admin' : 'std',
+  ].join('|');
 
-  const isAdminUser = Boolean(options?.isAdminUser);
+  if (!options?.forceRefresh) {
+    const cached = hydrationResultCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < ADDITIONAL_HYDRATION_TTL_MS) {
+      return cached.result;
+    }
+    const inFlight = inFlightHydrationRequests.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+  }
 
-  // 1. Hydrate CMS Subject & Chapter Overrides
-  try {
-    const [cloudSubjects, cloudChapters] = await Promise.all([
+  const runPromise = (async (): Promise<AdditionalCloudHydrationResult> => {
+    let subjectsSynced = 0;
+    let chaptersSynced = 0;
+    let assignmentsSynced = 0;
+    let progressSynced = 0;
+    let lastErrorCode: string | undefined;
+
+    const isAdminUser = Boolean(options?.isAdminUser);
+    const shouldFetchAssignments = Boolean(options?.board && options?.classLevel && hasLocalStorage());
+    const shouldFetchProgress = Boolean(
+      options?.studentId && options.studentId !== 'guest-student' && hasLocalStorage()
+    );
+
+    const [cloudSubjects, cloudChapters, cloudAssignments, cloudProgress] = await Promise.all([
       fetchCloudAdditionalSubjects({ includeUnpublished: isAdminUser }).catch((err) => {
         lastErrorCode = err instanceof Error ? err.message : String(err);
         return null;
@@ -963,68 +990,77 @@ export async function hydrateAdditionalCurriculumFromCloud(options?: {
         lastErrorCode = err instanceof Error ? err.message : String(err);
         return null;
       }),
+      shouldFetchAssignments
+        ? fetchPublishedCloudAssignments(options!.board!, options!.classLevel!).catch((err) => {
+            lastErrorCode = err instanceof Error ? err.message : String(err);
+            return null;
+          })
+        : Promise.resolve(null),
+      shouldFetchProgress
+        ? fetchCloudStudentAdditionalProgress(options!.studentId!).catch((err) => {
+            lastErrorCode = err instanceof Error ? err.message : String(err);
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
 
-    if (hasLocalStorage() && (cloudSubjects || cloudChapters)) {
-      let overlay: AdditionalCurriculumAdminOverlay = {
-        subjectOverrides: {},
-        chapterOverrides: {},
-      };
-      try {
-        const raw = window.localStorage.getItem(ADDITIONAL_ADMIN_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Partial<AdditionalCurriculumAdminOverlay>;
-          overlay = {
-            subjectOverrides:
-              parsed.subjectOverrides && typeof parsed.subjectOverrides === 'object'
-                ? parsed.subjectOverrides
-                : {},
-            chapterOverrides:
-              parsed.chapterOverrides && typeof parsed.chapterOverrides === 'object'
-                ? parsed.chapterOverrides
-                : {},
-          };
-        }
-      } catch {
-        // fallback empty overlay
-      }
-
-      if (Array.isArray(cloudSubjects) && cloudSubjects.length > 0) {
-        for (const subj of cloudSubjects) {
-          if (subj && typeof subj.id === 'string') {
-            overlay.subjectOverrides[subj.id] = subj;
-            subjectsSynced += 1;
-          }
-        }
-      }
-      if (Array.isArray(cloudChapters) && cloudChapters.length > 0) {
-        for (const ch of cloudChapters) {
-          if (ch && typeof ch.chapterId === 'string') {
-            overlay.chapterOverrides[ch.chapterId] = {
-              ...ch,
-              curriculumLabel: ADDITIONAL_CURRICULUM_LABEL,
-            };
-            chaptersSynced += 1;
-          }
-        }
-      }
-      if (subjectsSynced > 0 || chaptersSynced > 0) {
-        window.localStorage.setItem(ADDITIONAL_ADMIN_STORAGE_KEY, JSON.stringify(overlay));
-        broadcastAdditionalCurriculumChange('admin_cms');
-      }
-    }
-  } catch (err) {
-    lastErrorCode = err instanceof Error ? err.message : String(err);
-  }
-
-  // 2. Hydrate Board/Class Supplementary Assignments
-  if (options?.board && options?.classLevel && hasLocalStorage()) {
+    // 1. Merge CMS Subject & Chapter Overrides
     try {
-      const cloudAssignments = await fetchPublishedCloudAssignments(
-        options.board,
-        options.classLevel
-      );
-      if (cloudAssignments.length > 0) {
+      if (hasLocalStorage() && (cloudSubjects || cloudChapters)) {
+        let overlay: AdditionalCurriculumAdminOverlay = {
+          subjectOverrides: {},
+          chapterOverrides: {},
+        };
+        try {
+          const raw = window.localStorage.getItem(ADDITIONAL_ADMIN_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Partial<AdditionalCurriculumAdminOverlay>;
+            overlay = {
+              subjectOverrides:
+                parsed.subjectOverrides && typeof parsed.subjectOverrides === 'object'
+                  ? parsed.subjectOverrides
+                  : {},
+              chapterOverrides:
+                parsed.chapterOverrides && typeof parsed.chapterOverrides === 'object'
+                  ? parsed.chapterOverrides
+                  : {},
+            };
+          }
+        } catch {
+          // fallback empty overlay
+        }
+
+        if (Array.isArray(cloudSubjects) && cloudSubjects.length > 0) {
+          for (const subj of cloudSubjects) {
+            if (subj && typeof subj.id === 'string') {
+              overlay.subjectOverrides[subj.id] = subj;
+              subjectsSynced += 1;
+            }
+          }
+        }
+        if (Array.isArray(cloudChapters) && cloudChapters.length > 0) {
+          for (const ch of cloudChapters) {
+            if (ch && typeof ch.chapterId === 'string') {
+              overlay.chapterOverrides[ch.chapterId] = {
+                ...ch,
+                curriculumLabel: ADDITIONAL_CURRICULUM_LABEL,
+              };
+              chaptersSynced += 1;
+            }
+          }
+        }
+        if (subjectsSynced > 0 || chaptersSynced > 0) {
+          window.localStorage.setItem(ADDITIONAL_ADMIN_STORAGE_KEY, JSON.stringify(overlay));
+          broadcastAdditionalCurriculumChange('admin_cms');
+        }
+      }
+    } catch (err) {
+      lastErrorCode = err instanceof Error ? err.message : String(err);
+    }
+
+    // 2. Merge Board/Class Supplementary Assignments
+    try {
+      if (hasLocalStorage() && Array.isArray(cloudAssignments) && cloudAssignments.length > 0) {
         let localList: AdditionalTeacherAssignment[] = [];
         try {
           const raw = window.localStorage.getItem(ADDITIONAL_ASSIGNMENTS_STORAGE_KEY);
@@ -1054,13 +1090,15 @@ export async function hydrateAdditionalCurriculumFromCloud(options?: {
     } catch (err) {
       lastErrorCode = err instanceof Error ? err.message : String(err);
     }
-  }
 
-  // 3. Hydrate Monotonic Student Supplementary Progress
-  if (options?.studentId && options.studentId !== 'guest-student' && hasLocalStorage()) {
+    // 3. Merge Monotonic Student Supplementary Progress
     try {
-      const cloudProgress = await fetchCloudStudentAdditionalProgress(options.studentId);
-      if (cloudProgress.length > 0) {
+      if (
+        shouldFetchProgress &&
+        Array.isArray(cloudProgress) &&
+        cloudProgress.length > 0 &&
+        options?.studentId
+      ) {
         let store: Record<string, Record<string, AdditionalCurriculumProgressRecord>> = {};
         try {
           const raw = window.localStorage.getItem(ADDITIONAL_PROGRESS_STORAGE_KEY);
@@ -1099,14 +1137,28 @@ export async function hydrateAdditionalCurriculumFromCloud(options?: {
     } catch (err) {
       lastErrorCode = err instanceof Error ? err.message : String(err);
     }
-  }
 
-  return {
-    hydrated: Boolean(!lastErrorCode || subjectsSynced + chaptersSynced + assignmentsSynced + progressSynced > 0),
-    subjectsSynced,
-    chaptersSynced,
-    assignmentsSynced,
-    progressSynced,
-    ...(lastErrorCode ? { errorCode: lastErrorCode } : {}),
-  };
+    const result: AdditionalCloudHydrationResult = {
+      hydrated: Boolean(
+        !lastErrorCode || subjectsSynced + chaptersSynced + assignmentsSynced + progressSynced > 0
+      ),
+      subjectsSynced,
+      chaptersSynced,
+      assignmentsSynced,
+      progressSynced,
+      ...(lastErrorCode ? { errorCode: lastErrorCode } : {}),
+    };
+
+    if (!lastErrorCode) {
+      hydrationResultCache.set(cacheKey, { ts: Date.now(), result });
+    }
+    return result;
+  })();
+
+  inFlightHydrationRequests.set(cacheKey, runPromise);
+  try {
+    return await runPromise;
+  } finally {
+    inFlightHydrationRequests.delete(cacheKey);
+  }
 }
