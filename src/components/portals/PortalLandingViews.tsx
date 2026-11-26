@@ -5,9 +5,12 @@ import {
   BookOpen,
   Building2,
   CheckCircle2,
+  FileDown,
   GraduationCap,
   HeartHandshake,
   LogIn,
+  Monitor,
+  QrCode,
   Search,
   ShieldCheck,
   Sparkles,
@@ -274,18 +277,48 @@ export const PortalLandingViews: React.FC<PortalLandingViewsProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
-      {/* Top Portal Switcher & Back Home */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onBackHome}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-extrabold text-slate-800 cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Main Home</span>
-        </button>
+      {/* Top Portal Switcher, Shifted Quick-Navigation Buttons & Back Home */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <button
+            type="button"
+            onClick={onBackHome}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-extrabold text-white cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-amber-300" />
+            <span>Back to Main Home</span>
+          </button>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+          {/* Shifted Header Quick-Access Buttons (Visible inside portals) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onExploreResources('study-materials')}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-800 hover:text-indigo-800 border border-slate-200 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Study Library</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onExploreResources('ai-tools')}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-800 hover:text-indigo-800 border border-slate-200 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>AI Tools</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onExploreResources('document-studio')}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-800 hover:text-indigo-800 border border-slate-200 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+            >
+              <QrCode className="w-3.5 h-3.5 text-teal-600" />
+              <span>Generators</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-100 max-w-full">
           {PORTAL_TABS.map((t) => {
             const active = t.role === portalRole;
             return (
@@ -300,7 +333,7 @@ export const PortalLandingViews: React.FC<PortalLandingViewsProps> = ({
                 className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap cursor-pointer border transition-colors ${
                   active
                     ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                 }`}
               >
                 {t.label}
@@ -551,6 +584,72 @@ export const PortalLandingViews: React.FC<PortalLandingViewsProps> = ({
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Shifted Portal Quick-Action & Capability Icons Strip (Visible when Portal Opens) */}
+      <div
+        aria-label="Portal Capabilities Quick Bar"
+        className="w-full rounded-2xl bg-[#07152e] text-white border border-sky-400/35 px-3.5 py-3 shadow-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2"
+      >
+        {[
+          {
+            id: 'portal-pill-ai-tools',
+            icon: Sparkles,
+            title: '100+ AI Tools',
+            subtitle: '& Generators',
+            onClick: () => onExploreResources('ai-tools'),
+          },
+          {
+            id: 'portal-pill-study-library',
+            icon: BookOpen,
+            title: 'Complete Study',
+            subtitle: 'Material Library',
+            onClick: () => onExploreResources('study-materials'),
+          },
+          {
+            id: 'portal-pill-pdf-word-excel',
+            icon: FileDown,
+            title: 'PDF, Word, Excel',
+            subtitle: '& More Formats',
+            onClick: () => onExploreResources('document-studio'),
+          },
+          {
+            id: 'portal-pill-safe-secure',
+            icon: ShieldCheck,
+            title: 'Safe & Secure',
+            subtitle: 'for Everyone',
+            onClick: () => onLoginPortal(portalRole),
+          },
+          {
+            id: 'portal-pill-all-devices',
+            icon: Monitor,
+            title: 'Works on All Devices',
+            subtitle: '(Web, Mobile, TV)',
+            onClick: () => onExploreResources('all-courses'),
+          },
+        ].map((pill) => {
+          const PillIcon = pill.icon;
+          return (
+            <button
+              key={pill.id}
+              type="button"
+              onClick={pill.onClick}
+              className="min-h-[44px] px-2.5 py-1.5 rounded-xl hover:bg-white/10 text-left flex items-center gap-2.5 cursor-pointer transition-colors group"
+            >
+              <span className="w-8 h-8 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-300 flex items-center justify-center shrink-0 group-hover:bg-amber-400 group-hover:text-slate-950 transition-colors">
+                <PillIcon className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[11px] font-black text-white leading-tight truncate">
+                  {pill.title}
+                </div>
+                <div className="text-[10px] font-bold text-sky-200 leading-tight truncate">
+                  {pill.subtitle}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

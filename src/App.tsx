@@ -1206,31 +1206,40 @@ const AppContent: React.FC = () => {
 
   const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
   const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
+  const isPublicHomepageView =
+    currentTab === 'public-home' ||
+    (currentTab === 'dashboard' && isLearningPortal && !currentStudent);
 
   return (
-    <div className="min-h-screen bg-amber-50/30 text-slate-900 flex flex-col font-sans">
-      {/* Header */}
-      <Header
-        currentTab={currentTab}
-        setCurrentTab={(tab) => handleNavigateTab(tab)}
-        onMenuAction={handleMenuAction}
-        onSelectMainSection={handleSelectDashboardSection}
-        activeMenuId={getActiveMenuId()}
-        onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
-        onOpenPanel={handleOpenRolePanel}
-        onOpenPortalLanding={handleOpenPortalLanding}
-        activeLandingPortal={currentTab === 'portal-landing' ? activeLandingPortal : undefined}
-        onOpenMembership={(targetClass, targetBoard, showAllPlans) =>
-          openMembershipWithPlan('premium', targetClass, targetBoard, 'BOARD_CLASS', Boolean(showAllPlans))
-        }
-        viewMode={viewMode}
-        onToggleViewMode={() =>
-          setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))
-        }
-      />
+    <div
+      className={`min-h-screen flex flex-col font-sans ${
+        isPublicHomepageView ? 'bg-[#040d1f] text-white' : 'bg-amber-50/30 text-slate-900'
+      }`}
+    >
+      {/* Header (Shown inside Portals & Subpages; hidden on the initial full-screen Public Wallpaper Homepage) */}
+      {!isPublicHomepageView && (
+        <Header
+          currentTab={currentTab}
+          setCurrentTab={(tab) => handleNavigateTab(tab)}
+          onMenuAction={handleMenuAction}
+          onSelectMainSection={handleSelectDashboardSection}
+          activeMenuId={getActiveMenuId()}
+          onOpenAuth={(defaultTab) => openAuthModalWithTab(defaultTab || 'login')}
+          onOpenPanel={handleOpenRolePanel}
+          onOpenPortalLanding={handleOpenPortalLanding}
+          activeLandingPortal={currentTab === 'portal-landing' ? activeLandingPortal : undefined}
+          onOpenMembership={(targetClass, targetBoard, showAllPlans) =>
+            openMembershipWithPlan('premium', targetClass, targetBoard, 'BOARD_CLASS', Boolean(showAllPlans))
+          }
+          viewMode={viewMode}
+          onToggleViewMode={() =>
+            setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))
+          }
+        />
+      )}
 
-      {/* Live Announcement Ticker across Website, Student Portal & Teacher Portal */}
-      {!(activeRole === 'admin' && currentUser?.role === 'admin') && (
+      {/* Live Announcement Ticker across Portals (Hidden on initial full-screen Public Wallpaper Homepage) */}
+      {!isPublicHomepageView && !(activeRole === 'admin' && currentUser?.role === 'admin') && (
         <LiveAnnouncementTicker
           audience={
             !currentStudent
@@ -1253,11 +1262,15 @@ const AppContent: React.FC = () => {
 
       {/* Main Content Arena */}
       <main
-        className={`flex-1 w-full mx-auto pt-4 sm:pt-6 pb-10 ${
-          viewMode === 'desktop'
-            ? 'max-w-[1840px] px-4 sm:px-6 lg:px-8 2xl:px-10'
-            : 'msz-container px-4 sm:px-6 lg:px-8 2xl:px-10'
-        }`}
+        className={
+          isPublicHomepageView
+            ? 'flex-1 w-full p-0 m-0'
+            : `flex-1 w-full mx-auto pt-4 sm:pt-6 pb-10 ${
+                viewMode === 'desktop'
+                  ? 'max-w-[1840px] px-4 sm:px-6 lg:px-8 2xl:px-10'
+                  : 'msz-container px-4 sm:px-6 lg:px-8 2xl:px-10'
+              }`
+        }
       >
         {sessionSecurityNotice && (
           <div className="mb-6 rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1650,6 +1663,7 @@ const AppContent: React.FC = () => {
               currentUserName={currentStudent?.name || currentUser?.displayName}
               isDesktopMode={viewMode === 'desktop'}
               onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
+              onSetViewMode={(mode) => setViewMode(mode)}
               onMenuAction={handleMenuAction}
               onGlobalSearchJump={handleGlobalSearchRoute}
               activeMainSection={dashboardMainSection}
@@ -2115,6 +2129,7 @@ const AppContent: React.FC = () => {
                 currentRole={activeRole}
                 isDesktopMode={viewMode === 'desktop'}
                 onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
+                onSetViewMode={(mode) => setViewMode(mode)}
                 onMenuAction={handleMenuAction}
                 onGlobalSearchJump={handleGlobalSearchRoute}
                 activeMainSection={dashboardMainSection}
@@ -2516,29 +2531,34 @@ const AppContent: React.FC = () => {
         )}
       </Suspense>
 
-      {/* Unified AI-Powered Help & Support Assistant (Shared for Students, Teachers & Visitors) */}
-      <HelpSupportAssistant
-        isOpen={isHelpDrawerOpen}
-        onOpenChange={setIsHelpDrawerOpen}
-        onNavigateAction={handleHelpSupportNavigation}
-        activeTab={currentTab}
-      />
+      {/* Unified AI-Powered Help & Support Assistant (Visible inside portals, hidden on initial full-screen homepage) */}
+      {!isPublicHomepageView && (
+        <HelpSupportAssistant
+          isOpen={isHelpDrawerOpen}
+          onOpenChange={setIsHelpDrawerOpen}
+          onNavigateAction={handleHelpSupportNavigation}
+          activeTab={currentTab}
+        />
+      )}
 
       {/* Non-intrusive PWA Offline Connectivity Banner */}
       <PWAOfflineIndicator />
 
-      {/* Mobile & Installed PWA Native Bottom Navigation Bar */}
-      <MobileBottomNav
-        currentTab={currentTab}
-        activeRole={activeRole}
-        isTeacherPortal={isTeacherPortal}
-        isAuthenticated={Boolean(currentStudent || currentUser)}
-        viewMode={viewMode}
-        onNavigateTab={(t) => handleNavigateTab(t)}
-        onOpenAuth={() => openAuthModalWithTab(isTeacherPortal ? 'teacher' : 'login', isTeacherPortal ? 'teacher' : 'student')}
-      />
+      {/* Mobile & Installed PWA Native Bottom Navigation Bar (Visible inside portals, hidden on initial full-screen homepage) */}
+      {!isPublicHomepageView && (
+        <MobileBottomNav
+          currentTab={currentTab}
+          activeRole={activeRole}
+          isTeacherPortal={isTeacherPortal}
+          isAuthenticated={Boolean(currentStudent || currentUser)}
+          viewMode={viewMode}
+          onNavigateTab={(t) => handleNavigateTab(t)}
+          onOpenAuth={() => openAuthModalWithTab(isTeacherPortal ? 'teacher' : 'login', isTeacherPortal ? 'teacher' : 'student')}
+        />
+      )}
 
-      {/* Professional Education Platform Footer */}
+      {/* Professional Education Platform Footer (Visible inside portals/subpages, hidden on initial full-screen homepage) */}
+      {!isPublicHomepageView && (
       <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-10 pb-8 text-xs">
         <div
           className={`mx-auto space-y-10 ${
@@ -2691,6 +2711,7 @@ const AppContent: React.FC = () => {
           </div>
         </div>
       </footer>
+      )}
     </div>
   );
 };

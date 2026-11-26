@@ -3,7 +3,6 @@ import type { ClassLevel, EducationBoard, PortalRole, SubjectName } from '../typ
 import type { AuthModalTab, PortalRegisterRole } from './AuthModal';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { InteractiveWallpaperHero } from './InteractiveWallpaperHero';
-import { PWAInstallButton } from './PWAInstallButton';
 
 export type HomeScrollTarget =
   | 'home-overview'
@@ -33,6 +32,7 @@ interface PublicHomeDashboardProps {
   currentUserName?: string;
   isDesktopMode?: boolean;
   onToggleViewMode?: () => void;
+  onSetViewMode?: (mode: 'auto' | 'desktop') => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
   activeMainSection?: MainMenuId;
   onSelectMainSection?: (sectionId: MainMenuId) => void;
@@ -42,11 +42,9 @@ interface PublicHomeDashboardProps {
 
 /**
  * PUBLIC HOMEPAGE (https://mystudyzone.in)
- * Renders ONLY the new MyStudyZone high-resolution educational wallpaper homepage
- * with real interactive controls and global search.
- * The private detailed user dashboards (StudentDashboard, TeacherDashboard, ParentZoneView,
- * SchoolCollegeZoneView, CoachingInstituteZoneView) remain strictly inside their respective
- * authenticated user portals.
+ * Renders the full-screen MyStudyZone high-resolution educational wallpaper homepage
+ * with Mobile View (Portrait) and Desktop Site (Landscape) switcher at top-right
+ * and all 5 clickable portal cards visible on screen.
  */
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   selectedBoard,
@@ -58,16 +56,22 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   isAuthenticated = false,
   currentRole = 'student',
   currentUserName,
+  isDesktopMode = false,
+  onToggleViewMode,
+  onSetViewMode,
   onGlobalSearchJump,
 }) => {
   return (
-    <div id="home-overview" className="space-y-6 pb-10">
+    <div id="home-overview" className="w-full min-h-screen">
       <InteractiveWallpaperHero
         selectedBoard={selectedBoard}
         selectedClass={selectedClass}
         isAuthenticated={isAuthenticated}
         currentRole={currentRole}
         currentUserName={currentUserName}
+        isDesktopMode={isDesktopMode}
+        onToggleViewMode={onToggleViewMode}
+        onSetViewMode={onSetViewMode}
         onNavigateTab={(tab, subSection, subject) =>
           onNavigateZone(tab, subSection || 'overview', subject)
         }
@@ -76,9 +80,6 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
         onOpenPanel={onOpenPanel}
         onOpenPortalLanding={onOpenPortalLanding}
       />
-
-      {/* Direct PWA Mobile App Install Banner (Auto-hidden when installed) */}
-      <PWAInstallButton variant="banner" />
     </div>
   );
 };
