@@ -17,35 +17,80 @@ import {
   isSmartTvOrSingleWindowBrowser,
 } from './utils/smartTvCompatibility';
 
-import { SubjectQuizView } from './components/SubjectQuizView';
-import { DemoSectionView } from './components/DemoSectionView';
-import { MembershipModal } from './components/MembershipModal';
-import { PlanUpgradePromptModal } from './components/PlanUpgradePromptModal';
-import { AuthModal } from './components/AuthModal';
-import { PasswordResetModal } from './components/PasswordResetModal';
+import type { StudyLibrarySectionTab } from './components/StudyMaterialsView';
 import { HelpSupportView } from './components/HelpSupportView';
 import { GrievanceRedressalView } from './components/GrievanceRedressalView';
 import { TermsAndPrivacyView } from './components/TermsAndPrivacyView';
 import { AboutUsView } from './components/AboutUsView';
 import { ContactUsView } from './components/ContactUsView';
 import { FaqsView } from './components/FaqsView';
-import { StoryWorldView } from './components/StoryWorldView';
-import { DrawingChampionsView } from './components/DrawingChampionsView';
-import { PuzzleChampionsView } from './components/PuzzleChampionsView';
-import { CertificatesView } from './components/CertificatesView';
-import { CricketChampionsView } from './components/CricketChampionsView';
-import { StudentProfileView } from './components/StudentProfileView';
-import { ShivajiStoriesView } from './components/ShivajiStoriesView';
-import { SudokuView } from './components/SudokuView';
-import { FutureSkillsView } from './components/FutureSkillsView';
-import { ReferralHubView } from './components/ReferralHubView';
-import { WorksheetsView } from './components/WorksheetsView';
-import { StudyMaterialsView, type StudyLibrarySectionTab } from './components/StudyMaterialsView';
-import { PublicZoneExplorerView } from './components/PublicZoneExplorerView';
-import { AllCoursesExplorerView } from './components/AllCoursesExplorerView';
-import { OtherProgramsView } from './components/OtherProgramsView';
-import { AdditionalCurriculumView } from './components/AdditionalCurriculumView';
 
+const SubjectQuizView = lazyWithRetry(() =>
+  import('./components/SubjectQuizView').then((m) => ({ default: m.SubjectQuizView }))
+);
+const DemoSectionView = lazyWithRetry(() =>
+  import('./components/DemoSectionView').then((m) => ({ default: m.DemoSectionView }))
+);
+const MembershipModal = lazyWithRetry(() =>
+  import('./components/MembershipModal').then((m) => ({ default: m.MembershipModal }))
+);
+const PlanUpgradePromptModal = lazyWithRetry(() =>
+  import('./components/PlanUpgradePromptModal').then((m) => ({ default: m.PlanUpgradePromptModal }))
+);
+const AuthModal = lazyWithRetry(() =>
+  import('./components/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+const PasswordResetModal = lazyWithRetry(() =>
+  import('./components/PasswordResetModal').then((m) => ({ default: m.PasswordResetModal }))
+);
+const StoryWorldView = lazyWithRetry(() =>
+  import('./components/StoryWorldView').then((m) => ({ default: m.StoryWorldView }))
+);
+const DrawingChampionsView = lazyWithRetry(() =>
+  import('./components/DrawingChampionsView').then((m) => ({ default: m.DrawingChampionsView }))
+);
+const PuzzleChampionsView = lazyWithRetry(() =>
+  import('./components/PuzzleChampionsView').then((m) => ({ default: m.PuzzleChampionsView }))
+);
+const CertificatesView = lazyWithRetry(() =>
+  import('./components/CertificatesView').then((m) => ({ default: m.CertificatesView }))
+);
+const CricketChampionsView = lazyWithRetry(() =>
+  import('./components/CricketChampionsView').then((m) => ({ default: m.CricketChampionsView }))
+);
+const StudentProfileView = lazyWithRetry(() =>
+  import('./components/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
+);
+const ShivajiStoriesView = lazyWithRetry(() =>
+  import('./components/ShivajiStoriesView').then((m) => ({ default: m.ShivajiStoriesView }))
+);
+const SudokuView = lazyWithRetry(() =>
+  import('./components/SudokuView').then((m) => ({ default: m.SudokuView }))
+);
+const FutureSkillsView = lazyWithRetry(() =>
+  import('./components/FutureSkillsView').then((m) => ({ default: m.FutureSkillsView }))
+);
+const ReferralHubView = lazyWithRetry(() =>
+  import('./components/ReferralHubView').then((m) => ({ default: m.ReferralHubView }))
+);
+const WorksheetsView = lazyWithRetry(() =>
+  import('./components/WorksheetsView').then((m) => ({ default: m.WorksheetsView }))
+);
+const StudyMaterialsView = lazyWithRetry(() =>
+  import('./components/StudyMaterialsView').then((m) => ({ default: m.StudyMaterialsView }))
+);
+const PublicZoneExplorerView = lazyWithRetry(() =>
+  import('./components/PublicZoneExplorerView').then((m) => ({ default: m.PublicZoneExplorerView }))
+);
+const AllCoursesExplorerView = lazyWithRetry(() =>
+  import('./components/AllCoursesExplorerView').then((m) => ({ default: m.AllCoursesExplorerView }))
+);
+const OtherProgramsView = lazyWithRetry(() =>
+  import('./components/OtherProgramsView').then((m) => ({ default: m.OtherProgramsView }))
+);
+const AdditionalCurriculumView = lazyWithRetry(() =>
+  import('./components/AdditionalCurriculumView').then((m) => ({ default: m.AdditionalCurriculumView }))
+);
 const ScholarshipChampionsView = lazyWithRetry(() =>
   import('./components/ScholarshipChampionsView').then((m) => ({
     default: m.ScholarshipChampionsView,
@@ -66,6 +111,19 @@ const TeacherLessonPlannerView = lazyWithRetry(() =>
 );
 const TeacherDashboard = lazyWithRetry(() =>
   import('./components/TeacherDashboard').then((m) => ({ default: m.TeacherDashboard }))
+);
+const CoachingInstituteZoneView = lazyWithRetry(() =>
+  import('./components/zones/CoachingInstituteZoneView').then((m) => ({
+    default: m.CoachingInstituteZoneView,
+  }))
+);
+const ParentZoneView = lazyWithRetry(() =>
+  import('./components/zones/ParentZoneView').then((m) => ({ default: m.ParentZoneView }))
+);
+const SchoolCollegeZoneView = lazyWithRetry(() =>
+  import('./components/zones/SchoolCollegeZoneView').then((m) => ({
+    default: m.SchoolCollegeZoneView,
+  }))
 );
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
@@ -490,6 +548,7 @@ const AppContent: React.FC = () => {
 
     const alwaysOpenTabs = new Set([
       'demo', 'demo-mock-tests', 'dashboard', 'public-home', 'explore-zone', 'all-courses', 'other-programs',
+      'coaching-zone', 'parent-zone', 'school-college-zone',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'teacher-dashboard', 'additional-curriculum',
@@ -1471,6 +1530,38 @@ const AppContent: React.FC = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
+          ) : currentTab === 'coaching-zone' ? (
+            <CoachingInstituteZoneView
+              userId={currentStudent?.id || currentUser?.uid || 'guest_learner'}
+              userName={currentStudent?.name || currentUser?.displayName || 'Learner'}
+              onNavigateTab={(t) => handleNavigateTab(t)}
+              onOpenAuth={(tab) => openAuthModalWithTab(tab || 'login')}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          ) : currentTab === 'parent-zone' ? (
+            <ParentZoneView
+              onNavigateTab={(t) => handleNavigateTab(t)}
+              onOpenAuth={(tab) => openAuthModalWithTab(tab || 'login')}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          ) : currentTab === 'school-college-zone' ? (
+            <SchoolCollegeZoneView
+              userId={currentStudent?.id || currentUser?.uid || 'guest_admin'}
+              userName={currentStudent?.name || currentUser?.displayName || 'Institution Admin'}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
           ) : currentTab === 'tet-ctet' ? (
             <TetCtetView
               onOpenAuth={() => openAuthModalWithTab('teacher', 'teacher')}
@@ -1636,6 +1727,10 @@ const AppContent: React.FC = () => {
                   const directStudioTabs = new Set([
                     'all-courses',
                     'other-programs',
+                    'coaching-zone',
+                    'parent-zone',
+                    'school-college-zone',
+                    'teacher-dashboard',
                     'scholarship',
                     'tet-ctet',
                     'drawing',

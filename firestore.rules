@@ -392,6 +392,40 @@ service cloud.firestore {
                          );
         allow delete: if isValidId(studentId) && isValidId(chapterId) && isAdmin();
       }
+
+      // Additive Subcollection: /students/{studentId}/teacher_tools_saved/{artifactId}
+      // Strictly isolated per Teacher UID; Students are denied by isTeacherAccount(studentId).
+      match /teacher_tools_saved/{artifactId} {
+        allow get: if isValidId(studentId) && isValidId(artifactId) && (
+          isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+        allow list: if isValidId(studentId) && (
+          isAdmin() || (isSignedIn() && resource.data.teacherUid == request.auth.uid && isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+        allow create: if isValidId(studentId) && isValidId(artifactId) &&
+                         isSignedIn() &&
+                         incoming().keys().hasAll(['id', 'teacherUid', 'toolId', 'toolTitle', 'board', 'classLevel', 'subject', 'topic', 'contentBody', 'createdAt']) &&
+                         incoming().keys().hasOnly(['id', 'teacherUid', 'toolId', 'toolTitle', 'board', 'classLevel', 'subject', 'topic', 'contentBody', 'createdAt']) &&
+                         isValidId(incoming().id) &&
+                         incoming().id == artifactId &&
+                         incoming().toolId is string && incoming().toolId.size() > 0 && incoming().toolId.size() <= 20 &&
+                         incoming().toolTitle is string && incoming().toolTitle.size() > 0 && incoming().toolTitle.size() <= 120 &&
+                         incoming().board in ['Maharashtra', 'CBSE', 'ICSE'] &&
+                         incoming().classLevel is string && incoming().classLevel.size() > 0 && incoming().classLevel.size() <= 20 &&
+                         incoming().subject is string && incoming().subject.size() > 0 && incoming().subject.size() <= 100 &&
+                         incoming().topic is string && incoming().topic.size() > 0 && incoming().topic.size() <= 160 &&
+                         incoming().contentBody is string && incoming().contentBody.size() > 0 && incoming().contentBody.size() <= 8000 &&
+                         incoming().createdAt is string && incoming().createdAt.size() > 0 && incoming().createdAt.size() <= 50 && (
+                           isAdmin() || (
+                             isStudentDocOwner(studentId) &&
+                             isTeacherAccount(studentId) &&
+                             incoming().teacherUid == request.auth.uid
+                           )
+                         );
+        allow delete: if isValidId(studentId) && isValidId(artifactId) && (
+          isAdmin() || (isStudentDocOwner(studentId) && isTeacherAccount(studentId))
+        );
+      }
     }
 
     // 2. Collection: /parents/{parentId}
@@ -1074,6 +1108,336 @@ service cloud.firestore {
       allow delete: if isValidId(assignmentId) && (
         isAdmin() || (isSignedIn() && existing().teacherUid == request.auth.uid)
       );
+    }
+
+    // ------------------------------------------------------------------
+    // ADDITIVE FIVE-ZONE ECOSYSTEM VALIDATORS & COLLECTIONS (Collections 20–23)
+    // ------------------------------------------------------------------
+
+    function isValidSkillEnrollment(data) {
+      return data.keys().hasAll(['id', 'userId', 'studentName', 'programId', 'programTitle', 'enrolledAt', 'completedModuleIds', 'updatedAt']) &&
+             data.keys().hasOnly([
+               'id', 'userId', 'studentName', 'programId', 'programTitle', 'enrolledAt',
+               'completedModuleIds', 'quizBestScore', 'quizTotal', 'projectSubmittedNote',
+               'certificateIssuedAt', 'certificateCode', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             isValidId(data.userId) &&
+             data.studentName is string && data.studentName.size() > 0 && data.studentName.size() <= 100 &&
+             isValidId(data.programId) &&
+             data.programTitle is string && data.programTitle.size() > 0 && data.programTitle.size() <= 120 &&
+             data.enrolledAt is string && data.enrolledAt.size() > 0 && data.enrolledAt.size() <= 50 &&
+             data.completedModuleIds is list && data.completedModuleIds.size() <= 20 &&
+             (!('quizBestScore' in data) || (data.quizBestScore is number && data.quizBestScore >= 0 && data.quizBestScore <= 100)) &&
+             (!('quizTotal' in data) || (data.quizTotal is number && data.quizTotal >= 0 && data.quizTotal <= 100)) &&
+             (!('projectSubmittedNote' in data) || (data.projectSubmittedNote is string && data.projectSubmittedNote.size() <= 1000)) &&
+             (!('certificateIssuedAt' in data) || (data.certificateIssuedAt is string && data.certificateIssuedAt.size() <= 50)) &&
+             (!('certificateCode' in data) || (data.certificateCode is string && data.certificateCode.size() <= 64)) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('email' in data) &&
+             !('mobile' in data) &&
+             !('phone' in data) &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    function isValidCoachingInstitute(data) {
+      return data.keys().hasAll(['id', 'ownerUserId', 'instituteName', 'instituteType', 'city', 'contactPhone', 'directorName', 'programIdsOffered', 'published', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['id', 'ownerUserId', 'instituteName', 'instituteType', 'city', 'contactPhone', 'directorName', 'programIdsOffered', 'published', 'createdAt', 'updatedAt']) &&
+             isValidId(data.id) &&
+             isValidId(data.ownerUserId) &&
+             data.instituteName is string && data.instituteName.size() > 0 && data.instituteName.size() <= 150 &&
+             data.instituteType in ['Abacus & Vedic Maths Centre', 'Coaching Class', 'Skill Academy', 'Multi-Program Institute'] &&
+             data.city is string && data.city.size() > 0 && data.city.size() <= 80 &&
+             data.contactPhone is string && data.contactPhone.size() <= 20 &&
+             data.directorName is string && data.directorName.size() > 0 && data.directorName.size() <= 100 &&
+             data.programIdsOffered is list && data.programIdsOffered.size() <= 18 &&
+             data.published is bool &&
+             data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 50 &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    function isValidCoachingBatch(data) {
+      return data.keys().hasAll(['id', 'instituteId', 'batchName', 'programId', 'trainerName', 'schedule', 'studentIds', 'updatedAt']) &&
+             data.keys().hasOnly(['id', 'instituteId', 'batchName', 'programId', 'trainerName', 'schedule', 'studentIds', 'updatedAt']) &&
+             isValidId(data.id) &&
+             isValidId(data.instituteId) &&
+             data.batchName is string && data.batchName.size() > 0 && data.batchName.size() <= 120 &&
+             isValidId(data.programId) &&
+             data.trainerName is string && data.trainerName.size() > 0 && data.trainerName.size() <= 100 &&
+             data.schedule is string && data.schedule.size() > 0 && data.schedule.size() <= 120 &&
+             data.studentIds is list && data.studentIds.size() <= 200 &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50;
+    }
+
+    function isValidCoachingStudentRoster(data) {
+      return data.keys().hasAll(['id', 'instituteId', 'name', 'mobile', 'grade', 'programId', 'batchId', 'feeTotalInr', 'feePaidInr', 'attendancePresent', 'attendanceTotal', 'updatedAt']) &&
+             data.keys().hasOnly([
+               'id', 'instituteId', 'name', 'mobile', 'grade', 'programId', 'batchId',
+               'feeTotalInr', 'feePaidInr', 'attendancePresent', 'attendanceTotal',
+               'latestAssessmentScore', 'parentNote', 'certificateCode', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             isValidId(data.instituteId) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.mobile is string && data.mobile.size() <= 20 &&
+             data.grade is string && data.grade.size() > 0 && data.grade.size() <= 30 &&
+             isValidId(data.programId) &&
+             isValidId(data.batchId) &&
+             data.feeTotalInr is number && data.feeTotalInr >= 0 &&
+             data.feePaidInr is number && data.feePaidInr >= 0 &&
+             data.attendancePresent is number && data.attendancePresent >= 0 &&
+             data.attendanceTotal is number && data.attendanceTotal >= data.attendancePresent &&
+             (!('latestAssessmentScore' in data) || (data.latestAssessmentScore is string && data.latestAssessmentScore.size() <= 40)) &&
+             (!('parentNote' in data) || (data.parentNote is string && data.parentNote.size() <= 500)) &&
+             (!('certificateCode' in data) || (data.certificateCode is string && data.certificateCode.size() <= 64)) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50;
+    }
+
+    function isValidSchoolInstitution(data) {
+      return data.keys().hasAll(['id', 'ownerUserId', 'institutionName', 'institutionType', 'affiliationOrUniversity', 'city', 'principalName', 'contactEmailOrPhone', 'departmentsOrClasses', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['id', 'ownerUserId', 'institutionName', 'institutionType', 'affiliationOrUniversity', 'city', 'principalName', 'contactEmailOrPhone', 'departmentsOrClasses', 'createdAt', 'updatedAt']) &&
+             isValidId(data.id) &&
+             isValidId(data.ownerUserId) &&
+             data.institutionName is string && data.institutionName.size() > 0 && data.institutionName.size() <= 160 &&
+             data.institutionType in ['School (Std 1–10)', 'Higher Secondary / Jr College (Std 11–12)', 'Degree College / UG'] &&
+             data.affiliationOrUniversity is string && data.affiliationOrUniversity.size() > 0 && data.affiliationOrUniversity.size() <= 150 &&
+             data.city is string && data.city.size() > 0 && data.city.size() <= 80 &&
+             data.principalName is string && data.principalName.size() > 0 && data.principalName.size() <= 100 &&
+             data.contactEmailOrPhone is string && data.contactEmailOrPhone.size() > 0 && data.contactEmailOrPhone.size() <= 150 &&
+             data.departmentsOrClasses is list && data.departmentsOrClasses.size() <= 40 &&
+             data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 50 &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50 &&
+             !('passwordHash' in data) &&
+             !('isAdmin' in data) &&
+             !('role' in data);
+    }
+
+    function isValidInstitutionMember(data) {
+      return data.keys().hasAll(['id', 'institutionId', 'role', 'fullName', 'rollOrCode', 'classOrDepartment', 'attendancePresent', 'attendanceTotal', 'updatedAt']) &&
+             data.keys().hasOnly(['id', 'institutionId', 'role', 'fullName', 'rollOrCode', 'classOrDepartment', 'attendancePresent', 'attendanceTotal', 'latestExamName', 'latestMarksPct', 'updatedAt']) &&
+             isValidId(data.id) &&
+             isValidId(data.institutionId) &&
+             data.role in ['student', 'faculty'] &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 100 &&
+             data.rollOrCode is string && data.rollOrCode.size() > 0 && data.rollOrCode.size() <= 40 &&
+             data.classOrDepartment is string && data.classOrDepartment.size() > 0 && data.classOrDepartment.size() <= 80 &&
+             data.attendancePresent is number && data.attendancePresent >= 0 &&
+             data.attendanceTotal is number && data.attendanceTotal >= data.attendancePresent &&
+             (!('latestExamName' in data) || (data.latestExamName is string && data.latestExamName.size() <= 100)) &&
+             (!('latestMarksPct' in data) || (data.latestMarksPct is number && data.latestMarksPct >= 0 && data.latestMarksPct <= 100)) &&
+             data.updatedAt is string && data.updatedAt.size() > 0 && data.updatedAt.size() <= 50;
+    }
+
+    function isValidInstitutionNotice(data) {
+      return data.keys().hasAll(['id', 'institutionId', 'title', 'audience', 'body', 'publishedAt']) &&
+             data.keys().hasOnly(['id', 'institutionId', 'title', 'audience', 'body', 'publishedAt']) &&
+             isValidId(data.id) &&
+             isValidId(data.institutionId) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 160 &&
+             data.audience in ['All Campus', 'Students Only', 'Faculty & Staff'] &&
+             data.body is string && data.body.size() > 0 && data.body.size() <= 1500 &&
+             data.publishedAt is string && data.publishedAt.size() > 0 && data.publishedAt.size() <= 50;
+    }
+
+    function isCoachingInstituteOwner(instituteId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/coaching_institutes/$(instituteId)) &&
+             get(/databases/$(database)/documents/coaching_institutes/$(instituteId)).data.ownerUserId == request.auth.uid;
+    }
+
+    function isSchoolInstitutionOwner(institutionId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/institutions/$(institutionId)) &&
+             get(/databases/$(database)/documents/institutions/$(institutionId)).data.ownerUserId == request.auth.uid;
+    }
+
+    // 20. Additive Collection: /skill_enrollments/{enrollmentId}
+    match /skill_enrollments/{enrollmentId} {
+      allow get: if isValidId(enrollmentId) && (
+        isAdmin() || (isSignedIn() && existing().userId == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(enrollmentId) &&
+                       isSignedIn() &&
+                       isValidSkillEnrollment(incoming()) &&
+                       incoming().id == enrollmentId &&
+                       (isAdmin() || incoming().userId == request.auth.uid);
+      allow update: if isValidId(enrollmentId) &&
+                       isSignedIn() &&
+                       isValidSkillEnrollment(incoming()) &&
+                       incoming().id == existing().id &&
+                       incoming().userId == existing().userId &&
+                       incoming().programId == existing().programId &&
+                       incoming().enrolledAt == existing().enrolledAt && (
+                         isAdmin() || (
+                           existing().userId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'completedModuleIds', 'quizBestScore', 'quizTotal',
+                             'projectSubmittedNote', 'certificateIssuedAt', 'certificateCode', 'updatedAt'
+                           ])
+                         )
+                       );
+      allow delete: if isValidId(enrollmentId) && (
+        isAdmin() || (isSignedIn() && existing().userId == request.auth.uid)
+      );
+    }
+
+    // 21. Additive Collection: /coaching_institutes/{instituteId} (+ tenant-isolated batches & roster)
+    match /coaching_institutes/{instituteId} {
+      allow get: if isValidId(instituteId) && (
+        isAdmin() || (isSignedIn() && existing().ownerUserId == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.ownerUserId == request.auth.uid);
+      allow create: if isValidId(instituteId) &&
+                       isSignedIn() &&
+                       isValidCoachingInstitute(incoming()) &&
+                       incoming().id == instituteId &&
+                       (isAdmin() || incoming().ownerUserId == request.auth.uid);
+      allow update: if isValidId(instituteId) &&
+                       isSignedIn() &&
+                       isValidCoachingInstitute(incoming()) &&
+                       incoming().id == existing().id &&
+                       incoming().ownerUserId == existing().ownerUserId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isAdmin() || (
+                           existing().ownerUserId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'instituteName', 'instituteType', 'city', 'contactPhone',
+                             'directorName', 'programIdsOffered', 'published', 'updatedAt'
+                           ])
+                         )
+                       );
+      allow delete: if isValidId(instituteId) && (
+        isAdmin() || (isSignedIn() && existing().ownerUserId == request.auth.uid)
+      );
+
+      match /batches/{batchId} {
+        allow get, list: if isValidId(instituteId) && (isAdmin() || isCoachingInstituteOwner(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(batchId) &&
+                         isValidCoachingBatch(incoming()) &&
+                         incoming().id == batchId &&
+                         incoming().instituteId == instituteId &&
+                         (isAdmin() || isCoachingInstituteOwner(instituteId));
+        allow update: if isValidId(instituteId) && isValidId(batchId) &&
+                         isValidCoachingBatch(incoming()) &&
+                         incoming().id == existing().id &&
+                         incoming().instituteId == existing().instituteId &&
+                         (isAdmin() || (
+                           isCoachingInstituteOwner(instituteId) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['batchName', 'programId', 'trainerName', 'schedule', 'studentIds', 'updatedAt'])
+                         ));
+        allow delete: if isValidId(instituteId) && isValidId(batchId) && (isAdmin() || isCoachingInstituteOwner(instituteId));
+      }
+
+      match /roster/{memberId} {
+        allow get, list: if isValidId(instituteId) && (isAdmin() || isCoachingInstituteOwner(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(memberId) &&
+                         isValidCoachingStudentRoster(incoming()) &&
+                         incoming().id == memberId &&
+                         incoming().instituteId == instituteId &&
+                         (isAdmin() || isCoachingInstituteOwner(instituteId));
+        allow update: if isValidId(instituteId) && isValidId(memberId) &&
+                         isValidCoachingStudentRoster(incoming()) &&
+                         incoming().id == existing().id &&
+                         incoming().instituteId == existing().instituteId &&
+                         (isAdmin() || (
+                           isCoachingInstituteOwner(instituteId) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'mobile', 'grade', 'programId', 'batchId',
+                             'feeTotalInr', 'feePaidInr', 'attendancePresent', 'attendanceTotal',
+                             'latestAssessmentScore', 'parentNote', 'certificateCode', 'updatedAt'
+                           ])
+                         ));
+        allow delete: if isValidId(instituteId) && isValidId(memberId) && (isAdmin() || isCoachingInstituteOwner(instituteId));
+      }
+    }
+
+    // 22. Additive Collection: /institutions/{institutionId} (+ tenant-isolated members & notices)
+    match /institutions/{institutionId} {
+      allow get: if isValidId(institutionId) && (
+        isAdmin() || (isSignedIn() && existing().ownerUserId == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.ownerUserId == request.auth.uid);
+      allow create: if isValidId(institutionId) &&
+                       isSignedIn() &&
+                       isValidSchoolInstitution(incoming()) &&
+                       incoming().id == institutionId &&
+                       (isAdmin() || incoming().ownerUserId == request.auth.uid);
+      allow update: if isValidId(institutionId) &&
+                       isSignedIn() &&
+                       isValidSchoolInstitution(incoming()) &&
+                       incoming().id == existing().id &&
+                       incoming().ownerUserId == existing().ownerUserId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isAdmin() || (
+                           existing().ownerUserId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'institutionName', 'institutionType', 'affiliationOrUniversity',
+                             'city', 'principalName', 'contactEmailOrPhone',
+                             'departmentsOrClasses', 'updatedAt'
+                           ])
+                         )
+                       );
+      allow delete: if isValidId(institutionId) && (
+        isAdmin() || (isSignedIn() && existing().ownerUserId == request.auth.uid)
+      );
+
+      match /members/{memberId} {
+        allow get, list: if isValidId(institutionId) && (isAdmin() || isSchoolInstitutionOwner(institutionId));
+        allow create: if isValidId(institutionId) && isValidId(memberId) &&
+                         isValidInstitutionMember(incoming()) &&
+                         incoming().id == memberId &&
+                         incoming().institutionId == institutionId &&
+                         (isAdmin() || isSchoolInstitutionOwner(institutionId));
+        allow update: if isValidId(institutionId) && isValidId(memberId) &&
+                         isValidInstitutionMember(incoming()) &&
+                         incoming().id == existing().id &&
+                         incoming().institutionId == existing().institutionId &&
+                         (isAdmin() || (
+                           isSchoolInstitutionOwner(institutionId) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'role', 'fullName', 'rollOrCode', 'classOrDepartment',
+                             'attendancePresent', 'attendanceTotal', 'latestExamName', 'latestMarksPct', 'updatedAt'
+                           ])
+                         ));
+        allow delete: if isValidId(institutionId) && isValidId(memberId) && (isAdmin() || isSchoolInstitutionOwner(institutionId));
+      }
+
+      match /notices/{noticeId} {
+        allow get, list: if isValidId(institutionId) && (isAdmin() || isSchoolInstitutionOwner(institutionId));
+        allow create: if isValidId(institutionId) && isValidId(noticeId) &&
+                         isValidInstitutionNotice(incoming()) &&
+                         incoming().id == noticeId &&
+                         incoming().institutionId == institutionId &&
+                         (isAdmin() || isSchoolInstitutionOwner(institutionId));
+        allow delete: if isValidId(institutionId) && isValidId(noticeId) && (isAdmin() || isSchoolInstitutionOwner(institutionId));
+      }
+    }
+
+    // 23. Additive Collection: /five_zones_cms/{configId} (Zero-PII Central Governance)
+    match /five_zones_cms/{configId} {
+      allow get: if isValidId(configId) && (configId == 'main' || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(configId) &&
+                               isAdmin() &&
+                               incoming().keys().hasAll(['id', 'zonesEnabled', 'pricingTierLabels', 'programPublishedMap', 'updatedAt', 'updatedByUid']) &&
+                               incoming().keys().hasOnly(['id', 'zonesEnabled', 'pricingTierLabels', 'programPublishedMap', 'updatedAt', 'updatedByUid']) &&
+                               incoming().id == configId &&
+                               incoming().zonesEnabled is map &&
+                               incoming().pricingTierLabels is map &&
+                               incoming().programPublishedMap is map &&
+                               incoming().updatedAt is string && incoming().updatedAt.size() <= 50 &&
+                               incoming().updatedByUid == request.auth.uid &&
+                               !('email' in incoming()) &&
+                               !('mobile' in incoming()) &&
+                               !('phone' in incoming()) &&
+                               !('passwordHash' in incoming());
+      allow delete: if isValidId(configId) && isAdmin();
     }
   }
 }

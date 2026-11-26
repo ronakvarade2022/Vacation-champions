@@ -237,6 +237,8 @@ export default defineConfig(() => {
             '**/data-stories-*',
             '**/data-drawings-*',
             '**/data-study-library-*',
+            '**/data-verified-syllabus-*',
+            '**/data-additional-curriculum-*',
             '**/admin-*',
           ],
           navigateFallback: '/index.html',
@@ -341,14 +343,19 @@ export default defineConfig(() => {
       modulePreload: {
         polyfill: false,
         resolveDependencies: (_filename, deps) => {
-          // Only preload core runtime/UI dependencies; never eagerly preload multi-megabyte exam/question banks
+          // Only preload core runtime/UI dependencies; never eagerly preload multi-megabyte exam/question/syllabus banks or admin chunks
           return deps.filter(
             (d) =>
               !d.includes('data-tet-') &&
               !d.includes('data-scholarship-') &&
               !d.includes('data-worksheets') &&
               !d.includes('data-questions-') &&
-              !d.includes('data-study-library-')
+              !d.includes('data-study-library-') &&
+              !d.includes('data-verified-syllabus') &&
+              !d.includes('data-additional-curriculum') &&
+              !d.includes('data-stories') &&
+              !d.includes('data-drawings') &&
+              !d.includes('admin-')
           );
         },
       },
@@ -357,7 +364,9 @@ export default defineConfig(() => {
         output: {
           manualChunks(id: string) {
             if (id.includes('node_modules')) {
-              if (id.includes('firebase')) return 'vendor-firebase';
+              if (id.includes('/firebase/') || id.includes('/@firebase/')) {
+                return 'vendor-firebase';
+              }
               if (
                 id.includes('node_modules/react/') ||
                 id.includes('node_modules/react-dom/') ||
@@ -381,6 +390,12 @@ export default defineConfig(() => {
               id.includes('src/data/classCurriculumConfig')
             ) {
               return 'data-curriculum-meta';
+            }
+            if (id.includes('src/data/verifiedSyllabus/')) {
+              return 'data-verified-syllabus';
+            }
+            if (id.includes('src/data/additionalCurriculum/')) {
+              return 'data-additional-curriculum';
             }
             if (
               id.includes('src/data/notes/') ||

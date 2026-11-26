@@ -9,6 +9,10 @@ import {
   Languages,
   Trophy,
   ArrowRight,
+  FileText,
+  PlayCircle,
+  FileSpreadsheet,
+  CheckSquare,
 } from 'lucide-react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConfig';
@@ -26,8 +30,10 @@ import {
 export type GlobalSearchTargetTab =
   | 'textbooks'
   | 'chapter_notes'
+  | 'textbook_solutions'
   | 'short_revision'
   | 'qa_bank'
+  | 'worksheets_ref'
   | 'chapter_test'
   | 'model_papers'
   | 'pyq_papers'
@@ -47,7 +53,17 @@ export interface GlobalSearchJumpTarget {
 
 interface SearchIndexEntry {
   id: string;
-  kind: 'chapter' | 'textbook' | 'math' | 'science_diagram' | 'grammar' | 'scholarship';
+  kind:
+    | 'chapter'
+    | 'solutions'
+    | 'textbook'
+    | 'exam_paper'
+    | 'video_lesson'
+    | 'worksheet'
+    | 'math'
+    | 'science_diagram'
+    | 'grammar'
+    | 'scholarship';
   title: string;
   subtitle: string;
   searchBlob: string;
@@ -71,14 +87,14 @@ const BOARDS: EducationBoard[] = ['Maharashtra', 'CBSE', 'ICSE'];
 let cachedGlobalIndex: { key: string; entries: SearchIndexEntry[] } | null = null;
 
 function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
-  const modeKey = isVerifiedSyllabusPipelineEnabled() ? 'central' : 'legacy';
+  const modeKey = isVerifiedSyllabusPipelineEnabled() ? 'central_v2' : 'legacy_v2';
   if (cachedGlobalIndex && cachedGlobalIndex.key === modeKey) {
     return cachedGlobalIndex.entries;
   }
 
   const entries: SearchIndexEntry[] = [];
 
-  // 1. All 3 Boards × 10 Classes Textbooks & Chapters (382 textbooks + 3,542 chapters)
+  // 1. All 3 Boards × 10 Classes Textbooks, Chapters, Solutions, Exam Papers, Video Lessons & Worksheets
   for (const board of BOARDS) {
     for (const classLevel of ALL_10_CLASSES) {
       const textbooks = getOfficialTextbooksForBoardClass(board, classLevel);
@@ -106,14 +122,71 @@ function buildGlobalStudyLibraryIndex(): SearchIndexEntry[] {
               id: `ch_${board}_${classLevel}_${subject}_${chNum}`,
               kind: 'chapter',
               title: `Ch ${chNum}: ${rawTitle}`,
-              subtitle: `${board} · ${classLevel} · ${subject} · Notes, Revision, Q&A & Test`,
-              searchBlob: `${rawTitle} ${subject} ${board} ${classLevel} chapter ${chNum}`.toLowerCase(),
+              subtitle: `${board} · ${classLevel} · ${subject} · Chapter Notes, Revision, Q&A & Test`,
+              searchBlob: `${rawTitle} ${subject} ${board} ${classLevel} chapter ${chNum} notes revision`.toLowerCase(),
               board,
               classLevel,
               subject,
               chapterNumber: chNum,
               targetTab: 'chapter_notes',
             });
+            entries.push({
+              id: `sol_${board}_${classLevel}_${subject}_${chNum}`,
+              kind: 'solutions',
+              title: `Exercise Solutions — Ch ${chNum}: ${rawTitle}`,
+              subtitle: `${board} · ${classLevel} · ${subject} · Complete Textbook Exercise Solutions`,
+              searchBlob: `${rawTitle} ${subject} ${board} ${classLevel} chapter ${chNum} solution answers exercise textbook`.toLowerCase(),
+              board,
+              classLevel,
+              subject,
+              chapterNumber: chNum,
+              targetTab: 'textbook_solutions',
+            });
+            entries.push({
+              id: `vid_${board}_${classLevel}_${subject}_${chNum}`,
+              kind: 'video_lesson',
+              title: `Video Lesson — Ch ${chNum}: ${rawTitle}`,
+              subtitle: `${board} · ${classLevel} · ${subject} · Structured Video Lesson`,
+              searchBlob: `${rawTitle} ${subject} ${board} ${classLevel} chapter ${chNum} video lecture diksha`.toLowerCase(),
+              board,
+              classLevel,
+              subject,
+              chapterNumber: chNum,
+              targetTab: 'video_lessons',
+            });
+          });
+          entries.push({
+            id: `mp_${board}_${classLevel}_${subject}`,
+            kind: 'exam_paper',
+            title: `${subject} Model Question Papers (${board} ${classLevel})`,
+            subtitle: `${board} · ${classLevel} · 3 Board Blueprint Model Papers + Solutions`,
+            searchBlob: `${subject} ${board} ${classLevel} model paper question paper sample blueprint`.toLowerCase(),
+            board,
+            classLevel,
+            subject,
+            targetTab: 'model_papers',
+          });
+          entries.push({
+            id: `pyq_${board}_${classLevel}_${subject}`,
+            kind: 'exam_paper',
+            title: `${subject} Previous Year Question Papers (PYQ Archive)`,
+            subtitle: `${board} · ${classLevel} · Solved PYQ Archive (2022–2025)`,
+            searchBlob: `${subject} ${board} ${classLevel} previous year pyq question paper solved archive`.toLowerCase(),
+            board,
+            classLevel,
+            subject,
+            targetTab: 'pyq_papers',
+          });
+          entries.push({
+            id: `ws_${board}_${classLevel}_${subject}`,
+            kind: 'worksheet',
+            title: `${subject} Chapter Practice Worksheets (${board} ${classLevel})`,
+            subtitle: `${board} · ${classLevel} · ${subject} · Auto-Graded Worksheets`,
+            searchBlob: `${subject} ${board} ${classLevel} worksheet practice exercise`.toLowerCase(),
+            board,
+            classLevel,
+            subject,
+            targetTab: 'worksheets_ref',
           });
         } else {
           const inlineAdditional = resolveInlineAdditionalCurriculumFallback({
@@ -243,7 +316,7 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
           matched.push(item);
         }
       }
-      if (matched.length >= 40) break;
+      if (matched.length >= 45) break;
     }
     return matched;
   }, [isOpen, allEntries, query, boardFilter, classFilter, kindFilter, defaultBoard, defaultClass]);
@@ -254,6 +327,14 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
     switch (kind) {
       case 'textbook':
         return <Library className="w-4 h-4 text-amber-600 shrink-0" />;
+      case 'solutions':
+        return <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />;
+      case 'exam_paper':
+        return <FileText className="w-4 h-4 text-purple-600 shrink-0" />;
+      case 'video_lesson':
+        return <PlayCircle className="w-4 h-4 text-rose-600 shrink-0" />;
+      case 'worksheet':
+        return <FileSpreadsheet className="w-4 h-4 text-sky-600 shrink-0" />;
       case 'math':
         return <Calculator className="w-4 h-4 text-indigo-600 shrink-0" />;
       case 'science_diagram':
@@ -287,8 +368,8 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
                 Global Study Material Search
               </h2>
               <p className="text-xs text-slate-600">
-                Instant search across 3 Boards, Classes 1–10, 382 Textbooks, 3,542 Chapters,
-                Formulas, 12 Science Diagrams &amp; Grammar (0 database reads)
+                Instant search across Textbooks, Chapters, Exercise Solutions, Question Papers,
+                Video Lessons, Worksheets, Math Formulas, Science Diagrams &amp; Grammar
               </p>
             </div>
             <button
@@ -308,7 +389,7 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Try: Photosynthesis, Trigonometry, Shivaji, Pythagoras, NCERT Science, Tenses..."
+              placeholder="Try: Photosynthesis, Trigonometry, Shivaji, PYQ, Model Paper, Video, Exercise Solutions..."
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:border-indigo-600 shadow-2xs"
             />
           </div>
@@ -348,8 +429,12 @@ export const StudyLibraryGlobalSearch: React.FC<StudyLibraryGlobalSearchProps> =
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-800 font-semibold"
             >
               <option value="ALL">All Resource Types</option>
-              <option value="chapter">Chapters (Notes / Q&amp;A / Tests)</option>
+              <option value="chapter">Chapters &amp; Notes</option>
+              <option value="solutions">Textbook Exercise Solutions</option>
               <option value="textbook">Official Textbooks</option>
+              <option value="exam_paper">Model &amp; PYQ Question Papers</option>
+              <option value="video_lesson">Video Lessons</option>
+              <option value="worksheet">Chapter Worksheets</option>
               <option value="math">Math Formula Hub</option>
               <option value="science_diagram">Science SVG Diagrams</option>
               <option value="grammar">English Grammar Hub</option>

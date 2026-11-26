@@ -2811,8 +2811,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAnnouncements(prev => prev.filter(a => a.id !== id));
   };
 
-  const linkParentToStudent = (_parentId: string, _studentId: string): { success: boolean; message: string } => {
-    return { success: false, message: 'Parent Portal has been removed. Platform supports Student Portal and Teacher Portal.' };
+  const linkParentToStudent = (parentId: string, studentId: string): { success: boolean; message: string } => {
+    const targetStudent = studentsList.find((s) => s.id === studentId && s.accountRole !== 'teacher');
+    if (!targetStudent) {
+      return { success: false, message: 'Verified Student profile not found.' };
+    }
+    setParentsList((prev) => {
+      const idx = prev.findIndex((p) => p.id === parentId);
+      if (idx === -1) {
+        return [
+          ...prev,
+          {
+            id: parentId,
+            name: targetStudent.parentName || 'Parent / Guardian',
+            email: targetStudent.parentEmail || '',
+            mobile: targetStudent.mobile || '',
+            linkedStudentIds: [studentId],
+            isVerified: true,
+            registeredAt: new Date().toISOString(),
+          },
+        ];
+      }
+      const existing = prev[idx];
+      if (existing.linkedStudentIds.includes(studentId)) return prev;
+      const updated = [...prev];
+      updated[idx] = {
+        ...existing,
+        linkedStudentIds: [...existing.linkedStudentIds, studentId],
+      };
+      return updated;
+    });
+    return { success: true, message: `Linked ${targetStudent.name} (${targetStudent.classLevel}) securely.` };
   };
 
   // Automated Security & Class-Wise Isolation Test Runner (Ephemeral Synthetic Fixtures Only)

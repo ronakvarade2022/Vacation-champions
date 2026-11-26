@@ -1,0 +1,12 @@
+{
+  "version": "1.1.0-stage1-expanded",
+  "bundles": {
+    "maharashtra__class-5__english__mathematics": "maharashtra/class-5/english/mathematics.json",
+    "cbse__class-6__english__mathematics": "cbse/class-6/english/mathematics.json",
+    "cbse__class-6__english__science": "cbse/class-6/english/science.json",
+    "maharashtra__class-10__english__mathematics-algebra": "maharashtra/class-10/english/mathematics-algebra.json",
+    "maharashtra__class-10__english__mathematics-geometry": "maharashtra/class-10/english/mathematics-geometry.json",
+    "cbse__class-10__english__mathematics": "cbse/class-10/english/mathematics.json",
+    "icse__class-10__english__mathematics": "icse/class-10/english/mathematics.json"
+  }
+}

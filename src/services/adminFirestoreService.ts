@@ -15,10 +15,11 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { cachedAdminFetch, ADMIN_CACHE_DEFAULT_TTL_MS } from './adminCacheService';
-import type { StudentProfile, PaymentTransaction, EducationBoard } from '../types';
+import type { StudentProfile, ParentProfile, PaymentTransaction, EducationBoard } from '../types';
 
 const ADMIN_STUDENTS_CACHE_KEY = 'admin:firestore:students';
 const ADMIN_TRANSACTIONS_CACHE_KEY = 'admin:firestore:transactions';
+const ADMIN_PARENTS_CACHE_KEY = 'admin:firestore:parents';
 
 function isSignedInAdminUser(): boolean {
   const email = (auth.currentUser?.email || '').trim().toLowerCase();
@@ -126,6 +127,40 @@ export async function fetchBoundedTransactionsForAdmin(options?: {
         } catch {
           return { transactions: [], fromFirestore: false };
         }
+      }
+    },
+    {
+      ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS,
+      forceRefresh: options?.forceRefresh,
+    }
+  );
+}
+
+export async function fetchBoundedParentsForAdmin(options?: {
+  pageSize?: number;
+  forceRefresh?: boolean;
+}): Promise<{ parents: ParentProfile[]; fromFirestore: boolean }> {
+  const pageSize = Math.min(Math.max(options?.pageSize ?? 150, 20), 500);
+  const cacheKey = `${ADMIN_PARENTS_CACHE_KEY}:${pageSize}`;
+
+  return cachedAdminFetch(
+    cacheKey,
+    async () => {
+      if (!isSignedInAdminUser()) {
+        return { parents: [], fromFirestore: false };
+      }
+      try {
+        const snap = await getDocs(query(collection(db, 'parents'), limit(pageSize)));
+        const rows: ParentProfile[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as ParentProfile;
+          if (data && (data.id || docSnap.id)) {
+            rows.push({ ...data, id: data.id || docSnap.id });
+          }
+        });
+        return { parents: rows, fromFirestore: true };
+      } catch {
+        return { parents: [], fromFirestore: false };
       }
     },
     {

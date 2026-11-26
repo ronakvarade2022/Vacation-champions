@@ -499,6 +499,169 @@
         "lastUpdatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["studentId", "chapterId", "subjectId", "classLevel", "board", "medium", "notesCompleted", "worksheetCompleted", "quizCompleted", "bestQuizScore", "quizTotal", "lastUpdatedAt"]
+    },
+    "SkillEnrollment": {
+      "title": "SkillEnrollment",
+      "description": "Independent student enrolment record for any of the 18 Skill Development programs (decoupled from coaching institutes).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "programId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "programTitle": { "type": "string", "maxLength": 120 },
+        "enrolledAt": { "type": "string", "maxLength": 50 },
+        "completedModuleIds": { "type": "array", "description": "Completed level module IDs (max 20)." },
+        "quizBestScore": { "type": "number" },
+        "quizTotal": { "type": "number" },
+        "projectSubmittedNote": { "type": "string", "maxLength": 1000 },
+        "certificateIssuedAt": { "type": "string", "maxLength": 50 },
+        "certificateCode": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "studentName", "programId", "programTitle", "enrolledAt", "completedModuleIds", "updatedAt"]
+    },
+    "CoachingInstitute": {
+      "title": "CoachingInstitute",
+      "description": "Multi-tenant registered coaching institute or skill development centre partitioned by ownerUserId.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUserId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "instituteName": { "type": "string", "maxLength": 150 },
+        "instituteType": { "type": "string", "enum": ["Abacus & Vedic Maths Centre", "Coaching Class", "Skill Academy", "Multi-Program Institute"] },
+        "city": { "type": "string", "maxLength": 80 },
+        "contactPhone": { "type": "string", "maxLength": 20 },
+        "directorName": { "type": "string", "maxLength": 100 },
+        "programIdsOffered": { "type": "array", "description": "Up to 18 offered skill program IDs." },
+        "published": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "ownerUserId", "instituteName", "instituteType", "city", "contactPhone", "directorName", "programIdsOffered", "published", "createdAt", "updatedAt"]
+    },
+    "CoachingBatch": {
+      "title": "CoachingBatch",
+      "description": "Tenant-isolated training batch under /coaching_institutes/{instituteId}/batches.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "instituteId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "batchName": { "type": "string", "maxLength": 120 },
+        "programId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trainerName": { "type": "string", "maxLength": 100 },
+        "schedule": { "type": "string", "maxLength": 120 },
+        "studentIds": { "type": "array", "description": "Up to 200 assigned batch student IDs." },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "instituteId", "batchName", "programId", "trainerName", "schedule", "studentIds", "updatedAt"]
+    },
+    "CoachingStudentRoster": {
+      "title": "CoachingStudentRoster",
+      "description": "Tenant-isolated coaching student roster record under /coaching_institutes/{instituteId}/roster.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "instituteId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 100 },
+        "mobile": { "type": "string", "maxLength": 20 },
+        "grade": { "type": "string", "maxLength": 30 },
+        "programId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "batchId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "feeTotalInr": { "type": "number" },
+        "feePaidInr": { "type": "number" },
+        "attendancePresent": { "type": "number" },
+        "attendanceTotal": { "type": "number" },
+        "latestAssessmentScore": { "type": "string", "maxLength": 40 },
+        "parentNote": { "type": "string", "maxLength": 500 },
+        "certificateCode": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "instituteId", "name", "mobile", "grade", "programId", "batchId", "feeTotalInr", "feePaidInr", "attendancePresent", "attendanceTotal", "updatedAt"]
+    },
+    "SchoolInstitution": {
+      "title": "SchoolInstitution",
+      "description": "Multi-tenant registered school, higher secondary, or degree college partitioned by ownerUserId.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUserId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "institutionName": { "type": "string", "maxLength": 160 },
+        "institutionType": { "type": "string", "enum": ["School (Std 1–10)", "Higher Secondary / Jr College (Std 11–12)", "Degree College / UG"] },
+        "affiliationOrUniversity": { "type": "string", "maxLength": 150 },
+        "city": { "type": "string", "maxLength": 80 },
+        "principalName": { "type": "string", "maxLength": 100 },
+        "contactEmailOrPhone": { "type": "string", "maxLength": 150 },
+        "departmentsOrClasses": { "type": "array", "description": "Up to 40 class/department labels." },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "ownerUserId", "institutionName", "institutionType", "affiliationOrUniversity", "city", "principalName", "contactEmailOrPhone", "departmentsOrClasses", "createdAt", "updatedAt"]
+    },
+    "InstitutionMember": {
+      "title": "InstitutionMember",
+      "description": "Tenant-isolated student or faculty member record under /institutions/{institutionId}/members.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "institutionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["student", "faculty"] },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "rollOrCode": { "type": "string", "maxLength": 40 },
+        "classOrDepartment": { "type": "string", "maxLength": 80 },
+        "attendancePresent": { "type": "number" },
+        "attendanceTotal": { "type": "number" },
+        "latestExamName": { "type": "string", "maxLength": 100 },
+        "latestMarksPct": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "institutionId", "role", "fullName", "rollOrCode", "classOrDepartment", "attendancePresent", "attendanceTotal", "updatedAt"]
+    },
+    "InstitutionNotice": {
+      "title": "InstitutionNotice",
+      "description": "Tenant-isolated campus notice under /institutions/{institutionId}/notices.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "institutionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 160 },
+        "audience": { "type": "string", "enum": ["All Campus", "Students Only", "Faculty & Staff"] },
+        "body": { "type": "string", "maxLength": 1500 },
+        "publishedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "institutionId", "title", "audience", "body", "publishedAt"]
+    },
+    "TeacherToolArtifact": {
+      "title": "TeacherToolArtifact",
+      "description": "Saved classroom worksheet, rubric, paper, or checklist generated from Teacher Tools TT-001..TT-130 under /students/{studentId}/teacher_tools_saved.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "toolId": { "type": "string", "maxLength": 20 },
+        "toolTitle": { "type": "string", "maxLength": 120 },
+        "board": { "type": "string", "enum": ["Maharashtra", "CBSE", "ICSE"] },
+        "classLevel": { "type": "string", "maxLength": 20 },
+        "subject": { "type": "string", "maxLength": 100 },
+        "topic": { "type": "string", "maxLength": 160 },
+        "contentBody": { "type": "string", "maxLength": 8000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "teacherUid", "toolId", "toolTitle", "board", "classLevel", "subject", "topic", "contentBody", "createdAt"]
+    },
+    "FiveZonesCmsConfig": {
+      "title": "FiveZonesCmsConfig",
+      "description": "Zero-PII central governance configuration for the 5 portals and 18 skill programs managed by Admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "zonesEnabled": { "type": "object" },
+        "pricingTierLabels": { "type": "object" },
+        "programPublishedMap": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "updatedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" }
+      },
+      "required": ["id", "zonesEnabled", "pricingTierLabels", "programPublishedMap", "updatedAt", "updatedByUid"]
     }
   },
   "firestore": {
@@ -586,6 +749,10 @@
       "schema": { "$ref": "#/entities/TeacherLessonPlanState" },
       "description": "Private per-teacher progress, timetable load, permitted edits, outcome statuses, and private remarks isolated by authenticated Teacher UID."
     },
+    "/students/{studentId}/teacher_tools_saved/{artifactId}": {
+      "schema": { "$ref": "#/entities/TeacherToolArtifact" },
+      "description": "Private per-teacher saved Teacher Tools outputs (TT-001..TT-130) isolated by authenticated Teacher UID."
+    },
     "/students/{studentId}/additional_progress/{chapterId}": {
       "schema": { "$ref": "#/entities/AdditionalCurriculumProgress" },
       "description": "Isolated per-student supplementary chapter progress under MY STUDYZONE ADDITIONAL CURRICULUM."
@@ -601,6 +768,38 @@
     "/additional_curriculum_assignments/{assignmentId}": {
       "schema": { "$ref": "#/entities/AdditionalCurriculumAssignment" },
       "description": "Zero-PII supplementary chapter assignments issued by verified Teachers or Admins."
+    },
+    "/skill_enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/SkillEnrollment" },
+      "description": "Independent student enrolment records for the 18 Coaching & Skill Development programs."
+    },
+    "/coaching_institutes/{instituteId}": {
+      "schema": { "$ref": "#/entities/CoachingInstitute" },
+      "description": "Multi-tenant registered Coaching & Skill Development institutes partitioned by ownerUserId."
+    },
+    "/coaching_institutes/{instituteId}/batches/{batchId}": {
+      "schema": { "$ref": "#/entities/CoachingBatch" },
+      "description": "Tenant-isolated batch schedules inside a Coaching Institute."
+    },
+    "/coaching_institutes/{instituteId}/roster/{memberId}": {
+      "schema": { "$ref": "#/entities/CoachingStudentRoster" },
+      "description": "Tenant-isolated student roster, fee tracking, and attendance inside a Coaching Institute."
+    },
+    "/institutions/{institutionId}": {
+      "schema": { "$ref": "#/entities/SchoolInstitution" },
+      "description": "Multi-tenant Schools, Higher Secondary (Std 11–12), and Colleges partitioned by ownerUserId."
+    },
+    "/institutions/{institutionId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/InstitutionMember" },
+      "description": "Tenant-isolated student & faculty directory inside a School/College institution."
+    },
+    "/institutions/{institutionId}/notices/{noticeId}": {
+      "schema": { "$ref": "#/entities/InstitutionNotice" },
+      "description": "Tenant-isolated campus announcements & circulars inside a School/College institution."
+    },
+    "/five_zones_cms/{configId}": {
+      "schema": { "$ref": "#/entities/FiveZonesCmsConfig" },
+      "description": "Central 5-Zone portal & 18-program CMS governance configuration managed exclusively by Admin."
     }
   }
 }

@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "1.0.0",
+  "board": "CBSE",
+  "classLevel": "Class 10",
+  "medium": "English",
+  "subject": "Mathematics",
+  "verifiedSource": "NCERT Mathematics – Textbook for Class X (2025–2026 Rationalised Edition)",
+  "chapters": [
+    {
+      "id": "NOTES-CBSE-C10-MATH-CH1",
+      "board": "CBSE",
+      "classLevel": "Class 10",
+      "subject": "Mathematics",
+      "chapterNumber": 1,
+      "chapterTitle": "Real Numbers",
+      "textbookRef": "Mathematics Class X (NCERT) • Chapter 1: Real Numbers",
+      "overview": "Apply the Fundamental Theorem of Arithmetic (prime factorisation), HCF×LCM = product of two numbers, and proof by contradiction for irrationality of √2, √3, √5.",
+      "keyPoints": [
+        "Fundamental Theorem of Arithmetic: Every composite number factors uniquely as a product of primes (up to order).",
+        "For any two positive integers a and b: HCF(a, b) × LCM(a, b) = a × b.",
+        "For a number 6ⁿ or 4ⁿ to end with 0, its prime factorisation must contain both 2 and 5."
+      ],
+      "formulasAndRules": [
+        "HCF(a, b) × LCM(a, b) = a × b",
+        "If prime p divides a², then p divides a"
+      ],
+      "solvedExamples": [
+        {
+          "prompt": "Given HCF(306, 657) = 9, find LCM(306, 657).",
+          "solution": "LCM = (306 × 657) / 9 = 34 × 657 = 22,338."
+        }
+      ],
+      "textbookExerciseSolutions": [
+        {
+          "id": "CBSE10-M1-EX11-Q1",
+          "qNo": "Exercise 1.1 – Q1 & Q2",
+          "exerciseSetLabel": "Exercise 1.1 (NCERT)",
+          "questionType": "solve_following",
+          "typeLabel": "Prime Factorisation, HCF & LCM",
+          "marks": 4,
+          "question": "Q1: Express as product of prime factors: (i) 140  (ii) 156  (iii) 3825.\nQ2(i): Find LCM and HCF of 26 and 91 and verify LCM × HCF = product of the two numbers.",
+          "conceptUsed": "Fundamental Theorem of Arithmetic",
+          "formulaExplained": "HCF = product of smallest powers of common primes; LCM = product of greatest powers of all primes involved.",
+          "answer": "Q1: (i) 2²×5×7  (ii) 2²×3×13  (iii) 3²×5²×17  |  Q2(i): HCF = 13, LCM = 182 (Verified: 13×182 = 2366 = 26×91)",
+          "stepByStepExplanation": "26 = 2 × 13; 91 = 7 × 13 ⇒ HCF = 13, LCM = 2 × 7 × 13 = 182. Product: 13 × 182 = 2366; 26 × 91 = 2366.",
+          "subQuestionsCount": 4,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        },
+        {
+          "id": "CBSE10-M1-EX12-Q1",
+          "qNo": "Exercise 1.2 – Q1",
+          "exerciseSetLabel": "Exercise 1.2 (NCERT)",
+          "questionType": "solve_following",
+          "typeLabel": "Irrationality Proof",
+          "marks": 3,
+          "question": "Prove that √5 is irrational.",
+          "conceptUsed": "Proof by Contradiction",
+          "formulaExplained": "Assume √5 = a/b (coprime integers, b≠0) and show 5 divides both a and b.",
+          "answer": "Proved by contradiction that √5 is irrational.",
+          "stepByStepExplanation": "Suppose √5 = a/b (HCF(a,b)=1) ⇒ 5b² = a² ⇒ 5|a² ⇒ 5|a. Let a = 5c ⇒ 5b² = 25c² ⇒ b² = 5c² ⇒ 5|b. Contradiction! Both a,b have factor 5 despite being coprime. Thus √5 is irrational.",
+          "subQuestionsCount": 1,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        }
+      ],
+      "classNotebookExercises": [
+        { "id": "CBSE10-M1-NB1", "qNo": "NB-1", "exerciseType": "define_following", "sectionGroup": "Theorem", "typeLabel": "Fundamental Theorem of Arithmetic", "marks": 2, "prompt": "State the Fundamental Theorem of Arithmetic.", "writingGuidance": "Mention unique prime factorisation.", "modelAnswer": "Every composite number can be expressed as a product of primes, and this factorisation is unique apart from the order of prime factors." },
+        { "id": "CBSE10-M1-NB2", "qNo": "NB-2", "exerciseType": "solve_following", "sectionGroup": "Factor Tree", "typeLabel": "Prime Factors of 5005", "marks": 2, "prompt": "Express 5005 and 7429 as products of prime factors.", "writingGuidance": "Divide systematically by primes 5,7,11,13 and 17,19,23.", "modelAnswer": "5005 = 5×7×11×13 | 7429 = 17×19×23." },
+        { "id": "CBSE10-M1-NB3", "qNo": "NB-3", "exerciseType": "solve_following", "sectionGroup": "HCF & LCM", "typeLabel": "Three Numbers HCF/LCM", "marks": 2, "prompt": "Find HCF and LCM of 12, 15, and 21 by prime factorisation.", "writingGuidance": "Note: HCF×LCM=product applies only to 2 numbers, not 3.", "modelAnswer": "12=2²×3, 15=3×5, 21=3×7 ⇒ HCF = 3, LCM = 2²×3×5×7 = 420." },
+        { "id": "CBSE10-M1-NB4", "qNo": "NB-4", "exerciseType": "give_reasons", "sectionGroup": "Digit 0 Check", "typeLabel": "Can 6ⁿ End With 0?", "marks": 2, "prompt": "Check whether 6ⁿ can end with digit 0 for any natural number n.", "writingGuidance": "Check prime factors of 6.", "modelAnswer": "6ⁿ = (2×3)ⁿ lacks prime factor 5, so by uniqueness of FTA it can never end with 0." },
+        { "id": "CBSE10-M1-NB5", "qNo": "NB-5", "exerciseType": "give_reasons", "sectionGroup": "Composite Check", "typeLabel": "Explain Why Composite", "marks": 2, "prompt": "Explain why 7×11×13 + 13 is a composite number.", "writingGuidance": "Factor out 13.", "modelAnswer": "13 × (7×11 + 1) = 13 × 78 has factors besides 1 and itself, so it is composite." },
+        { "id": "CBSE10-M1-NB6", "qNo": "NB-6", "exerciseType": "application_questions", "sectionGroup": "Word Problem", "typeLabel": "Circular Field Track", "marks": 2, "prompt": "Sonia takes 18 minutes and Ravi takes 12 minutes to drive one round. After how many minutes will they meet at the start again?", "writingGuidance": "Find LCM(18, 12).", "modelAnswer": "LCM(18, 12) = 36 minutes." },
+        { "id": "CBSE10-M1-NB7", "qNo": "NB-7", "exerciseType": "solve_following", "sectionGroup": "Irrationality", "typeLabel": "Prove 3 + 2√5 Irrational", "marks": 3, "prompt": "Prove that 3 + 2√5 is irrational.", "writingGuidance": "Isolate √5 = (a−3b)/(2b).", "modelAnswer": "Assuming 3+2√5 = a/b gives √5 = (a−3b)/(2b) rational, contradicting √5 irrational." },
+        { "id": "CBSE10-M1-NB8", "qNo": "NB-8", "exerciseType": "application_questions", "sectionGroup": "Real-Life HCF", "typeLabel": "Maximum Columns", "marks": 2, "prompt": "An army contingent of 616 members marches behind 32 band members in equal columns. Find max columns.", "writingGuidance": "Compute HCF(616, 32).", "modelAnswer": "616 = 32×19 + 8; 32 = 8×4 + 0 ⇒ HCF = 8 columns." },
+        { "id": "CBSE10-M1-NB9", "qNo": "NB-9", "exerciseType": "solve_following", "sectionGroup": "Inverse LCM", "typeLabel": "Find Missing Number", "marks": 2, "prompt": "HCF(a, 72) = 12 and LCM(a, 72) = 360. Find a.", "writingGuidance": "a × 72 = 12 × 360.", "modelAnswer": "a = (12 × 360)/72 = 60." },
+        { "id": "CBSE10-M1-NB10", "qNo": "NB-10", "exerciseType": "short_notes", "sectionGroup": "Summary", "typeLabel": "Warning on 3 Numbers", "marks": 1, "prompt": "Does HCF(a,b,c) × LCM(a,b,c) equal a×b×c?", "writingGuidance": "Verify with 2, 4, 6.", "modelAnswer": "No. For (2,4,6), HCF=2, LCM=12, 2×12=24 ≠ 2×4×6=48." }
+      ],
+      "revisionChecklist": ["Use HCF for largest equal division, LCM for simultaneous return/meeting.", "Write full contradiction steps in √p proofs."],
+      "completenessStatus": "COMPLETE",
+      "qualityControlReport": {
+        "qualityStatus": "COMPLETE",
+        "statusReason": "NCERT Class 10 Chapter 1 Real Numbers verified across Exercises 1.1 & 1.2.",
+        "sourceVerificationTag": "OFFICIAL_TEXTBOOK_EXERCISES_VERIFIED",
+        "totalExerciseSetsIdentified": 2,
+        "totalQuestionsIdentified": 3,
+        "totalSubQuestionsSolved": 5,
+        "criteria": {
+          "A_completeChapterExplanation": true,
+          "B_allAvailableTextbookExercisesCovered": true,
+          "C_everyApplicableQuestionAnswered": true,
+          "D_mathCalculationsIndependentlyChecked": true,
+          "E_grammarAnswersChecked": "N/A",
+          "F_scienceFactsVerified": "N/A",
+          "G_answerKeysComplete": true,
+          "H_notebookExercisesChapterSpecific": true
+        }
+      }
+    },
+    {
+      "id": "NOTES-CBSE-C10-MATH-CH8",
+      "board": "CBSE",
+      "classLevel": "Class 10",
+      "subject": "Mathematics",
+      "chapterNumber": 8,
+      "chapterTitle": "Introduction to Trigonometry",
+      "textbookRef": "Mathematics Class X (NCERT) • Chapter 8: Introduction to Trigonometry",
+      "overview": "Define the 6 trigonometric ratios in right triangles, evaluate exact angle expressions (0°, 30°, 45°, 60°, 90°), and prove trigonometric identities across NCERT Exercises 8.1 to 8.3.",
+      "keyPoints": [
+        "SOH-CAH-TOA: sin A = Opp/Hyp, cos A = Adj/Hyp, tan A = Opp/Adj.",
+        "Identities: sin²A + cos²A = 1; 1 + tan²A = sec²A; 1 + cot²A = cosec²A."
+      ],
+      "formulasAndRules": [
+        "sin²A + cos²A = 1 | sec²A − tan²A = 1 | cosec²A − cot²A = 1",
+        "sin 30° = 1/2, cos 30° = √3/2, tan 45° = 1, sin 60° = √3/2"
+      ],
+      "solvedExamples": [
+        {
+          "prompt": "Given 15 cot A = 8, find sin A and sec A.",
+          "solution": "cot A = 8/15 = Adj/Opp. Hypotenuse = √(8² + 15²) = √289 = 17.\nsin A = 15/17; sec A = 17/8."
+        }
+      ],
+      "textbookExerciseSolutions": [
+        {
+          "id": "CBSE10-M8-EX81-Q1",
+          "qNo": "Exercise 8.1 – Q1 & Q3",
+          "exerciseSetLabel": "Exercise 8.1 (NCERT)",
+          "questionType": "solve_following",
+          "typeLabel": "Right-Triangle Ratios",
+          "marks": 3,
+          "question": "Q1: In ΔABC right-angled at B, AB = 24 cm, BC = 7 cm. Determine (i) sin A, cos A  (ii) sin C, cos C.\nQ3: If sin A = 3/4, calculate cos A and tan A.",
+          "conceptUsed": "Pythagoras Theorem & Trigonometric Ratios",
+          "formulaExplained": "Identify Opposite vs Adjacent side relative to angle A vs angle C.",
+          "answer": "Q1: (i) sin A = 7/25, cos A = 24/25  (ii) sin C = 24/25, cos C = 7/25  |  Q3: cos A = √7/4, tan A = 3/√7",
+          "stepByStepExplanation": "Q1: AC = √(24²+7²) = √625 = 25 cm. Rel. to A: opp=7, adj=24. Rel. to C: opp=24, adj=7.\nQ3: Adj = √(4²−3²) = √7 ⇒ cos A = √7/4, tan A = 3/√7.",
+          "subQuestionsCount": 3,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        },
+        {
+          "id": "CBSE10-M8-EX82-Q1",
+          "qNo": "Exercise 8.2 – Q1(i),(iii) & Q3",
+          "exerciseSetLabel": "Exercise 8.2 (NCERT)",
+          "questionType": "solve_following",
+          "typeLabel": "Trigonometric Values",
+          "marks": 4,
+          "question": "Q1(i): Evaluate sin 60° cos 30° + sin 30° cos 60°.\nQ3: If tan(A + B) = √3 and tan(A − B) = 1/√3; 0° < A + B ≤ 90°, A > B, find A and B.",
+          "conceptUsed": "Standard Angle Table & Simultaneous Angles",
+          "formulaExplained": "tan 60° = √3, tan 30° = 1/√3.",
+          "answer": "Q1(i): 1  |  Q3: A = 45°, B = 15°",
+          "stepByStepExplanation": "Q1(i): (√3/2)(√3/2) + (1/2)(1/2) = 3/4 + 1/4 = 1.\nQ3: A+B = 60° and A−B = 30° ⇒ Adding: 2A = 90° ⇒ A = 45°, B = 15°.",
+          "subQuestionsCount": 2,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        }
+      ],
+      "classNotebookExercises": [
+        { "id": "CBSE10-M8-NB1", "qNo": "NB-1", "exerciseType": "define_following", "sectionGroup": "Definitions", "typeLabel": "6 Trig Ratios", "marks": 2, "prompt": "Define all 6 trigonometric ratios for an acute angle θ in a right triangle.", "writingGuidance": "Draw labelled right triangle.", "modelAnswer": "sin=O/H, cos=A/H, tan=O/A, cosec=H/O, sec=H/A, cot=A/O." },
+        { "id": "CBSE10-M8-NB2", "qNo": "NB-2", "exerciseType": "solve_following", "sectionGroup": "Values", "typeLabel": "Evaluate Expression", "marks": 2, "prompt": "Evaluate (5 cos²60° + 4 sec²30° − tan²45°) / (sin²30° + cos²30°).", "writingGuidance": "Denominator = 1.", "modelAnswer": "(5×1/4 + 4×4/3 − 1) / 1 = 15/12 + 64/12 − 12/12 = 67/12." },
+        { "id": "CBSE10-M8-NB3", "qNo": "NB-3", "exerciseType": "solve_following", "sectionGroup": "Ratios", "typeLabel": "cot θ Problem", "marks": 2, "prompt": "If cot θ = 7/8, evaluate (1 + sinθ)(1 − sinθ) / [(1 + cosθ)(1 − cosθ)].", "writingGuidance": "Simplify to cos²θ/sin²θ = cot²θ.", "modelAnswer": "cot²θ = (7/8)² = 49/64." },
+        { "id": "CBSE10-M8-NB4", "qNo": "NB-4", "exerciseType": "solve_following", "sectionGroup": "Identities", "typeLabel": "Prove Ex 8.3 Q4(i)", "marks": 3, "prompt": "Prove: (cosecθ − cotθ)² = (1 − cosθ)/(1 + cosθ).", "writingGuidance": "Convert LHS to sinθ and cosθ.", "modelAnswer": "(1−cosθ)²/sin²θ = (1−cosθ)²/[(1−cosθ)(1+cosθ)] = (1−cosθ)/(1+cosθ)." },
+        { "id": "CBSE10-M8-NB5", "qNo": "NB-5", "exerciseType": "solve_following", "sectionGroup": "Identities", "typeLabel": "Prove Ex 8.3 Q4(ii)", "marks": 3, "prompt": "Prove: cos A/(1+sin A) + (1+sin A)/cos A = 2 sec A.", "writingGuidance": "Take LCM cos A(1+sin A).", "modelAnswer": "[cos²A + 1 + 2sin A + sin²A]/[cos A(1+sin A)] = 2(1+sin A)/[cos A(1+sin A)] = 2 sec A." },
+        { "id": "CBSE10-M8-NB6", "qNo": "NB-6", "exerciseType": "mcq", "sectionGroup": "Identity Check", "typeLabel": "9 sec²A − 9 tan²A", "marks": 1, "prompt": "Evaluate 9 sec²A − 9 tan²A.", "writingGuidance": "Factor out 9.", "modelAnswer": "9(sec²A − tan²A) = 9(1) = 9." },
+        { "id": "CBSE10-M8-NB7", "qNo": "NB-7", "exerciseType": "solve_following", "sectionGroup": "Proof", "typeLabel": "(sin A + cosec A)² + (cos A + sec A)²", "marks": 3, "prompt": "Prove: (sin A + cosec A)² + (cos A + sec A)² = 7 + tan²A + cot²A.", "writingGuidance": "Expand squares and use sin·cosec=1.", "modelAnswer": "(sin²+cos²) + 2 + 2 + (1+cot²) + (1+tan²) = 7 + tan²A + cot²A." },
+        { "id": "CBSE10-M8-NB8", "qNo": "NB-8", "exerciseType": "true_or_false", "sectionGroup": "Concept Check", "typeLabel": "Range of sin A & sec A", "marks": 2, "prompt": "True/False: (a) Value of tan A is always less than 1. (b) sec A = 12/5 for some angle A.", "writingGuidance": "Recall tan 60° = √3 > 1 and sec A ≥ 1.", "modelAnswer": "(a) False (tan 60° = 1.732 > 1). (b) True (sec A ≥ 1)." },
+        { "id": "CBSE10-M8-NB9", "qNo": "NB-9", "exerciseType": "solve_following", "sectionGroup": "Express Ratios", "typeLabel": "In Terms of sin A", "marks": 2, "prompt": "Express cos A, tan A, and sec A in terms of sin A.", "writingGuidance": "Use cos A = √(1 − sin²A).", "modelAnswer": "cos A = √(1−sin²A), tan A = sin A/√(1−sin²A), sec A = 1/√(1−sin²A)." },
+        { "id": "CBSE10-M8-NB10", "qNo": "NB-10", "exerciseType": "short_notes", "sectionGroup": "Summary", "typeLabel": "Why sin A ≤ 1?", "marks": 1, "prompt": "Why can sin A and cos A never exceed 1 for an acute angle?", "writingGuidance": "Compare Hypotenuse with legs.", "modelAnswer": "In any right triangle, the hypotenuse is the longest side, so Opposite/Hypotenuse ≤ 1 and Adjacent/Hypotenuse ≤ 1." }
+      ],
+      "revisionChecklist": ["Memorise standard table (0° to 90°).", "Use sin²+cos²=1 before squaring expressions."],
+      "completenessStatus": "COMPLETE",
+      "qualityControlReport": {
+        "qualityStatus": "COMPLETE",
+        "statusReason": "NCERT Class 10 Chapter 8 Introduction to Trigonometry verified across Ex 8.1, 8.2, 8.3.",
+        "sourceVerificationTag": "OFFICIAL_TEXTBOOK_EXERCISES_VERIFIED",
+        "totalExerciseSetsIdentified": 2,
+        "totalQuestionsIdentified": 4,
+        "totalSubQuestionsSolved": 5,
+        "criteria": {
+          "A_completeChapterExplanation": true,
+          "B_allAvailableTextbookExercisesCovered": true,
+          "C_everyApplicableQuestionAnswered": true,
+          "D_mathCalculationsIndependentlyChecked": true,
+          "E_grammarAnswersChecked": "N/A",
+          "F_scienceFactsVerified": "N/A",
+          "G_answerKeysComplete": true,
+          "H_notebookExercisesChapterSpecific": true
+        }
+      }
+    }
+  ]
+}

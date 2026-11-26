@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   Crown,
   AlertTriangle,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { UniversalExamShell, ExamPaletteItem } from './exam/UniversalExamShell';
 import {
@@ -131,6 +132,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   );
   const [collectionFilter, setCollectionFilter] = useState<'all' | WorksheetCollectionType>('all');
   const [selectedChapter, setSelectedChapter] = useState<string>('ALL');
+  const [worksheetSearchQuery, setWorksheetSearchQuery] = useState<string>('');
   const [wsPage, setWsPage] = useState<number>(1);
   const [showAllInGrid, setShowAllInGrid] = useState<boolean>(false);
   const [activeWorksheet, setActiveWorksheet] = useState<OnlineWorksheet | null>(null);
@@ -144,7 +146,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   useEffect(() => {
     setWsPage(1);
     setShowAllInGrid(false);
-  }, [selectedBoard, selectedMedium, selectedClass, selectedSubject, collectionFilter, selectedChapter]);
+  }, [selectedBoard, selectedMedium, selectedClass, selectedSubject, collectionFilter, selectedChapter, worksheetSearchQuery]);
 
   const selectedClassInfo = useMemo(
     () => getBoardClassSubscriptionInfo(currentStudent, selectedBoard, selectedClass),
@@ -274,9 +276,16 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   }, [selectedChapter, availableChapters]);
 
   const worksheetsList = useMemo(() => {
-    if (effectiveChapter === 'ALL') return collectionScopedWorksheets;
-    return collectionScopedWorksheets.filter(ws => ws.chapterName === effectiveChapter);
-  }, [collectionScopedWorksheets, effectiveChapter]);
+    const chapterFiltered =
+      effectiveChapter === 'ALL'
+        ? collectionScopedWorksheets
+        : collectionScopedWorksheets.filter(ws => ws.chapterName === effectiveChapter);
+    const q = worksheetSearchQuery.trim().toLowerCase();
+    if (!q) return chapterFiltered;
+    return chapterFiltered.filter(ws =>
+      `${ws.title} ${ws.chapterName || ''} ${ws.subject} ${ws.topic || ''}`.toLowerCase().includes(q)
+    );
+  }, [collectionScopedWorksheets, effectiveChapter, worksheetSearchQuery]);
 
   const WS_PAGE_SIZE = 25;
   const totalWsPages = Math.max(1, Math.ceil(worksheetsList.length / WS_PAGE_SIZE));
@@ -1529,6 +1538,26 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={worksheetSearchQuery}
+              onChange={(e) => setWorksheetSearchQuery(e.target.value)}
+              placeholder={`Search worksheets inside ${selectedClass} by title, chapter, or topic...`}
+              className="w-full pl-10 pr-20 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
+            />
+            {worksheetSearchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => setWorksheetSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-bold cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

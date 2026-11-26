@@ -2,6 +2,7 @@ import React from 'react';
 import { ClassLevel, EducationBoard, SubjectName } from '../types';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
+import { FiveZonesHubStrip } from './zones/FiveZonesHubStrip';
 import { PWAInstallButton } from './PWAInstallButton';
 
 export type HomeScrollTarget =
@@ -94,6 +95,12 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
           }}
         />
       </div>
+
+      {/* FIVE MAJOR EDUCATIONAL ZONES HUB */}
+      <FiveZonesHubStrip
+        onNavigateZone={(tab) => onNavigateZone(tab)}
+        onOpenTeacherPortal={() => onOpenPanel('teacher', 'login')}
+      />
 
       {/* DIRECT PWA MOBILE APP INSTALL BANNER */}
       <PWAInstallButton variant="banner" />

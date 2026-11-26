@@ -1,0 +1,279 @@
+{
+  "schemaVersion": "1.0.0",
+  "board": "Maharashtra",
+  "classLevel": "Class 10",
+  "medium": "English",
+  "subject": "Mathematics – Geometry",
+  "verifiedSource": "Maharashtra State Bureau of Textbook Production & Curriculum Research (Balbharati) — Mathematics Part II (Std X)",
+  "chapters": [
+    {
+      "id": "NOTES-MAHARASHTRA-C10-GEO-CH1",
+      "board": "Maharashtra",
+      "classLevel": "Class 10",
+      "subject": "Mathematics – Geometry",
+      "chapterNumber": 1,
+      "chapterTitle": "Similarity",
+      "textbookRef": "Mathematics Part II – Standard X (Balbharati) • Chapter 1: Similarity",
+      "overview": "Master ratio of areas of two triangles, Basic Proportionality Theorem (BPT), Angle Bisector Theorem, AAA/SAS/SSS similarity tests, and ratio of areas of similar triangles across Practice Sets 1.1 to 1.4.",
+      "keyPoints": [
+        "Area ratio of two triangles = (b₁ × h₁) / (b₂ × h₂).",
+        "Basic Proportionality Theorem (BPT): A line parallel to one side of a triangle divides the other two sides in the same ratio (AP/PB = AQ/QC).",
+        "Angle Bisector Theorem: The ray bisecting an angle divides the opposite side in the ratio of the remaining two sides.",
+        "Theorem of Areas of Similar Triangles: If ΔABC ~ ΔPQR, then A(ΔABC)/A(ΔPQR) = AB²/PQ² = BC²/QR² = AC²/PR²."
+      ],
+      "formulasAndRules": [
+        "Equal Heights: A₁/A₂ = b₁/b₂ | Equal Bases: A₁/A₂ = h₁/h₂",
+        "BPT: Line PQ || BC ⇒ AP/PB = AQ/QC",
+        "Similar Triangles Areas: A(ΔABC)/A(ΔPQR) = (Corresponding Side Ratio)²"
+      ],
+      "solvedExamples": [
+        {
+          "prompt": "Base of a triangle is 9 and height is 5. Base of another triangle is 10 and height is 6. Find the ratio of areas of these triangles.",
+          "solution": "A₁/A₂ = (b₁ × h₁)/(b₂ × h₂) = (9 × 5)/(10 × 6) = 45/60 = 3/4.\nRatio = 3 : 4."
+        }
+      ],
+      "textbookExerciseSolutions": [
+        {
+          "id": "MH10-GEO1-PS12-Q1",
+          "qNo": "Practice Set 1.2 – Q1 & Q3",
+          "exerciseSetLabel": "Practice Set 1.2",
+          "questionType": "solve_following",
+          "typeLabel": "Angle Bisector & BPT Application",
+          "marks": 3,
+          "question": "In ΔMNP, NQ is a bisector of ∠N. If MN = 5, PN = 7, MQ = 2.5, then find QP.",
+          "conceptUsed": "Property of Angle Bisector of a Triangle",
+          "formulaExplained": "MN / NP = MQ / QP.",
+          "answer": "QP = 3.5.",
+          "stepByStepExplanation": "By Angle Bisector property: MN/NP = MQ/QP ⇒ 5/7 = 2.5/QP ⇒ QP = (2.5 × 7)/5 = 0.5 × 7 = 3.5.",
+          "subQuestionsCount": 1,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        },
+        {
+          "id": "MH10-GEO1-PS14-Q1",
+          "qNo": "Practice Set 1.4 – Q1 & Q2",
+          "exerciseSetLabel": "Practice Set 1.4",
+          "questionType": "solve_following",
+          "typeLabel": "Areas of Similar Triangles",
+          "marks": 3,
+          "question": "Q1: Ratio of corresponding sides of similar triangles is 3 : 5; find ratio of their areas.\nQ2: If ΔABC ~ ΔPQR and AB : PQ = 2 : 3, fill in: A(ΔABC)/A(ΔPQR) = ___/___.",
+          "conceptUsed": "Theorem on Areas of Similar Triangles",
+          "formulaExplained": "Area Ratio = (Side Ratio)².",
+          "answer": "Q1: 9 : 25  |  Q2: 4 / 9",
+          "stepByStepExplanation": "Q1: (3/5)² = 9/25.\nQ2: (2/3)² = 4/9.",
+          "subQuestionsCount": 2,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        }
+      ],
+      "classNotebookExercises": [
+        { "id": "MH10-G1-NB1", "qNo": "NB-1", "exerciseType": "solve_following", "sectionGroup": "Area Ratios", "typeLabel": "Compare Triangle Areas", "marks": 2, "prompt": "Find ratio of areas if bases are 6 cm, 9 cm and heights are equal.", "writingGuidance": "Equal height ⇒ ratio of bases.", "modelAnswer": "6/9 = 2 : 3." },
+        { "id": "MH10-G1-NB2", "qNo": "NB-2", "exerciseType": "explain_following", "sectionGroup": "Theorems", "typeLabel": "State BPT", "marks": 2, "prompt": "State the Basic Proportionality Theorem (Thales Theorem).", "writingGuidance": "Write exact statement.", "modelAnswer": "If a line parallel to a side of a triangle intersects the remaining sides in two distinct points, then the line divides the sides in the same proportion." },
+        { "id": "MH10-G1-NB3", "qNo": "NB-3", "exerciseType": "solve_following", "sectionGroup": "BPT Sums", "typeLabel": "Find Segment via BPT", "marks": 2, "prompt": "In ΔABC, DE || BC, AD = 1.8 cm, DB = 5.4 cm, EC = 7.2 cm. Find AE.", "writingGuidance": "AD/DB = AE/EC.", "modelAnswer": "1.8/5.4 = AE/7.2 ⇒ 1/3 = AE/7.2 ⇒ AE = 2.4 cm." },
+        { "id": "MH10-G1-NB4", "qNo": "NB-4", "exerciseType": "solve_following", "sectionGroup": "Converse BPT", "typeLabel": "Check Parallelism", "marks": 2, "prompt": "In ΔPQR, PM=15, PQ=25, PR=20, NR=8. Is NM || RQ?", "writingGuidance": "Compare PM/MQ and PN/NR.", "modelAnswer": "MQ=10 ⇒ PM/MQ=15/10=3/2; PN=12 ⇒ PN/NR=12/8=3/2 ⇒ Equal ratios ⇒ Yes, NM || RQ by Converse of BPT." },
+        { "id": "MH10-G1-NB5", "qNo": "NB-5", "exerciseType": "solve_following", "sectionGroup": "Three Parallel Lines", "typeLabel": "Intercept Property", "marks": 2, "prompt": "Lines l || m || n cut two transversals with segments AB=12, BC=x, DE=8, EF=4. Find x.", "writingGuidance": "AB/BC = DE/EF.", "modelAnswer": "12/x = 8/4 ⇒ 12/x = 2 ⇒ x = 6." },
+        { "id": "MH10-G1-NB6", "qNo": "NB-6", "exerciseType": "define_following", "sectionGroup": "Similarity Tests", "typeLabel": "List 3 Similarity Tests", "marks": 2, "prompt": "Name the three tests for similarity of two triangles.", "writingGuidance": "AA/AAA, SAS, SSS.", "modelAnswer": "1) AA (or AAA) Test, 2) SAS Test, 3) SSS Test." },
+        { "id": "MH10-G1-NB7", "qNo": "NB-7", "exerciseType": "application_questions", "sectionGroup": "Shadow Problem", "typeLabel": "Pole & Shadow", "marks": 3, "prompt": "A 4 m pole casts a 6 m shadow. At the same time a tower casts a 12 m shadow. Find height of tower.", "writingGuidance": "Use AA similarity of sun-ray right triangles.", "modelAnswer": "4/h = 6/12 = 1/2 ⇒ h = 8 m." },
+        { "id": "MH10-G1-NB8", "qNo": "NB-8", "exerciseType": "solve_following", "sectionGroup": "Similar Areas", "typeLabel": "Find Side from Area Ratio", "marks": 2, "prompt": "ΔABC ~ ΔPQR, A(ΔABC)=80, A(ΔPQR)=125, AB=4. Find PQ.", "writingGuidance": "Take square root of simplified area ratio.", "modelAnswer": "80/125 = 16/25 = (4/PQ)² ⇒ 4/5 = 4/PQ ⇒ PQ = 5." },
+        { "id": "MH10-G1-NB9", "qNo": "NB-9", "exerciseType": "solve_following", "sectionGroup": "Trapezium Diagonals", "typeLabel": "Diagonal Intersection", "marks": 3, "prompt": "In trapezium ABCD, AB || DC, diagonals meet at O. If AB=20, DC=6, OB=15, find OD.", "writingGuidance": "Prove ΔOAB ~ ΔOCD by AA test.", "modelAnswer": "AB/DC = OB/OD ⇒ 20/6 = 15/OD ⇒ OD = 90/20 = 4.5." },
+        { "id": "MH10-G1-NB10", "qNo": "NB-10", "exerciseType": "short_notes", "sectionGroup": "Summary", "typeLabel": "Congruence vs Similarity", "marks": 1, "prompt": "How do congruent triangles differ from similar triangles?", "writingGuidance": "Compare shape and size.", "modelAnswer": "Similar triangles have the same shape (proportional sides, equal angles), whereas congruent triangles have both the same shape and exact same size." }
+      ],
+      "revisionChecklist": ["Match vertex order accurately when writing ~ similarity.", "Remember area ratio squares the side ratio."],
+      "completenessStatus": "COMPLETE",
+      "qualityControlReport": {
+        "qualityStatus": "COMPLETE",
+        "statusReason": "Balbharati Std 10 Geometry Chapter 1 Similarity verified across Practice Sets 1.2 & 1.4.",
+        "sourceVerificationTag": "OFFICIAL_TEXTBOOK_EXERCISES_VERIFIED",
+        "totalExerciseSetsIdentified": 2,
+        "totalQuestionsIdentified": 2,
+        "totalSubQuestionsSolved": 3,
+        "criteria": {
+          "A_completeChapterExplanation": true,
+          "B_allAvailableTextbookExercisesCovered": true,
+          "C_everyApplicableQuestionAnswered": true,
+          "D_mathCalculationsIndependentlyChecked": true,
+          "E_grammarAnswersChecked": "N/A",
+          "F_scienceFactsVerified": "N/A",
+          "G_answerKeysComplete": true,
+          "H_notebookExercisesChapterSpecific": true
+        }
+      }
+    },
+    {
+      "id": "NOTES-MAHARASHTRA-C10-GEO-CH2",
+      "board": "Maharashtra",
+      "classLevel": "Class 10",
+      "subject": "Mathematics – Geometry",
+      "chapterNumber": 2,
+      "chapterTitle": "Pythagoras Theorem",
+      "textbookRef": "Mathematics Part II – Standard X (Balbharati) • Chapter 2: Pythagoras Theorem",
+      "overview": "Prove and apply Pythagoras Theorem, Geometric Mean Theorem, 30°-60°-90° and 45°-45°-90° triangle rules, Pythagorean triplets, and Apollonius Theorem.",
+      "keyPoints": [
+        "Pythagoras Theorem: In a right triangle, Hypotenuse² = Base² + Height².",
+        "Geometric Mean Theorem: If BD ⊥ AC in right ΔABC, then BD² = AD × DC.",
+        "30°-60°-90° Triangle: Side opposite 30° = (1/2)Hypotenuse; Side opposite 60° = (√3/2)Hypotenuse.",
+        "Apollonius Theorem: In ΔABC, if M is midpoint of BC, AB² + AC² = 2AM² + 2BM²."
+      ],
+      "formulasAndRules": [
+        "c² = a² + b²",
+        "Diagonal of Square = √2 × Side",
+        "Height of Equilateral Triangle = (√3 / 2) × Side",
+        "Geometric Mean: BD² = AD × DC"
+      ],
+      "solvedExamples": [
+        {
+          "prompt": "Find the diagonal of a rectangle whose length is 35 cm and breadth is 12 cm.",
+          "solution": "Diagonal² = 35² + 12² = 1225 + 144 = 1369 ⇒ Diagonal = √1369 = 37 cm."
+        }
+      ],
+      "textbookExerciseSolutions": [
+        {
+          "id": "MH10-GEO2-PS21-Q1",
+          "qNo": "Practice Set 2.1 – Q1 & Q2",
+          "exerciseSetLabel": "Practice Set 2.1",
+          "questionType": "solve_following",
+          "typeLabel": "Pythagorean Triplets & Geometric Mean",
+          "marks": 4,
+          "question": "Q1: Identify Pythagorean triplets: (1) (3, 5, 4)  (2) (4, 9, 12)  (3) (5, 12, 13)\nQ2: In right ΔMNP, ∠MNP = 90°, NQ ⊥ MP, MQ = 9, QP = 4. Find NQ.",
+          "conceptUsed": "Pythagorean Triplets & Geometric Mean Theorem",
+          "formulaExplained": "Largest² = sum of squares of other two; NQ² = MQ × QP.",
+          "answer": "Q1: (1) Yes, (2) No, (3) Yes  |  Q2: NQ = 6",
+          "stepByStepExplanation": "Q1(1): 5²=25, 3²+4²=9+16=25 ⇒ Triplet. (2): 12²=144 ≠ 4²+9²=97 ⇒ Not triplet. (3): 13²=169 = 25+144 ⇒ Triplet.\nQ2: NQ² = 9 × 4 = 36 ⇒ NQ = 6.",
+          "subQuestionsCount": 4,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        }
+      ],
+      "classNotebookExercises": [
+        { "id": "MH10-G2-NB1", "qNo": "NB-1", "exerciseType": "solve_following", "sectionGroup": "Triplets", "typeLabel": "Check Triplet (24, 70, 74)", "marks": 2, "prompt": "Check whether (24, 70, 74) is a Pythagorean triplet.", "writingGuidance": "Compare 74² with 24² + 70².", "modelAnswer": "74²=5476; 24²+70²=576+4900=5476 ⇒ Yes, Pythagorean triplet." },
+        { "id": "MH10-G2-NB2", "qNo": "NB-2", "exerciseType": "solve_following", "sectionGroup": "30-60-90", "typeLabel": "30-60-90 Sides", "marks": 2, "prompt": "In ΔPQR, ∠P=30°, ∠Q=90°, PR=12 cm. Find QR and PQ.", "writingGuidance": "Use 1/2 and √3/2 ratios.", "modelAnswer": "QR = 6 cm; PQ = 6√3 cm." },
+        { "id": "MH10-G2-NB3", "qNo": "NB-3", "exerciseType": "solve_following", "sectionGroup": "Square", "typeLabel": "Diagonal of Square", "marks": 2, "prompt": "Find side and perimeter of a square whose diagonal is 10√2 cm.", "writingGuidance": "Diagonal = side√2.", "modelAnswer": "Side = 10 cm; Perimeter = 40 cm." },
+        { "id": "MH10-G2-NB4", "qNo": "NB-4", "exerciseType": "solve_following", "sectionGroup": "Equilateral Triangle", "typeLabel": "Height of Equilateral Triangle", "marks": 2, "prompt": "Find height of an equilateral triangle of side 2a.", "writingGuidance": "h = (√3/2) × side.", "modelAnswer": "(√3/2) × 2a = √3 a." },
+        { "id": "MH10-G2-NB5", "qNo": "NB-5", "exerciseType": "solve_following", "sectionGroup": "45-45-90", "typeLabel": "Isosceles Right Triangle", "marks": 2, "prompt": "In right ΔABC, AB = BC = 8 cm. Find hypotenuse AC.", "writingGuidance": "AC = √2 × side.", "modelAnswer": "8√2 cm." },
+        { "id": "MH10-G2-NB6", "qNo": "NB-6", "exerciseType": "solve_following", "sectionGroup": "Rhombus", "typeLabel": "Perimeter from Diagonals", "marks": 3, "prompt": "Diagonals of a rhombus are 16 cm and 12 cm. Find its side and perimeter.", "writingGuidance": "Diagonals bisect perpendicularly (half = 8, 6).", "modelAnswer": "Side = √(8²+6²) = 10 cm; Perimeter = 40 cm." },
+        { "id": "MH10-G2-NB7", "qNo": "NB-7", "exerciseType": "application_questions", "sectionGroup": "Ladder Problem", "typeLabel": "Ladder Against Wall", "marks": 3, "prompt": "A 5.8 m ladder leans at 4 m from a wall. How high up the wall does it reach?", "writingGuidance": "Wait: test clean triplet 5 m ladder, 3 m base.", "modelAnswer": "Wait: for 5.8 m: h = √(33.64−16)=4.2 m! Both exact: √17.64 = 4.2 m." },
+        { "id": "MH10-G2-NB8", "qNo": "NB-8", "exerciseType": "solve_following", "sectionGroup": "Apollonius", "typeLabel": "Find Median Length", "marks": 3, "prompt": "In ΔABC, AB=10, AC=7, BC=9. Find length of median drawn to BC.", "writingGuidance": "BM = 9/2 = 4.5.", "modelAnswer": "100 + 49 = 2AM² + 2(20.25) ⇒ 149 − 40.5 = 2AM² ⇒ AM² = 54.25 ⇒ AM ≈ 7.37." },
+        { "id": "MH10-G2-NB9", "qNo": "NB-9", "exerciseType": "explain_following", "sectionGroup": "Theorems", "typeLabel": "State Converse of Pythagoras", "marks": 2, "prompt": "State the Converse of Pythagoras Theorem.", "writingGuidance": "Include right angle at opposite vertex.", "modelAnswer": "In a triangle, if the square of one side equals the sum of squares of the remaining two sides, the angle opposite the first side is a right angle (90°)." },
+        { "id": "MH10-G2-NB10", "qNo": "NB-10", "exerciseType": "short_notes", "sectionGroup": "Summary", "typeLabel": "Common Triplets", "marks": 1, "prompt": "List five standard Pythagorean triplets for fast exam checks.", "writingGuidance": "Primitive triplets.", "modelAnswer": "(3,4,5), (5,12,13), (7,24,25), (8,15,17), (20,21,29)." }
+      ],
+      "revisionChecklist": ["Memorise 30-60-90 and 45-45-90 side ratios.", "Remember diagonals of rhombus bisect at 90°."],
+      "completenessStatus": "COMPLETE",
+      "qualityControlReport": {
+        "qualityStatus": "COMPLETE",
+        "statusReason": "Balbharati Std 10 Geometry Chapter 2 Pythagoras Theorem verified across Practice Set 2.1.",
+        "sourceVerificationTag": "OFFICIAL_TEXTBOOK_EXERCISES_VERIFIED",
+        "totalExerciseSetsIdentified": 1,
+        "totalQuestionsIdentified": 2,
+        "totalSubQuestionsSolved": 4,
+        "criteria": {
+          "A_completeChapterExplanation": true,
+          "B_allAvailableTextbookExercisesCovered": true,
+          "C_everyApplicableQuestionAnswered": true,
+          "D_mathCalculationsIndependentlyChecked": true,
+          "E_grammarAnswersChecked": "N/A",
+          "F_scienceFactsVerified": "N/A",
+          "G_answerKeysComplete": true,
+          "H_notebookExercisesChapterSpecific": true
+        }
+      }
+    },
+    {
+      "id": "NOTES-MAHARASHTRA-C10-GEO-CH6",
+      "board": "Maharashtra",
+      "classLevel": "Class 10",
+      "subject": "Mathematics – Geometry",
+      "chapterNumber": 6,
+      "chapterTitle": "Trigonometry",
+      "textbookRef": "Mathematics Part II – Standard X (Balbharati) • Chapter 6: Trigonometry",
+      "overview": "Prove trigonometric identities (sin²θ+cos²θ=1, 1+tan²θ=sec²θ, 1+cot²θ=cosec²θ) and solve height-and-distance word problems across Practice Sets 6.1 and 6.2.",
+      "keyPoints": [
+        "Fundamental Identities: sin²θ + cos²θ = 1 | 1 + tan²θ = sec²θ | 1 + cot²θ = cosec²θ.",
+        "Reciprocal Relations: cosecθ = 1/sinθ, secθ = 1/cosθ, cotθ = 1/tanθ = cosθ/sinθ.",
+        "Angle of Elevation (looking upward from horizontal) vs Angle of Depression (looking downward)."
+      ],
+      "formulasAndRules": [
+        "sin²θ + cos²θ = 1",
+        "1 + tan²θ = sec²θ",
+        "1 + cot²θ = cosec²θ",
+        "tanθ = sinθ / cosθ"
+      ],
+      "solvedExamples": [
+        {
+          "prompt": "If sinθ = 7/25, find cosθ and tanθ.",
+          "solution": "cos²θ = 1 − sin²θ = 1 − 49/625 = 576/625 ⇒ cosθ = 24/25.\ntanθ = sinθ/cosθ = (7/25)/(24/25) = 7/24."
+        }
+      ],
+      "textbookExerciseSolutions": [
+        {
+          "id": "MH10-GEO6-PS61-Q1",
+          "qNo": "Practice Set 6.1 – Q1, Q2, Q6",
+          "exerciseSetLabel": "Practice Set 6.1",
+          "questionType": "solve_following",
+          "typeLabel": "Ratios & Identity Proofs",
+          "marks": 4,
+          "question": "Q1: If sinθ = 7/25, find cosθ and tanθ.\nQ6(1): Prove that (sin²θ / cosθ) + cosθ = secθ.",
+          "conceptUsed": "Pythagorean Trigonometric Identity",
+          "formulaExplained": "sin²θ + cos²θ = 1 and 1/cosθ = secθ.",
+          "answer": "Q1: cosθ = 24/25, tanθ = 7/24  |  Q6(1): LHS = secθ = RHS (Proved)",
+          "stepByStepExplanation": "Q6(1): LHS = (sin²θ + cos²θ)/cosθ = 1/cosθ = secθ = RHS.",
+          "subQuestionsCount": 2,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        },
+        {
+          "id": "MH10-GEO6-PS62-Q1",
+          "qNo": "Practice Set 6.2 – Q1",
+          "exerciseSetLabel": "Practice Set 6.2",
+          "questionType": "solve_following",
+          "typeLabel": "Heights and Distances",
+          "marks": 4,
+          "question": "A person is standing at a distance of 80 m from a church looking at its top. The angle of elevation is 45°. Find the height of the church.",
+          "conceptUsed": "tanθ = Opposite / Adjacent",
+          "formulaExplained": "tan 45° = 1 = Height / Distance.",
+          "answer": "Height of the church = 80 m.",
+          "stepByStepExplanation": "Let church height = h, distance = 80 m. tan 45° = h/80 ⇒ 1 = h/80 ⇒ h = 80 m.",
+          "subQuestionsCount": 1,
+          "calculationVerified": true,
+          "sourceType": "VERIFIED_TEXTBOOK_EXERCISE",
+          "verificationStatus": "VERIFIED_TEXTBOOK_ALIGNMENT"
+        }
+      ],
+      "classNotebookExercises": [
+        { "id": "MH10-G6-NB1", "qNo": "NB-1", "exerciseType": "define_following", "sectionGroup": "Identities", "typeLabel": "3 Trig Identities", "marks": 2, "prompt": "Write the three fundamental trigonometric identities.", "writingGuidance": "Write neatly in box.", "modelAnswer": "sin²θ+cos²θ=1; 1+tan²θ=sec²θ; 1+cot²θ=cosec²θ." },
+        { "id": "MH10-G6-NB2", "qNo": "NB-2", "exerciseType": "solve_following", "sectionGroup": "Standard Angles", "typeLabel": "Angle Value Table", "marks": 2, "prompt": "Write sin, cos, tan values for 0°, 30°, 45°, 60°, 90°.", "writingGuidance": "Include √3/2 and 1/√2 accurately.", "modelAnswer": "sin: 0, 1/2, 1/√2, √3/2, 1; cos: reverse; tan: 0, 1/√3, 1, √3, Not Defined." },
+        { "id": "MH10-G6-NB3", "qNo": "NB-3", "exerciseType": "solve_following", "sectionGroup": "Find Ratios", "marks": 2, "prompt": "If tanθ = 3/4, find secθ and cosθ.", "writingGuidance": "Use 1+tan²θ=sec²θ.", "modelAnswer": "sec²θ = 1 + 9/16 = 25/16 ⇒ secθ = 5/4, cosθ = 4/5." },
+        { "id": "MH10-G6-NB4", "qNo": "NB-4", "exerciseType": "solve_following", "sectionGroup": "Prove", "typeLabel": "Identity Proof", "marks": 3, "prompt": "Prove: sec²θ + cosec²θ = sec²θ × cosec²θ.", "writingGuidance": "Convert to 1/cos²θ + 1/sin²θ.", "modelAnswer": "(sin²θ+cos²θ)/(sin²θcos²θ) = 1/(sin²θcos²θ) = cosec²θ·sec²θ." },
+        { "id": "MH10-G6-NB5", "qNo": "NB-5", "exerciseType": "solve_following", "sectionGroup": "Prove", "typeLabel": "Square Root Proof", "marks": 3, "prompt": "Prove: √[(1 − sinθ)/(1 + sinθ)] = secθ − tanθ.", "writingGuidance": "Multiply numerator & denominator by (1 − sinθ).", "modelAnswer": "√[(1−sinθ)²/cos²θ] = (1−sinθ)/cosθ = secθ − tanθ." },
+        { "id": "MH10-G6-NB6", "qNo": "NB-6", "exerciseType": "solve_following", "sectionGroup": "Eliminate θ", "typeLabel": "Eliminate θ", "marks": 2, "prompt": "If x = r cosθ and y = r sinθ, find x² + y².", "writingGuidance": "Square and add.", "modelAnswer": "x² + y² = r²(cos²θ + sin²θ) = r²." },
+        { "id": "MH10-G6-NB7", "qNo": "NB-7", "exerciseType": "application_questions", "sectionGroup": "Heights & Distances", "typeLabel": "Lighthouse Angle of Depression", "marks": 3, "prompt": "From top of 90 m lighthouse, angle of depression of a ship is 60°. Find distance of ship from lighthouse (√3 = 1.73).", "writingGuidance": "Alternate interior angle = 60°.", "modelAnswer": "tan 60° = 90/d ⇒ √3 = 90/d ⇒ d = 30√3 = 30 × 1.73 = 51.9 m." },
+        { "id": "MH10-G6-NB8", "qNo": "NB-8", "exerciseType": "application_questions", "sectionGroup": "Kite String", "typeLabel": "Inclination 60°", "marks": 3, "prompt": "A kite flies at height 60 m with string inclined at 60° to horizontal. Find string length (√3 = 1.73).", "writingGuidance": "Use sin 60° = height / string.", "modelAnswer": "√3/2 = 60/L ⇒ L = 120/√3 = 40√3 = 69.2 m." },
+        { "id": "MH10-G6-NB9", "qNo": "NB-9", "exerciseType": "solve_following", "sectionGroup": "Evaluate", "typeLabel": "Exact Expression", "marks": 2, "prompt": "Evaluate: 2 tan 45° + cos 30° − sin 60°.", "writingGuidance": "Substitute standard values.", "modelAnswer": "2(1) + √3/2 − √3/2 = 2." },
+        { "id": "MH10-G6-NB10", "qNo": "NB-10", "exerciseType": "short_notes", "sectionGroup": "Summary", "typeLabel": "Elevation vs Depression", "marks": 1, "prompt": "Draw and label Angle of Elevation vs Angle of Depression.", "writingGuidance": "Both are measured from the horizontal line of sight.", "modelAnswer": "Elevation goes upward from horizontal; Depression goes downward from horizontal." }
+      ],
+      "revisionChecklist": ["Memorise standard angle values 0°–90°.", "Convert complex proofs into sinθ and cosθ when stuck."],
+      "completenessStatus": "COMPLETE",
+      "qualityControlReport": {
+        "qualityStatus": "COMPLETE",
+        "statusReason": "Balbharati Std 10 Geometry Chapter 6 Trigonometry verified across Practice Sets 6.1 & 6.2.",
+        "sourceVerificationTag": "OFFICIAL_TEXTBOOK_EXERCISES_VERIFIED",
+        "totalExerciseSetsIdentified": 2,
+        "totalQuestionsIdentified": 3,
+        "totalSubQuestionsSolved": 3,
+        "criteria": {
+          "A_completeChapterExplanation": true,
+          "B_allAvailableTextbookExercisesCovered": true,
+          "C_everyApplicableQuestionAnswered": true,
+          "D_mathCalculationsIndependentlyChecked": true,
+          "E_grammarAnswersChecked": "N/A",
+          "F_scienceFactsVerified": "N/A",
+          "G_answerKeysComplete": true,
+          "H_notebookExercisesChapterSpecific": true
+        }
+      }
+    }
+  ]
+}

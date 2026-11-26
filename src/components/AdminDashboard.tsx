@@ -28,10 +28,51 @@ import {
   X,
   CalendarDays,
   Megaphone,
+  ArrowLeft,
+  ChevronRight,
+  Home,
+  Activity,
+  GraduationCap,
+  Building2,
+  HeartHandshake,
+  UserPlus,
+  Grid,
+  CheckCircle2,
+  Sparkles,
+  Library,
+  FileText,
+  PlayCircle,
+  BookMarked,
+  Trophy,
+  Award,
+  Target,
+  Compass,
+  Wrench,
+  ClipboardCheck,
+  CheckSquare,
+  Crown,
+  Flag,
+  Bell,
+  Database,
 } from 'lucide-react';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
+import { ALL_10_CLASSES, getSubjectsForClass } from '../data/classCurriculumConfig';
+import { getAllBoardTextbookSummary, getOfficialTextbooksForBoardClass } from '../data/studyLibrary/textbookLibraryData';
+import { getAllWorksheetsForClass } from '../data/worksheetsData';
+import { ALL_130_TEACHER_TOOLS } from '../data/teacherTools/teacherToolsCatalog';
 import { ALL_ADMIN_CLASSES, ALL_ADMIN_SUBJECTS } from '../utils/adminAnalytics';
 import { ALL_BOARDS, getBoardShortLabel } from '../utils/subscriptionAccess';
+import {
+  ADMIN_MAIN_CATEGORIES,
+  getAdminCategoryMeta,
+  getAdminSubsectionMeta,
+  getSubsectionsForCategory,
+  type AdminCategoryId,
+  type AdminJumpTarget,
+  type AdminSubsectionId,
+  type CompletenessBadge,
+} from './admin/adminCatalogConfig';
+import { AdminGlobalSearchBar } from './admin/AdminGlobalSearchBar';
 
 const AdminQuestionsSection = lazyWithRetry(() =>
   import('./admin/AdminQuestionsSection').then((m) => ({ default: m.AdminQuestionsSection }))
@@ -106,37 +147,103 @@ const AdminAdditionalCurriculumSection = lazyWithRetry(() =>
     default: m.AdminAdditionalCurriculumSection,
   }))
 );
+const AdminFiveZonesCmsSection = lazyWithRetry(() =>
+  import('./admin/AdminFiveZonesCmsSection').then((m) => ({
+    default: m.AdminFiveZonesCmsSection,
+  }))
+);
+const AdminDataCompletenessDashboard = lazyWithRetry(() =>
+  import('./admin/AdminDataCompletenessDashboard').then((m) => ({
+    default: m.AdminDataCompletenessDashboard,
+  }))
+);
+const AdminExtendedSubsections = lazyWithRetry(() =>
+  import('./admin/AdminExtendedSubsections').then((m) => ({
+    default: m.AdminExtendedSubsections,
+  }))
+);
 
-type AdminSectionId =
-  | 'students'
-  | 'questions'
-  | 'worksheets'
-  | 'study-library-cms'
-  | 'additional-curriculum'
-  | 'lesson-planner'
-  | 'announcements'
-  | 'progression'
-  | 'duplicates'
-  | 'stories'
-  | 'drawings'
-  | 'payments'
-  | 'referrals'
-  | 'settings'
-  | 'cricket'
-  | 'scholarship'
-  | 'tet-ctet'
-  | 'demo-exams'
-  | 'question-error-reports'
-  | 'support'
-  | 'profile';
+type AdminViewLevel = 'home' | 'category' | 'subsection';
 
 const AdminTabSkeleton: React.FC = () => (
-  <SectionLoadingFallback label="Loading Administrator panel..." />
+  <SectionLoadingFallback label="Loading Administrator module..." />
 );
+
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Users,
+  UserPlus,
+  GraduationCap,
+  Building2,
+  HeartHandshake,
+  ShieldCheck,
+  Layers,
+  Grid,
+  BookOpen,
+  CheckCircle2,
+  Sparkles,
+  Library,
+  FileText,
+  PlayCircle,
+  HelpCircle,
+  FileSpreadsheet,
+  AlertTriangle,
+  BookMarked,
+  Palette,
+  Trophy,
+  Award,
+  Target,
+  Compass,
+  Wrench,
+  CalendarDays,
+  ClipboardCheck,
+  CheckSquare,
+  Crown,
+  CreditCard,
+  Gift,
+  Activity,
+  BarChart3,
+  Flag,
+  Megaphone,
+  LifeBuoy,
+  Bell,
+  Settings,
+  User,
+  Database,
+};
+
+function renderStatusChip(status: CompletenessBadge) {
+  switch (status) {
+    case 'GREEN':
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-200">
+          Complete
+        </span>
+      );
+    case 'YELLOW':
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-950 border border-amber-200">
+          Partial
+        </span>
+      );
+    case 'BLUE':
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-900 border border-sky-200">
+          Audit Needed
+        </span>
+      );
+    default:
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 border border-rose-200">
+          Missing
+        </span>
+      );
+  }
+}
 
 export const AdminDashboard: React.FC = () => {
   const {
     studentsList,
+    parentsList,
     allQuestions,
     rejectedDuplicates,
     allStories,
@@ -158,6 +265,8 @@ export const AdminDashboard: React.FC = () => {
     addOrUpdateLearningProgram,
     deleteLearningProgram,
     transactions,
+    announcements,
+    notifications,
     platformSettings,
     drawingTemplates,
     toggleDrawingTemplatePublished,
@@ -177,7 +286,10 @@ export const AdminDashboard: React.FC = () => {
     void ensureContentBankHydrated('all');
   }, [ensureContentBankHydrated]);
 
-  const [activeSection, setActiveSection] = useState<AdminSectionId>('questions');
+  // 3-Level Organized Drilldown Navigation State
+  const [viewLevel, setViewLevel] = useState<AdminViewLevel>('home');
+  const [activeCategoryId, setActiveCategoryId] = useState<AdminCategoryId>('registration_users');
+  const [activeSubsection, setActiveSubsection] = useState<AdminSubsectionId>('students');
 
   // Independent Education Board & Class Dashboard Switcher
   const [selectedBoardWorkspace, setSelectedBoardWorkspace] = useState<'all' | EducationBoard>('all');
@@ -272,24 +384,175 @@ export const AdminDashboard: React.FC = () => {
     ]
   );
 
-  // Memoized counts for tabs so switching sections is O(1)
-  const tabCounts = useMemo(
-    () => ({
-      questions: allQuestions.length,
-      duplicates: rejectedDuplicates.length,
+  // Navigation handlers
+  const handleSelectCategory = useCallback((categoryId: AdminCategoryId) => {
+    setActiveCategoryId(categoryId);
+    setViewLevel('category');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleOpenSubsection = useCallback((subsectionId: AdminSubsectionId) => {
+    const meta = getAdminSubsectionMeta(subsectionId);
+    setActiveCategoryId(meta.categoryId);
+    setActiveSubsection(subsectionId);
+    setViewLevel('subsection');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleJumpToSection = useCallback((target: AdminJumpTarget) => {
+    setActiveCategoryId(target.categoryId);
+    setActiveSubsection(target.subsectionId);
+    if (target.board) setSelectedBoardWorkspace(target.board);
+    if (target.classLevel) setSelectedClassWorkspace(target.classLevel);
+    setViewLevel('subsection');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Compute live structural counts across all categories & subsections
+  const liveMetrics = useMemo(() => {
+    const tbSummary = getAllBoardTextbookSummary();
+    const totalTextbooks = tbSummary.reduce((s, b) => s + b.totalTextbooks, 0);
+    let totalChapters = 0;
+    let totalWorksheets = 0;
+    let totalSubjects = 0;
+    for (const brd of ALL_BOARDS) {
+      for (const cls of ALL_10_CLASSES) {
+        totalWorksheets += getAllWorksheetsForClass(cls, brd).length;
+        totalSubjects += getSubjectsForClass(cls, brd).length;
+        totalChapters += getOfficialTextbooksForBoardClass(brd, cls).reduce(
+          (acc, tb) => acc + tb.totalChapters,
+          0
+        );
+      }
+    }
+
+    const studentsOnly = studentsList.filter((s) => s.accountRole !== 'teacher');
+    const teachersOnly = studentsList.filter((s) => s.accountRole === 'teacher');
+    const attendanceTotal = studentsList.reduce(
+      (s, stu) => s + (stu.attendanceRecords?.length || 0),
+      0
+    );
+    const assignmentsTotal = studentsList.reduce(
+      (s, stu) => s + (stu.assignments?.length || 0),
+      0
+    );
+    let schoolsCount = 0;
+    try {
+      const raw = localStorage.getItem('msz_institutions_v1');
+      if (raw) schoolsCount = (JSON.parse(raw) as unknown[]).length;
+    } catch {
+      schoolsCount = 0;
+    }
+
+    const subsectionCounts: Partial<Record<AdminSubsectionId, number>> = {
       students: studentsList.length,
-      stories: allStories.length,
+      'student-registration': studentsOnly.length,
+      'teachers-directory': teachersOnly.length,
+      'schools-directory': schoolsCount,
+      'parents-management': parentsList.length,
+      'admin-security': 4,
+      'boards-management': 3,
+      'classes-divisions': 10,
+      'subjects-management': totalSubjects,
+      'syllabus-registry': 30,
+      'additional-curriculum': 13,
+      'textbooks-directory': totalTextbooks,
+      'chapters-notes-solutions': totalChapters,
+      'study-library-cms': totalChapters,
+      'papers-videos-inspector': totalSubjects,
+      questions: allQuestions.length,
+      worksheets: totalWorksheets,
+      duplicates: rejectedDuplicates.length,
+      stories: allStories.length + shivajiStories.length,
       drawings: drawingTemplates.length,
-      transactions: transactions.length,
-    }),
-    [
-      allQuestions.length,
-      rejectedDuplicates.length,
-      studentsList.length,
-      allStories.length,
-      drawingTemplates.length,
-      transactions.length,
-    ]
+      cricket: gkQuestions.length,
+      scholarship: 600 + customScholarshipQuestions.length,
+      'demo-exams': 4,
+      'five-zones-cms': 18,
+      'teacher-tools-directory': ALL_130_TEACHER_TOOLS.length,
+      'lesson-planner': 3,
+      'teacher-attendance': attendanceTotal,
+      'teacher-assignments': assignmentsTotal,
+      'tet-ctet': 200,
+      'subscriptions-plans': studentsList.filter((s) => s.plan !== 'free').length,
+      payments: transactions.length,
+      referrals: studentsList.filter((s) => Boolean(s.referralCode)).length,
+      'data-status': 14,
+      progression: studentsList.length,
+      'question-error-reports': 0,
+      announcements: announcements.length,
+      support: 1,
+      'system-notifications': notifications.length,
+      settings: learningPrograms.length,
+      profile: 1,
+      'system-health': 3,
+    };
+
+    const categoryTotals: Record<AdminCategoryId, { label: string; count: number; status: CompletenessBadge }> = {
+      registration_users: {
+        label: `${studentsList.length} Accounts`,
+        count: studentsList.length + parentsList.length + schoolsCount,
+        status: schoolsCount > 0 || parentsList.length > 0 ? 'GREEN' : 'YELLOW',
+      },
+      academic_management: {
+        label: `${totalTextbooks} Books · ${totalChapters} Chapters`,
+        count: totalTextbooks + totalChapters,
+        status: 'GREEN',
+      },
+      student_learning: {
+        label: `${allQuestions.length} Qs · ${totalWorksheets} Worksheets`,
+        count: allQuestions.length + totalWorksheets,
+        status: 'GREEN',
+      },
+      teacher_management: {
+        label: `${ALL_130_TEACHER_TOOLS.length} Tools · 200 Mocks`,
+        count: ALL_130_TEACHER_TOOLS.length + teachersOnly.length,
+        status: 'GREEN',
+      },
+      finance_subscriptions: {
+        label: `${transactions.length} Transactions`,
+        count: transactions.length,
+        status: transactions.length > 0 ? 'GREEN' : 'BLUE',
+      },
+      reports_analytics: {
+        label: '14 Audits Tracked',
+        count: 14,
+        status: 'GREEN',
+      },
+      communication: {
+        label: `${announcements.length} Notices · ${notifications.length} Alerts`,
+        count: announcements.length + notifications.length,
+        status: announcements.length > 0 ? 'GREEN' : 'YELLOW',
+      },
+      website_system: {
+        label: `${learningPrograms.length} Featured Programs`,
+        count: learningPrograms.length,
+        status: 'GREEN',
+      },
+    };
+
+    return { subsectionCounts, categoryTotals };
+  }, [
+    studentsList,
+    parentsList.length,
+    allQuestions.length,
+    rejectedDuplicates.length,
+    allStories.length,
+    shivajiStories.length,
+    drawingTemplates.length,
+    gkQuestions.length,
+    customScholarshipQuestions.length,
+    transactions.length,
+    announcements.length,
+    notifications.length,
+    learningPrograms.length,
+  ]);
+
+  const activeCategoryMeta = getAdminCategoryMeta(activeCategoryId);
+  const activeSubsectionMeta = getAdminSubsectionMeta(activeSubsection);
+  const categorySubsections = useMemo(
+    () => getSubsectionsForCategory(activeCategoryId),
+    [activeCategoryId]
   );
 
   return (
@@ -297,500 +560,499 @@ export const AdminDashboard: React.FC = () => {
       {/* Top Banner */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 bg-amber-500/20 text-amber-400 border border-amber-500/40 px-3 py-1 rounded-full text-xs font-bold w-fit mb-2">
+          <div className="flex items-center gap-2 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-full text-xs font-bold w-fit mb-2">
             <ShieldCheck className="w-4 h-4" />
-            <span>Master Administrator Control Center</span>
+            <span>Master Administrator Command Center</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-display font-extrabold tracking-tight">
-            Platform Management & Zero-Repetition Engine
+            Platform Management, Curriculum &amp; Data Completeness
           </h1>
-          <p className="text-slate-400 text-xs sm:text-sm font-medium mt-1">
-            Maintain curriculum standards across Maharashtra, CBSE & ICSE boards, inspect central question IDs, manage worksheets & stories, and verify payments.
+          <p className="text-slate-300 text-xs sm:text-sm font-medium mt-1">
+            Structured 8-Category Administrator Architecture across Registrations, Academic Syllabus,
+            Student Content, Teachers, Razorpay Finance, Reports, Communication &amp; System Health.
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+        {/* Top Quick Actions */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={() =>
+              handleJumpToSection({
+                categoryId: 'reports_analytics',
+                subsectionId: 'data-status',
+              })
+            }
+            className="px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Activity className="w-4 h-4" />
+            <span>COMPLETE CONTENT &amp; DATA STATUS</span>
+          </button>
+
           <button
             type="button"
             onClick={handleOpenAddQuestionModal}
-            className="px-4 sm:px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add New Vetted Question</span>
+            <span>Add Vetted Question</span>
           </button>
         </div>
       </div>
 
-      {/* Independent Board & Class Dashboard Workspace Switcher */}
-      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-amber-200/80 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5 mr-1">
-            <Layers className="w-3.5 h-3.5 text-amber-600" />
-            <span>Board Dashboard:</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setSelectedBoardWorkspace('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              selectedBoardWorkspace === 'all'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-amber-50'
-            }`}
-          >
-            All 3 Boards
-          </button>
-          {BOARD_META_LIST.map((bm) => {
-            const isActive = selectedBoardWorkspace === bm.id;
-            return (
-              <button
-                type="button"
-                key={bm.id}
-                onClick={() => setSelectedBoardWorkspace(isActive ? 'all' : bm.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                  isActive
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-amber-50'
-                }`}
-              >
-                <span>{bm.icon}</span>
-                <span>{bm.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Global Role-Scoped Admin Search */}
+      <AdminGlobalSearchBar
+        studentsList={studentsList}
+        parentsList={parentsList}
+        allQuestions={allQuestions}
+        transactions={transactions}
+        onNavigateJump={handleJumpToSection}
+      />
 
-        <div className="flex items-center gap-2">
-          <label
-            htmlFor="admin-class-workspace-select"
-            className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600"
+      {/* Breadcrumb & Back Navigation Bar (Shown on Level 2 Category & Level 3 Subsection) */}
+      {viewLevel !== 'home' && (
+        <div className="bg-white rounded-2xl px-4 py-3 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <nav
+            aria-label="Admin Dashboard Breadcrumb"
+            className="flex flex-wrap items-center gap-1.5 text-xs font-bold"
           >
-            Class Scope:
-          </label>
-          <select
-            id="admin-class-workspace-select"
-            value={selectedClassWorkspace}
-            onChange={(e) => setSelectedClassWorkspace(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 focus:outline-hidden focus:border-amber-500 cursor-pointer"
-          >
-            <option value="all">All Classes (1st – 10th)</option>
-            {ALL_ADMIN_CLASSES.map((cls) => (
-              <option key={cls} value={cls}>
-                {cls}
-              </option>
-            ))}
-          </select>
-          {(selectedBoardWorkspace !== 'all' || selectedClassWorkspace !== 'all') && (
             <button
               type="button"
-              onClick={() => {
-                setSelectedBoardWorkspace('all');
-                setSelectedClassWorkspace('all');
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 cursor-pointer"
+              onClick={() => setViewLevel('home')}
+              className="inline-flex items-center gap-1 text-slate-600 hover:text-amber-700 cursor-pointer"
             >
-              Reset
+              <Home className="w-3.5 h-3.5" />
+              <span>Main Dashboard</span>
             </button>
-          )}
+
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+
+            <button
+              type="button"
+              onClick={() => setViewLevel('category')}
+              className={`cursor-pointer ${
+                viewLevel === 'category'
+                  ? 'text-slate-900 font-black'
+                  : 'text-slate-600 hover:text-amber-700'
+              }`}
+            >
+              {activeCategoryMeta.title}
+            </button>
+
+            {viewLevel === 'subsection' && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-amber-800 font-black">{activeSubsectionMeta.title}</span>
+              </>
+            )}
+          </nav>
+
+          <div className="flex items-center gap-2">
+            {viewLevel === 'subsection' && (
+              <button
+                type="button"
+                onClick={() => setViewLevel('category')}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to {activeCategoryMeta.title}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setViewLevel('home')}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>All 8 Categories</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Admin Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none bg-white p-2 rounded-2xl border border-amber-200">
-        <button
-          type="button"
-          onClick={() => setActiveSection('questions')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'questions'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <HelpCircle className="w-4 h-4" />
-          <span>Question Bank ({tabCounts.questions})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('worksheets')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'worksheets'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>Worksheets Bank</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('study-library-cms')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'study-library-cms'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Free Study Library CMS &amp; Health</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('additional-curriculum')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'additional-curriculum'
-              ? 'bg-indigo-700 text-white shadow-xs'
-              : 'text-indigo-900 bg-indigo-50/70 hover:bg-indigo-100'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Additional Curriculum CMS</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('lesson-planner')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'lesson-planner'
-              ? 'bg-teal-700 text-white shadow-xs'
-              : 'text-teal-900 bg-teal-50/70 hover:bg-teal-100'
-          }`}
-        >
-          <CalendarDays className="w-4 h-4" />
-          <span>Lesson Planner &amp; Calendars</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('duplicates')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'duplicates'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>Rejected Duplicates ({tabCounts.duplicates})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('students')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'students'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Registered Students ({tabCounts.students})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('progression')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'progression'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Level Progress Tracking</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('stories')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'stories'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Stories &amp; Shivaji ({tabCounts.stories + shivajiStories.length})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('drawings')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'drawings'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <Palette className="w-4 h-4" />
-          <span>Drawing Studio ({tabCounts.drawings})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('payments')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'payments'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span>Transactions ({tabCounts.transactions})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('referrals')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'referrals'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <Gift className="w-4 h-4" />
-          <span>Referrals & Rewards</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('cricket')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'cricket'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <span>🏏</span>
-          <span>GK &amp; Cricket ({gkQuestions.length} Qs)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('scholarship')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'scholarship'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <span>🏆</span>
-          <span>MSCE Scholarship</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('tet-ctet')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'tet-ctet'
-              ? 'bg-indigo-700 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-indigo-50'
-          }`}
-        >
-          <span>🎓</span>
-          <span>TET &amp; CTET (200 Mocks)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('demo-exams')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'demo-exams'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <span>🎯</span>
-          <span>Free Demo Mock Tests (4 Tests)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('question-error-reports')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'question-error-reports'
-              ? 'bg-rose-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-rose-50'
-          }`}
-        >
-          <span>🚩</span>
-          <span>QUESTION ERROR REPORTS</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('announcements')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'announcements'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <Megaphone className="w-4 h-4" />
-          <span>Live Announcement Ticker</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('settings')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'settings'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Visibility, Timers &amp; Programs</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('support')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'support'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <LifeBuoy className="w-4 h-4" />
-          <span>Help, Grievance & Reports</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection('profile')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
-            activeSection === 'profile'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-700 hover:bg-amber-50'
-          }`}
-        >
-          <User className="w-4 h-4" />
-          <span>Supervisor Profile</span>
-        </button>
-      </div>
+      {/* LEVEL 1: LANDING SCREEN WITH ONLY THE 8 MAIN CATEGORY CARDS */}
+      {viewLevel === 'home' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <div>
+              <h2 className="text-base sm:text-lg font-display font-black text-slate-900">
+                8 Core Management Categories
+              </h2>
+              <p className="text-xs text-slate-500">
+                Select any category below to inspect its dedicated subsections and live records.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-slate-600">
+              {ADMIN_MAIN_CATEGORIES.length} Categories · 41 Organized Modules
+            </span>
+          </div>
 
-      {/* Lazily Mounted Active Section Only (Zero background rendering/heavy data loading for closed tabs) */}
-      <Suspense fallback={<AdminTabSkeleton />}>
-        {activeSection === 'questions' && (
-          <AdminQuestionsSection
-            allQuestions={allQuestions}
-            rejectedDuplicatesCount={rejectedDuplicates.length}
-            selectedBoardWorkspace={selectedBoardWorkspace}
-            onSelectBoardWorkspace={setSelectedBoardWorkspace}
-            selectedClassWorkspace={selectedClassWorkspace}
-            onSelectClassWorkspace={setSelectedClassWorkspace}
-            onOpenAddQuestionModal={handleOpenAddQuestionModal}
-            onUpdateQuestionStatus={updateQuestionStatus}
-            onDeleteQuestion={deleteQuestion}
-          />
-        )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {ADMIN_MAIN_CATEGORIES.map((cat) => {
+              const metrics = liveMetrics.categoryTotals[cat.id];
+              const subCount = getSubsectionsForCategory(cat.id).length;
 
-        {activeSection === 'worksheets' && (
-          <AdminWorksheetsSection
-            selectedBoardWorkspace={selectedBoardWorkspace}
-            selectedClassWorkspace={selectedClassWorkspace}
-          />
-        )}
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => handleSelectCategory(cat.id)}
+                  className="bg-white rounded-3xl p-5 border border-slate-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between gap-4 cursor-pointer group"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`px-2.5 py-1 rounded-xl text-xs font-black border ${cat.badgeStyle}`}
+                      >
+                        Category {cat.numberLabel}
+                      </span>
+                      {renderStatusChip(metrics.status)}
+                    </div>
 
-        {activeSection === 'study-library-cms' && (
-          <AdminStudyLibraryCmsSection
-            selectedBoardWorkspace={selectedBoardWorkspace}
-            selectedClassWorkspace={selectedClassWorkspace}
-          />
-        )}
+                    <div>
+                      <h3 className="text-base font-display font-black text-slate-900 group-hover:text-amber-700 transition-colors">
+                        {cat.title}
+                      </h3>
+                      <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                        {cat.shortSubtitle}
+                      </p>
+                    </div>
 
-        {activeSection === 'additional-curriculum' && <AdminAdditionalCurriculumSection />}
+                    <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                      {cat.description}
+                    </p>
+                  </div>
 
-        {activeSection === 'lesson-planner' && (
-          <AdminLessonPlannerSection selectedBoardWorkspace={selectedBoardWorkspace} />
-        )}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                    <div>
+                      <div className="font-black text-slate-900">{metrics.label}</div>
+                      <div className="text-[11px] text-slate-500">{subCount} Subsections</div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 font-black text-amber-700 group-hover:translate-x-0.5 transition-transform">
+                      <span>Open</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-        {activeSection === 'duplicates' && (
-          <AdminDuplicatesSection
-            allQuestions={allQuestions}
-            rejectedDuplicates={rejectedDuplicates}
-          />
-        )}
+      {/* LEVEL 2: CATEGORY SCREEN SHOWING INDIVIDUAL SUBSECTION CARDS */}
+      {viewLevel === 'category' && (
+        <div className="space-y-5">
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-700">
+                Category {activeCategoryMeta.numberLabel}
+              </span>
+              <h2 className="text-xl font-display font-black text-slate-900 mt-0.5">
+                {activeCategoryMeta.title}
+              </h2>
+              <p className="text-xs text-slate-600 mt-1">{activeCategoryMeta.description}</p>
+            </div>
+            <div className="text-xs font-black text-slate-700 bg-slate-100 px-3.5 py-2 rounded-xl self-start">
+              {categorySubsections.length} Subsections
+            </div>
+          </div>
 
-        {activeSection === 'students' && (
-          <AdminStudentsSection
-            studentsList={studentsList}
-            selectedBoardWorkspace={selectedBoardWorkspace}
-            onSelectBoardWorkspace={setSelectedBoardWorkspace}
-            adminPromoteOrCorrectClass={adminPromoteOrCorrectClass}
-            adminApplyApproved365DayMigration={adminApplyApproved365DayMigration}
-          />
-        )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categorySubsections.map((sub) => {
+              const IconComp = ICON_MAP[sub.iconName] || FolderIconFallback;
+              const liveCount = liveMetrics.subsectionCounts[sub.id];
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => handleOpenSubsection(sub.id)}
+                  className="bg-white rounded-3xl p-5 border border-slate-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between gap-4 cursor-pointer group"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center">
+                        <IconComp className="w-5 h-5" />
+                      </div>
+                      {renderStatusChip(sub.defaultStatus)}
+                    </div>
 
-        {activeSection === 'progression' && (
-          <AdminProgressionSection
-            studentsList={studentsList}
-            selectedBoardWorkspace={selectedBoardWorkspace}
-            onSelectBoardWorkspace={setSelectedBoardWorkspace}
-            selectedClassWorkspace={selectedClassWorkspace}
-            onSelectClassWorkspace={setSelectedClassWorkspace}
-          />
-        )}
+                    <h3 className="text-sm font-display font-black text-slate-900 group-hover:text-amber-700">
+                      {sub.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">{sub.description}</p>
+                  </div>
 
-        {activeSection === 'stories' && (
-          <AdminStoriesSection
-            allStories={allStories}
-            shivajiStories={shivajiStories}
-            onSaveStory={addOrUpdateStory}
-            onToggleStoryPublished={toggleStoryPublished}
-            onDeleteCustomStory={deleteCustomStory}
-            onSaveShivajiStory={addOrUpdateShivajiStory}
-            onDeleteCustomShivajiStory={deleteCustomShivajiStory}
-          />
-        )}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-700 tabular-nums">
+                      {typeof liveCount === 'number' ? `${liveCount} Records / Items` : 'Live View'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 font-black text-slate-900 group-hover:text-amber-700">
+                      <span>Open Subsection</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-        {activeSection === 'drawings' && (
-          <AdminDrawingsSection
-            drawingTemplates={drawingTemplates}
-            savedDrawings={savedDrawings}
-            toggleDrawingTemplatePublished={toggleDrawingTemplatePublished}
-            deleteDrawingTemplate={deleteDrawingTemplate}
-            addDrawingTemplate={addDrawingTemplate}
-          />
-        )}
+      {/* LEVEL 3: ACTIVE SUBSECTION VIEW */}
+      {viewLevel === 'subsection' && (
+        <div className="space-y-5">
+          {/* Board & Class Scope Filter Bar (rendered when active subsection supports board/class filtering) */}
+          {activeSubsectionMeta.usesBoardScope && (
+            <div className="bg-white rounded-2xl p-3 sm:p-4 border border-amber-200/80 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5 mr-1">
+                  <Layers className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Board Scope:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBoardWorkspace('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    selectedBoardWorkspace === 'all'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-amber-50'
+                  }`}
+                >
+                  All 3 Boards
+                </button>
+                {BOARD_META_LIST.map((bm) => {
+                  const isActive = selectedBoardWorkspace === bm.id;
+                  return (
+                    <button
+                      type="button"
+                      key={bm.id}
+                      onClick={() => setSelectedBoardWorkspace(isActive ? 'all' : bm.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        isActive
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-amber-50'
+                      }`}
+                    >
+                      <span>{bm.icon}</span>
+                      <span>{bm.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-        {activeSection === 'payments' && (
-          <AdminPaymentsSection
-            transactions={transactions}
-            selectedBoardWorkspace={selectedBoardWorkspace}
-            onSelectBoardWorkspace={setSelectedBoardWorkspace}
-          />
-        )}
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="admin-class-workspace-select"
+                  className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600"
+                >
+                  Class Scope:
+                </label>
+                <select
+                  id="admin-class-workspace-select"
+                  value={selectedClassWorkspace}
+                  onChange={(e) => setSelectedClassWorkspace(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 focus:outline-hidden focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="all">All Classes (1st – 10th)</option>
+                  {ALL_ADMIN_CLASSES.map((cls) => (
+                    <option key={cls} value={cls}>
+                      {cls}
+                    </option>
+                  ))}
+                </select>
+                {(selectedBoardWorkspace !== 'all' || selectedClassWorkspace !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBoardWorkspace('all');
+                      setSelectedClassWorkspace('all');
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
-        {activeSection === 'cricket' && (
-          <AdminCricketSection
-            gkQuestions={gkQuestions}
-            onSaveGkQuestion={addOrUpdateGkQuestion}
-            onDeleteGkQuestion={deleteCustomGkQuestion}
-          />
-        )}
+          {/* Lazily Mounted Active Subsection Only */}
+          <Suspense fallback={<AdminTabSkeleton />}>
+            {activeSubsection === 'data-status' && (
+              <AdminDataCompletenessDashboard onJumpToSection={handleJumpToSection} />
+            )}
 
-        {activeSection === 'scholarship' && (
-          <AdminScholarshipSection
-            customQuestions={customScholarshipQuestions}
-            onSaveCustomQuestion={addOrUpdateScholarshipQuestion}
-            onDeleteCustomQuestion={deleteCustomScholarshipQuestion}
-          />
-        )}
+            {activeSubsection === 'questions' && (
+              <AdminQuestionsSection
+                allQuestions={allQuestions}
+                rejectedDuplicatesCount={rejectedDuplicates.length}
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                onSelectBoardWorkspace={setSelectedBoardWorkspace}
+                selectedClassWorkspace={selectedClassWorkspace}
+                onSelectClassWorkspace={setSelectedClassWorkspace}
+                onOpenAddQuestionModal={handleOpenAddQuestionModal}
+                onUpdateQuestionStatus={updateQuestionStatus}
+                onDeleteQuestion={deleteQuestion}
+              />
+            )}
 
-        {activeSection === 'tet-ctet' && <AdminTetCtetSection />}
+            {activeSubsection === 'worksheets' && (
+              <AdminWorksheetsSection
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                selectedClassWorkspace={selectedClassWorkspace}
+              />
+            )}
 
-        {activeSection === 'demo-exams' && <AdminDemoExamsSection />}
+            {activeSubsection === 'study-library-cms' && (
+              <AdminStudyLibraryCmsSection
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                selectedClassWorkspace={selectedClassWorkspace}
+              />
+            )}
 
-        {activeSection === 'question-error-reports' && <AdminQuestionErrorReportsSection />}
+            {activeSubsection === 'additional-curriculum' && <AdminAdditionalCurriculumSection />}
 
-        {activeSection === 'announcements' && <AdminAnnouncementsSection />}
+            {activeSubsection === 'lesson-planner' && (
+              <AdminLessonPlannerSection selectedBoardWorkspace={selectedBoardWorkspace} />
+            )}
 
-        {activeSection === 'settings' && (
-          <AdminSettingsSection
-            initialTimers={platformSettings.timers}
-            onSaveTimers={updateTimers}
-            sectionVisibility={sectionVisibility}
-            onSaveSectionVisibility={updateSectionVisibility}
-            learningPrograms={learningPrograms}
-            onSaveLearningProgram={addOrUpdateLearningProgram}
-            onDeleteLearningProgram={deleteLearningProgram}
-          />
-        )}
+            {activeSubsection === 'duplicates' && (
+              <AdminDuplicatesSection
+                allQuestions={allQuestions}
+                rejectedDuplicates={rejectedDuplicates}
+              />
+            )}
 
-        {activeSection === 'referrals' && <AdminReferralPanel />}
+            {activeSubsection === 'students' && (
+              <AdminStudentsSection
+                studentsList={studentsList}
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                onSelectBoardWorkspace={setSelectedBoardWorkspace}
+                adminPromoteOrCorrectClass={adminPromoteOrCorrectClass}
+                adminApplyApproved365DayMigration={adminApplyApproved365DayMigration}
+              />
+            )}
 
-        {activeSection === 'support' && <AdminSupportPanel />}
+            {activeSubsection === 'progression' && (
+              <AdminProgressionSection
+                studentsList={studentsList}
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                onSelectBoardWorkspace={setSelectedBoardWorkspace}
+                selectedClassWorkspace={selectedClassWorkspace}
+                onSelectClassWorkspace={setSelectedClassWorkspace}
+              />
+            )}
 
-        {activeSection === 'profile' && (
-          <AdminProfileSection
-            studentsCount={studentsList.length}
-            questionsCount={allQuestions.length}
-          />
-        )}
-      </Suspense>
+            {activeSubsection === 'stories' && (
+              <AdminStoriesSection
+                allStories={allStories}
+                shivajiStories={shivajiStories}
+                onSaveStory={addOrUpdateStory}
+                onToggleStoryPublished={toggleStoryPublished}
+                onDeleteCustomStory={deleteCustomStory}
+                onSaveShivajiStory={addOrUpdateShivajiStory}
+                onDeleteCustomShivajiStory={deleteCustomShivajiStory}
+              />
+            )}
+
+            {activeSubsection === 'drawings' && (
+              <AdminDrawingsSection
+                drawingTemplates={drawingTemplates}
+                savedDrawings={savedDrawings}
+                toggleDrawingTemplatePublished={toggleDrawingTemplatePublished}
+                deleteDrawingTemplate={deleteDrawingTemplate}
+                addDrawingTemplate={addDrawingTemplate}
+              />
+            )}
+
+            {activeSubsection === 'payments' && (
+              <AdminPaymentsSection
+                transactions={transactions}
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                onSelectBoardWorkspace={setSelectedBoardWorkspace}
+              />
+            )}
+
+            {activeSubsection === 'cricket' && (
+              <AdminCricketSection
+                gkQuestions={gkQuestions}
+                onSaveGkQuestion={addOrUpdateGkQuestion}
+                onDeleteGkQuestion={deleteCustomGkQuestion}
+              />
+            )}
+
+            {activeSubsection === 'scholarship' && (
+              <AdminScholarshipSection
+                customQuestions={customScholarshipQuestions}
+                onSaveCustomQuestion={addOrUpdateScholarshipQuestion}
+                onDeleteCustomQuestion={deleteCustomScholarshipQuestion}
+              />
+            )}
+
+            {activeSubsection === 'tet-ctet' && <AdminTetCtetSection />}
+
+            {activeSubsection === 'demo-exams' && <AdminDemoExamsSection />}
+
+            {activeSubsection === 'question-error-reports' && (
+              <AdminQuestionErrorReportsSection />
+            )}
+
+            {activeSubsection === 'announcements' && <AdminAnnouncementsSection />}
+
+            {activeSubsection === 'five-zones-cms' && <AdminFiveZonesCmsSection />}
+
+            {activeSubsection === 'settings' && (
+              <AdminSettingsSection
+                initialTimers={platformSettings.timers}
+                onSaveTimers={updateTimers}
+                sectionVisibility={sectionVisibility}
+                onSaveSectionVisibility={updateSectionVisibility}
+                learningPrograms={learningPrograms}
+                onSaveLearningProgram={addOrUpdateLearningProgram}
+                onDeleteLearningProgram={deleteLearningProgram}
+              />
+            )}
+
+            {activeSubsection === 'referrals' && <AdminReferralPanel />}
+
+            {activeSubsection === 'support' && <AdminSupportPanel />}
+
+            {activeSubsection === 'profile' && (
+              <AdminProfileSection
+                studentsCount={studentsList.length}
+                questionsCount={allQuestions.length}
+              />
+            )}
+
+            {(activeSubsection === 'student-registration' ||
+              activeSubsection === 'teachers-directory' ||
+              activeSubsection === 'schools-directory' ||
+              activeSubsection === 'parents-management' ||
+              activeSubsection === 'admin-security' ||
+              activeSubsection === 'boards-management' ||
+              activeSubsection === 'classes-divisions' ||
+              activeSubsection === 'subjects-management' ||
+              activeSubsection === 'syllabus-registry' ||
+              activeSubsection === 'textbooks-directory' ||
+              activeSubsection === 'chapters-notes-solutions' ||
+              activeSubsection === 'papers-videos-inspector' ||
+              activeSubsection === 'teacher-tools-directory' ||
+              activeSubsection === 'teacher-attendance' ||
+              activeSubsection === 'teacher-assignments' ||
+              activeSubsection === 'subscriptions-plans' ||
+              activeSubsection === 'system-notifications' ||
+              activeSubsection === 'system-health') && (
+              <AdminExtendedSubsections
+                subsectionId={activeSubsection}
+                selectedBoardWorkspace={selectedBoardWorkspace}
+                selectedClassWorkspace={selectedClassWorkspace}
+                onJumpToSection={handleJumpToSection}
+              />
+            )}
+          </Suspense>
+        </div>
+      )}
 
       {/* ADD NEW QUESTION MODAL WITH DUPLICATE CHECK */}
       {showAddQuestionModal && (
@@ -810,7 +1072,8 @@ export const AdminDashboard: React.FC = () => {
                 Add New Curriculum Question
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                Verified automatically for uniqueness within the selected Education Board &amp; Class pool.
+                Verified automatically for uniqueness within the selected Education Board &amp; Class
+                pool.
               </p>
             </div>
 
@@ -878,7 +1141,9 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Question Format / Type</label>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Question Format / Type
+                  </label>
                   <select
                     value={newQuestionType}
                     onChange={(e) => setNewQuestionType(e.target.value as QuestionType)}
@@ -903,7 +1168,9 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Topic / Curriculum Chapter</label>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Topic / Curriculum Chapter
+                  </label>
                   <input
                     type="text"
                     value={newTopic}
@@ -1002,3 +1269,7 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
+
+const FolderIconFallback: React.FC<{ className?: string }> = ({ className }) => (
+  <Layers className={className} />
+);

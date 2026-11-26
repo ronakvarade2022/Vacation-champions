@@ -24,7 +24,11 @@ import {
   Trash2,
   Filter,
   X,
+  Wrench,
+  ArrowLeft,
 } from 'lucide-react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { SectionLoadingFallback } from './SectionLoadingFallback';
 import { useApp } from '../context/AppContext';
 import type {
   ClassLevel,
@@ -39,6 +43,10 @@ import { BOARD_META_LIST } from '../data/boards/boardMeta';
 import { getBoardShortLabel } from '../utils/subscriptionAccess';
 import { getSubjectsForClass } from '../data/classCurriculumConfig';
 
+const TeacherToolsWorkbench = lazyWithRetry(() =>
+  import('./teacher/TeacherToolsWorkbench').then((m) => ({ default: m.TeacherToolsWorkbench }))
+);
+
 interface TeacherDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName) => void;
   onOpenAdditionalCurriculum?: (ctx: {
@@ -50,7 +58,7 @@ interface TeacherDashboardProps {
   onSwitchToStudentView?: () => void;
 }
 
-type TeacherTab = 'overview' | 'roster' | 'assignments' | 'analytics';
+type TeacherTab = 'overview' | 'tools' | 'roster' | 'assignments' | 'analytics';
 
 const DIVISIONS = ['All Divisions', 'Div A', 'Div B', 'Div C', 'Div D'];
 
@@ -59,7 +67,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onOpenAdditionalCurriculum,
   onSwitchToStudentView,
 }) => {
-  const { currentStudent, studentsList, addStudentAssignment, updateStudentAssignment, activeBoard } = useApp();
+  const { currentStudent, studentsList, addStudentAssignment, updateStudentAssignment, updateStudentAttendance, activeBoard } = useApp();
 
   const [activeTeacherTab, setActiveTeacherTab] = useState<TeacherTab>('overview');
   const [selectedBoard, setSelectedBoard] = useState<EducationBoard>(
@@ -70,6 +78,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   );
   const [selectedDivision, setSelectedDivision] = useState<string>('All Divisions');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<'all' | 'submitted' | 'pending' | 'graded'>('all');
+  const [attendanceFeedback, setAttendanceFeedback] = useState<string | null>(null);
 
   // Assignment creation modal state
   const [showNewAssignmentModal, setShowNewAssignmentModal] = useState<boolean>(false);
@@ -134,6 +144,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     });
     return list.sort((a, b) => b.assignment.dueDate.localeCompare(a.assignment.dueDate));
   }, [filteredStudents]);
+
+  const filteredAssignmentsList = useMemo(() => {
+    if (assignmentStatusFilter === 'all') return classAssignmentsList;
+    return classAssignmentsList.filter(({ assignment }) => {
+      const s = (assignment.status || '').toLowerCase();
+      if (assignmentStatusFilter === 'submitted') return s === 'submitted';
+      if (assignmentStatusFilter === 'graded') return s === 'graded' || s === 'evaluated';
+      return s === 'pending';
+    });
+  }, [classAssignmentsList, assignmentStatusFilter]);
 
   // Performance metrics
   const metrics = useMemo(() => {
@@ -250,6 +270,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             <button
               type="button"
+              onClick={() => setActiveTeacherTab('tools')}
+              className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+            >
+              <Wrench className="w-4 h-4" />
+              <span>130 Teacher Tools</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => onNavigateTab('lesson-planner')}
               className="px-4 py-2.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
             >
@@ -335,6 +364,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'overview' as const, label: 'Overview & Shortcuts', icon: Sparkles },
+            { id: 'tools' as const, label: '130 Teacher Tools & Guides', icon: Wrench },
             { id: 'roster' as const, label: `Student Roster (${filteredStudents.length})`, icon: Users },
             { id: 'assignments' as const, label: `Homework & Assignments (${classAssignmentsList.length})`, icon: FileText },
             { id: 'analytics' as const, label: 'Performance Summary', icon: Award },
@@ -370,6 +400,38 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {activeTeacherTab !== 'overview' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-600">
+            <button
+              type="button"
+              onClick={() => setActiveTeacherTab('overview')}
+              className="hover:text-slate-900 underline cursor-pointer"
+            >
+              Teacher Command Center
+            </button>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-black text-slate-900">
+              {activeTeacherTab === 'tools'
+                ? '130 Teacher Tools & Pedagogy Guides'
+                : activeTeacherTab === 'roster'
+                ? 'Student Roster & Attendance'
+                : activeTeacherTab === 'assignments'
+                ? 'Homework & Assignments'
+                : 'Performance Summary'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTeacherTab('overview')}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Overview</span>
+          </button>
+        </div>
+      )}
 
       {/* TAB 1: OVERVIEW & SHORTCUTS */}
       {activeTeacherTab === 'overview' && (
@@ -419,6 +481,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <button
+                type="button"
+                onClick={() => setActiveTeacherTab('tools')}
+                className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/70 hover:bg-amber-100/70 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
+              >
+                <div className="space-y-1">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
+                    <Wrench className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-black text-slate-900 group-hover:text-amber-800">
+                    130 Teacher Tools &amp; Pedagogy Guides
+                  </h3>
+                  <p className="text-[11px] text-slate-600 leading-snug">
+                    All 8 toolkits across Waves 1–6: Blueprints, Gradebooks, Live Classroom Timer, AI Prompts &amp; Teacher Guides.
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-700 shrink-0 mt-2" />
+              </button>
+
               <button
                 type="button"
                 onClick={() => onNavigateTab('lesson-planner')}
@@ -546,6 +627,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
       )}
 
+      {/* TAB: 130 TEACHER TOOLS & TEACHING GUIDES (Lazy Loaded) */}
+      {activeTeacherTab === 'tools' && (
+        <React.Suspense fallback={<SectionLoadingFallback label="Loading 130 Teacher Tools & Guides..." />}>
+          <TeacherToolsWorkbench
+            board={selectedBoard}
+            classLevel={selectedClass}
+            onOpenLessonPlanner={() => onNavigateTab('lesson-planner')}
+          />
+        </React.Suspense>
+      )}
+
       {/* TAB 2: STUDENT ROSTER & MONITORING */}
       {activeTeacherTab === 'roster' && (
         <div className="space-y-4">
@@ -567,6 +659,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </span>
             </div>
           </div>
+
+          {attendanceFeedback && (
+            <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between gap-2">
+              <span>{attendanceFeedback}</span>
+              <button type="button" onClick={() => setAttendanceFeedback(null)} className="cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {filteredStudents.length === 0 ? (
             <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-3">
@@ -590,6 +691,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <th className="py-3 px-4">Daily Streak</th>
                       <th className="py-3 px-4">Points (XP)</th>
                       <th className="py-3 px-4">Worksheets Solved</th>
+                      <th className="py-3 px-4">Attendance (Mark Today)</th>
                       <th className="py-3 px-4">Assignments</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
@@ -599,6 +701,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       const completedWsCount = student.completedWorksheetIds?.length || 0;
                       const studentAsnCount = student.assignments?.length || 0;
                       const hasStreak = (student.streakDays || 0) > 0;
+                      const attList = student.attendanceRecords || [];
+                      const attPresent = attList.filter((r) => r.status === 'PRESENT').length;
+                      const todayIso = new Date().toISOString().slice(0, 10);
 
                       return (
                         <tr key={student.id} className="hover:bg-slate-50/70 transition-colors">
@@ -636,6 +741,44 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
                               {completedWsCount} Solved
                             </span>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-bold text-slate-700 mr-1">
+                                {attPresent}/{attList.length}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateStudentAttendance(student.id, {
+                                    id: `att_${Date.now().toString(36)}`,
+                                    studentId: student.id,
+                                    date: todayIso,
+                                    status: 'PRESENT',
+                                  });
+                                  setAttendanceFeedback(`Marked ${student.name} PRESENT for ${todayIso}.`);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                              >
+                                P
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateStudentAttendance(student.id, {
+                                    id: `att_${Date.now().toString(36)}`,
+                                    studentId: student.id,
+                                    date: todayIso,
+                                    status: 'ABSENT',
+                                  });
+                                  setAttendanceFeedback(`Marked ${student.name} ABSENT for ${todayIso}.`);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-[10px] cursor-pointer"
+                              >
+                                A
+                              </button>
+                            </div>
                           </td>
 
                           <td className="py-3 px-4 font-medium text-slate-600">
@@ -690,27 +833,57 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </button>
           </div>
 
-          {classAssignmentsList.length === 0 ? (
+          {classAssignmentsList.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 bg-white p-3 rounded-2xl border border-slate-200">
+              <Filter className="w-3.5 h-3.5 text-slate-500 mr-1" />
+              {[
+                { id: 'all' as const, label: `All (${classAssignmentsList.length})` },
+                { id: 'submitted' as const, label: `Submitted / Needs Grading (${metrics.pendingGradingCount})` },
+                { id: 'pending' as const, label: 'Pending Student Work' },
+                { id: 'graded' as const, label: 'Graded' },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setAssignmentStatusFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                    assignmentStatusFilter === f.id
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filteredAssignmentsList.length === 0 ? (
             <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-3">
               <div className="w-12 h-12 mx-auto rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
                 <FileText className="w-6 h-6" />
               </div>
-              <h3 className="text-sm font-black text-slate-900">No Assignments Created Yet</h3>
+              <h3 className="text-sm font-black text-slate-900">
+                {classAssignmentsList.length === 0 ? 'No Assignments Created Yet' : 'No Matching Assignments'}
+              </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Dispatch homework or revision tasks to all students in {selectedBoard} · {selectedClass}.
+                {classAssignmentsList.length === 0
+                  ? `Dispatch homework or revision tasks to all students in ${selectedBoard} · ${selectedClass}.`
+                  : 'Try switching the status filter above to see other assignments.'}
               </p>
-              <button
-                type="button"
-                onClick={() => setShowNewAssignmentModal(true)}
-                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs cursor-pointer"
-              >
-                Create First Assignment
-              </button>
+              {classAssignmentsList.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewAssignmentModal(true)}
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs cursor-pointer"
+                >
+                  Create First Assignment
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {classAssignmentsList.map(({ student, assignment }) => {
-                const isPending = assignment.status === 'PENDING' || assignment.status === 'pending';
+              {filteredAssignmentsList.map(({ student, assignment }) => {
                 const isSubmitted = assignment.status === 'submitted' || assignment.status === 'SUBMITTED';
                 const isGraded = assignment.status === 'graded' || assignment.status === 'EVALUATED';
 

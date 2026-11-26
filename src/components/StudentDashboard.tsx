@@ -41,6 +41,7 @@ import {
 } from '../data/classCurriculumConfig';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
 import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
+import { FiveZonesHubStrip } from './zones/FiveZonesHubStrip';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface StudentDashboardProps {
@@ -897,6 +898,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           );
         })()}
       </div>
+
+      {/* FIVE MAJOR EDUCATIONAL ZONES HUB */}
+      <FiveZonesHubStrip
+        onNavigateZone={(tab) => onNavigateTab(tab)}
+        onOpenTeacherPortal={() => {
+          if (currentStudent.accountRole === 'teacher') {
+            onNavigateTab('teacher-dashboard');
+          } else if (onOpenPanel) {
+            onOpenPanel('teacher', 'login');
+          }
+        }}
+      />
 
       {/* DIRECT PWA MOBILE APP INSTALL BANNER AT BOTTOM OF DASHBOARD */}
       <PWAInstallButton variant="banner" />

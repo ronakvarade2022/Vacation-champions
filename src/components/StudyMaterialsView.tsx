@@ -97,6 +97,11 @@ import {
   toggleStudyLibraryChecklistItem,
 } from '../utils/studyLibraryLocalStore';
 import { evaluateChapterCompleteness } from '../data/notes/chapterNotebookAndSolutionsBuilder';
+import {
+  fetchExternalChapterBundle,
+  mergeExternalVerifiedChapters,
+  type ExternalChapterBundlePayload,
+} from '../services/studyContentDeliveryService';
 
 export type StudyLibrarySectionTab =
   | 'textbooks'
@@ -244,6 +249,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   // Interactive Exam Papers & PYQ Answer Toggle State
   const [selectedModelPaperIdx, setSelectedModelPaperIdx] = useState<number>(0);
   const [selectedPyqPaperIdx, setSelectedPyqPaperIdx] = useState<number>(0);
+  const [paperSearchQuery, setPaperSearchQuery] = useState<string>('');
   const [revealedPaperAnswers, setRevealedPaperAnswers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -295,7 +301,30 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
   );
 
-  const chapters = useMemo(
+  const [externalChapterBundle, setExternalChapterBundle] =
+    useState<ExternalChapterBundlePayload | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setExternalChapterBundle(null);
+    fetchExternalChapterBundle({
+      board: selectedBoard,
+      classLevel: selectedClass,
+      subject: selectedSubject,
+      medium: effectiveMedium,
+    })
+      .then((bundle) => {
+        if (active) setExternalChapterBundle(bundle);
+      })
+      .catch(() => {
+        if (active) setExternalChapterBundle(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedBoard, selectedClass, selectedSubject, effectiveMedium]);
+
+  const baseChapters = useMemo(
     () =>
       getStudyMaterialsForSubject(
         selectedBoard,
@@ -304,6 +333,11 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
         effectiveMedium
       ),
     [selectedBoard, selectedClass, selectedSubject, effectiveMedium]
+  );
+
+  const chapters = useMemo(
+    () => mergeExternalVerifiedChapters(baseChapters, externalChapterBundle),
+    [baseChapters, externalChapterBundle]
   );
 
   const inlineAdditional = useMemo(
@@ -379,6 +413,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
     }
     setSelectedModelPaperIdx(0);
     setSelectedPyqPaperIdx(0);
+    setPaperSearchQuery('');
     setRevealedSolutions({});
     setRevealedQaAnswers({});
     setRevealedTextbookAnswers({});
@@ -1147,15 +1182,27 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 const setIdx = isPyq ? setSelectedPyqPaperIdx : setSelectedModelPaperIdx;
                 return (
                   <>
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <span className="text-[11px] font-black uppercase tracking-wider text-[#0f2952]">
                         {isPyq
                           ? `Previous Year Question Papers (${papers.length} Years)`
                           : `Model Question Paper Sets (${papers.length} Sets)`}
                       </span>
-                      <span className="text-[11px] font-bold text-slate-600">
-                        {selectedSubject} · {selectedClass}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative min-w-[200px]">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={paperSearchQuery}
+                            onChange={(e) => setPaperSearchQuery(e.target.value)}
+                            placeholder="Search questions in papers..."
+                            className="w-full pl-8 pr-3 py-1 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-600">
+                          {selectedSubject} · {selectedClass}
+                        </span>
+                      </div>
                     </div>
                     <div
                       role="tablist"
@@ -3421,7 +3468,15 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
 
                     {/* Paper Sections */}
                     <div className="space-y-5">
-                      {activePaper.sections.map((sec, sIdx) => (
+                      {activePaper.sections.map((sec, sIdx) => {
+                        const pq = paperSearchQuery.trim().toLowerCase();
+                        const visibleQs = pq
+                          ? sec.questions.filter((qItem) =>
+                              `${qItem.qNo} ${qItem.question} ${qItem.modelAnswer}`.toLowerCase().includes(pq)
+                            )
+                          : sec.questions;
+                        if (pq && visibleQs.length === 0) return null;
+                        return (
                         <section
                           key={sIdx}
                           className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4"
@@ -3438,7 +3493,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                             </span>
                           </div>
                           <div className="space-y-3">
-                            {sec.questions.map((qItem, qIdx) => {
+                            {visibleQs.map((qItem, qIdx) => {
                               const ansKey = `${activePaper.id}-${sIdx}-${qIdx}`;
                               const open = Boolean(revealedPaperAnswers[ansKey]);
                               return (
@@ -3478,7 +3533,8 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                             })}
                           </div>
                         </section>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
