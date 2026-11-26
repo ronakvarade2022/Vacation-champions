@@ -1229,8 +1229,8 @@ const AppContent: React.FC = () => {
 
   return (
     <div
-      className={`min-h-screen flex flex-col font-sans ${
-        isPublicHomepageView ? 'bg-[#040d1f] text-white' : 'bg-amber-50/30 text-slate-900'
+      className={`flex flex-col font-sans ${
+        isPublicHomepageView ? 'bg-[#040d1f] text-white' : 'min-h-screen bg-amber-50/30 text-slate-900'
       }`}
     >
       {/* Header (Shown inside Portals & Subpages; hidden on the initial full-screen Public Wallpaper Homepage) */}
@@ -1281,7 +1281,7 @@ const AppContent: React.FC = () => {
       <main
         className={
           isPublicHomepageView
-            ? 'msz-public-home-main flex-1 w-full p-0 m-0'
+            ? 'msz-public-home-main w-full p-0 m-0'
             : `flex-1 w-full mx-auto pt-4 sm:pt-6 pb-10 ${
                 viewMode === 'desktop'
                   ? 'max-w-[1840px] px-4 sm:px-6 lg:px-8 2xl:px-10'

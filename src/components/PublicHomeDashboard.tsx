@@ -49,29 +49,39 @@ interface PublicHomeDashboardProps {
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   selectedBoard,
   selectedClass,
+  onSelectBoard,
+  onSelectClass,
+  onOpenDemo,
   onNavigateZone,
   onOpenAuth,
   onOpenPanel,
   onOpenPortalLanding,
+  onOpenMembership,
   isAuthenticated = false,
   currentRole = 'student',
   currentUserName,
   isDesktopMode = false,
   onToggleViewMode,
   onSetViewMode,
+  onMenuAction,
   onGlobalSearchJump,
 }) => {
   return (
-    <div id="home-overview" className="w-full min-h-screen">
+    <div id="home-overview" className="w-full">
       <InteractiveWallpaperHero
         selectedBoard={selectedBoard}
         selectedClass={selectedClass}
+        onSelectBoard={onSelectBoard}
+        onSelectClass={onSelectClass}
         isAuthenticated={isAuthenticated}
         currentRole={currentRole}
         currentUserName={currentUserName}
         isDesktopMode={isDesktopMode}
         onToggleViewMode={onToggleViewMode}
         onSetViewMode={onSetViewMode}
+        onOpenDemo={onOpenDemo}
+        onOpenMembership={onOpenMembership}
+        onMenuAction={onMenuAction}
         onNavigateTab={(tab, subSection, subject) =>
           onNavigateZone(tab, subSection || 'overview', subject)
         }
