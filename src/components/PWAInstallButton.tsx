@@ -22,6 +22,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 }) => {
   const {
     isInstallable,
+    isInstalled,
+    isStandalone,
     isIOS,
     isIOSSafari,
     isAndroid,
@@ -31,6 +33,10 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
   const [isPrompting, setIsPrompting] = useState(false);
+
+  if (isInstalled || isStandalone) {
+    return null;
+  }
 
   const handleInstallClick = async () => {
     if (isPrompting) return;

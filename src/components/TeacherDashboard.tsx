@@ -232,20 +232,193 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     window.print();
   };
 
+  const [activeOverviewCategory, setActiveOverviewCategory] = useState<
+    | 'all'
+    | 'classroom'
+    | 'lesson-planning'
+    | 'teaching-resources'
+    | 'ai-tools'
+    | 'assignments'
+    | 'assessment'
+    | 'performance'
+    | 'downloads'
+  >('all');
+
+  const teacherResourceCards = [
+    {
+      id: 'my-classroom',
+      category: 'classroom' as const,
+      categoryLabel: 'My Classroom',
+      title: `Class Roster & Attendance (${filteredStudents.length})`,
+      description:
+        'Mark daily student attendance, view active learning streaks, and inspect individual student progress.',
+      icon: Users,
+      iconBg: 'bg-teal-500 text-slate-950',
+      badge: 'Live Roster',
+      onClick: () => setActiveTeacherTab('roster'),
+    },
+    {
+      id: 'lesson-planner',
+      category: 'lesson-planning' as const,
+      categoryLabel: 'Lesson Planning',
+      title: '3-Tab Official Lesson Planner',
+      description:
+        'Annual, Monthly, and Daily lesson plans mapped to official Maharashtra, CBSE, and ICSE textbook chapters.',
+      icon: Calendar,
+      iconBg: 'bg-amber-400 text-slate-950',
+      badge: 'Annual · Monthly · Daily',
+      onClick: () => onNavigateTab('lesson-planner'),
+    },
+    {
+      id: 'teacher-130-tools',
+      category: 'teaching-resources' as const,
+      categoryLabel: 'Teaching Resources',
+      title: '130 Teacher Tools & Pedagogy Guides',
+      description:
+        'All 8 educator toolkits across Waves 1–6: Exam Blueprints, Gradebooks, Live Classroom Timer & Teaching Guides.',
+      icon: Wrench,
+      iconBg: 'bg-amber-400 text-slate-950',
+      badge: '130 Tools',
+      onClick: () => setActiveTeacherTab('tools'),
+    },
+    {
+      id: 'study-library',
+      category: 'teaching-resources' as const,
+      categoryLabel: 'Teaching Resources',
+      title: 'Free Study Library & Textbooks',
+      description:
+        'Official e-textbooks, chapter notes, textbook solutions, short revision sheets, and video lessons.',
+      icon: BookOpen,
+      iconBg: 'bg-teal-400 text-slate-950',
+      badge: 'Classes 1–10',
+      onClick: () => onNavigateTab('study-materials'),
+    },
+    {
+      id: 'additional-curriculum',
+      category: 'teaching-resources' as const,
+      categoryLabel: 'Teaching Resources',
+      title: 'Additional Curriculum Track',
+      description:
+        'GK, Logical Reasoning, Computer Knowledge, and 10 supplementary enrichment tracks for classroom periods.',
+      icon: Layers,
+      iconBg: 'bg-sky-400 text-slate-950',
+      badge: '10 Subjects',
+      onClick: () => {
+        if (onOpenAdditionalCurriculum) {
+          onOpenAdditionalCurriculum({
+            board: selectedBoard,
+            classLevel: selectedClass,
+          });
+        } else {
+          onNavigateTab('additional-curriculum');
+        }
+      },
+    },
+    {
+      id: 'teacher-ai-tools',
+      category: 'ai-tools' as const,
+      categoryLabel: 'AI Teacher Tools',
+      title: '40 AI Teacher Productivity Tools',
+      description:
+        'Generate question papers, lesson plans, rubrics, report card remarks, and bilingual worksheets with real Gemini AI.',
+      icon: Sparkles,
+      iconBg: 'bg-indigo-400 text-slate-950',
+      badge: '40 AI Tools',
+      onClick: () => onNavigateTab('ai-tools'),
+    },
+    {
+      id: 'homework-assignments',
+      category: 'assignments' as const,
+      categoryLabel: 'Assignments',
+      title: `Homework & Assignments (${classAssignmentsList.length})`,
+      description:
+        'Dispatch chapter homework to your class, track pending student submissions, and record marks & feedback.',
+      icon: FileText,
+      iconBg: 'bg-teal-400 text-slate-950',
+      badge: `${metrics.pendingGradingCount} To Grade`,
+      onClick: () => setActiveTeacherTab('assignments'),
+    },
+    {
+      id: 'worksheets-hub',
+      category: 'assessment' as const,
+      categoryLabel: 'Assessment',
+      title: 'Online Worksheets Hub',
+      description:
+        'Browse hundreds of auto-graded chapter worksheets across all subjects for classroom and home practice.',
+      icon: CheckSquare,
+      iconBg: 'bg-amber-400 text-slate-950',
+      badge: 'Auto-Graded',
+      onClick: () => onNavigateTab('worksheets'),
+    },
+    {
+      id: 'subject-quizzes',
+      category: 'assessment' as const,
+      categoryLabel: 'Assessment',
+      title: 'Subject Quizzes & 4-Level Drills',
+      description:
+        'Zero-repetition 4-level question bank and TET & CTET (200 Mocks) for continuous assessment.',
+      icon: Award,
+      iconBg: 'bg-sky-400 text-slate-950',
+      badge: '4 Levels + TET/CTET',
+      onClick: () => onNavigateTab('quizzes'),
+    },
+    {
+      id: 'tet-ctet-zone',
+      category: 'assessment' as const,
+      categoryLabel: 'Assessment',
+      title: 'TET & CTET Career Exam Zone',
+      description:
+        '200 full-length mock examinations, Child Development & Pedagogy, and language drills.',
+      icon: GraduationCap,
+      iconBg: 'bg-purple-400 text-slate-950',
+      badge: '200 Mocks',
+      onClick: () => onNavigateTab('tet-ctet'),
+    },
+    {
+      id: 'student-performance',
+      category: 'performance' as const,
+      categoryLabel: 'Student Performance',
+      title: 'Class Mastery & Analytics Summary',
+      description:
+        'Review class average XP, learning consistency rate, completed worksheets, and printable class reports.',
+      icon: Award,
+      iconBg: 'bg-emerald-400 text-slate-950',
+      badge: `${metrics.avgPoints} Avg XP`,
+      onClick: () => setActiveTeacherTab('analytics'),
+    },
+    {
+      id: 'document-print-studio',
+      category: 'downloads' as const,
+      categoryLabel: 'Downloads',
+      title: 'Document, PDF, QR & Print Studio',
+      description:
+        '19 PDF utilities, Word/Excel print sheets, ID Photo Resizer, A4 Print Preview, and Student QR Attendance labels.',
+      icon: Printer,
+      iconBg: 'bg-amber-400 text-slate-950',
+      badge: 'PDF · Print · QR',
+      onClick: () => onNavigateTab('document-studio'),
+    },
+  ];
+
+  const visibleTeacherCards =
+    activeOverviewCategory === 'all'
+      ? teacherResourceCards
+      : teacherResourceCards.filter((c) => c.category === activeOverviewCategory);
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
-      {/* Teacher Command Header */}
-      <div className="bg-gradient-to-r from-emerald-850 via-teal-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg border border-teal-700/40 relative overflow-hidden">
+      {/* High-Contrast Deep Navy & Slate Teacher Command Header */}
+      <div className="bg-gradient-to-r from-[#0b1930] via-[#0f2447] to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-slate-700/90 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5" />
+              <span className="px-3 py-1 rounded-full bg-teal-500/20 text-teal-200 border border-teal-400/40 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-teal-300" />
                 <span>Teacher &amp; Educator Command Center</span>
               </span>
-              <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold">
+              <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/40 text-xs font-bold">
                 {currentStudent?.schoolName || 'Central Educational Institute'}
               </span>
             </div>
@@ -254,7 +427,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               Welcome, {currentStudent?.name || 'Teacher'}!
             </h1>
             {(currentStudent?.qualification || (currentStudent?.teachingSubjects && currentStudent.teachingSubjects.length > 0) || (currentStudent?.classesTaught && currentStudent.classesTaught.length > 0)) && (
-              <p className="text-xs font-bold text-emerald-200">
+              <p className="text-xs font-bold text-teal-200">
                 {[
                   currentStudent?.qualification ? `Qualification: ${currentStudent.qualification}` : '',
                   currentStudent?.teachingSubjects?.length ? `Subjects: ${currentStudent.teachingSubjects.join(', ')}` : '',
@@ -264,10 +437,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   .join(' · ')}
               </p>
             )}
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Manage your classroom roster, track student learning streak and worksheet completion,
-              dispatch assignments, and access the verified 3-Tab Lesson Planner for Maharashtra,
-              CBSE, and ICSE.
+            <p className="text-xs sm:text-sm text-slate-200 max-w-2xl leading-relaxed">
+              Manage your classroom roster, lesson plans, teaching resources, AI productivity tools,
+              homework assignments, assessments, and printable reports from one organised workspace.
             </p>
           </div>
 
@@ -276,7 +448,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <button
                 type="button"
                 onClick={onSwitchToStudentView}
-                className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-all cursor-pointer flex items-center gap-1.5"
+                className="min-h-[42px] px-4 py-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs border border-slate-600 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
                 <Eye className="w-3.5 h-3.5 text-amber-300" />
                 <span>Student View Preview</span>
@@ -285,52 +457,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             <button
               type="button"
-              onClick={() => onNavigateTab('ai-tools')}
-              className="px-4 py-2.5 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+              onClick={() => setShowNewAssignmentModal(true)}
+              className="min-h-[42px] px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>40 Teacher AI Tools</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onNavigateTab('document-studio')}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Document &amp; Print Studio</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTeacherTab('tools')}
-              className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
-            >
-              <Wrench className="w-4 h-4" />
-              <span>130 Teacher Tools</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onNavigateTab('lesson-planner')}
-              className="px-4 py-2.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Open Lesson Planner</span>
+              <Plus className="w-4 h-4" />
+              <span>Dispatch Homework</span>
             </button>
           </div>
         </div>
 
         {/* Global Class & Board Filter Strip */}
-        <div className="mt-6 pt-5 border-t border-teal-700/40 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="mt-6 pt-5 border-t border-slate-700/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-[11px] font-bold text-teal-200 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-slate-200 uppercase tracking-wider mb-1">
               Select Board
             </label>
             <select
               value={selectedBoard}
               onChange={(e) => setSelectedBoard(e.target.value as EducationBoard)}
-              className="w-full bg-slate-900/80 border border-teal-600/50 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-teal-400 cursor-pointer"
+              className="w-full bg-slate-900/95 border border-slate-600 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 cursor-pointer"
             >
               {BOARD_META_LIST.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -341,13 +486,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-teal-200 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-slate-200 uppercase tracking-wider mb-1">
               Select Class
             </label>
             <select
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value as ClassLevel)}
-              className="w-full bg-slate-900/80 border border-teal-600/50 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-teal-400 cursor-pointer"
+              className="w-full bg-slate-900/95 border border-slate-600 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 cursor-pointer"
             >
               {ALL_10_CLASSES.map((cls) => (
                 <option key={cls} value={cls}>
@@ -358,13 +503,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-teal-200 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-slate-200 uppercase tracking-wider mb-1">
               Division / Section
             </label>
             <select
               value={selectedDivision}
               onChange={(e) => setSelectedDivision(e.target.value)}
-              className="w-full bg-slate-900/80 border border-teal-600/50 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-teal-400 cursor-pointer"
+              className="w-full bg-slate-900/95 border border-slate-600 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 cursor-pointer"
             >
               {DIVISIONS.map((div) => (
                 <option key={div} value={div}>
@@ -377,15 +522,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       </div>
 
       {asnNotice && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center justify-between gap-2 shadow-xs">
+        <div className="p-3.5 rounded-2xl bg-slate-900 border border-teal-500/60 text-white text-xs font-bold flex items-center justify-between gap-2 shadow-xs">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
             <span>{asnNotice}</span>
           </div>
           <button
             type="button"
             onClick={() => setAsnNotice(null)}
-            className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+            className="text-slate-300 hover:text-white cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -396,11 +541,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { id: 'overview' as const, label: 'Overview & Shortcuts', icon: Sparkles },
+            { id: 'overview' as const, label: 'Organised Workspace', icon: Layers },
             { id: 'tools' as const, label: '130 Teacher Tools & Guides', icon: Wrench },
-            { id: 'roster' as const, label: `Student Roster (${filteredStudents.length})`, icon: Users },
-            { id: 'assignments' as const, label: `Homework & Assignments (${classAssignmentsList.length})`, icon: FileText },
-            { id: 'analytics' as const, label: 'Performance Summary', icon: Award },
+            { id: 'roster' as const, label: `My Classroom (${filteredStudents.length})`, icon: Users },
+            { id: 'assignments' as const, label: `Assignments (${classAssignmentsList.length})`, icon: FileText },
+            { id: 'analytics' as const, label: 'Student Performance', icon: Award },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTeacherTab === tab.id;
@@ -409,10 +554,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTeacherTab(tab.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
                   isActive
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    ? 'bg-[#0f2447] text-white shadow-sm border border-slate-700'
+                    : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-200'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -426,47 +571,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <button
             type="button"
             onClick={handlePrintRoster}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+            className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
           >
-            <Printer className="w-3.5 h-3.5 text-slate-500" />
+            <Printer className="w-3.5 h-3.5 text-amber-300" />
             <span>Print Class Report</span>
           </button>
         </div>
       </div>
 
       {activeTeacherTab !== 'overview' && (
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs">
-          <div className="flex items-center gap-1.5 font-bold text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 text-white border border-slate-700 rounded-2xl px-4 py-2.5 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-300">
             <button
               type="button"
               onClick={() => setActiveTeacherTab('overview')}
-              className="hover:text-slate-900 underline cursor-pointer"
+              className="hover:text-white underline cursor-pointer"
             >
               Teacher Command Center
             </button>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-black text-slate-900">
+            <span className="font-black text-amber-300">
               {activeTeacherTab === 'tools'
                 ? '130 Teacher Tools & Pedagogy Guides'
                 : activeTeacherTab === 'roster'
-                ? 'Student Roster & Attendance'
+                ? 'My Classroom Roster & Attendance'
                 : activeTeacherTab === 'assignments'
                 ? 'Homework & Assignments'
-                : 'Performance Summary'}
+                : 'Student Performance Summary'}
             </span>
           </div>
           <button
             type="button"
             onClick={() => setActiveTeacherTab('overview')}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Overview</span>
+            <span>Back to Workspace</span>
           </button>
         </div>
       )}
 
-      {/* TAB 1: OVERVIEW & SHORTCUTS */}
+      {/* TAB 1: ORGANISED TEACHER WORKSPACE (8 Logical Categories & High-Contrast Navy/Slate Cards) */}
       {activeTeacherTab === 'overview' && (
         <div className="space-y-6">
           <GlobalStudySearchBar
@@ -480,230 +625,139 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             headline={`Teacher Syllabus, Worksheet, Exam Paper & Productivity Search (${selectedBoard} · ${selectedClass})`}
             compact
           />
-          {/* Quick Metrics Cards */}
+
+          {/* High-Contrast Dark Slate & Navy Quick Metrics Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <div className="bg-[#0f2447] text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
                 Total Enrolled
               </span>
-              <div className="text-2xl font-black text-slate-900">{metrics.totalStudents}</div>
-              <p className="text-[10px] text-slate-500 font-medium">
+              <div className="text-2xl font-black text-white tabular-nums">{metrics.totalStudents}</div>
+              <p className="text-[11px] text-sky-200 font-semibold">
                 {getBoardShortLabel(selectedBoard)} · {selectedClass}
               </p>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Active Learning Streaks
+            <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                Active Streaks
               </span>
-              <div className="text-2xl font-black text-emerald-600">{metrics.activeStudents}</div>
-              <p className="text-[10px] text-emerald-700 font-medium">Regular daily practice</p>
+              <div className="text-2xl font-black text-teal-300 tabular-nums">{metrics.activeStudents}</div>
+              <p className="text-[11px] text-slate-300 font-semibold">Regular daily practice</p>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
                 Worksheets Solved
               </span>
-              <div className="text-2xl font-black text-indigo-600">{metrics.totalWorksheetsDone}</div>
-              <p className="text-[10px] text-slate-500 font-medium">Cumulative classroom attempts</p>
+              <div className="text-2xl font-black text-amber-300 tabular-nums">{metrics.totalWorksheetsDone}</div>
+              <p className="text-[11px] text-slate-300 font-semibold">Cumulative class attempts</p>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Pending Submissions
+            <div className="bg-[#0f2447] text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                Pending Grading
               </span>
-              <div className="text-2xl font-black text-amber-600">{metrics.pendingGradingCount}</div>
-              <p className="text-[10px] text-amber-700 font-medium">Awaiting evaluation</p>
+              <div className="text-2xl font-black text-amber-400 tabular-nums">{metrics.pendingGradingCount}</div>
+              <p className="text-[11px] text-amber-200 font-semibold">Awaiting evaluation</p>
             </div>
           </div>
 
-          {/* Quick Learning & Curriculum Launchers */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-            <h2 className="text-base font-display font-black text-slate-900 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-indigo-600" />
-              <span>Teaching Resources &amp; Class Portals</span>
-            </h2>
+          {/* 8-Category Organised Teacher Hub */}
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-display font-black text-slate-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-[#0f2447]" />
+                  <span>Teacher Categories &amp; Classroom Modules</span>
+                </h2>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  Filter by category below or open any module directly. High-contrast cards ensure clear visibility in any classroom lighting.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-xl bg-slate-900 text-amber-300 text-xs font-black self-start sm:self-auto">
+                Showing {visibleTeacherCards.length} Module{visibleTeacherCards.length === 1 ? '' : 's'}
+              </span>
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              <button
-                type="button"
-                onClick={() => setActiveTeacherTab('tools')}
-                className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/70 hover:bg-amber-100/70 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
-                    <Wrench className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-amber-800">
-                    130 Teacher Tools &amp; Pedagogy Guides
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    All 8 toolkits across Waves 1–6: Blueprints, Gradebooks, Live Classroom Timer, AI Prompts &amp; Teacher Guides.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-700 shrink-0 mt-2" />
-              </button>
+            {/* 8 Logical Teacher Category Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {[
+                { id: 'all' as const, label: 'All Categories (12)' },
+                { id: 'classroom' as const, label: '1. My Classroom' },
+                { id: 'lesson-planning' as const, label: '2. Lesson Planning' },
+                { id: 'teaching-resources' as const, label: '3. Teaching Resources' },
+                { id: 'ai-tools' as const, label: '4. AI Teacher Tools' },
+                { id: 'assignments' as const, label: '5. Assignments' },
+                { id: 'assessment' as const, label: '6. Assessment' },
+                { id: 'performance' as const, label: '7. Student Performance' },
+                { id: 'downloads' as const, label: '8. Downloads & Print' },
+              ].map((cat) => {
+                const isSelected = activeOverviewCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setActiveOverviewCategory(cat.id)}
+                    className={`shrink-0 min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-[#0f2447] text-white border-slate-900 shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
 
-              <button
-                type="button"
-                onClick={() => onNavigateTab('lesson-planner')}
-                className="p-4 rounded-2xl border border-teal-200 bg-teal-50/50 hover:bg-teal-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center font-black">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-teal-700">
-                    3-Tab Lesson Planner
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    Annual, Monthly, and Daily lesson plans mapped to official textbook chapters.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0 mt-2" />
-              </button>
+            {/* High-Contrast Dark Navy / Slate / Charcoal Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleTeacherCards.map((card, idx) => {
+                const Icon = card.icon;
+                const cardSurface =
+                  idx % 2 === 0
+                    ? 'bg-gradient-to-br from-[#0f2447] via-[#132d59] to-slate-900'
+                    : 'bg-gradient-to-br from-slate-900 via-slate-800 to-[#0f2447]';
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={card.onClick}
+                    className={`p-5 rounded-2xl border border-slate-700 hover:border-amber-400/80 ${cardSurface} text-white shadow-md hover:shadow-lg transition-all text-left cursor-pointer group flex flex-col justify-between gap-4`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div
+                          className={`w-10 h-10 rounded-xl ${card.iconBg} flex items-center justify-center font-black shadow-xs shrink-0`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                          {card.categoryLabel}
+                        </span>
+                      </div>
 
-              <button
-                type="button"
-                onClick={() => onNavigateTab('worksheets')}
-                className="p-4 rounded-2xl border border-amber-200 bg-amber-50/50 hover:bg-amber-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
-                    <FileText className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-amber-700">
-                    Online Worksheets Hub
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    Browse hundreds of auto-graded chapter worksheets across all subjects.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0 mt-2" />
-              </button>
+                      <div className="space-y-1.5">
+                        <h3 className="text-sm sm:text-base font-display font-black text-white group-hover:text-amber-300 transition-colors">
+                          {card.title}
+                        </h3>
+                        <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                          {card.description}
+                        </p>
+                      </div>
+                    </div>
 
-              <button
-                type="button"
-                onClick={() => onNavigateTab('quizzes')}
-                className="p-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black">
-                    <Award className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-indigo-700">
-                    Subject Quizzes &amp; Drills
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    Zero-repetition 4-level question bank for continuous classroom assessments.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0 mt-2" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigateTab('study-materials')}
-                className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
-                    <BookOpen className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-emerald-700">
-                    Free Study Library
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    Official e-textbooks, chapter tests, video lessons, and printable study sheets.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0 mt-2" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigateTab('tet-ctet')}
-                className="p-4 rounded-2xl border border-purple-200 bg-purple-50/50 hover:bg-purple-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-purple-700 text-white flex items-center justify-center font-black">
-                    <GraduationCap className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-purple-700">
-                    TET &amp; CTET Career Zone
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    200 mock examinations, CDP, Pedagogy, and Marathi/English language drills.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 shrink-0 mt-2" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenAdditionalCurriculum) {
-                    onOpenAdditionalCurriculum({
-                      board: selectedBoard,
-                      classLevel: selectedClass,
-                    });
-                  } else {
-                    onNavigateTab('additional-curriculum');
-                  }
-                }}
-                className="p-4 rounded-2xl border border-sky-200 bg-sky-50/50 hover:bg-sky-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black">
-                    <Layers className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-sky-700">
-                    Additional Curriculum Track
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    GK, Logical Reasoning, Computer, and 10 supplementary enrichment tracks.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 shrink-0 mt-2" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigateTab('document-studio')}
-                className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
-                    <Printer className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-emerald-700">
-                    Document, PDF &amp; Print Studio
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    19 PDF utilities, Word/Excel print-area sheets, Image/ID Resizer &amp; Print Preview.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0 mt-2" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigateTab('qr-barcode-centre')}
-                className="p-4 rounded-2xl border border-amber-200 bg-amber-50/50 hover:bg-amber-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="w-9 h-9 rounded-xl bg-slate-900 text-amber-300 flex items-center justify-center font-black">
-                    <QrCode className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-black text-slate-900 group-hover:text-amber-700">
-                    QR &amp; Attendance Barcode Centre
-                  </h3>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    Generate Student/Teacher ID QR codes, Attendance sheets &amp; Bulk A4 label sheets.
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0 mt-2" />
-              </button>
+                    <div className="pt-3 border-t border-slate-700/80 flex items-center justify-between text-xs font-extrabold">
+                      <span className="text-teal-300">{card.badge}</span>
+                      <span className="inline-flex items-center gap-1 text-white group-hover:text-amber-300">
+                        <span>Open Module</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1051,27 +1105,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-                <span className="text-xs font-bold text-slate-500">Class Average XP</span>
-                <div className="text-2xl font-black text-slate-900">{metrics.avgPoints} Points</div>
-                <p className="text-[10px] text-slate-500">Based on regular quizzes and worksheets</p>
+              <div className="p-5 rounded-2xl bg-[#0f2447] text-white border border-slate-700 space-y-1 shadow-sm">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Class Average XP</span>
+                <div className="text-2xl font-black text-white tabular-nums">{metrics.avgPoints} Points</div>
+                <p className="text-xs text-sky-200 font-medium">Based on regular quizzes and worksheets</p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1">
-                <span className="text-xs font-bold text-emerald-800">Learning Consistency Rate</span>
-                <div className="text-2xl font-black text-emerald-700">
+              <div className="p-5 rounded-2xl bg-slate-900 text-white border border-slate-700 space-y-1 shadow-sm">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Learning Consistency Rate</span>
+                <div className="text-2xl font-black text-teal-300 tabular-nums">
                   {metrics.totalStudents > 0
                     ? Math.round((metrics.activeStudents / metrics.totalStudents) * 100)
                     : 0}
                   %
                 </div>
-                <p className="text-[10px] text-emerald-800">Students with 1+ day streak</p>
+                <p className="text-xs text-slate-300 font-medium">Students with 1+ day streak</p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 space-y-1">
-                <span className="text-xs font-bold text-indigo-800">Total Worksheets Solved</span>
-                <div className="text-2xl font-black text-indigo-700">{metrics.totalWorksheetsDone}</div>
-                <p className="text-[10px] text-indigo-800">Submitted across all subjects</p>
+              <div className="p-5 rounded-2xl bg-[#0f2447] text-white border border-slate-700 space-y-1 shadow-sm">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Total Worksheets Solved</span>
+                <div className="text-2xl font-black text-amber-300 tabular-nums">{metrics.totalWorksheetsDone}</div>
+                <p className="text-xs text-sky-200 font-medium">Submitted across all subjects</p>
               </div>
             </div>
 

@@ -215,3 +215,21 @@ html.tv-browser-detected .cv-auto-section {
   }
 }
 
+/* Installed PWA & Mobile Safe-Area Utilities */
+.pb-safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 767px) {
+  html:not(.desktop-site-active):not(.tv-browser-detected) main {
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+

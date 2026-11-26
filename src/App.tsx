@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, Component, type ErrorInfo, type ReactNode } from 'react';
+import React, { useState, useEffect, startTransition, Suspense, Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
@@ -6,6 +6,7 @@ import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
 import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { SectionLoadingFallback } from './components/SectionLoadingFallback';
 import { LiveAnnouncementTicker } from './components/LiveAnnouncementTicker';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
@@ -664,24 +665,26 @@ const AppContent: React.FC = () => {
       }
     }
 
-    if (tab !== 'worksheets') {
-      setWorksheetsInitialClass(undefined);
-      setWorksheetsInitialBoard(undefined);
-    }
-    if (tab !== 'study-materials' && tab !== 'study-material') {
-      setStudyInitialClass(undefined);
-      setStudyInitialBoard(undefined);
-      setStudyInitialSectionTab(undefined);
-    }
+    startTransition(() => {
+      if (tab !== 'worksheets') {
+        setWorksheetsInitialClass(undefined);
+        setWorksheetsInitialBoard(undefined);
+      }
+      if (tab !== 'study-materials' && tab !== 'study-material') {
+        setStudyInitialClass(undefined);
+        setStudyInitialBoard(undefined);
+        setStudyInitialSectionTab(undefined);
+      }
 
-    if (subjectParam) {
-      setQuizInitialSubject(subjectParam);
-    }
-    if (levelParam) {
-      setQuizInitialLevel(levelParam);
-    }
-    setCurrentTab(tab === 'study-material' ? 'study-materials' : tab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (subjectParam) {
+        setQuizInitialSubject(subjectParam);
+      }
+      if (levelParam) {
+        setQuizInitialLevel(levelParam);
+      }
+      setCurrentTab(tab === 'study-material' ? 'study-materials' : tab);
+    });
+    safeScrollToTop();
   };
 
   const handleHelpSupportNavigation = (action: SupportNavigationAction) => {
@@ -2076,36 +2079,31 @@ const AppContent: React.FC = () => {
               <>
                 {/* Dedicated Teacher Portal Workspace Quick Header (visible on sub-pages, avoiding duplicate Welcome banner on TeacherDashboard) */}
                 {isTeacherPortal && currentTab !== 'dashboard' && currentTab !== 'teacher-dashboard' && (
-                  <div className="mb-6 rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 sm:p-6 shadow-lg border border-emerald-400/30 space-y-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="space-y-1.5">
+                  <div className="mb-5 rounded-3xl bg-gradient-to-r from-[#0b1930] via-[#0f2447] to-slate-900 text-white p-4 sm:p-5 shadow-lg border border-slate-700/90 space-y-3.5">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-200 text-xs font-extrabold uppercase tracking-wider">
-                            <GraduationCap className="w-3.5 h-3.5" />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/40 text-teal-200 text-xs font-extrabold uppercase tracking-wider">
+                            <GraduationCap className="w-3.5 h-3.5 text-teal-300" />
                             <span>Teacher Portal &bull; Active: {getBoardShortLabel(activeBoard)} &bull; {currentStudent.classLevel}</span>
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-amber-200 text-xs font-bold">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-amber-300 text-xs font-bold">
                             <Sparkles className="w-3 h-3" />
                             <span>
-                              Classes 1–10 + Scholarship + TET/CTET Hub ({getActivatedBoardClassesList(currentStudent).length} Paid Class{getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 'es'})
+                              Educator Workspace ({getActivatedBoardClassesList(currentStudent).length} Paid Class{getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 'es'})
                             </span>
                           </span>
                         </div>
-                        <h2 className="text-xl sm:text-2xl font-display font-black">
-                          Welcome, {currentStudent.name}! (Educator Workspace)
+                        <h2 className="text-lg sm:text-xl font-display font-black text-white">
+                          Welcome, {currentStudent.name}!
                         </h2>
-                        <p className="text-xs sm:text-sm text-emerald-100 font-medium">
-                          {isPremiumActive
-                            ? getPremiumActivatedBannerMessage(currentStudent.classLevel, activeBoard)
-                            : `Browse Classes 1–10 (All Boards), 4th & 7th Scholarship, MAHA TET, and CTET Papers 1 & 2. Free demos & Mock 01 previews are open; paid tests and full banks unlock per purchased plan.`}
-                        </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, 'BOARD_CLASS')}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white font-black text-xs cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs cursor-pointer transition-colors"
                         >
                           <Crown className="w-4 h-4 text-amber-300" />
                           <span>{isPremiumActive ? `Class Active (${getBoardShortLabel(activeBoard)} ${currentStudent.classLevel})` : `Unlock Class (₹99)`}</span>
@@ -2114,217 +2112,76 @@ const AppContent: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, 'TET_CTET_COMBO_1Y')}
-                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs shadow-md cursor-pointer transition-all"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-sm cursor-pointer transition-all"
                           >
                             <Award className="w-4 h-4" />
                             <span>
-                              TET + CTET Combo 1 Year (<span className="line-through opacity-75">₹999</span> ₹499)
+                              TET + CTET Combo 1Y (<span className="line-through opacity-75">₹999</span> ₹499)
                             </span>
                           </button>
                         )}
                       </div>
                     </div>
 
-                    {/* Teacher Category Access Badges (Visibility Separate from Paid Access) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-2 border-t border-white/15 text-xs">
-                      {[
-                        {
-                          id: 'all_classes',
-                          label: 'Classes 1 to 10',
-                          unlocked: hasCategoryAccess(currentStudent, 'all_classes') || getActivatedBoardClassesList(currentStudent).length > 0,
-                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('all_classes'),
-                          sku: 'BOARD_CLASS' as PlanSkuId,
-                          tab: 'all-courses',
-                        },
-                        {
-                          id: 'scholarship_4th',
-                          label: '4th Scholarship',
-                          unlocked: hasCategoryAccess(currentStudent, 'scholarship_4th'),
-                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('scholarship_4th'),
-                          sku: 'SCHOLARSHIP_COMBO' as PlanSkuId,
-                          tab: 'scholarship',
-                        },
-                        {
-                          id: 'scholarship_7th',
-                          label: '7th Scholarship',
-                          unlocked: hasCategoryAccess(currentStudent, 'scholarship_7th'),
-                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('scholarship_7th'),
-                          sku: 'SCHOLARSHIP_COMBO' as PlanSkuId,
-                          tab: 'scholarship',
-                        },
-                        {
-                          id: 'maha_tet',
-                          label: 'Maharashtra TET',
-                          unlocked: hasCategoryAccess(currentStudent, 'maha_tet'),
-                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('maha_tet'),
-                          sku: 'TET_1Y' as PlanSkuId,
-                          tab: 'tet-ctet',
-                        },
-                        {
-                          id: 'ctet_paper_1',
-                          label: 'CTET Paper 1',
-                          unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_1'),
-                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('ctet_paper_1'),
-                          sku: 'CTET_1Y' as PlanSkuId,
-                          tab: 'tet-ctet',
-                        },
-                        {
-                          id: 'ctet_paper_2',
-                          label: 'CTET Paper 2',
-                          unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_2'),
-                          selected: !currentStudent.selectedTeacherCategories?.length || currentStudent.selectedTeacherCategories.includes('ctet_paper_2'),
-                          sku: 'CTET_1Y' as PlanSkuId,
-                          tab: 'tet-ctet',
-                        },
-                        {
-                          id: 'ctet_both',
-                          label: 'Both CTET Papers',
-                          unlocked: hasCategoryAccess(currentStudent, 'ctet_paper_1') && hasCategoryAccess(currentStudent, 'ctet_paper_2'),
-                          selected: !currentStudent.selectedTeacherCategories?.length || (currentStudent.selectedTeacherCategories.includes('ctet_paper_1') && currentStudent.selectedTeacherCategories.includes('ctet_paper_2')),
-                          sku: 'CTET_1Y' as PlanSkuId,
-                          tab: 'tet-ctet',
-                        },
-                      ].map((cat) => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() =>
-                            cat.unlocked
-                              ? handleNavigateTab(cat.tab)
-                              : openMembershipWithPlan('premium', currentStudent.classLevel, activeBoard, cat.sku)
-                          }
-                          className={`px-3 py-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
-                            cat.unlocked
-                              ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-100 hover:bg-emerald-500/30'
-                              : cat.selected
-                              ? 'bg-white/15 border-amber-300/50 text-white hover:bg-white/20'
-                              : 'bg-black/25 border-white/15 text-amber-100/80 hover:bg-white/10'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1 w-full">
-                            <span className="font-extrabold truncate">{cat.label}</span>
-                            {cat.unlocked ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                            ) : (
-                              <Lock className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                            )}
-                          </div>
-                          <span className="text-[9px] font-bold text-emerald-200/90 truncate">
-                            {cat.unlocked ? 'Purchased ✓' : cat.selected ? '✓ Selected • Preview Open' : 'Available'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
                     {/* Teacher Portal Quick Module Bar */}
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-white/15">
+                    <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-700/80">
                       <button
                         type="button"
                         onClick={() => handleNavigateTab('dashboard')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'dashboard' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
+                        className="px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-2xs"
                       >
                         <GraduationCap className="w-3.5 h-3.5" />
-                        <span>{getBoardShortLabel(activeBoard)} {currentStudent.classLevel} Overview</span>
+                        <span>Teacher Command Center</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleNavigateTab('lesson-planner')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'lesson-planner' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                          currentTab === 'lesson-planner' ? 'bg-white text-slate-950' : 'bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-600'
                         }`}
                       >
-                        <CalendarDays className="w-3.5 h-3.5" />
-                        <span>LESSON PLANNER</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openAdditionalCurriculum({ board: activeBoard, classLevel: currentStudent.classLevel, medium: currentStudent.medium as InstructionMedium | undefined })}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'additional-curriculum' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Additional Curriculum</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigateTab('worksheets')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'worksheets' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>Class-Wise Worksheets</span>
+                        <CalendarDays className="w-3.5 h-3.5 text-teal-300" />
+                        <span>Lesson Planner</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleNavigateTab('study-materials')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'study-materials' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                          currentTab === 'study-materials' ? 'bg-white text-slate-950' : 'bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-600'
                         }`}
                       >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Free Study Library (12 Modules)</span>
+                        <BookOpen className="w-3.5 h-3.5 text-sky-300" />
+                        <span>Study Library</span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleNavigateTab('quizzes')}
+                        onClick={() => handleNavigateTab('worksheets')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'quizzes' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                          currentTab === 'worksheets' ? 'bg-white text-slate-950' : 'bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-600'
                         }`}
                       >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>4-Level Practice Quizzes</span>
+                        <FileText className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Worksheets</span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleNavigateTab('scholarship')}
+                        onClick={() => handleNavigateTab('ai-tools')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'scholarship' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                          currentTab === 'ai-tools' ? 'bg-white text-slate-950' : 'bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-600'
                         }`}
                       >
-                        <Award className="w-3.5 h-3.5" />
-                        <span>4th &amp; 7th Scholarship</span>
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+                        <span>40 AI Tools</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleNavigateTab('tet-ctet')}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'tet-ctet' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
+                          currentTab === 'tet-ctet' ? 'bg-white text-slate-950' : 'bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-600'
                         }`}
                       >
-                        <GraduationCap className="w-3.5 h-3.5" />
+                        <Award className="w-3.5 h-3.5 text-purple-300" />
                         <span>TET &amp; CTET (200 Mocks)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigateTab('stories')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'stories' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>Stories &amp; Audio</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigateTab('cricket')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
-                          currentTab === 'cricket' ? 'bg-white text-emerald-950' : 'bg-white/10 hover:bg-white/20 text-white'
-                        }`}
-                      >
-                        <Activity className="w-3.5 h-3.5" />
-                        <span>Current Affairs</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigateTab('help-support')}
-                        className="px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-xs"
-                      >
-                        <Headphones className="w-3.5 h-3.5" />
-                        <span>HELP &amp; SUPPORT</span>
                       </button>
                       <PWAInstallButton variant="teacher" />
                     </div>
@@ -2582,6 +2439,17 @@ const AppContent: React.FC = () => {
 
       {/* Non-intrusive PWA Offline Connectivity Banner */}
       <PWAOfflineIndicator />
+
+      {/* Mobile & Installed PWA Native Bottom Navigation Bar */}
+      <MobileBottomNav
+        currentTab={currentTab}
+        activeRole={activeRole}
+        isTeacherPortal={isTeacherPortal}
+        isAuthenticated={Boolean(currentStudent || currentUser)}
+        viewMode={viewMode}
+        onNavigateTab={(t) => handleNavigateTab(t)}
+        onOpenAuth={() => openAuthModalWithTab(isTeacherPortal ? 'teacher' : 'login', isTeacherPortal ? 'teacher' : 'student')}
+      />
 
       {/* Professional Education Platform Footer */}
       <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-10 pb-8 text-xs">

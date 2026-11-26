@@ -233,57 +233,111 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigateTab('teacher-dashboard')}
-                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-[#0f2447] hover:bg-slate-900 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
                 >
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
+                  <Users className="w-3.5 h-3.5 text-teal-300" />
                   <span>Teacher Command Center</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigateTab('lesson-planner')}
-                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
                 >
-                  <Calendar className="w-3.5 h-3.5" />
+                  <Calendar className="w-3.5 h-3.5 text-amber-300" />
                   <span>Lesson Planner</span>
                 </button>
               </>
             )}
-            <button
-              type="button"
-              onClick={() => onNavigateTab('ai-tools')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>
-                {currentStudent.accountRole === 'teacher'
-                  ? 'Teacher AI Tools (40 Tools)'
-                  : 'Student AI Study Tools (30 Tools)'}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('document-studio')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>PDF, Image &amp; Print Studio</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('qr-barcode-centre')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
-            >
-              <QrCode className="w-3.5 h-3.5 text-amber-300" />
-              <span>QR &amp; Barcode Maker</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('core-skills-lab')}
-              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Vedic Maths · Abacus · Phonics</span>
-            </button>
+          </div>
+        </div>
+
+        {/* 7-CATEGORY CLEAN STUDENT ORGANISER STRIP (Stage 3: My Learning · My Class · Study Materials · AI Study Tools · Tests & Exams · My Progress · Downloads) */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-extrabold text-slate-700 uppercase tracking-wider text-[11px]">
+              Quick Student Categories (Instant Access)
+            </span>
+            <span className="text-[11px] font-bold text-indigo-700">
+              {getBoardShortLabel(activeBoard)} · {currentStudent.classLevel}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {[
+              {
+                id: 'cat-my-learning',
+                label: 'My Learning',
+                sub: `${activeClassSubjects.length} Subjects`,
+                icon: GraduationCap,
+                bg: 'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-200',
+                onClick: () => onNavigateTab('all-courses'),
+              },
+              {
+                id: 'cat-my-class',
+                label: 'My Class',
+                sub: `${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel}`,
+                icon: Layers,
+                bg: 'bg-sky-50 hover:bg-sky-100 text-sky-950 border-sky-200',
+                onClick: () => setShowAddBoardClassSelector((prev) => !prev),
+              },
+              {
+                id: 'cat-study-materials',
+                label: 'Study Materials',
+                sub: 'Books & Solutions',
+                icon: BookOpen,
+                bg: 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-200',
+                onClick: () => onNavigateTab('study-materials'),
+              },
+              {
+                id: 'cat-ai-study-tools',
+                label: 'AI Study Tools',
+                sub: currentStudent.accountRole === 'teacher' ? '40 Teacher Tools' : '30 Student Tools',
+                icon: ShieldCheck,
+                bg: 'bg-purple-50 hover:bg-purple-100 text-purple-950 border-purple-200',
+                onClick: () => onNavigateTab('ai-tools'),
+              },
+              {
+                id: 'cat-tests-exams',
+                label: 'Tests & Exams',
+                sub: 'Quizzes & Mocks',
+                icon: FileText,
+                bg: 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-200',
+                onClick: () => onNavigateTab('quizzes'),
+              },
+              {
+                id: 'cat-my-progress',
+                label: 'My Progress',
+                sub: `${overallProgressPercent}% Mastery`,
+                icon: Award,
+                bg: 'bg-rose-50 hover:bg-rose-100 text-rose-950 border-rose-200',
+                onClick: () => onNavigateTab('certificates'),
+              },
+              {
+                id: 'cat-downloads',
+                label: 'Downloads',
+                sub: 'PDF & Print Studio',
+                icon: Printer,
+                bg: 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300',
+                onClick: () => onNavigateTab('document-studio'),
+              },
+            ].map((cat) => {
+              const Icon = cat.icon;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={cat.onClick}
+                  className={`min-h-[48px] p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${cat.bg}`}
+                >
+                  <div className="w-8 h-8 rounded-xl bg-white/90 border border-black/5 flex items-center justify-center shrink-0 shadow-2xs">
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-black truncate">{cat.label}</div>
+                    <div className="text-[10px] font-bold opacity-75 truncate">{cat.sub}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
