@@ -35,6 +35,7 @@ import {
 } from './OneLineIconNavBar';
 import {
   GlobalSearchJumpTarget,
+  GlobalStudySearchBar,
   StudyLibraryGlobalSearch,
 } from './StudyLibraryGlobalSearch';
 import {
@@ -131,6 +132,7 @@ interface StudyMaterialsViewProps {
   initialBoard?: EducationBoard;
   initialClass?: ClassLevel;
   initialSubject?: SubjectName;
+  initialChapterNumber?: number;
   initialSectionTab?: StudyLibrarySectionTab;
   onNavigateTab: (tab: string, subjectParam?: SubjectName) => void;
   onOpenMembership?: (
@@ -163,6 +165,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   initialBoard,
   initialClass,
   initialSubject,
+  initialChapterNumber,
   initialSectionTab,
   onNavigateTab,
   onOpenAdditionalCurriculum,
@@ -212,6 +215,12 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
       setActiveSectionTab(initialSectionTab);
     }
   }, [initialSectionTab]);
+
+  useEffect(() => {
+    if (initialChapterNumber && initialChapterNumber > 0) {
+      setPendingChapterNumber(initialChapterNumber);
+    }
+  }, [initialChapterNumber]);
 
   // Spark-optimized version-gated Firestore dynamic overlay (0 reads when studyLibraryVersion === 0 or cached)
   useEffect(() => {
@@ -700,6 +709,16 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Inline Global Search & Curated Academic Suggestions */}
+      <GlobalStudySearchBar
+        defaultBoard={selectedBoard}
+        defaultClass={selectedClass}
+        onJumpToResult={handleGlobalSearchJump}
+        onOpenToolTab={(tab) => onNavigateTab(tab)}
+        onOpenFullSearchModal={() => setIsGlobalSearchOpen(true)}
+        compact
+      />
 
       {/* Global Cross-Library Search Modal (0 Firestore Reads, Mounted Only When Open) */}
       {isGlobalSearchOpen && (
@@ -1433,10 +1452,24 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                     {String(activeChapter.chapterNumber).padStart(2, '0')}.{' '}
                     {activeChapter.chapterTitle}
                   </h2>
-                  <p className="text-xs font-medium text-slate-600">
-                    Official Textbook Alignment:{' '}
-                    <strong className="text-slate-800">{activeChapter.textbookRef}</strong>
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
+                    <span>
+                      Official Textbook Alignment:{' '}
+                      <strong className="text-slate-800">{activeChapter.textbookRef}</strong>
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${
+                        syllabusResolution.verificationStatus === 'VERIFIED'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-sky-50 text-sky-800 border-sky-200'
+                      }`}
+                    >
+                      Source Origin:{' '}
+                      {syllabusResolution.verificationStatus === 'VERIFIED'
+                        ? 'Official Textbook Syllabus · Verified Openly Licensed Guide'
+                        : 'Teacher-Created & Structured Study Notes'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">

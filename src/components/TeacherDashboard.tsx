@@ -26,9 +26,11 @@ import {
   X,
   Wrench,
   ArrowLeft,
+  QrCode,
 } from 'lucide-react';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { SectionLoadingFallback } from './SectionLoadingFallback';
+import { GlobalStudySearchBar, type GlobalSearchJumpTarget } from './StudyLibraryGlobalSearch';
 import { useApp } from '../context/AppContext';
 import type {
   ClassLevel,
@@ -49,6 +51,7 @@ const TeacherToolsWorkbench = lazyWithRetry(() =>
 
 interface TeacherDashboardProps {
   onNavigateTab: (tab: string, subjectParam?: SubjectName) => void;
+  onGlobalSearchJump?: (target: GlobalSearchJumpTarget) => void;
   onOpenAdditionalCurriculum?: (ctx: {
     board?: EducationBoard;
     classLevel?: ClassLevel;
@@ -64,6 +67,7 @@ const DIVISIONS = ['All Divisions', 'Div A', 'Div B', 'Div C', 'Div D'];
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onNavigateTab,
+  onGlobalSearchJump,
   onOpenAdditionalCurriculum,
   onSwitchToStudentView,
 }) => {
@@ -285,7 +289,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               className="px-4 py-2.5 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
             >
               <Sparkles className="w-4 h-4" />
-              <span>AI Tools Studio</span>
+              <span>40 Teacher AI Tools</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateTab('document-studio')}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Document &amp; Print Studio</span>
             </button>
 
             <button
@@ -456,6 +469,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* TAB 1: OVERVIEW & SHORTCUTS */}
       {activeTeacherTab === 'overview' && (
         <div className="space-y-6">
+          <GlobalStudySearchBar
+            defaultBoard={selectedBoard}
+            defaultClass={selectedClass}
+            onJumpToResult={(target) => {
+              if (onGlobalSearchJump) onGlobalSearchJump(target);
+              else onNavigateTab('study-materials', target.subject);
+            }}
+            onOpenToolTab={(tab) => onNavigateTab(tab)}
+            headline={`Teacher Syllabus, Worksheet, Exam Paper & Productivity Search (${selectedBoard} · ${selectedClass})`}
+            compact
+          />
           {/* Quick Metrics Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
@@ -641,6 +665,44 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 shrink-0 mt-2" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('document-studio')}
+                className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
+              >
+                <div className="space-y-1">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
+                    <Printer className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-black text-slate-900 group-hover:text-emerald-700">
+                    Document, PDF &amp; Print Studio
+                  </h3>
+                  <p className="text-[11px] text-slate-600 leading-snug">
+                    19 PDF utilities, Word/Excel print-area sheets, Image/ID Resizer &amp; Print Preview.
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0 mt-2" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('qr-barcode-centre')}
+                className="p-4 rounded-2xl border border-amber-200 bg-amber-50/50 hover:bg-amber-50 transition-all text-left cursor-pointer group flex items-start justify-between gap-3"
+              >
+                <div className="space-y-1">
+                  <div className="w-9 h-9 rounded-xl bg-slate-900 text-amber-300 flex items-center justify-center font-black">
+                    <QrCode className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-black text-slate-900 group-hover:text-amber-700">
+                    QR &amp; Attendance Barcode Centre
+                  </h3>
+                  <p className="text-[11px] text-slate-600 leading-snug">
+                    Generate Student/Teacher ID QR codes, Attendance sheets &amp; Bulk A4 label sheets.
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0 mt-2" />
               </button>
             </div>
           </div>

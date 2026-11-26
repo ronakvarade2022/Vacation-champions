@@ -18,6 +18,8 @@ import {
   BookOpen,
   Calendar,
   Users,
+  Printer,
+  QrCode,
 } from 'lucide-react';
 import {
   getBoardClassSubscriptionInfo,
@@ -59,6 +61,7 @@ interface StudentDashboardProps {
   onSelectMainSection?: (sectionId: MainMenuId) => void;
   activeSubActionId?: NavSubActionId;
   onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
+  onGlobalSearchJump?: (target: import('./StudyLibraryGlobalSearch').GlobalSearchJumpTarget) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -72,6 +75,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onSelectMainSection,
   activeSubActionId,
   onOpenPanel,
+  onGlobalSearchJump,
 }) => {
   const {
     currentStudent,
@@ -161,6 +165,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           else onNavigateTab('quizzes');
         }}
         onNavigateTab={(tab, _subSection, subject) => onNavigateTab(tab, subject)}
+        onGlobalSearchJump={onGlobalSearchJump}
         onMenuAction={onMenuAction}
         onOpenAuth={() => onNavigateTab('profile')}
         onOpenMembership={(targetClass, targetBoard) =>
@@ -249,7 +254,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>AI Tools Studio (10 Tools)</span>
+              <span>
+                {currentStudent.accountRole === 'teacher'
+                  ? 'Teacher AI Tools (40 Tools)'
+                  : 'Student AI Study Tools (30 Tools)'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('document-studio')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>PDF, Image &amp; Print Studio</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('qr-barcode-centre')}
+              className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+            >
+              <QrCode className="w-3.5 h-3.5 text-amber-300" />
+              <span>QR &amp; Barcode Maker</span>
             </button>
             <button
               type="button"

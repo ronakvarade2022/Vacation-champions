@@ -147,6 +147,11 @@ const AIToolsHubView = lazyWithRetry(() =>
     default: m.AIToolsHubView,
   }))
 );
+const DocumentPrintSuiteView = lazyWithRetry(() =>
+  import('./components/productivity/DocumentPrintSuiteView').then((m) => ({
+    default: m.DocumentPrintSuiteView,
+  }))
+);
 const CoreSkillLabView = lazyWithRetry(() =>
   import('./components/skillPrograms/CoreSkillLabView').then((m) => ({
     default: m.CoreSkillLabView,
@@ -163,6 +168,7 @@ import { MAIN_NAV_MENUS, MainMenuId, NavSubActionId } from './data/navigationCon
 import type { HomeScrollTarget } from './components/PublicHomeDashboard';
 import type { ExplorerZoneType } from './components/PublicZoneExplorerView';
 import type { SupportNavigationAction } from './data/helpSupportKnowledgeBase';
+import type { GlobalSearchJumpTarget } from './components/StudyLibraryGlobalSearch';
 import {
   canAccessFeature,
   canAccessSubject,
@@ -192,7 +198,9 @@ const FEATURE_TITLES: Record<string, string> = {
   'ai-academy': 'AI Learning Academy & Future Skills',
   'additional-curriculum': 'MY STUDYZONE ADDITIONAL CURRICULUM (10 Subjects · Classes 1–10)',
   'teacher-dashboard': 'Teacher & Educator Command Center (Classes 1–10)',
-  'ai-tools': '10 Real AI Study & Educator Tools Studio',
+  'ai-tools': 'Student (30 Tools) & Teacher (40 Tools) AI Workspace',
+  'document-studio': 'Document, Image, PDF (19 Tools) & Print Preview Studio',
+  'qr-barcode-centre': 'Barcode & QR Generator Centre (15 Tools)',
   'core-skills-lab': 'Vedic Maths, Abacus & Phonics Interactive Lab',
   certificates: 'Official Champion Certificates & Leaderboard',
   leaderboard: 'Official Champion Certificates & Leaderboard',
@@ -262,15 +270,31 @@ const AppContent: React.FC = () => {
   const [worksheetsInitialBoard, setWorksheetsInitialBoard] = useState<EducationBoard | undefined>(undefined);
   const [studyInitialClass, setStudyInitialClass] = useState<ClassLevel | undefined>(undefined);
   const [studyInitialBoard, setStudyInitialBoard] = useState<EducationBoard | undefined>(undefined);
+  const [studyInitialChapterNumber, setStudyInitialChapterNumber] = useState<number | undefined>(
+    undefined
+  );
   const [studyInitialSectionTab, setStudyInitialSectionTab] = useState<
     StudyLibrarySectionTab | undefined
   >(undefined);
+  const [docStudioInitialTab, setDocStudioInitialTab] = useState<
+    'images' | 'pdf_office' | 'print_preview' | 'qr_barcode'
+  >('images');
   const [additionalCurriculumContext, setAdditionalCurriculumContext] = useState<{
     board?: EducationBoard;
     classLevel?: ClassLevel;
     medium?: InstructionMedium;
     subjectId?: string;
   } | null>(null);
+
+  const handleGlobalSearchRoute = (target: GlobalSearchJumpTarget) => {
+    if (target.board) setStudyInitialBoard(target.board);
+    if (target.classLevel) setStudyInitialClass(target.classLevel);
+    if (target.subject) setQuizInitialSubject(target.subject);
+    setStudyInitialChapterNumber(target.chapterNumber);
+    setStudyInitialSectionTab(target.tab as StudyLibrarySectionTab);
+    setCurrentTab('study-materials');
+    safeScrollToTop();
+  };
 
   const openAdditionalCurriculum = (ctx?: {
     board?: EducationBoard;
@@ -599,7 +623,7 @@ const AppContent: React.FC = () => {
     const alwaysOpenTabs = new Set([
       'demo', 'demo-mock-tests', 'dashboard', 'dashboard-student-preview', 'public-home', 'portal-landing',
       'explore-zone', 'all-courses', 'other-programs',
-      'coaching-zone', 'parent-zone', 'school-college-zone', 'ai-tools', 'core-skills-lab',
+      'coaching-zone', 'parent-zone', 'school-college-zone', 'ai-tools', 'document-studio', 'qr-barcode-centre', 'core-skills-lab',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'teacher-dashboard', 'additional-curriculum',
@@ -868,6 +892,16 @@ const AppContent: React.FC = () => {
         handleNavigateTab('ai-tools');
         return;
       }
+      case 'sl-document-studio': {
+        setDocStudioInitialTab('images');
+        handleNavigateTab('document-studio');
+        return;
+      }
+      case 'sl-qr-barcode': {
+        setDocStudioInitialTab('qr_barcode');
+        handleNavigateTab('qr-barcode-centre');
+        return;
+      }
       case 'sl-core-skills-lab': {
         setInitialCoreSkillProgram('vedic-maths');
         handleNavigateTab('core-skills-lab');
@@ -1063,6 +1097,8 @@ const AppContent: React.FC = () => {
       currentTab === 'future-skills' ||
       currentTab === 'ai-academy' ||
       currentTab === 'ai-tools' ||
+      currentTab === 'document-studio' ||
+      currentTab === 'qr-barcode-centre' ||
       currentTab === 'core-skills-lab' ||
       currentTab === 'other-programs'
     ) {
@@ -1317,6 +1353,10 @@ const AppContent: React.FC = () => {
                 ? 'sl-ai-academy'
                 : currentTab === 'ai-tools'
                 ? 'sl-ai-tools'
+                : currentTab === 'document-studio'
+                ? 'sl-document-studio'
+                : currentTab === 'qr-barcode-centre'
+                ? 'sl-qr-barcode'
                 : currentTab === 'core-skills-lab'
                 ? 'sl-core-skills-lab'
                 : currentTab === 'additional-curriculum'
@@ -1445,6 +1485,8 @@ const AppContent: React.FC = () => {
                   'future-skills',
                   'ai-academy',
                   'ai-tools',
+                  'document-studio',
+                  'qr-barcode-centre',
                   'core-skills-lab',
                   'referrals',
                   'faqs',
@@ -1519,6 +1561,7 @@ const AppContent: React.FC = () => {
               isDesktopMode={viewMode === 'desktop'}
               onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
               onMenuAction={handleMenuAction}
+              onGlobalSearchJump={handleGlobalSearchRoute}
               activeMainSection={dashboardMainSection}
               onSelectMainSection={handleSelectDashboardSection}
             />
@@ -1648,6 +1691,38 @@ const AppContent: React.FC = () => {
             />
           ) : currentTab === 'ai-tools' ? (
             <AIToolsHubView
+              portalMode={
+                isTeacherPortal
+                  ? 'teacher'
+                  : currentStudent
+                  ? 'student'
+                  : 'all'
+              }
+              studentContext={{
+                board: currentStudent ? activeBoard : publicBoard,
+                classLevel: currentStudent?.classLevel || publicClass,
+                medium: currentStudent?.medium || 'English',
+                name: currentStudent?.name || currentUser?.displayName || undefined,
+              }}
+              onOpenDocumentStudio={(subTab) => {
+                setDocStudioInitialTab(subTab || 'images');
+                handleNavigateTab('document-studio');
+              }}
+              onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
+          ) : currentTab === 'document-studio' || currentTab === 'qr-barcode-centre' ? (
+            <DocumentPrintSuiteView
+              initialTab={
+                currentTab === 'qr-barcode-centre' ? 'qr_barcode' : docStudioInitialTab
+              }
+              defaultStudentName={currentStudent?.name || currentUser?.displayName || ''}
+              defaultSchoolName={currentStudent?.schoolName || 'MyStudyZone'}
+              defaultBoardClass={`${currentStudent ? activeBoard : publicBoard} · ${currentStudent?.classLevel || publicClass}`}
+              onOpenAiStudio={() => handleNavigateTab('ai-tools')}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
@@ -1695,6 +1770,7 @@ const AppContent: React.FC = () => {
             <SchoolCollegeZoneView
               userId={currentStudent?.id || currentUser?.uid || 'guest_admin'}
               userName={currentStudent?.name || currentUser?.displayName || 'Institution Admin'}
+              onNavigateTab={(t) => handleNavigateTab(t)}
               onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'school_admin', regRole || 'school_admin')}
               onBackHome={() => {
                 setHomeScrollTarget('home-overview');
@@ -1734,6 +1810,7 @@ const AppContent: React.FC = () => {
               initialBoard={studyInitialBoard || (currentStudent ? activeBoard : publicBoard)}
               initialClass={studyInitialClass || currentStudent?.classLevel || publicClass}
               initialSubject={quizInitialSubject}
+              initialChapterNumber={studyInitialChapterNumber}
               initialSectionTab={studyInitialSectionTab}
               onNavigateTab={handleNavigateTab}
               onOpenMembership={(plan, targetClass, targetBoard) =>
@@ -1882,6 +1959,8 @@ const AppContent: React.FC = () => {
                     'future-skills',
                     'ai-academy',
                     'ai-tools',
+                    'document-studio',
+                    'qr-barcode-centre',
                     'core-skills-lab',
                     'referrals',
                     'faqs',
@@ -1947,6 +2026,7 @@ const AppContent: React.FC = () => {
                 isDesktopMode={viewMode === 'desktop'}
                 onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
                 onMenuAction={handleMenuAction}
+                onGlobalSearchJump={handleGlobalSearchRoute}
                 activeMainSection={dashboardMainSection}
                 onSelectMainSection={handleSelectDashboardSection}
                 activeSubActionId={activeSubActionId || undefined}
@@ -1967,6 +2047,7 @@ const AppContent: React.FC = () => {
               <SchoolCollegeZoneView
                 userId={currentUser?.uid || 'guest_admin'}
                 userName={currentUser?.displayName || 'Institution Admin'}
+                onNavigateTab={(t) => handleNavigateTab(t)}
                 onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab || 'school_admin', regRole || 'school_admin')}
                 onBackHome={() => {
                   handleOpenPortalLanding('school_admin');
@@ -2254,6 +2335,7 @@ const AppContent: React.FC = () => {
                 {currentTab === 'dashboard' && isTeacherPortal && (
                   <TeacherDashboard
                     onNavigateTab={handleNavigateTab}
+                    onGlobalSearchJump={handleGlobalSearchRoute}
                     onOpenAdditionalCurriculum={openAdditionalCurriculum}
                     onSwitchToStudentView={() => {
                       setCurrentTab('dashboard-student-preview');
@@ -2271,6 +2353,7 @@ const AppContent: React.FC = () => {
                     viewMode={viewMode}
                     onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
                     onMenuAction={handleMenuAction}
+                    onGlobalSearchJump={handleGlobalSearchRoute}
                     onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
                     activeMainSection={dashboardMainSection}
                     onSelectMainSection={handleSelectDashboardSection}
@@ -2304,6 +2387,7 @@ const AppContent: React.FC = () => {
                       viewMode={viewMode}
                       onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
                       onMenuAction={handleMenuAction}
+                      onGlobalSearchJump={handleGlobalSearchRoute}
                       onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
                       activeMainSection={dashboardMainSection}
                       onSelectMainSection={handleSelectDashboardSection}
@@ -2345,6 +2429,7 @@ const AppContent: React.FC = () => {
                 {currentTab === 'teacher-dashboard' && isTeacherPortal && (
                   <TeacherDashboard
                     onNavigateTab={handleNavigateTab}
+                    onGlobalSearchJump={handleGlobalSearchRoute}
                     onOpenAdditionalCurriculum={openAdditionalCurriculum}
                     onSwitchToStudentView={() => {
                       setCurrentTab('dashboard-student-preview');

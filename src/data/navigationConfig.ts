@@ -35,6 +35,8 @@ export type NavSubActionId =
   | 'sl-creative'
   | 'sl-programs'
   | 'sl-ai-tools'
+  | 'sl-document-studio'
+  | 'sl-qr-barcode'
   | 'sl-core-skills-lab'
   // SECTION 4: STUDY MATERIAL
   | 'sm-textbook-learning'
@@ -258,9 +260,21 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
       },
       {
         id: 'sl-ai-tools',
-        label: 'AI Tools Studio (10 Tools)',
-        description: 'Real Gemini-powered PDF, Worksheet, Question Paper, Notes, Presentation, Quiz, Resume & Image studio',
-        badgeText: '10 AI Tools',
+        label: 'AI Tools Studio (30 Student · 40 Teacher)',
+        description: 'Role-wise Gemini AI Tools for Students (30 Study Tools) and Teachers (40 Planning & Exam Tools) with Tables, Flashcards, Slides & PDF Print Preview',
+        badgeText: '70+ AI Tools',
+      },
+      {
+        id: 'sl-document-studio',
+        label: 'Document, Image & Print Studio',
+        description: 'Browser-side Image Resizer (KB/MB/px), Passport Photo Maker, 19 PDF Tools, Word/Excel Utilities & Interactive Print Preview',
+        badgeText: '19 PDF + Print',
+      },
+      {
+        id: 'sl-qr-barcode',
+        label: 'Barcode & QR Generator Centre',
+        description: 'Generate 15 types of QR & Barcodes (School/Student/Teacher IDs, Attendance, EAN-13, Code 128, ISBN, vCard, Wi-Fi & Bulk Label Sheets)',
+        badgeText: '15 QR Tools',
       },
       {
         id: 'sl-core-skills-lab',

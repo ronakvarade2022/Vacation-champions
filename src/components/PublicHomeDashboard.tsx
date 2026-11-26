@@ -37,6 +37,7 @@ interface PublicHomeDashboardProps {
   activeMainSection?: MainMenuId;
   onSelectMainSection?: (sectionId: MainMenuId) => void;
   activeSubActionId?: NavSubActionId;
+  onGlobalSearchJump?: (target: import('./StudyLibraryGlobalSearch').GlobalSearchJumpTarget) => void;
 }
 
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
@@ -59,6 +60,7 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   activeMainSection,
   onSelectMainSection,
   activeSubActionId,
+  onGlobalSearchJump,
 }) => {
   return (
     <div className={`${isDesktopMode ? 'space-y-8' : 'space-y-10'} pb-12`}>
@@ -73,6 +75,7 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
           onNavigateTab={(tab, subSection, subject) =>
             onNavigateZone(tab, subSection || 'overview', subject)
           }
+          onGlobalSearchJump={onGlobalSearchJump}
           onMenuAction={onMenuAction}
           onOpenAuth={onOpenAuth}
           onOpenPanel={onOpenPanel}

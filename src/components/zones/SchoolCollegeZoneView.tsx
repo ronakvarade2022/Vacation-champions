@@ -73,6 +73,7 @@ function readJson<T>(key: string, fallback: T): T {
 export interface SchoolCollegeZoneViewProps {
   userId: string;
   userName: string;
+  onNavigateTab?: (tab: string) => void;
   onOpenAuth?: (tab?: 'school_admin' | 'register', registerRole?: 'school_admin') => void;
   onBackHome: () => void;
 }
@@ -80,6 +81,7 @@ export interface SchoolCollegeZoneViewProps {
 export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
   userId,
   userName,
+  onNavigateTab,
   onOpenAuth,
   onBackHome,
 }) => {
@@ -349,6 +351,24 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
                   Institution Admin Login
                 </button>
               )
+            )}
+            {onNavigateTab && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('document-studio')}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 text-xs font-extrabold cursor-pointer"
+                >
+                  PDF &amp; Print Studio
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('qr-barcode-centre')}
+                  className="px-3 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 border border-amber-300/40 text-amber-100 text-xs font-extrabold cursor-pointer"
+                >
+                  School &amp; ID QR Maker
+                </button>
+              </>
             )}
           </div>
         </div>

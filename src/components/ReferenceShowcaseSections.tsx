@@ -33,6 +33,8 @@ import {
   UserCheck,
   UserPlus,
   Users,
+  Printer,
+  QrCode,
 } from 'lucide-react';
 import type { ChapterStudyMaterial, ClassLevel, EducationBoard, OfficialTextbookResource, PortalRole, SubjectName } from '../types';
 import type { getExamPapersForSubject as getExamPapersForSubjectFn } from '../data/studyLibrary/examPapersData';
@@ -54,6 +56,7 @@ import {
   HeroBoardEmblemIcon,
 } from './DashboardIllustrations';
 import { QuickStudyZoneIconBar, type QuickLearningNavId } from './OneLineIconNavBar';
+import { GlobalStudySearchBar, type GlobalSearchJumpTarget } from './StudyLibraryGlobalSearch';
 
 export interface RealStudentProgressMetrics {
   isLoggedIn: boolean;
@@ -72,6 +75,7 @@ interface ReferenceShowcaseSectionsProps {
   onSelectClass?: (cls: ClassLevel) => void;
   onOpenDemo: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
   onNavigateTab: (tab: string, subSection?: string, subject?: SubjectName) => void;
+  onGlobalSearchJump?: (target: GlobalSearchJumpTarget) => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
   onOpenAuth: (defaultTab: 'login' | 'register' | 'teacher' | 'admin') => void;
   onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
@@ -204,6 +208,7 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
   onSelectClass,
   onOpenDemo,
   onNavigateTab,
+  onGlobalSearchJump,
   onMenuAction,
   onOpenAuth,
   onOpenPanel,
@@ -351,6 +356,14 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       onNavigateTab('cricket');
     } else if (actionId === 'sl-ai-academy') {
       onNavigateTab('future-skills');
+    } else if (actionId === 'sl-ai-tools') {
+      onNavigateTab('ai-tools');
+    } else if (actionId === 'sl-document-studio') {
+      onNavigateTab('document-studio');
+    } else if (actionId === 'sl-qr-barcode') {
+      onNavigateTab('qr-barcode-centre');
+    } else if (actionId === 'sl-core-skills-lab') {
+      onNavigateTab('core-skills-lab');
     } else if (actionId === 'sl-additional-curriculum') {
       onNavigateTab('additional-curriculum');
     } else if (actionId === 'sl-creative' || actionId === 'sl-programs') {
@@ -621,6 +634,27 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         borderClass: 'border-[#4f46e5]/40',
       };
     }
+    if (subId === 'sl-ai-tools') {
+      return {
+        emojiIcon: '🤖',
+        cardGradient: 'from-[#e0e7ff] via-[#c7d2fe] to-[#a5b4fc]',
+        borderClass: 'border-[#4338ca]/50',
+      };
+    }
+    if (subId === 'sl-document-studio') {
+      return {
+        emojiIcon: '🖨️',
+        cardGradient: 'from-[#d1fae5] via-[#a7f3d0] to-[#6ee7b7]',
+        borderClass: 'border-emerald-500/50',
+      };
+    }
+    if (subId === 'sl-qr-barcode') {
+      return {
+        emojiIcon: '📱',
+        cardGradient: 'from-[#fef3c7] via-[#fde68a] to-[#fcd34d]',
+        borderClass: 'border-amber-500/50',
+      };
+    }
     if (subId === 'sl-creative') {
       return {
         illustrationType: 'writing',
@@ -828,6 +862,23 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
           </button>
         </div>
       </section>
+
+      {/* =====================================================================
+          INLINE GLOBAL STUDY SEARCH & SUGGESTIONS BAR
+          ===================================================================== */}
+      <GlobalStudySearchBar
+        defaultBoard={selectedBoard}
+        defaultClass={selectedClass}
+        onJumpToResult={(target) => {
+          if (onGlobalSearchJump) {
+            onGlobalSearchJump(target);
+          } else {
+            onNavigateTab('study-materials', target.tab, target.subject);
+          }
+        }}
+        onOpenToolTab={(tab) => onNavigateTab(tab)}
+        compact
+      />
 
       {/* =====================================================================
           ICON-BASED ONE-LINE LEARNING NAVIGATION BAR
@@ -1741,6 +1792,57 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
                         { label: 'Access', value: 'Classes 1–10' },
                       ],
                       cta: 'Open Creative Activities',
+                    },
+                    'sl-ai-tools': {
+                      highlights: [
+                        'Role-wise Gemini AI Workspace: 30 Student Study Tools and 40 Teacher Planning & Exam Tools',
+                        'Outputs include structured Tables, Interactive Flashcards, Quizzes, Slides & Documents',
+                        'Connected directly to NCERT/Balbharati/CISCE syllabus chapters and Print Preview Studio',
+                      ],
+                      stats: [
+                        { label: 'Student AI', value: '30 Tools' },
+                        { label: 'Teacher AI', value: '40 Tools' },
+                        { label: 'Exports', value: 'PDF / PPTX / XLS' },
+                      ],
+                      cta: 'Open AI Tools Studio',
+                    },
+                    'sl-document-studio': {
+                      highlights: [
+                        'Image Resizer by KB/MB/Pixels, Passport & ID Photo Maker with A4 Sheet & Image Editor',
+                        '19 Complete Browser PDF Tools (Merge, Split, Compress, Sign, Annotate, Word/Excel Utilities)',
+                        'Interactive Print Preview Engine with A4/A3/Letter/Legal sizing, Scaling & Margin Trim',
+                      ],
+                      stats: [
+                        { label: 'PDF Tools', value: '19 Utilities' },
+                        { label: 'Image Tools', value: 'Resize + Passport' },
+                        { label: 'Privacy', value: '100% Browser' },
+                      ],
+                      cta: 'Open Document & Print Studio',
+                    },
+                    'sl-qr-barcode': {
+                      highlights: [
+                        '15 QR & Barcode formats: School/Student/Teacher IDs, Attendance QR, EAN-13, Code 128, ISBN & Wi-Fi',
+                        'Bulk Label Generator (up to 50 codes) with A4 Printable Label Sheet PDF export',
+                        'Custom colors, center logo overlay & lossless PNG / SVG / PDF download',
+                      ],
+                      stats: [
+                        { label: 'Generators', value: '15 Modes' },
+                        { label: 'Bulk Mode', value: 'Up to 50 Labels' },
+                        { label: 'Formats', value: 'PNG / SVG / PDF' },
+                      ],
+                      cta: 'Open Barcode & QR Centre',
+                    },
+                    'sl-core-skills-lab': {
+                      highlights: [
+                        'Interactive 7-rod Soroban Abacus, 16 Vedic Maths speed drills & 4-level spoken Phonics lab',
+                        'Track speed scores and build core mental calculation confidence for Classes 1–10',
+                      ],
+                      stats: [
+                        { label: 'Abacus', value: '7-Rod Interactive' },
+                        { label: 'Vedic Maths', value: '16 Sutras' },
+                        { label: 'Phonics', value: '4 Spoken Levels' },
+                      ],
+                      cta: 'Open Core Skills Lab',
                     },
                   };
                   const info = studioDetailsMap[activeSub.id] || studioDetailsMap['sl-drawing'];

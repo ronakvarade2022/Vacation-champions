@@ -517,6 +517,22 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
               <Building2 className="w-4 h-4" />
               <span>Institute &amp; Academy Portal ({institutes.length})</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateTab('document-studio')}
+              className="px-3 py-2 rounded-xl text-xs font-black bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-all"
+            >
+              PDF &amp; Certificate Print
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateTab('qr-barcode-centre')}
+              className="px-3 py-2 rounded-xl text-xs font-black bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-all"
+            >
+              ID &amp; Attendance QR
+            </button>
           </div>
         </div>
 

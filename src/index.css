@@ -194,5 +194,24 @@ html.tv-browser-detected .cv-auto-section {
     box-shadow: none !important;
     border-width: 2px !important;
   }
+
+  body.msz-print-sheet-mode * {
+    visibility: hidden !important;
+  }
+
+  body.msz-print-sheet-mode #msz-print-preview-printable,
+  body.msz-print-sheet-mode #msz-print-preview-printable * {
+    visibility: visible !important;
+  }
+
+  body.msz-print-sheet-mode #msz-print-preview-printable {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
 }
 

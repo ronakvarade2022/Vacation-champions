@@ -10,7 +10,11 @@ export type AiToolId =
   | 'quiz_generator'
   | 'resume_maker'
   | 'letter_generator'
-  | 'content_generator';
+  | 'content_generator'
+  | 'teacher_productivity_tool'
+  | 'student_learning_tool';
+
+export type RoleToolOutputKind = 'document' | 'table' | 'slides' | 'quiz' | 'flashcards';
 
 export interface AiServiceStatus {
   configured: boolean;
@@ -29,10 +33,12 @@ const VALID_TEXT_TOOLS = new Set<AiToolId>([
   'resume_maker',
   'letter_generator',
   'content_generator',
+  'teacher_productivity_tool',
+  'student_learning_tool',
 ]);
 
 const AI_WINDOW_MS = 10 * 60 * 1000;
-const MAX_AI_REQUESTS_PER_IP = 30;
+const MAX_AI_REQUESTS_PER_IP = 40;
 const ipAiRequestLog = new Map<string, number[]>();
 
 function checkIpRateLimit(ip: string): boolean {
@@ -128,13 +134,17 @@ export async function handleAiTextGenerate(
     };
   }
 
-  const topic = String(body.topic || body.prompt || '').trim().slice(0, 1200);
+  const topic = String(body.topic || body.prompt || '').trim().slice(0, 1600);
   const board = String(body.board || 'Maharashtra').trim().slice(0, 40);
   const classLevel = String(body.classLevel || 'Class 5').trim().slice(0, 30);
   const subject = String(body.subject || 'Mathematics').trim().slice(0, 80);
   const language = String(body.language || 'English').trim().slice(0, 30);
-  const instructions = String(body.instructions || '').trim().slice(0, 800);
-  const count = Math.min(Math.max(Number(body.count) || 5, 1), 20);
+  const instructions = String(body.instructions || '').trim().slice(0, 1000);
+  const count = Math.min(Math.max(Number(body.count) || 5, 1), 25);
+
+  const roleToolName = String(body.toolName || '').trim().slice(0, 100);
+  const roleToolCategory = String(body.toolCategory || '').trim().slice(0, 80);
+  const outputKindRaw = String(body.outputKind || 'document').trim() as RoleToolOutputKind;
 
   if (!topic) {
     return {
@@ -150,10 +160,15 @@ export async function handleAiTextGenerate(
   const ai = createServerGeminiClient(apiKey);
 
   try {
-    if (toolId === 'quiz_generator') {
+    // 1. Interactive Quiz schema (either legacy quiz_generator or role-scoped quiz outputKind)
+    if (
+      toolId === 'quiz_generator' ||
+      ((toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
+        outputKindRaw === 'quiz')
+    ) {
       const response = await ai.models.generateContent({
         model: 'gemini-4-hydrogen',
-        contents: `Generate ${count} original, accurate multiple-choice quiz questions in ${language} for ${board} Board ${classLevel} ${subject} on the topic "${topic}". ${instructions}`,
+        contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ''}Generate ${count} original, accurate multiple-choice questions in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". ${instructions}`,
         config: {
           systemInstruction:
             'You are a strict Indian school academic curriculum author. Ensure factual and mathematical accuracy. Return valid JSON matching the schema.',
@@ -188,17 +203,23 @@ export async function handleAiTextGenerate(
         payload: {
           success: true,
           toolId,
+          outputKind: 'quiz',
           model: 'gemini-4-hydrogen',
           structured: parsed,
         },
       };
     }
 
-    if (toolId === 'presentation_maker') {
+    // 2. Presentation slides schema
+    if (
+      toolId === 'presentation_maker' ||
+      ((toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
+        outputKindRaw === 'slides')
+    ) {
       const slideCount = Math.min(Math.max(count, 3), 12);
       const response = await ai.models.generateContent({
         model: 'gemini-4-hydrogen',
-        contents: `Create a ${slideCount}-slide educational presentation deck in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Include concise bullet points and practical speaker notes for each slide. ${instructions}`,
+        contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ''}Create a ${slideCount}-slide educational presentation deck in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Include concise bullet points and practical speaker notes for each slide. ${instructions}`,
         config: {
           systemInstruction:
             'You create classroom-ready structured slide decks with clear bullet points and teacher/student speaker notes.',
@@ -234,12 +255,107 @@ export async function handleAiTextGenerate(
         payload: {
           success: true,
           toolId,
+          outputKind: 'slides',
           model: 'gemini-4-hydrogen',
           structured: parsed,
         },
       };
     }
 
+    // 3. Structured Table / Sheet schema (Timetables, Attendance, Marksheets, Seating Plans, Study Planners)
+    if (
+      (toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
+      outputKindRaw === 'table'
+    ) {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: `Tool: ${roleToolName || 'Academic Table Generator'} (${roleToolCategory || 'Education'}). Context: ${board} Board, ${classLevel}, Subject: ${subject}, Language: ${language}. Request: "${topic}". ${instructions} Output an organized, ready-to-print tabular grid (columns + rows) suitable for Excel (.xlsx) and A4 PDF export.`,
+        config: {
+          systemInstruction:
+            'You are an Indian school & academic operations planner. Generate clean, practical tabular schedules, registers, marksheets, seating charts, or study planners matching the exact JSON schema.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              subtitle: { type: Type.STRING },
+              columns: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              rows: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+              },
+              notes: { type: Type.STRING },
+            },
+          },
+        },
+      });
+
+      const parsed = JSON.parse((response.text || '{}').trim());
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          outputKind: 'table',
+          model: 'gemini-4-hydrogen',
+          structured: parsed,
+        },
+      };
+    }
+
+    // 4. Flashcards / Vocabulary / Definitions schema
+    if (
+      (toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
+      outputKindRaw === 'flashcards'
+    ) {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: `Tool: ${roleToolName || 'Study Flashcards'}. Create ${Math.min(Math.max(count, 4), 16)} study cards in ${language} for ${board} ${classLevel} ${subject} on "${topic}". ${instructions}`,
+        config: {
+          systemInstruction:
+            'You create high-retention study flashcards, definitions, formulas, and bilingual vocabulary cards matching the exact JSON schema.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              subtitle: { type: Type.STRING },
+              cards: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    front: { type: Type.STRING },
+                    back: { type: Type.STRING },
+                    hint: { type: Type.STRING },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const parsed = JSON.parse((response.text || '{}').trim());
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          outputKind: 'flashcards',
+          model: 'gemini-4-hydrogen',
+          structured: parsed,
+        },
+      };
+    }
+
+    // 5. Resume Maker schema
     if (toolId === 'resume_maker') {
       const response = await ai.models.generateContent({
         model: 'gemini-4-hydrogen',
@@ -278,7 +394,7 @@ export async function handleAiTextGenerate(
       };
     }
 
-    // Structured document output for PDF Maker, Worksheet, Question Paper, Notes, Letter, Content Generator
+    // 6. Structured document output (all remaining Teacher/Student document tools + PDF Maker/Worksheet/Question Paper/Notes/Letter/Content)
     const promptByTool: Record<string, string> = {
       pdf_maker: `Write a complete, well-structured educational PDF document in ${language} for ${board} ${classLevel} ${subject} titled/about "${topic}". Organize into clear sections suitable for direct PDF publication. ${instructions}`,
       worksheet_generator: `Create a printable classroom practice worksheet in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". Include varied sections (Fill in the Blanks, True/False, Short Questions, Problem Solving) AND a complete Answer Key section at the end. ${instructions}`,
@@ -286,6 +402,8 @@ export async function handleAiTextGenerate(
       notes_generator: `Write comprehensive, student-friendly Chapter Revision Notes in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". Include Overview, Key Concepts & Definitions, Important Formulas/Rules, Worked Examples, and Quick Revision Bullets. ${instructions}`,
       letter_generator: `Write a formal, clear, ready-to-send school/educational letter in ${language} for the request: "${topic}". Include Date placeholder, Recipient block, Subject line, clear body paragraphs, and Sign-off. ${instructions}`,
       content_generator: `Create engaging, original educational content in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Additional context: ${instructions}`,
+      teacher_productivity_tool: `You are executing Teacher Tool "${roleToolName || 'Educator Generator'}" (${roleToolCategory || 'Teaching'}). Language: ${language}. Curriculum: ${board} Board, ${classLevel}, ${subject}. Topic/Request: "${topic}". ${instructions} Produce complete, classroom-ready sections with clear headings, practical steps/questions, and teacher notes or answer keys wherever applicable.`,
+      student_learning_tool: `You are executing Student Learning Tool "${roleToolName || 'Student Study Helper'}" (${roleToolCategory || 'Learning'}). Language: ${language}. Student Profile: ${board} Board, ${classLevel}, ${subject}. Request/Question: "${topic}". ${instructions} Provide clear, step-by-step, age-appropriate explanations, worked examples, memory tips, and practice checks.`,
     };
 
     const response = await ai.models.generateContent({
@@ -293,7 +411,7 @@ export async function handleAiTextGenerate(
       contents: promptByTool[toolId] || topic,
       config: {
         systemInstruction:
-          'You are an expert Indian curriculum author and educational editor for MyStudyZone. Output clear structured JSON with title, subtitle, and well-organized sections.',
+          'You are an expert Indian curriculum author, educator, and tutor for MyStudyZone. Output clear structured JSON with title, subtitle, and well-organized sections.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -321,6 +439,7 @@ export async function handleAiTextGenerate(
       payload: {
         success: true,
         toolId,
+        outputKind: 'document',
         model: 'gemini-4-hydrogen',
         structured: parsed,
       },
