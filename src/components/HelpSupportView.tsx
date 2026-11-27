@@ -55,16 +55,26 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
   onNavigateTab,
   onOpenMembership 
 }) => {
-  const { currentStudent } = useApp();
+  const { currentStudent, currentUser, activeRole } = useApp();
+  const activeAccountId = currentStudent?.id || currentUser?.uid || '';
 
   const [activeSubTab, setActiveSubTab] = useState<'create' | 'track' | 'faqs'>('create');
 
   // Form State
   const [userCategory, setUserCategory] = useState<SupportUserCategory>(
-    normalizeSupportUserCategory(currentStudent?.accountRole)
+    normalizeSupportUserCategory(
+      currentStudent?.accountRole ||
+        (activeRole === 'school_admin'
+          ? 'college'
+          : activeRole === 'institute_admin'
+          ? 'institute'
+          : activeRole)
+    )
   );
-  const [studentName, setStudentName] = useState(currentStudent?.name || '');
-  const [email, setEmail] = useState(currentStudent?.email || '');
+  const [studentName, setStudentName] = useState(
+    currentStudent?.name || currentUser?.displayName || ''
+  );
+  const [email, setEmail] = useState(currentStudent?.email || currentUser?.email || '');
   const [mobile, setMobile] = useState(currentStudent?.mobile || '');
   const [category, setCategory] = useState<SupportCategory>('Payment & Subscription');
   const [subject, setSubject] = useState('');
@@ -79,20 +89,20 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // Student's recent tickets
+  // User's recent tickets
   const [myTickets, setMyTickets] = useState<SupportTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
 
   useEffect(() => {
-    if (currentStudent?.id) {
+    if (activeAccountId) {
       loadMyTickets();
     }
-  }, [currentStudent?.id]);
+  }, [activeAccountId]);
 
   const loadMyTickets = async () => {
     setLoadingTickets(true);
     try {
-      const tickets = await getSupportTickets(currentStudent?.id);
+      const tickets = await getSupportTickets(activeAccountId || undefined);
       setMyTickets(tickets);
     } catch (err) {
       console.warn('Failed to load tickets', err);
@@ -131,7 +141,7 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
     setIsSubmitting(true);
     try {
       const ticket = await createSupportTicket({
-        studentId: currentStudent?.id || 'guest',
+        studentId: activeAccountId || 'guest',
         studentName: studentName.trim(),
         email: email.trim(),
         mobile: mobile.trim(),
@@ -685,8 +695,8 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
             )}
           </div>
 
-          {/* Student's Recent Tickets List */}
-          {currentStudent && (
+          {/* Account's Recent Tickets List */}
+          {Boolean(activeAccountId) && (
             <div className="bg-white rounded-3xl p-6 border border-amber-200/80 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-display font-bold text-base text-slate-900">

@@ -23,15 +23,16 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
-  HELP_DESK_WELCOME_MESSAGE,
-  SupportLanguage,
   SupportNavigationAction,
   SupportPortalContext,
-  buildNavigationAction,
+  getPortalWelcomeActions,
+  getPortalWelcomeMessage,
 } from '../data/helpSupportKnowledgeBase';
 import {
   ChatTurnPayload,
   HELP_SUPPORT_OPEN_EVENT,
+  SupportAiStatusInfo,
+  fetchHelpAiStatus,
   sendHelpChatMessage,
   submitHelpSupportRequest,
 } from '../services/helpAssistantService';
@@ -210,18 +211,14 @@ const QUICK_TOPICS_BY_PORTAL: Record<
   ],
 };
 
-function makeInitialWelcomeMessage(): HelpMessageItem {
+function makeInitialWelcomeMessage(portal?: SupportPortalContext): HelpMessageItem {
   return {
     id: 'welcome-msz-helpdesk',
     sender: 'assistant',
-    text: HELP_DESK_WELCOME_MESSAGE,
+    text: getPortalWelcomeMessage(portal),
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     source: 'welcome',
-    navigationActions: [
-      buildNavigationAction('open_syllabus'),
-      buildNavigationAction('open_worksheets'),
-      buildNavigationAction('open_ai_tools'),
-    ],
+    navigationActions: getPortalWelcomeActions(portal),
     suggestSupportTicket: false,
   };
 }
@@ -233,7 +230,7 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
   activeTab,
   activePortalContext,
 }) => {
-  const { currentStudent, activeRole } = useApp();
+  const { currentStudent, currentUser, activeRole } = useApp();
 
   // Determine active portal category from context, tab, or signed-in role
   const detectedUserCategory = useMemo<SupportUserCategory>(() => {
@@ -260,14 +257,51 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
     detectedUserCategory
   );
 
+  const effectiveWelcomeContext: SupportPortalContext =
+    activeTab === 'public-home' && selectedPortalGuide === detectedUserCategory
+      ? 'homepage'
+      : selectedPortalGuide;
+
+  const [aiStatus, setAiStatus] = useState<SupportAiStatusInfo>({
+    aiConnected: false,
+    configured: false,
+    mode: 'knowledge_base',
+    reason: 'missing_key',
+    model: 'gemini-4-hydrogen',
+    message: 'Checking AI Help Desk status...',
+  });
+
   useEffect(() => {
     setSelectedPortalGuide(detectedUserCategory);
   }, [detectedUserCategory]);
 
   const [activeView, setActiveView] = useState<'chat' | 'support_request' | 'track_ticket'>('chat');
-  const [messages, setMessages] = useState<HelpMessageItem[]>(() => [makeInitialWelcomeMessage()]);
+  const [messages, setMessages] = useState<HelpMessageItem[]>(() => [
+    makeInitialWelcomeMessage(effectiveWelcomeContext),
+  ]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+
+  // Sync initial welcome message dynamically when portal changes before user starts chatting
+  useEffect(() => {
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].source === 'welcome') {
+        return [makeInitialWelcomeMessage(effectiveWelcomeContext)];
+      }
+      return prev;
+    });
+  }, [effectiveWelcomeContext]);
+
+  // Fetch honest server AI connection status on mount and whenever drawer opens
+  useEffect(() => {
+    let cancelled = false;
+    fetchHelpAiStatus().then((status) => {
+      if (!cancelled) setAiStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   // Support Request Form State
   const [reqRole, setReqRole] = useState<SupportUserCategory>(detectedUserCategory);
@@ -288,15 +322,21 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Sync user profile fields when user logs in or switches portal
+  // Sync default role when active portal changes (does NOT reset while user edits Name/Email)
   useEffect(() => {
     setReqRole(detectedUserCategory);
-    if (currentStudent) {
-      if (!reqName) setReqName(currentStudent.name || '');
-      if (!reqEmail) setReqEmail(currentStudent.email || currentStudent.parentEmail || '');
-      if (!reqMobile) setReqMobile(currentStudent.mobile || '');
-    }
-  }, [currentStudent, detectedUserCategory, reqName, reqEmail, reqMobile]);
+  }, [detectedUserCategory]);
+
+  // Prefill contact fields when user signs in
+  useEffect(() => {
+    const resolvedName = currentStudent?.name || currentUser?.displayName || '';
+    const resolvedEmail =
+      currentStudent?.email || currentStudent?.parentEmail || currentUser?.email || '';
+    const resolvedMobile = currentStudent?.mobile || '';
+    if (resolvedName) setReqName((prev) => prev || resolvedName);
+    if (resolvedEmail) setReqEmail((prev) => prev || resolvedEmail);
+    if (resolvedMobile) setReqMobile((prev) => prev || resolvedMobile);
+  }, [currentStudent, currentUser]);
 
   // Listen for global open event (e.g. from footer or Help buttons)
   useEffect(() => {
@@ -351,6 +391,35 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
           activeClass: currentStudent?.classLevel,
         });
 
+        if (
+          res.aiStatus === 'missing_key' ||
+          res.aiStatus === 'quota_exceeded' ||
+          res.aiStatus === 'upstream_error' ||
+          res.aiStatus === 'offline_fallback'
+        ) {
+          setAiStatus((prev) => ({
+            ...prev,
+            aiConnected: false,
+            mode: 'knowledge_base',
+            reason:
+              res.aiStatus === 'missing_key'
+                ? 'missing_key'
+                : res.aiStatus === 'quota_exceeded'
+                ? 'quota_exceeded'
+                : res.aiStatus === 'upstream_error'
+                ? 'upstream_error'
+                : 'offline',
+          }));
+        } else if (res.source === 'gemini_ai' && res.aiStatus === 'ok') {
+          setAiStatus((prev) => ({
+            ...prev,
+            aiConnected: true,
+            configured: true,
+            mode: 'live_ai',
+            reason: 'ok',
+          }));
+        }
+
         const botMsg: HelpMessageItem = {
           id: `bot_${Date.now()}`,
           sender: 'assistant',
@@ -371,7 +440,7 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
   );
 
   const handleResetConversation = () => {
-    setMessages([makeInitialWelcomeMessage()]);
+    setMessages([makeInitialWelcomeMessage(effectiveWelcomeContext)]);
     setInputText('');
   };
 
@@ -404,7 +473,7 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
         mobile: reqMobile,
         category: reqCategory,
         description: reqDescription,
-        studentId: currentStudent?.id,
+        studentId: currentStudent?.id || currentUser?.uid,
       });
 
       if (!result.success || !result.ticket) {
@@ -469,10 +538,17 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
             <div className="text-left leading-tight">
               <div className="text-xs font-extrabold tracking-wide flex items-center gap-1.5">
                 <span>AI Help &amp; Support</span>
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span
+                  title={aiStatus.message}
+                  className={`inline-block w-2 h-2 rounded-full ${
+                    aiStatus.aiConnected
+                      ? 'bg-emerald-400 animate-pulse'
+                      : 'bg-amber-400'
+                  }`}
+                />
               </div>
               <div className="text-[10px] text-amber-200 font-semibold hidden sm:block">
-                {activePortalLabel} • EN / HI / MR
+                {activePortalLabel} • {aiStatus.aiConnected ? 'Live AI' : 'KB Mode'}
               </div>
             </div>
           </button>
@@ -504,9 +580,28 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
                         {activePortalLabel}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-300">
-                      Students • Teachers • Parents • Colleges • Institutes
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-bold ${
+                          aiStatus.aiConnected ? 'text-emerald-300' : 'text-amber-300'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            aiStatus.aiConnected ? 'bg-emerald-400' : 'bg-amber-400'
+                          }`}
+                        />
+                        {aiStatus.aiConnected
+                          ? `Gemini Connected (${aiStatus.model})`
+                          : aiStatus.reason === 'quota_exceeded'
+                          ? 'Free AI Quota Exhausted • Knowledge Base Mode'
+                          : aiStatus.reason === 'api_key_invalid'
+                          ? 'Gemini Key Invalid • Knowledge Base Mode'
+                          : aiStatus.reason === 'upstream_error'
+                          ? 'Gemini Temporarily Busy • Knowledge Base Mode'
+                          : 'Knowledge Base Mode (Gemini API Key Not Set)'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 

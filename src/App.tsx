@@ -293,6 +293,21 @@ const AppContent: React.FC = () => {
   const [docStudioInitialTab, setDocStudioInitialTab] = useState<
     'images' | 'pdf_office' | 'print_preview' | 'qr_barcode'
   >('images');
+  const [aiToolsInitialTarget, setAiToolsInitialTarget] = useState<{
+    studioTab?: 'student_30' | 'teacher_40' | 'core_10';
+    coreTool?:
+      | 'pdf_maker'
+      | 'image_generator'
+      | 'worksheet_generator'
+      | 'question_paper_generator'
+      | 'notes_generator'
+      | 'presentation_maker'
+      | 'quiz_generator'
+      | 'resume_maker'
+      | 'letter_generator'
+      | 'content_generator';
+    teacherToolId?: string;
+  } | null>(null);
   const [additionalCurriculumContext, setAdditionalCurriculumContext] = useState<{
     board?: EducationBoard;
     classLevel?: ClassLevel;
@@ -732,6 +747,9 @@ const AppContent: React.FC = () => {
         setStudyInitialBoard(undefined);
         setStudyInitialSectionTab(undefined);
       }
+      if (tab === 'ai-tools') {
+        setAiToolsInitialTarget(null);
+      }
 
       if (subjectParam) {
         setQuizInitialSubject(subjectParam);
@@ -827,6 +845,16 @@ const AppContent: React.FC = () => {
         handleNavigateTab('ai-tools');
         return;
       }
+      case 'open_question_paper_generator': {
+        setAiToolsInitialTarget({
+          studioTab: 'core_10',
+          coreTool: 'question_paper_generator',
+          teacherToolId: 't_question_paper',
+        });
+        setCurrentTab('ai-tools');
+        safeScrollToTop();
+        return;
+      }
       case 'open_dictionary': {
         handleNavigateTab('trilingual-dictionary');
         return;
@@ -892,7 +920,12 @@ const AppContent: React.FC = () => {
         return;
       }
       case 'open_login': {
-        openAuthModalWithTab('login', 'student');
+        const portal = action.targetPortal;
+        if (portal === 'teacher') openAuthModalWithTab('teacher', 'teacher');
+        else if (portal === 'parent') openAuthModalWithTab('parent', 'parent');
+        else if (portal === 'college') openAuthModalWithTab('school_admin', 'school_admin');
+        else if (portal === 'institute') openAuthModalWithTab('institute_admin', 'institute_admin');
+        else openAuthModalWithTab('login', 'student');
         return;
       }
       case 'open_teacher_login': {
@@ -900,11 +933,33 @@ const AppContent: React.FC = () => {
         return;
       }
       case 'open_register': {
-        openAuthModalWithTab('register', 'student');
+        const portal = action.targetPortal;
+        const regRole: PortalRegisterRole =
+          portal === 'teacher'
+            ? 'teacher'
+            : portal === 'parent'
+            ? 'parent'
+            : portal === 'college'
+            ? 'school_admin'
+            : portal === 'institute'
+            ? 'institute_admin'
+            : 'student';
+        openAuthModalWithTab('register', regRole);
         return;
       }
       case 'open_password_reset': {
-        openAuthModalWithTab('forgot', 'student');
+        const portal = action.targetPortal;
+        const resetRole: PortalRegisterRole =
+          portal === 'teacher'
+            ? 'teacher'
+            : portal === 'parent'
+            ? 'parent'
+            : portal === 'college'
+            ? 'school_admin'
+            : portal === 'institute'
+            ? 'institute_admin'
+            : 'student';
+        openAuthModalWithTab('forgot', resetRole);
         return;
       }
       case 'open_dashboard':
@@ -1767,6 +1822,9 @@ const AppContent: React.FC = () => {
                   ? 'student'
                   : 'all'
               }
+              initialStudioTab={aiToolsInitialTarget?.studioTab}
+              initialCoreTool={aiToolsInitialTarget?.coreTool}
+              initialTeacherToolId={aiToolsInitialTarget?.teacherToolId}
               studentContext={{
                 board: currentStudent ? activeBoard : publicBoard,
                 classLevel: currentStudent?.classLevel || publicClass,
@@ -2522,20 +2580,24 @@ const AppContent: React.FC = () => {
         activePortalContext={
           currentTab === 'public-home'
             ? 'homepage'
-            : currentTab === 'parent-zone'
+            : currentTab === 'parent-zone' || activeRole === 'parent'
             ? 'parent'
-            : currentTab === 'school-college-zone'
+            : currentTab === 'school-college-zone' || activeRole === 'school_admin'
             ? 'college'
-            : currentTab === 'coaching-zone'
+            : currentTab === 'coaching-zone' || activeRole === 'institute_admin'
             ? 'institute'
-            : isTeacherPortal || activeLandingPortal === 'teacher'
+            : isTeacherPortal
             ? 'teacher'
-            : activeLandingPortal === 'parent'
-            ? 'parent'
-            : activeLandingPortal === 'school_admin'
-            ? 'college'
-            : activeLandingPortal === 'institute_admin'
-            ? 'institute'
+            : currentTab === 'portal-landing' || (!currentStudent && !currentUser)
+            ? activeLandingPortal === 'teacher'
+              ? 'teacher'
+              : activeLandingPortal === 'parent'
+              ? 'parent'
+              : activeLandingPortal === 'school_admin'
+              ? 'college'
+              : activeLandingPortal === 'institute_admin'
+              ? 'institute'
+              : 'student'
             : 'student'
         }
       />

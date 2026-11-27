@@ -138,6 +138,10 @@ export type StudioModeTab = 'student_30' | 'teacher_40' | 'core_10';
 
 export interface AIToolsHubViewProps {
   portalMode?: 'student' | 'teacher' | 'all';
+  initialStudioTab?: StudioModeTab;
+  initialCoreTool?: AiHubToolId;
+  initialTeacherToolId?: string;
+  initialStudentToolId?: string;
   studentContext?: {
     board?: EducationBoard;
     classLevel?: ClassLevel;
@@ -150,28 +154,56 @@ export interface AIToolsHubViewProps {
 
 export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
   portalMode = 'all',
+  initialStudioTab,
+  initialCoreTool,
+  initialTeacherToolId,
+  initialStudentToolId,
   studentContext,
   onOpenDocumentStudio,
   onBackHome,
 }) => {
   const defaultStudioTab: StudioModeTab =
-    portalMode === 'teacher'
+    initialStudioTab ||
+    (portalMode === 'teacher'
       ? 'teacher_40'
       : portalMode === 'student'
       ? 'student_30'
-      : 'student_30';
+      : 'student_30');
 
   const [studioTab, setStudioTab] = useState<StudioModeTab>(defaultStudioTab);
-  const [selectedCoreTool, setSelectedCoreTool] = useState<AiHubToolId>('pdf_maker');
-  const [selectedTeacherToolId, setSelectedTeacherToolId] = useState<string>(TEACHER_40_AI_TOOLS[0].id);
-  const [selectedStudentToolId, setSelectedStudentToolId] = useState<string>(STUDENT_30_AI_TOOLS[0].id);
+  const [selectedCoreTool, setSelectedCoreTool] = useState<AiHubToolId>(
+    initialCoreTool || 'pdf_maker'
+  );
+  const [selectedTeacherToolId, setSelectedTeacherToolId] = useState<string>(
+    initialTeacherToolId || TEACHER_40_AI_TOOLS[0].id
+  );
+  const [selectedStudentToolId, setSelectedStudentToolId] = useState<string>(
+    initialStudentToolId || STUDENT_30_AI_TOOLS[0].id
+  );
   const [toolSearchQuery, setToolSearchQuery] = useState<string>('');
   const [toolCategoryFilter, setToolCategoryFilter] = useState<string>('All');
 
   useEffect(() => {
-    if (portalMode === 'teacher') setStudioTab('teacher_40');
-    else if (portalMode === 'student') setStudioTab('student_30');
-  }, [portalMode]);
+    if (initialStudioTab) {
+      setStudioTab(initialStudioTab);
+    } else if (portalMode === 'teacher') {
+      setStudioTab('teacher_40');
+    } else if (portalMode === 'student') {
+      setStudioTab('student_30');
+    }
+  }, [portalMode, initialStudioTab]);
+
+  useEffect(() => {
+    if (initialCoreTool) setSelectedCoreTool(initialCoreTool);
+  }, [initialCoreTool]);
+
+  useEffect(() => {
+    if (initialTeacherToolId) setSelectedTeacherToolId(initialTeacherToolId);
+  }, [initialTeacherToolId]);
+
+  useEffect(() => {
+    if (initialStudentToolId) setSelectedStudentToolId(initialStudentToolId);
+  }, [initialStudentToolId]);
 
   const [aiStatus, setAiStatus] = useState<AiStatusState>({
     loading: true,

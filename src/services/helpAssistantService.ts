@@ -30,6 +30,48 @@ export interface ChatTurnPayload {
   text: string;
 }
 
+export interface SupportAiStatusInfo {
+  aiConnected: boolean;
+  configured: boolean;
+  mode: 'live_ai' | 'knowledge_base';
+  reason: 'ok' | 'missing_key' | 'quota_exceeded' | 'api_key_invalid' | 'upstream_error' | 'offline';
+  model: string;
+  message: string;
+}
+
+export async function fetchHelpAiStatus(): Promise<SupportAiStatusInfo> {
+  try {
+    const res = await fetch('/api/support/status');
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && typeof data.aiConnected === 'boolean') {
+      return {
+        aiConnected: Boolean(data.aiConnected),
+        configured: Boolean(data.configured),
+        mode: data.mode === 'live_ai' && data.aiConnected ? 'live_ai' : 'knowledge_base',
+        reason: data.reason || (data.aiConnected ? 'ok' : 'missing_key'),
+        model: String(data.model || 'gemini-4-hydrogen'),
+        message: String(
+          data.message ||
+            (data.aiConnected
+              ? 'Live Free-Tier Gemini AI Connected'
+              : 'Knowledge Base Mode Active')
+        ),
+      };
+    }
+  } catch {
+    // Offline or server unreachable
+  }
+
+  return {
+    aiConnected: false,
+    configured: false,
+    mode: 'knowledge_base',
+    reason: 'offline',
+    model: 'gemini-4-hydrogen',
+    message: 'Knowledge Base Mode (Support AI server status unavailable)',
+  };
+}
+
 export interface HelpChatResult {
   success: boolean;
   source: 'knowledge_base' | 'gemini_ai' | 'kb_fallback';
@@ -106,6 +148,7 @@ export async function sendHelpChatMessage(params: {
 
   const fastMatch = matchKnowledgeBaseFastPath(cleanMessage, {
     userRole: mappedPortalContext,
+    includeComplexMatch: true,
   });
   const lang = detectQueryLanguage(cleanMessage);
 

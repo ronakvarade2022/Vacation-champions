@@ -92,6 +92,7 @@ import {
 } from './src/data/planCatalog.ts';
 import {
   getServerSupportTickets,
+  getSupportAiStatus,
   handleSupportChatRequest,
   handleSupportTicketSubmission,
   updateServerSupportTicketStatus
@@ -213,7 +214,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Access-Control-Allow-Origin', trustedOrigin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature'
@@ -3758,10 +3759,79 @@ app.post('/api/support/chat', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/support/status', (_req: Request, res: Response) => {
+  return res.json({
+    success: true,
+    ...getSupportAiStatus(),
+  });
+});
+
 app.get('/api/support/tickets', async (req: Request, res: Response) => {
   try {
     const studentId = req.query.studentId ? String(req.query.studentId).trim() : undefined;
-    const tickets = getServerSupportTickets(studentId);
+    const ticketNumber = req.query.ticketNumber ? String(req.query.ticketNumber).trim() : undefined;
+
+    const authHeader = req.headers.authorization;
+    const rawToken =
+      typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+        ? authHeader.slice('Bearer '.length).trim()
+        : undefined;
+
+    if (ticketNumber) {
+      const adminCheck = rawToken
+        ? await verifyAdminRequest(req.headers).catch(() => ({ authorized: false }))
+        : { authorized: false };
+      const tickets = await getServerSupportTickets({
+        ticketNumber,
+        bearerToken: rawToken,
+        includeContactDetails: Boolean(adminCheck.authorized),
+      });
+      return res.json({
+        success: true,
+        count: tickets.length,
+        tickets,
+      });
+    }
+
+    if (studentId) {
+      const tokenRes = rawToken ? await verifyBearerIdToken(authHeader).catch(() => null) : null;
+      const adminCheck =
+        !tokenRes?.valid || tokenRes.uid !== studentId
+          ? await verifyAdminRequest(req.headers).catch(() => ({ authorized: false, statusCode: 401 }))
+          : { authorized: true, statusCode: 200 };
+      const isOwner = Boolean(tokenRes?.valid && tokenRes.uid === studentId);
+      if (!isOwner && !adminCheck.authorized) {
+        return res.status(401).json({
+          success: false,
+          tickets: [],
+          error: 'Authentication required to list account support tickets.',
+        });
+      }
+      const tickets = await getServerSupportTickets({
+        studentId,
+        bearerToken: rawToken,
+        includeContactDetails: true,
+      });
+      return res.json({
+        success: true,
+        count: tickets.length,
+        tickets,
+      });
+    }
+
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        tickets: [],
+        error: adminCheck.error || 'Administrator authorization required to list all support tickets.',
+      });
+    }
+
+    const tickets = await getServerSupportTickets({
+      bearerToken: rawToken,
+      includeContactDetails: true,
+    });
     return res.json({
       success: true,
       count: tickets.length,
@@ -3797,12 +3867,25 @@ app.post('/api/support/tickets', async (req: Request, res: Response) => {
 
 app.patch('/api/support/tickets/:ticketId', async (req: Request, res: Response) => {
   try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        error: adminCheck.error || 'Administrator authorization required to update support tickets.',
+      });
+    }
+    const authHeader = req.headers.authorization;
+    const rawToken =
+      typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+        ? authHeader.slice('Bearer '.length).trim()
+        : undefined;
     const ticketId = String(req.params.ticketId || '').trim();
     const { status, adminResponse } = (req.body || {}) as Record<string, unknown>;
     const result = await updateServerSupportTicketStatus(
       ticketId,
       String(status || 'IN_PROGRESS'),
-      adminResponse !== undefined ? String(adminResponse) : undefined
+      adminResponse !== undefined ? String(adminResponse) : undefined,
+      rawToken
     );
     return res.status(result.statusCode).json(result.payload);
   } catch (err: any) {

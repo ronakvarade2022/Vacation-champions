@@ -10,7 +10,7 @@ import {
   QuestionIssueType,
   FaqItem
 } from '../types/support';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { 
   collection, 
   doc, 
@@ -121,6 +121,34 @@ function saveLocalData<T>(key: string, data: T[]): void {
   }
 }
 
+async function getOptionalBearerToken(): Promise<string> {
+  try {
+    if (auth?.currentUser) {
+      return await auth.currentUser.getIdToken();
+    }
+  } catch {
+    // Ignore token fetch errors
+  }
+  return '';
+}
+
+function mergeTicketByFreshness(
+  map: Map<string, SupportTicket>,
+  incoming: SupportTicket
+): void {
+  if (!incoming || !incoming.id) return;
+  const existing = map.get(incoming.id);
+  if (!existing) {
+    map.set(incoming.id, incoming);
+    return;
+  }
+  const existingTs = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+  const incomingTs = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
+  if (incomingTs >= existingTs) {
+    map.set(incoming.id, incoming);
+  }
+}
+
 export function cacheSavedSupportTicketLocally(ticket: SupportTicket): void {
   const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
   const filtered = localList.filter(
@@ -149,10 +177,14 @@ export async function createSupportTicket(data: {
   const userCategory = normalizeSupportUserCategory(data.userCategory);
 
   // Try server endpoint first so ticket is persisted centrally
+  const bearerToken = await getOptionalBearerToken();
   try {
     const res = await fetch('/api/support/tickets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
       body: JSON.stringify({
         userCategory,
         requesterRole: userCategory,
@@ -228,22 +260,27 @@ export async function getSupportTickets(
   studentId?: string,
   forceRefresh: boolean = false
 ): Promise<SupportTicket[]> {
+  const bearerToken = await getOptionalBearerToken();
+
   if (studentId) {
     const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
     const map = new Map<string, SupportTicket>();
 
-    try {
-      const res = await fetch(
-        `/api/support/tickets?studentId=${encodeURIComponent(studentId)}`
-      );
-      const data = await res.json().catch(() => null);
-      if (res.ok && Array.isArray(data?.tickets)) {
-        for (const t of data.tickets as SupportTicket[]) {
-          if (t && t.id) map.set(t.id, t);
+    if (bearerToken) {
+      try {
+        const res = await fetch(
+          `/api/support/tickets?studentId=${encodeURIComponent(studentId)}`,
+          { headers: { Authorization: `Bearer ${bearerToken}` } }
+        );
+        const data = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(data?.tickets)) {
+          for (const t of data.tickets as SupportTicket[]) {
+            mergeTicketByFreshness(map, t);
+          }
         }
+      } catch {
+        // Continue with Firestore + local cache
       }
-    } catch {
-      // Continue with Firestore + local cache
     }
 
     try {
@@ -253,8 +290,7 @@ export async function getSupportTickets(
         );
         if (!snap.empty) {
           snap.docs.forEach((d) => {
-            const t = d.data() as SupportTicket;
-            if (t && t.id) map.set(t.id, t);
+            mergeTicketByFreshness(map, d.data() as SupportTicket);
           });
         }
       }
@@ -264,9 +300,7 @@ export async function getSupportTickets(
 
     localList
       .filter((t) => t.studentId === studentId)
-      .forEach((t) => {
-        if (!map.has(t.id)) map.set(t.id, t);
-      });
+      .forEach((t) => mergeTicketByFreshness(map, t));
 
     return Array.from(map.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -279,16 +313,20 @@ export async function getSupportTickets(
       const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
       const map = new Map<string, SupportTicket>();
 
-      try {
-        const res = await fetch('/api/support/tickets');
-        const data = await res.json().catch(() => null);
-        if (res.ok && Array.isArray(data?.tickets)) {
-          for (const t of data.tickets as SupportTicket[]) {
-            if (t && t.id) map.set(t.id, t);
+      if (bearerToken) {
+        try {
+          const res = await fetch('/api/support/tickets', {
+            headers: { Authorization: `Bearer ${bearerToken}` },
+          });
+          const data = await res.json().catch(() => null);
+          if (res.ok && Array.isArray(data?.tickets)) {
+            for (const t of data.tickets as SupportTicket[]) {
+              mergeTicketByFreshness(map, t);
+            }
           }
+        } catch {
+          // Continue with Firestore + local cache
         }
-      } catch {
-        // Continue with Firestore + local cache
       }
 
       try {
@@ -303,8 +341,7 @@ export async function getSupportTickets(
           }
           if (!snap.empty) {
             snap.forEach((d) => {
-              const t = d.data() as SupportTicket;
-              if (t && t.id) map.set(t.id, t);
+              mergeTicketByFreshness(map, d.data() as SupportTicket);
             });
           }
         }
@@ -312,11 +349,7 @@ export async function getSupportTickets(
         console.warn('[SupportService] Firestore read failed, using server & cached tickets:', err);
       }
 
-      localList.forEach((t) => {
-        if (t && t.id && !map.has(t.id)) {
-          map.set(t.id, t);
-        }
-      });
+      localList.forEach((t) => mergeTicketByFreshness(map, t));
 
       const merged = Array.from(map.values()).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -330,9 +363,53 @@ export async function getSupportTickets(
 
 export async function getSupportTicketByNumber(ticketNumber: string): Promise<SupportTicket | null> {
   const trimmed = ticketNumber.trim().toUpperCase();
-  const all = await getSupportTickets(undefined, true);
-  const found = all.find(t => t.ticketNumber.toUpperCase() === trimmed || t.id === trimmed);
-  return found || null;
+  if (!trimmed) return null;
+
+  const bearerToken = await getOptionalBearerToken();
+  const candidates: SupportTicket[] = [];
+
+  try {
+    const res = await fetch(
+      `/api/support/tickets?ticketNumber=${encodeURIComponent(trimmed)}`,
+      bearerToken ? { headers: { Authorization: `Bearer ${bearerToken}` } } : undefined
+    );
+    const data = await res.json().catch(() => null);
+    if (res.ok && Array.isArray(data?.tickets) && data.tickets.length > 0) {
+      candidates.push(...(data.tickets as SupportTicket[]));
+    }
+  } catch {
+    // Fallback to Firestore / local cache below
+  }
+
+  try {
+    if (db) {
+      const snap = await getDocs(
+        query(collection(db, 'support_tickets'), where('ticketNumber', '==', trimmed), limit(1))
+      );
+      if (!snap.empty) {
+        candidates.push(snap.docs[0].data() as SupportTicket);
+      }
+    }
+  } catch {
+    // Ignore Firestore rule errors for guest/cross-account lookups
+  }
+
+  const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
+  const localHit = localList.find(
+    (t) => t.ticketNumber.toUpperCase() === trimmed || t.id.toUpperCase() === trimmed
+  );
+  if (localHit) {
+    candidates.push(localHit);
+  }
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const tB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    const tA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    return tB - tA;
+  });
+  return candidates[0];
 }
 
 export async function updateSupportTicketStatus(
@@ -366,11 +443,15 @@ export async function updateSupportTicketStatus(
     )
   );
 
+  const bearerToken = await getOptionalBearerToken();
   let serverUpdated = false;
   try {
     const res = await fetch(`/api/support/tickets/${encodeURIComponent(ticketId)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
       body: JSON.stringify({
         status,
         ...(adminResponse !== undefined ? { adminResponse } : {}),

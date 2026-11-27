@@ -1,8 +1,10 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import {
   isFirebaseAdminConfigured,
+  serverListCollection,
+  serverQueryEqualsLimit1,
   serverSetDoc,
   serverUpdateDoc,
   verifyBearerIdToken,
@@ -44,6 +46,15 @@ export interface SupportChatResponsePayload {
   suggestSupportTicket: boolean;
   portalContext?: SupportPortalContext;
   notice?: string;
+}
+
+export interface SupportAiStatusPayload {
+  aiConnected: boolean;
+  configured: boolean;
+  mode: 'live_ai' | 'knowledge_base';
+  reason: 'ok' | 'missing_key' | 'quota_exceeded' | 'api_key_invalid' | 'upstream_error';
+  model: string;
+  message: string;
 }
 
 const VALID_CLASSES = new Set<ClassLevel>([
@@ -97,6 +108,8 @@ let dailyAiTracker = {
   dateKey: new Date().toISOString().slice(0, 10),
   count: 0,
   quotaExhaustedUntilDate: '',
+  lastKeyErrorReason: '' as '' | 'api_key_invalid' | 'upstream_error',
+  lastUpstreamErrorAt: 0,
 };
 
 // Persistent Server Support Tickets Store (Disk + Memory + Firestore sync)
@@ -141,13 +154,96 @@ function flushServerSupportTicketsToDisk(): boolean {
   }
 }
 
-export function getServerSupportTickets(studentId?: string): SupportTicket[] {
+function maskEmailForPublicLookup(rawEmail: string): string {
+  const email = String(rawEmail || '').trim();
+  const atIdx = email.indexOf('@');
+  if (atIdx <= 1) return email ? '***' : '';
+  return `${email.slice(0, 2)}***${email.slice(atIdx)}`;
+}
+
+export async function getServerSupportTickets(options?: {
+  studentId?: string;
+  ticketNumber?: string;
+  bearerToken?: string;
+  includeContactDetails?: boolean;
+}): Promise<SupportTicket[]> {
   ensureServerSupportTicketsLoaded();
-  const list = Array.from(serverSupportTicketsMap.values()).sort(
+  const mergedMap = new Map<string, SupportTicket>();
+
+  const pickFresher = (existing: SupportTicket | undefined, incoming: SupportTicket): SupportTicket => {
+    if (!existing) return incoming;
+    const tExisting = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+    const tIncoming = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
+    return tIncoming >= tExisting ? incoming : existing;
+  };
+
+  for (const t of serverSupportTicketsMap.values()) {
+    mergedMap.set(t.id, t);
+  }
+
+  // Merge live Firestore records when Admin SDK or authenticated caller Bearer token is available
+  try {
+    if (options?.ticketNumber) {
+      const targetUpper = options.ticketNumber.trim().toUpperCase();
+      const diskMatch = Array.from(mergedMap.values()).find(
+        (t) =>
+          t.ticketNumber.toUpperCase() === targetUpper ||
+          t.id.toUpperCase() === targetUpper
+      );
+      if (isFirebaseAdminConfigured() || options.bearerToken) {
+        const docMatch = await serverQueryEqualsLimit1(
+          'support_tickets',
+          'ticketNumber',
+          targetUpper,
+          options.bearerToken ? { bearerToken: options.bearerToken } : undefined
+        ).catch(() => null);
+        if (docMatch?.data) {
+          const fsTicket = {
+            ...(docMatch.data as SupportTicket),
+            id: (docMatch.data.id as string) || docMatch.id,
+          };
+          mergedMap.set(fsTicket.id, pickFresher(mergedMap.get(fsTicket.id), fsTicket));
+        }
+      }
+      const list = Array.from(mergedMap.values()).filter(
+        (t) =>
+          t.ticketNumber.toUpperCase() === targetUpper ||
+          t.id.toUpperCase() === targetUpper
+      );
+      const finalList = list.length ? list : diskMatch ? [diskMatch] : [];
+      if (options.includeContactDetails) return finalList;
+      return finalList.map((t) => ({
+        ...t,
+        email: maskEmailForPublicLookup(t.email),
+        mobile: '',
+      }));
+    }
+
+    if (isFirebaseAdminConfigured() || options?.bearerToken) {
+      const docs = await serverListCollection(
+        'support_tickets',
+        300,
+        options?.bearerToken ? { bearerToken: options.bearerToken } : undefined
+      ).catch(() => []);
+      for (const item of docs) {
+        if (item?.data && (item.data.ticketNumber || item.data.id)) {
+          const fsTicket = {
+            ...(item.data as SupportTicket),
+            id: (item.data.id as string) || item.id,
+          };
+          mergedMap.set(fsTicket.id, pickFresher(mergedMap.get(fsTicket.id), fsTicket));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Support Ticket Firestore Read Warning]:', err);
+  }
+
+  const list = Array.from(mergedMap.values()).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
-  if (studentId) {
-    return list.filter((t) => t.studentId === studentId);
+  if (options?.studentId) {
+    return list.filter((t) => t.studentId === options.studentId);
   }
   return list;
 }
@@ -155,7 +251,8 @@ export function getServerSupportTickets(studentId?: string): SupportTicket[] {
 export async function updateServerSupportTicketStatus(
   ticketId: string,
   statusRaw: string,
-  adminResponseRaw?: string
+  adminResponseRaw?: string,
+  bearerToken?: string
 ): Promise<{
   statusCode: number;
   payload: Record<string, unknown>;
@@ -187,7 +284,19 @@ export async function updateServerSupportTicketStatus(
   const cleanResponse =
     adminResponseRaw !== undefined ? String(adminResponseRaw).trim().slice(0, 2000) : undefined;
 
-  const existing = serverSupportTicketsMap.get(cleanId);
+  let targetKey = cleanId;
+  let existing = serverSupportTicketsMap.get(cleanId);
+  if (!existing) {
+    const cleanUpper = cleanId.toUpperCase();
+    for (const [k, v] of serverSupportTicketsMap.entries()) {
+      if (v.ticketNumber.toUpperCase() === cleanUpper || v.id.toUpperCase() === cleanUpper) {
+        targetKey = k;
+        existing = v;
+        break;
+      }
+    }
+  }
+
   let updatedTicket: SupportTicket | undefined;
   if (existing) {
     updatedTicket = {
@@ -196,27 +305,39 @@ export async function updateServerSupportTicketStatus(
       ...(cleanResponse !== undefined ? { adminResponse: cleanResponse } : {}),
       updatedAt: nowIso,
     };
-    serverSupportTicketsMap.set(cleanId, updatedTicket);
+    serverSupportTicketsMap.set(targetKey, updatedTicket);
     flushServerSupportTicketsToDisk();
   }
 
-  if (isFirebaseAdminConfigured()) {
+  if (isFirebaseAdminConfigured() || bearerToken) {
     try {
-      await serverUpdateDoc('support_tickets', cleanId, {
-        status: mappedStatus,
-        ...(cleanResponse !== undefined ? { adminResponse: cleanResponse } : {}),
-        updatedAt: nowIso,
-      });
+      await serverUpdateDoc(
+        'support_tickets',
+        targetKey,
+        {
+          status: mappedStatus,
+          ...(cleanResponse !== undefined ? { adminResponse: cleanResponse } : {}),
+          updatedAt: nowIso,
+        },
+        bearerToken ? { bearerToken } : undefined
+      );
     } catch (err) {
-      console.warn('[Support Ticket Firestore Admin Update Warning]:', err);
+      console.warn('[Support Ticket Firestore Update Warning]:', err);
     }
+  }
+
+  if (!updatedTicket && !isFirebaseAdminConfigured() && !bearerToken) {
+    return {
+      statusCode: 404,
+      payload: { success: false, error: 'Support ticket not found.' },
+    };
   }
 
   return {
     statusCode: 200,
     payload: {
       success: true,
-      ticketId: cleanId,
+      ticketId: targetKey,
       status: mappedStatus,
       adminResponse: cleanResponse,
       updatedAt: nowIso,
@@ -260,6 +381,80 @@ function getConfiguredGeminiKey(): string {
   return raw;
 }
 
+export function getSupportAiStatus(): SupportAiStatusPayload {
+  const apiKey = getConfiguredGeminiKey();
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (dailyAiTracker.dateKey !== todayKey) {
+    dailyAiTracker = {
+      dateKey: todayKey,
+      count: 0,
+      quotaExhaustedUntilDate: '',
+      lastKeyErrorReason: '',
+      lastUpstreamErrorAt: 0,
+    };
+  }
+
+  if (!apiKey) {
+    return {
+      aiConnected: false,
+      configured: false,
+      mode: 'knowledge_base',
+      reason: 'missing_key',
+      model: 'gemini-4-hydrogen',
+      message:
+        'Knowledge Base Mode (Server GEMINI_API_KEY not configured — free Knowledge Base & Support Tickets active)',
+    };
+  }
+
+  if (dailyAiTracker.lastKeyErrorReason === 'api_key_invalid') {
+    return {
+      aiConnected: false,
+      configured: false,
+      mode: 'knowledge_base',
+      reason: 'api_key_invalid',
+      model: 'gemini-4-hydrogen',
+      message:
+        'Knowledge Base Mode (Configured GEMINI_API_KEY rejected — check Settings > Secrets)',
+    };
+  }
+
+  if (dailyAiTracker.quotaExhaustedUntilDate === todayKey || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
+    return {
+      aiConnected: false,
+      configured: true,
+      mode: 'knowledge_base',
+      reason: 'quota_exceeded',
+      model: 'gemini-4-hydrogen',
+      message:
+        'Knowledge Base Mode (Free-tier daily AI quota reached — paid billing is never auto-enabled)',
+    };
+  }
+
+  if (
+    dailyAiTracker.lastUpstreamErrorAt &&
+    Date.now() - dailyAiTracker.lastUpstreamErrorAt < 2 * 60 * 1000
+  ) {
+    return {
+      aiConnected: false,
+      configured: true,
+      mode: 'knowledge_base',
+      reason: 'upstream_error',
+      model: 'gemini-4-hydrogen',
+      message:
+        'Knowledge Base Mode (Gemini service temporarily busy — Knowledge Base & Support Tickets active)',
+    };
+  }
+
+  return {
+    aiConnected: true,
+    configured: true,
+    mode: 'live_ai',
+    reason: 'ok',
+    model: 'gemini-4-hydrogen',
+    message: 'Live Free-Tier Gemini AI Connected (gemini-4-hydrogen)',
+  };
+}
+
 function resolvePortalContext(rawRole: unknown, rawPortal: unknown): SupportPortalContext {
   const portalStr = String(rawPortal || rawRole || '').trim().toLowerCase();
   if (portalStr === 'teacher') return 'teacher';
@@ -289,34 +484,41 @@ function buildFallbackMessage(
   const actions: SupportNavigationAction[] =
     portalContext === 'teacher'
       ? [
-          buildNavigationAction('open_teacher_resources'),
-          buildNavigationAction('open_lesson_planner'),
-          buildNavigationAction('open_worksheets', cls, board),
-          buildNavigationAction('open_ai_tools'),
+          buildNavigationAction('open_teacher_resources', cls, board, 'teacher'),
+          buildNavigationAction('open_lesson_planner', cls, board, 'teacher'),
+          buildNavigationAction('open_question_paper_generator', cls, board, 'teacher'),
+          buildNavigationAction('open_worksheets', cls, board, 'teacher'),
         ]
       : portalContext === 'parent'
       ? [
-          buildNavigationAction('open_parent_portal'),
-          buildNavigationAction('open_register'),
-          buildNavigationAction('open_login'),
+          buildNavigationAction('open_parent_portal', cls, board, 'parent'),
+          buildNavigationAction('open_register', cls, board, 'parent'),
+          buildNavigationAction('open_login', cls, board, 'parent'),
         ]
       : portalContext === 'college'
       ? [
-          buildNavigationAction('open_college_portal'),
-          buildNavigationAction('open_register'),
-          buildNavigationAction('open_login'),
+          buildNavigationAction('open_college_portal', cls, board, 'college'),
+          buildNavigationAction('open_register', cls, board, 'college'),
+          buildNavigationAction('open_login', cls, board, 'college'),
         ]
       : portalContext === 'institute'
       ? [
-          buildNavigationAction('open_institute_portal'),
-          buildNavigationAction('open_register'),
-          buildNavigationAction('open_login'),
+          buildNavigationAction('open_institute_portal', cls, board, 'institute'),
+          buildNavigationAction('open_register', cls, board, 'institute'),
+          buildNavigationAction('open_login', cls, board, 'institute'),
+        ]
+      : portalContext === 'student'
+      ? [
+          buildNavigationAction('open_syllabus', cls, board, 'student'),
+          buildNavigationAction('open_worksheets', cls, board, 'student'),
+          buildNavigationAction('open_quizzes', cls, board, 'student'),
+          buildNavigationAction('open_dictionary', cls, board, 'student'),
         ]
       : [
-          buildNavigationAction('open_syllabus', cls, board),
-          buildNavigationAction('open_worksheets', cls, board),
-          buildNavigationAction('open_ai_tools'),
+          buildNavigationAction('open_student_portal'),
           buildNavigationAction('open_teacher_resources'),
+          buildNavigationAction('open_parent_portal'),
+          buildNavigationAction('open_ai_tools'),
         ];
 
   if (lang === 'hi') {
@@ -406,42 +608,68 @@ export async function handleSupportChatRequest(
 
   // 2. Check AI key & strict free-tier quota guardrails before calling Gemini
   const apiKey = getConfiguredGeminiKey();
-  if (!apiKey) {
-    const fb = buildFallbackMessage(lang, message, false, portalContext);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (dailyAiTracker.dateKey !== todayKey) {
+    dailyAiTracker = {
+      dateKey: todayKey,
+      count: 0,
+      quotaExhaustedUntilDate: '',
+      lastKeyErrorReason: '',
+      lastUpstreamErrorAt: 0,
+    };
+  }
+
+  const buildKbOrGenericFallback = (
+    aiStatus: SupportChatResponsePayload['aiStatus'],
+    notice: string,
+    suggestTicket: boolean
+  ): SupportChatResponsePayload => {
+    const complexKbMatch = matchKnowledgeBaseFastPath(message, {
+      userRole: portalContext,
+      includeComplexMatch: true,
+    });
+    if (complexKbMatch.matched) {
+      return {
+        success: true,
+        source: 'kb_fallback',
+        aiStatus,
+        reply: complexKbMatch.reply,
+        language: complexKbMatch.language,
+        navigationActions: complexKbMatch.navigationActions,
+        suggestSupportTicket: complexKbMatch.suggestSupportTicket || suggestTicket,
+        portalContext,
+        notice,
+      };
+    }
+    const fb = buildFallbackMessage(lang, message, suggestTicket, portalContext);
     return {
       success: true,
       source: 'kb_fallback',
-      aiStatus: 'missing_key',
+      aiStatus,
       reply: fb.reply,
       language: lang,
       navigationActions: fb.navigationActions,
       suggestSupportTicket: true,
       portalContext,
-      notice:
-        'Live AI assistant is running in Knowledge Base mode (GEMINI_API_KEY is not configured on the server). Direct navigation and Support Ticket escalation remain active.',
+      notice,
     };
-  }
+  };
 
-  const todayKey = new Date().toISOString().slice(0, 10);
-  if (dailyAiTracker.dateKey !== todayKey) {
-    dailyAiTracker = { dateKey: todayKey, count: 0, quotaExhaustedUntilDate: '' };
+  if (!apiKey) {
+    return buildKbOrGenericFallback(
+      'missing_key',
+      'Running in Knowledge Base Mode (GEMINI_API_KEY is not configured on the server). Step-by-step portal guides, direct navigation, and Support Tickets remain active.',
+      false
+    );
   }
 
   // Strict Free API Policy: If free quota was already exhausted today, stop AI calls immediately
   if (dailyAiTracker.quotaExhaustedUntilDate === todayKey || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
-    const fb = buildFallbackMessage(lang, message, true, portalContext);
-    return {
-      success: true,
-      source: 'kb_fallback',
-      aiStatus: 'quota_exceeded',
-      reply: fb.reply,
-      language: lang,
-      navigationActions: fb.navigationActions,
-      suggestSupportTicket: true,
-      portalContext,
-      notice:
-        'Free-tier AI quota is temporarily exhausted for today. Paid models are never activated automatically. Standard Knowledge Base navigation and Admin Support Ticket submission remain fully active.',
-    };
+    return buildKbOrGenericFallback(
+      'quota_exceeded',
+      'Free-tier AI quota is temporarily exhausted for today. Paid models are never activated automatically. Knowledge Base guidance and Admin Support Tickets remain fully active.',
+      true
+    );
   }
 
   const withinAiIpLimit = pruneAndCheckWindow(
@@ -451,19 +679,11 @@ export async function handleSupportChatRequest(
     MAX_AI_CALLS_PER_IP
   );
   if (!withinAiIpLimit) {
-    const fb = buildFallbackMessage(lang, message, true, portalContext);
-    return {
-      success: true,
-      source: 'kb_fallback',
-      aiStatus: 'rate_limited',
-      reply: fb.reply,
-      language: lang,
-      navigationActions: fb.navigationActions,
-      suggestSupportTicket: true,
-      portalContext,
-      notice:
-        'Free AI chat limit reached for this session window. Showing Knowledge Base guidance & direct links.',
-    };
+    return buildKbOrGenericFallback(
+      'rate_limited',
+      'Free AI chat limit reached for this session window. Showing Knowledge Base guidance & direct links.',
+      true
+    );
   }
 
   // 3. Call server-side @google/genai using ONLY free-tier eligible model gemini-4-hydrogen
@@ -495,14 +715,13 @@ export async function handleSupportChatRequest(
       .filter(Boolean)
       .join('\n\n');
 
-    const response = await ai.models.generateContent({
+    const generateParams = {
       model: 'gemini-4-hydrogen',
       contents: promptText,
       config: {
         systemInstruction: HELP_DESK_SYSTEM_PROMPT,
         responseMimeType: 'application/json',
-        temperature: 0.3,
-        maxOutputTokens: 700,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -537,8 +756,23 @@ export async function handleSupportChatRequest(
           required: ['reply', 'language', 'navigationActionIds', 'suggestSupportTicket'],
         },
       },
-    });
+    };
 
+    let response;
+    try {
+      response = await ai.models.generateContent(generateParams);
+    } catch (firstErr: any) {
+      const firstMsg = String(firstErr?.message || '');
+      if (firstErr?.status === 503 || firstMsg.includes('503') || firstMsg.includes('UNAVAILABLE')) {
+        await new Promise((r) => setTimeout(r, 450));
+        response = await ai.models.generateContent(generateParams);
+      } else {
+        throw firstErr;
+      }
+    }
+
+    dailyAiTracker.lastKeyErrorReason = '';
+    dailyAiTracker.lastUpstreamErrorAt = 0;
     const rawJson = response.text || '{}';
     const parsed = JSON.parse(rawJson) as {
       reply?: string;
@@ -562,34 +796,46 @@ export async function handleSupportChatRequest(
         ? (parsed.detectedBoard as EducationBoard)
         : extractBoard(message);
 
+    const lowerMsg = message.toLowerCase();
+    const isPortalActionAllowedForContext = (actionId: SupportNavigationActionId): boolean => {
+      if (portalContext === 'teacher' && actionId === 'open_student_portal') {
+        return lowerMsg.includes('student portal');
+      }
+      if (portalContext === 'parent' && (actionId === 'open_student_portal' || actionId === 'open_teacher_resources')) {
+        return lowerMsg.includes('student portal') || lowerMsg.includes('teacher portal');
+      }
+      if (portalContext === 'college' && (actionId === 'open_student_portal' || actionId === 'open_institute_portal')) {
+        return lowerMsg.includes('student portal') || lowerMsg.includes('institute portal');
+      }
+      if (portalContext === 'institute' && (actionId === 'open_student_portal' || actionId === 'open_college_portal')) {
+        return lowerMsg.includes('student portal') || lowerMsg.includes('college portal');
+      }
+      return true;
+    };
+
     const validActions: SupportNavigationAction[] = [];
     const seenIds = new Set<string>();
     for (const rawId of parsed.navigationActionIds || []) {
       const id = String(rawId || '').trim() as SupportNavigationActionId;
-      if (id in SUPPORT_NAVIGATION_ALLOWLIST && !seenIds.has(id) && validActions.length < 3) {
+      if (
+        id in SUPPORT_NAVIGATION_ALLOWLIST &&
+        !seenIds.has(id) &&
+        isPortalActionAllowedForContext(id) &&
+        validActions.length < 3
+      ) {
         seenIds.add(id);
-        validActions.push(buildNavigationAction(id, targetClass, targetBoard));
+        validActions.push(buildNavigationAction(id, targetClass, targetBoard, portalContext));
       }
     }
 
     const cleanReply = String(parsed.reply || '').trim();
     if (!cleanReply) {
-      const fb = buildFallbackMessage(
-        replyLang,
-        message,
-        Boolean(parsed.suggestSupportTicket),
-        portalContext
+      dailyAiTracker.lastUpstreamErrorAt = Date.now();
+      return buildKbOrGenericFallback(
+        'upstream_error',
+        'AI response was empty. Showing verified Knowledge Base guidance instead.',
+        Boolean(parsed.suggestSupportTicket)
       );
-      return {
-        success: true,
-        source: 'kb_fallback',
-        aiStatus: 'upstream_error',
-        reply: fb.reply,
-        language: replyLang,
-        navigationActions: validActions.length ? validActions : fb.navigationActions,
-        suggestSupportTicket: Boolean(parsed.suggestSupportTicket),
-        portalContext,
-      };
     }
 
     return {
@@ -604,31 +850,37 @@ export async function handleSupportChatRequest(
     };
   } catch (err: any) {
     const errMsg = String(err?.message || err || '');
+    const upperMsg = errMsg.toUpperCase();
     const isQuota =
       err?.status === 429 ||
       errMsg.includes('429') ||
-      errMsg.toUpperCase().includes('RESOURCE_EXHAUSTED') ||
+      upperMsg.includes('RESOURCE_EXHAUSTED') ||
       errMsg.toLowerCase().includes('quota');
+    const isInvalidKey =
+      err?.status === 400 ||
+      err?.status === 401 ||
+      err?.status === 403 ||
+      upperMsg.includes('API_KEY_INVALID') ||
+      upperMsg.includes('PERMISSION_DENIED');
     console.warn('[Support Assistant AI Fallback]:', errMsg);
 
     if (isQuota) {
       dailyAiTracker.quotaExhaustedUntilDate = todayKey;
+    } else if (isInvalidKey) {
+      dailyAiTracker.lastKeyErrorReason = 'api_key_invalid';
+    } else {
+      dailyAiTracker.lastUpstreamErrorAt = Date.now();
     }
 
-    const fb = buildFallbackMessage(lang, message, true, portalContext);
-    return {
-      success: true,
-      source: 'kb_fallback',
-      aiStatus: isQuota ? 'quota_exceeded' : 'upstream_error',
-      reply: fb.reply,
-      language: lang,
-      navigationActions: fb.navigationActions,
-      suggestSupportTicket: true,
-      portalContext,
-      notice: isQuota
+    return buildKbOrGenericFallback(
+      isQuota ? 'quota_exceeded' : 'upstream_error',
+      isQuota
         ? 'Free-tier AI quota is currently exhausted. Paid models are never activated automatically. Showing Knowledge Base guidance and Support Request option.'
+        : isInvalidKey
+        ? 'Configured GEMINI_API_KEY could not be authenticated by Gemini. Running in Knowledge Base mode.'
         : 'AI assistant is temporarily unavailable. Showing Knowledge Base guidance and Support Request option.',
-    };
+      true
+    );
   }
 }
 
@@ -698,10 +950,12 @@ export async function handleSupportTicketSubmission(
   }
 
   let verifiedUid: string | null = null;
+  let bearerToken = '';
   if (headers.authorization) {
     const authRes = await verifyBearerIdToken(headers.authorization).catch(() => null);
     if (authRes?.valid && authRes.uid) {
       verifiedUid = authRes.uid;
+      bearerToken = authRes.token || '';
     }
   }
 
@@ -735,19 +989,19 @@ export async function handleSupportTicketSubmission(
     serverSupportTicketsMap.set(ticketId, ticketDoc);
     const savedToDisk = flushServerSupportTicketsToDisk();
 
-    // 2. Also persist to Firestore if Admin SDK is configured
-    let savedToFirestoreAdmin = false;
-    if (isFirebaseAdminConfigured()) {
+    // 2. Also persist to Firestore when Admin SDK or verified user Bearer token is present
+    let savedToFirestore = false;
+    if (isFirebaseAdminConfigured() || bearerToken) {
       const writeRes = await serverSetDoc(
         'support_tickets',
         ticketId,
         ticketDoc as unknown as Record<string, unknown>,
-        { merge: false }
-      ).catch(() => ({ usedAdminSdk: false }));
-      savedToFirestoreAdmin = Boolean(writeRes?.usedAdminSdk);
+        { merge: false, ...(bearerToken ? { bearerToken } : {}) }
+      ).catch(() => null);
+      savedToFirestore = Boolean(writeRes);
     }
 
-    if (!savedToDisk && !savedToFirestoreAdmin && serverSupportTicketsMap.size === 0) {
+    if (!savedToDisk && !savedToFirestore && serverSupportTicketsMap.size === 0) {
       return {
         statusCode: 500,
         payload: {
@@ -763,7 +1017,7 @@ export async function handleSupportTicketSubmission(
       payload: {
         success: true,
         persisted: true,
-        storage: savedToFirestoreAdmin ? 'firestore_admin' : 'server_persistent_store',
+        storage: savedToFirestore ? 'firestore_synced' : 'server_persistent_store',
         ticket: ticketDoc,
       },
     };
