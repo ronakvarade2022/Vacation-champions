@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
+import { PublicLandingHomepage } from './components/PublicLandingHomepage';
 import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
 import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
@@ -1210,30 +1211,46 @@ const AppContent: React.FC = () => {
   };
 
   const handleOpenPortalLanding = (portalRole: Exclude<PortalRole, 'admin'>) => {
-    // If user is already authenticated in this exact portal, open their existing dashboard directly
-    if (portalRole === 'student' && currentStudent && currentStudent.accountRole !== 'teacher') {
-      switchRole('student');
+    // 1. Student Portal card -> Opens the complete existing Student Portal Overview / Dashboard
+    if (portalRole === 'student') {
+      if (activeRole !== 'student') {
+        switchRole('student');
+      }
       setCurrentTab('dashboard');
       safeScrollToTop();
       return;
     }
-    if (portalRole === 'teacher' && currentStudent && currentStudent.accountRole === 'teacher') {
-      switchRole('teacher');
-      setCurrentTab('dashboard');
+
+    // 2. Teacher Portal card -> Opens the Teacher Portal Dashboard (if signed in as teacher) or Teacher Portal Overview
+    if (portalRole === 'teacher') {
+      if (currentStudent && currentStudent.accountRole === 'teacher') {
+        switchRole('teacher');
+        setCurrentTab('dashboard');
+        safeScrollToTop();
+        return;
+      }
+      setActiveLandingPortal('teacher');
+      setCurrentTab('portal-landing');
       safeScrollToTop();
       return;
     }
-    if (portalRole === 'parent' && currentUser && activeRole === 'parent') {
+
+    // 3. Parent Portal card -> Opens the complete existing Parent & Family Zone Overview
+    if (portalRole === 'parent') {
       setCurrentTab('parent-zone');
       safeScrollToTop();
       return;
     }
-    if (portalRole === 'school_admin' && currentUser && activeRole === 'school_admin') {
+
+    // 4. College Portal card -> Opens the complete existing School & College Zone Overview
+    if (portalRole === 'school_admin') {
       setCurrentTab('school-college-zone');
       safeScrollToTop();
       return;
     }
-    if (portalRole === 'institute_admin' && currentUser && activeRole === 'institute_admin') {
+
+    // 5. Institute Portal card -> Opens the complete existing Coaching & Skill Institute Zone Overview
+    if (portalRole === 'institute_admin') {
       setCurrentTab('coaching-zone');
       safeScrollToTop();
       return;
@@ -1246,12 +1263,14 @@ const AppContent: React.FC = () => {
 
   const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
   const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
-  const isPublicHomepageView = false;
+  const isPublicHomepageView = currentTab === 'public-home';
 
   return (
     <div
       className={`flex flex-col font-sans ${
-        isPublicHomepageView ? 'bg-[#040d1f] text-white' : 'min-h-screen bg-amber-50/30 text-slate-900'
+        isPublicHomepageView
+          ? 'min-h-screen bg-[#e0f2fe] text-slate-900'
+          : 'min-h-screen bg-amber-50/30 text-slate-900'
       }`}
     >
       {/* Header (Shown inside Portals & Subpages; hidden on the initial full-screen Public Wallpaper Homepage) */}
@@ -1608,111 +1627,43 @@ const AppContent: React.FC = () => {
               }}
             />
           ) : currentTab === 'public-home' ? (
-            <PublicHomeDashboard
-              selectedBoard={publicBoard}
-              selectedClass={publicClass}
-              onSelectBoard={setPublicBoard}
-              onSelectClass={setPublicClass}
-              scrollTarget={homeScrollTarget}
-              onClearScrollTarget={() => setHomeScrollTarget(null)}
-              onOpenDemo={(demoTab) => openDemoWithTab(demoTab || 'overview')}
-              onNavigateZone={(tab, subSection, subject) => {
-                const directStudioTabs = new Set([
-                  'all-courses',
-                  'other-programs',
-                  'scholarship',
-                  'tet-ctet',
-                  'drawing',
-                  'stories',
-                  'shivaji',
-                  'cricket',
-                  'puzzles',
-                  'sudoku',
-                  'future-skills',
-                  'ai-academy',
-                  'ai-tools',
-                  'document-studio',
-                  'qr-barcode-centre',
-                  'core-skills-lab',
-                  'trilingual-dictionary',
-                  'thought-of-the-day',
-                  'referrals',
-                  'faqs',
-                ]);
-                if (directStudioTabs.has(tab)) {
-                  handleNavigateTab(tab, subject);
+            <PublicLandingHomepage
+              onOpenPortal={handleOpenPortalLanding}
+              onNavigateTab={(tab, subSection) => {
+                if (tab === 'study-materials' && subSection) {
+                  setStudyInitialSectionTab(subSection as StudyLibrarySectionTab);
+                  handleNavigateTab('study-materials');
                   return;
                 }
-                if (tab === 'worksheets' || tab === 'study-materials') {
-                  if (tab === 'study-materials' && subSection) {
-                    const subTabMap: Record<string, StudyLibrarySectionTab> = {
-                      textbooks: 'textbooks',
-                      chapter_notes: 'chapter_notes',
-                      textbook_solutions: 'textbook_solutions',
-                      class_notebook: 'class_notebook',
-                      word_meanings: 'word_meanings',
-                      practice_questions: 'practice_questions',
-                      'sm-notes': 'chapter_notes',
-                      'sm-textbook-solutions': 'textbook_solutions',
-                      'sm-class-notebook': 'class_notebook',
-                      'sm-summaries': 'short_revision',
-                      'sm-question-banks': 'qa_bank',
-                      short_revision: 'short_revision',
-                      qa_bank: 'qa_bank',
-                      chapter_test: 'chapter_test',
-                      model_papers: 'model_papers',
-                      pyq_papers: 'pyq_papers',
-                      video_lessons: 'video_lessons',
-                      math_hub: 'math_hub',
-                      science_diagrams: 'science_diagrams',
-                      english_grammar: 'english_grammar',
-                      scholarship_olympiad: 'scholarship_olympiad',
-                    };
-                    if (subTabMap[subSection]) {
-                      setStudyInitialSectionTab(subTabMap[subSection]);
-                    }
-                  }
-                  handleNavigateTab(tab, subject);
+                if (tab === 'explore-zone' && subSection === 'exam-zone') {
+                  setExplorerZone('exam-zone');
+                  setExplorerSubFocus('ez-mock-tests');
+                  setCurrentTab('explore-zone');
+                  safeScrollToTop();
                   return;
                 }
-                if (isLearningPortal && currentStudent) {
-                  if (tab === 'performance') {
-                    handleNavigateTab('dashboard');
-                  } else {
-                    handleNavigateTab(tab, subject);
-                  }
-                } else {
-                  if (tab === 'quizzes') {
-                    setExplorerZone('practice-zone');
-                    setExplorerSubFocus(subSection || 'overview');
-                    setCurrentTab('explore-zone');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  } else if (tab === 'performance') {
-                    setExplorerZone('performance');
-                    setExplorerSubFocus(subSection || 'overview');
-                    setCurrentTab('explore-zone');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  } else {
-                    handleNavigateTab('study-materials', subject);
-                  }
+                if (tab === 'certificates' && !currentStudent) {
+                  setExplorerZone('performance');
+                  setExplorerSubFocus('perf-certificates');
+                  setCurrentTab('explore-zone');
+                  safeScrollToTop();
+                  return;
                 }
+                handleNavigateTab(tab);
               }}
-              onOpenAuth={(tab, regRole) => openAuthModalWithTab(tab, regRole || 'student')}
-              onOpenPanel={handleOpenRolePanel}
-              onOpenPortalLanding={handleOpenPortalLanding}
-              onOpenMembership={(targetClass, targetBoard) =>
-                openMembershipWithPlan('premium', targetClass, targetBoard)
+              onOpenAuth={(defaultTab, regRole) =>
+                openAuthModalWithTab(defaultTab, regRole || 'student')
               }
               isAuthenticated={Boolean(currentStudent || currentUser)}
-              currentRole={activeRole}
               currentUserName={currentStudent?.name || currentUser?.displayName}
-              isDesktopMode={viewMode === 'desktop'}
-              onToggleViewMode={() => setViewMode((prev) => (prev === 'desktop' ? 'auto' : 'desktop'))}
-              onSetViewMode={(mode) => setViewMode(mode)}
-              onMenuAction={handleMenuAction}
-              onGlobalSearchJump={handleGlobalSearchRoute}
-              activeMainSection={dashboardMainSection}
-              onSelectMainSection={handleSelectDashboardSection}
+              onOpenMyDashboard={() => {
+                if (activeRole === 'parent') setCurrentTab('parent-zone');
+                else if (activeRole === 'school_admin') setCurrentTab('school-college-zone');
+                else if (activeRole === 'institute_admin') setCurrentTab('coaching-zone');
+                else if (activeRole === 'admin' && currentUser?.role === 'admin') setCurrentTab('admin');
+                else setCurrentTab('dashboard');
+                safeScrollToTop();
+              }}
             />
           ) : currentTab === 'referrals' ? (
             <ReferralHubView
@@ -2127,6 +2078,8 @@ const AppContent: React.FC = () => {
                     'document-studio',
                     'qr-barcode-centre',
                     'core-skills-lab',
+                    'trilingual-dictionary',
+                    'thought-of-the-day',
                     'referrals',
                     'faqs',
                   ]);

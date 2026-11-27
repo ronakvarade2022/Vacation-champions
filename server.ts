@@ -99,6 +99,10 @@ import {
   handleAiImageGenerate,
   handleAiTextGenerate
 } from './server/aiToolsService.ts';
+import {
+  getServerCustomDictionaryEntries,
+  addServerCustomDictionaryEntry
+} from './server/dictionaryService.ts';
 
 dotenv.config();
 
@@ -3783,6 +3787,40 @@ app.post('/api/ai/image', async (req: Request, res: Response) => {
       success: false,
       errorCode: 'INTERNAL_ERROR',
       message: 'Unexpected AI image server error.',
+    });
+  }
+});
+
+// 11c. 100% Original MyStudyZone Firebase-Backed Trilingual Dictionary Endpoints
+app.get('/api/dictionary/entries', async (_req: Request, res: Response) => {
+  try {
+    const entries = await getServerCustomDictionaryEntries();
+    return res.json({
+      success: true,
+      count: entries.length,
+      entries,
+    });
+  } catch (err: any) {
+    console.error('[Dictionary GET Error]:', err);
+    return res.status(500).json({
+      success: false,
+      entries: [],
+      message: 'Failed to load custom dictionary entries.',
+    });
+  }
+});
+
+app.post('/api/dictionary/entries', async (req: Request, res: Response) => {
+  try {
+    const result = await addServerCustomDictionaryEntry(
+      (req.body || {}) as Record<string, unknown>
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err: any) {
+    console.error('[Dictionary POST Error]:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to save dictionary entry.',
     });
   }
 });

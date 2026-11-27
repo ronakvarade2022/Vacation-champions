@@ -13,10 +13,12 @@ import {
   Calendar,
 } from 'lucide-react';
 import { getThoughtForDate } from '../data/thoughtsOfTheDayData';
+import { getDailyVocabularyWords } from '../data/trilingualDictionaryData';
+import { searchDictionarySuggestions } from '../data/comprehensiveTrilingualLexicon';
 import {
-  loadTrilingualDictionaryEntries,
-  getDailyVocabularyWords,
-} from '../data/trilingualDictionaryData';
+  loadLocalComprehensiveDictionary,
+  recordRecentSearchedWord,
+} from '../services/dictionaryFirestoreService';
 
 interface DailyThoughtAndDictionaryWidgetProps {
   onOpenDictionary: (initialQuery?: string) => void;
@@ -28,7 +30,7 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
   onOpenThoughts,
 }) => {
   const todayInfo = useMemo(() => getThoughtForDate(new Date()), []);
-  const dictionaryEntries = useMemo(() => loadTrilingualDictionaryEntries(), []);
+  const dictionaryEntries = useMemo(() => loadLocalComprehensiveDictionary(), []);
   const dailyWords = useMemo(
     () => getDailyVocabularyWords(dictionaryEntries, new Date(), 5),
     [dictionaryEntries]
@@ -40,19 +42,18 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
 
   const todayThought = todayInfo.thought;
 
-  // Quick instant suggestions (top 4 matches)
+  // Quick instant suggestions (top 4 matches across English, Marathi, Hindi + spelling suggestions)
   const quickSuggestions = useMemo(() => {
-    const q = quickQuery.trim().toLowerCase();
+    const q = quickQuery.trim();
     if (!q) return [];
-    return dictionaryEntries
-      .filter(
-        (w) =>
-          w.english.toLowerCase().includes(q) ||
-          w.marathiWord.toLowerCase().includes(q) ||
-          w.hindiWord.toLowerCase().includes(q) ||
-          w.englishMeaning.toLowerCase().includes(q)
-      )
-      .slice(0, 4);
+    const { directMatches, spellingSuggestions } = searchDictionarySuggestions(
+      dictionaryEntries,
+      q,
+      'all',
+      4
+    );
+    const combined = [...directMatches, ...spellingSuggestions].slice(0, 4);
+    return combined.map((m) => m.entry);
   }, [dictionaryEntries, quickQuery]);
 
   const handleCopyTodayThought = async () => {
@@ -295,6 +296,9 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (quickQuery.trim()) {
+                  recordRecentSearchedWord(quickQuery.trim());
+                }
                 onOpenDictionary(quickQuery);
               }}
               className="relative"
@@ -319,13 +323,16 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
             {quickSuggestions.length > 0 && (
               <div className="rounded-2xl bg-sky-50 border border-sky-200 p-2.5 space-y-1.5">
                 <div className="text-[10px] font-display font-black text-[#0f2952] uppercase">
-                  Instant Dictionary Matches:
+                  Instant Dictionary Matches (Click 1 Word to Open):
                 </div>
                 {quickSuggestions.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => onOpenDictionary(item.english)}
+                    onClick={() => {
+                      recordRecentSearchedWord(item.english);
+                      onOpenDictionary(item.english);
+                    }}
                     className="w-full text-left px-2.5 py-1.5 rounded-xl bg-white hover:bg-amber-50 border border-sky-100 flex items-center justify-between gap-2 text-xs cursor-pointer transition"
                   >
                     <span className="font-display font-black text-[#0f2952]">{item.english}</span>
@@ -350,7 +357,10 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
                   <button
                     key={w.id}
                     type="button"
-                    onClick={() => onOpenDictionary(w.english)}
+                    onClick={() => {
+                      recordRecentSearchedWord(w.english);
+                      onOpenDictionary(w.english);
+                    }}
                     className="text-left p-2 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-[#0f2952] transition cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
@@ -373,11 +383,16 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
         {/* Open Full Dictionary Button */}
         <div className="px-4 sm:px-5 py-3 bg-sky-50/80 border-t border-sky-200/80 flex items-center justify-between gap-2">
           <span className="text-[11px] font-bold text-slate-600">
-            Synonyms • Antonyms • Audio • Examples
+            Single-Word Search • 6 Directions • Audio
           </span>
           <button
             type="button"
-            onClick={() => onOpenDictionary(quickQuery)}
+            onClick={() => {
+              if (quickQuery.trim()) {
+                recordRecentSearchedWord(quickQuery.trim());
+              }
+              onOpenDictionary(quickQuery);
+            }}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:brightness-105 text-[#0f2952] font-display font-black text-xs shadow-2xs cursor-pointer transition"
           >
             <span>Open Trilingual Dictionary</span>

@@ -362,13 +362,30 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-orange-600">Zone</span>
             </span>
             <span className="text-[9px] sm:text-[11px] xl:text-xs font-extrabold text-slate-700 tracking-wide block mt-0.5 truncate">
-              Learn • Practice • Grow
+              Learn • Practice • Excel
             </span>
           </div>
         </button>
 
-        {/* Right Actions Area (Always keeps Upgrade Plan, Share App, Install App & Login/Logout buttons visible in mobile, desktop & Smart TV frames) */}
+        {/* Right Actions Area (Always keeps Home, Upgrade Plan, Share App, Install App & Login/Logout buttons visible in mobile, desktop & Smart TV frames) */}
         <div className="flex items-center justify-end flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 xl:gap-2.5 shrink-0">
+          {currentTab !== 'public-home' && (
+            <button
+              type="button"
+              data-testid="header-return-public-home-btn"
+              onClick={() => {
+                setOpenDropdownMenu(null);
+                setMobileMenuOpen(false);
+                setCurrentTab('public-home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#0f2952] font-extrabold text-[11px] sm:text-xs border border-sky-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
+              title="Return to MyStudyZone Public Homepage"
+            >
+              <span>🏠</span>
+              <span>Home</span>
+            </button>
+          )}
           {/* Signed-in Active Board & Class Switcher Pill (Student & Teacher Learning Portals Only) */}
           {showStudentNavMenus &&
             currentStudent &&
