@@ -4,7 +4,6 @@ import { Header } from './components/Header';
 import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { PublicLandingHomepage } from './components/PublicLandingHomepage';
-import { SubPageConsistencyBar } from './components/DashboardSplitNavigator';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
 import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
 import { MobileBottomNav } from './components/MobileBottomNav';
@@ -1429,146 +1428,43 @@ const AppContent: React.FC = () => {
             </div>
           )}
 
-        {/* Public Visitor Return-to-Homepage Bar on Public Subpages */}
-        {!currentStudent &&
-          !currentUser &&
-          currentTab !== 'public-home' &&
+        {/* Clean App-Like Back Navigation Bar on Subpages (ONE SECTION OPEN AT A TIME) */}
+        {currentTab !== 'public-home' &&
           currentTab !== 'dashboard' &&
-          currentTab !== 'portal-landing' && (
-            <div className="mb-4 rounded-2xl bg-[#07152e] text-white border border-amber-400/50 px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentTab('public-home');
-                  safeScrollToTop();
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer transition-colors"
-              >
-                &larr; Back to MyStudyZone Public Homepage
-              </button>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          currentTab !== 'portal-landing' &&
+          currentTab !== 'dashboard-student-preview' &&
+          currentTab !== 'parent-zone' &&
+          currentTab !== 'school-college-zone' &&
+          currentTab !== 'coaching-zone' && (
+            <div className="mb-4 rounded-2xl bg-white border border-slate-200 px-4 py-2.5 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleNavigateTab('study-materials')}
-                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer"
+                  onClick={() => {
+                    setHomeScrollTarget('home-overview');
+                    setCurrentTab('dashboard');
+                    safeScrollToTop();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm cursor-pointer transition-colors"
                 >
-                  Study Library
+                  &larr; Back to {isTeacherPortal ? 'Teacher' : 'Student'} Dashboard
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleNavigateTab('ai-tools')}
-                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer"
+                  onClick={() => {
+                    setCurrentTab('public-home');
+                    safeScrollToTop();
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
                 >
-                  AI Tools
+                  Public Homepage
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleNavigateTab('document-studio')}
-                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer"
-                >
-                  Generators
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAuthModalWithTab('login', 'student')}
-                  className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold cursor-pointer"
-                >
-                  Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAuthModalWithTab('register', 'student')}
-                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold cursor-pointer"
-                >
-                  Register
-                </button>
+              </div>
+              <div className="text-xs font-extrabold text-slate-600">
+                {FEATURE_TITLES[currentTab] || 'Active Section'}
               </div>
             </div>
           )}
-
-        {/* Consistent Sub-Page Two-Level Horizontal Navigation Bar (Authenticated Learning Portals Only) */}
-        {Boolean(currentStudent) &&
-          isLearningPortal &&
-          currentTab !== 'public-home' &&
-          currentTab !== 'portal-landing' &&
-          currentTab !== 'dashboard' &&
-          currentTab !== 'dashboard-student-preview' &&
-          currentTab !== 'lesson-planner' && (
-          <SubPageConsistencyBar
-            activeSectionId={currentTab === 'referrals' ? 'referrals' : getActiveMenuId()}
-            activeSubActionId={
-              activeSubActionId ||
-              (currentTab === 'drawing'
-                ? 'sl-drawing'
-                : currentTab === 'stories'
-                ? 'sl-stories'
-                : currentTab === 'shivaji'
-                ? 'sl-shivaji'
-                : currentTab === 'scholarship'
-                ? 'sl-scholarship'
-                : currentTab === 'tet-ctet'
-                ? 'sl-tet-ctet'
-                : currentTab === 'cricket'
-                ? 'sl-gk'
-                : currentTab === 'future-skills' || currentTab === 'ai-academy'
-                ? 'sl-ai-academy'
-                : currentTab === 'ai-tools'
-                ? 'sl-ai-tools'
-                : currentTab === 'document-studio'
-                ? 'sl-document-studio'
-                : currentTab === 'qr-barcode-centre'
-                ? 'sl-qr-barcode'
-                : currentTab === 'core-skills-lab'
-                ? 'sl-core-skills-lab'
-                : currentTab === 'trilingual-dictionary'
-                ? 'sl-trilingual-dictionary'
-                : currentTab === 'thought-of-the-day'
-                ? 'sl-thought-of-the-day'
-                : currentTab === 'additional-curriculum'
-                ? 'sl-additional-curriculum'
-                : currentTab === 'other-programs'
-                ? 'sl-creative'
-                : currentTab === 'worksheets'
-                ? 'pz-worksheets'
-                : currentTab === 'puzzles'
-                ? 'pz-puzzles'
-                : currentTab === 'sudoku'
-                ? 'pz-sudoku'
-                : currentTab === 'study-materials'
-                ? 'sm-textbook-learning'
-                : currentTab === 'all-courses'
-                ? 'course-all'
-                : currentTab === 'certificates'
-                ? 'perf-certificates'
-                : currentTab === 'referrals'
-                ? 'acc-referrals'
-                : currentTab === 'profile'
-                ? 'acc-profile'
-                : null)
-            }
-            selectedBoard={currentStudent ? activeBoard : publicBoard}
-            selectedClass={currentStudent ? currentStudent.classLevel : publicClass}
-            onSelectSection={(sectionId) => {
-              if (sectionId === 'referrals') {
-                handleNavigateTab('referrals');
-                return;
-              }
-              const targetMenu = MAIN_NAV_MENUS.find((m) => m.id === sectionId);
-              if (targetMenu && targetMenu.items.length > 0) {
-                handleMenuAction(targetMenu.items[0].id);
-              } else {
-                handleMenuAction('home-overview');
-              }
-            }}
-            onTriggerSubAction={handleMenuAction}
-            onNavigateTab={(tab) => handleNavigateTab(tab)}
-            onReturnHome={() => {
-              setHomeScrollTarget('home-overview');
-              setCurrentTab(currentStudent ? 'dashboard' : 'public-home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
 
         {/* Live Interactive Visitor Demo Dashboard (All Classes 1st–10th preview, zero DB writes) */}
         <AppErrorBoundary
@@ -1640,6 +1536,17 @@ const AppContent: React.FC = () => {
                   setExplorerSubFocus('ez-mock-tests');
                   setCurrentTab('explore-zone');
                   safeScrollToTop();
+                  return;
+                }
+                if (tab === 'explore-zone' && subSection === 'performance') {
+                  setExplorerZone('performance');
+                  setExplorerSubFocus('perf-tracking');
+                  setCurrentTab('explore-zone');
+                  safeScrollToTop();
+                  return;
+                }
+                if (tab === 'demo' && subSection === 'live-quiz') {
+                  openDemoWithTab('live-quiz');
                   return;
                 }
                 if (tab === 'certificates' && !currentStudent) {

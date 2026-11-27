@@ -1,53 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { inspectHistoricalStudentProgress, mergePreservedCompletionIds } from '../utils/legacyContentCompatibility';
-import { CategoryId, ClassLevel, EducationBoard, PlanSkuId, SubjectName, QuizLevel } from '../types';
-import { calculateLevel } from '../data/badgesData';
-import {
-  Crown,
-  Lock,
-  ChevronRight,
-  User,
-  ShieldCheck,
-  GraduationCap,
-  Award,
-  CheckCircle2,
-  Layers,
-  Headphones,
-  FileText,
-  BookOpen,
-  Calendar,
-  Users,
-  Printer,
-  QrCode,
-} from 'lucide-react';
-import {
-  getBoardClassSubscriptionInfo,
-  getActivatedBoardClassesList,
-  getBoardShortLabel,
-  getCategorySubscriptionInfo,
-  getPrimaryBaseBoard,
-  getPrimaryBaseClass,
-  getStudentActivatedBoards,
-  getStudentActivatedClassesForBoard,
-  getStudentPlanInfo,
-  getVisibleExamCategoriesForStudent,
-  hasCategoryAccess,
-  parseBoardAndClassFromWorksheetId,
-} from '../utils/subscriptionAccess';
+import { ClassLevel, EducationBoard, PlanSkuId, PortalRole, SubjectName, QuizLevel } from '../types';
 import { BOARD_META_LIST } from '../data/boards/boardMeta';
+import { ALL_10_CLASSES_META, getSubjectsForClass } from '../data/classCurriculumConfig';
 import {
-  ALL_10_CLASSES,
-  ALL_10_CLASSES_META,
-  getSubjectsForClass,
-} from '../data/classCurriculumConfig';
-import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
-import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
-import { PWAInstallButton } from './PWAInstallButton';
+  formatStandardOrdinal,
+  getBoardShortLabel,
+  getClassSubscriptionInfo,
+} from '../utils/subscriptionAccess';
+import {
+  ArrowLeft,
+  ArrowRight,
+  GraduationCap,
+  Lock,
+  Sparkles,
+  CheckCircle2,
+  SlidersHorizontal,
+  LogIn,
+  UserPlus,
+  Crown,
+} from 'lucide-react';
+import type { AuthModalTab, PortalRegisterRole } from './AuthModal';
+import type { MainMenuId, NavSubActionId } from '../data/navigationConfig';
+import type { GlobalSearchJumpTarget } from './StudyLibraryGlobalSearch';
 
-interface StudentDashboardProps {
-  onNavigateTab: (tab: string, subjectParam?: SubjectName, levelParam?: QuizLevel) => void;
-  onOpenMembership: (
+export interface StudentDashboardProps {
+  // Authenticated StudentDashboard props (from App.tsx)
+  onNavigateTab?: (tab: string, subject?: SubjectName, level?: QuizLevel) => void;
+  onOpenMembership?: (
     plan?: 'basic' | 'premium',
     targetClass?: ClassLevel,
     targetBoard?: EducationBoard,
@@ -56,886 +36,731 @@ interface StudentDashboardProps {
   viewMode?: 'auto' | 'desktop';
   onToggleViewMode?: () => void;
   onMenuAction?: (actionId: NavSubActionId) => void;
-  onOpenDemo?: (tab?: 'overview' | 'live-curriculum' | 'live-quiz' | 'live-puzzles') => void;
+  onGlobalSearchJump?: (target: GlobalSearchJumpTarget) => void;
+  onOpenDemo?: (
+    demoTab?: 'overview' | 'demo-mock-tests' | 'live-curriculum' | 'live-quiz' | 'live-puzzles'
+  ) => void;
   activeMainSection?: MainMenuId;
-  onSelectMainSection?: (sectionId: MainMenuId) => void;
+  onSelectMainSection?: (section: MainMenuId) => void;
   activeSubActionId?: NavSubActionId;
   onOpenPanel?: (panel: 'student' | 'teacher' | 'admin', intent?: 'login' | 'register') => void;
-  onGlobalSearchJump?: (target: import('./StudyLibraryGlobalSearch').GlobalSearchJumpTarget) => void;
+
+  // Optional overrides when rendered via PublicHomeDashboard
+  selectedBoard?: EducationBoard;
+  selectedClass?: ClassLevel;
+  onSelectBoard?: (b: EducationBoard) => void;
+  onSelectClass?: (c: ClassLevel) => void;
+  onNavigateZone?: (tab: string, subSection?: string, subject?: SubjectName) => void;
+  onOpenAuth?: (tab: AuthModalTab, registerRole?: PortalRegisterRole) => void;
+  onOpenPortalLanding?: (portalRole: Exclude<PortalRole, 'admin'>) => void;
+}
+
+type StudentCategoryFolderId =
+  | 'learning-tools'
+  | 'scholarship-competitive'
+  | 'creative-cultural'
+  | 'progress-account'
+  | null;
+
+interface SubItemCard {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  color: string;
+  onClick: () => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onNavigateTab,
   onOpenMembership,
-  viewMode = 'desktop',
-  onToggleViewMode,
-  onMenuAction,
   onOpenDemo,
-  activeMainSection,
-  onSelectMainSection,
-  activeSubActionId,
   onOpenPanel,
-  onGlobalSearchJump,
+  selectedBoard: propSelectedBoard,
+  selectedClass: propSelectedClass,
+  onSelectBoard,
+  onSelectClass,
+  onNavigateZone,
+  onOpenAuth,
 }) => {
   const {
     currentStudent,
     activeBoard,
-    allAttempts,
-    getSubjectLevelProgress,
     switchActiveBoardAndClass,
-    activateAdditionalBoardClass,
-    updateTeacherSelectedCategories,
+    setIsAuthModalOpen,
   } = useApp();
-  const [selectedCurriculumBoard, setSelectedCurriculumBoard] = useState<EducationBoard>(activeBoard);
-  const [showAddBoardClassSelector, setShowAddBoardClassSelector] = useState(false);
 
-  useEffect(() => {
-    setSelectedCurriculumBoard(activeBoard);
-  }, [activeBoard]);
+  const [activeFolder, setActiveFolder] = useState<StudentCategoryFolderId>(null);
+  const [showBoardClassModal, setShowBoardClassModal] = useState(false);
 
-  if (!currentStudent) return null;
+  const isAuthenticated = Boolean(currentStudent);
+  const effectiveBoard: EducationBoard =
+    propSelectedBoard || (currentStudent ? activeBoard : 'Maharashtra');
+  const effectiveClass: ClassLevel =
+    propSelectedClass || currentStudent?.classLevel || 'Class 5';
 
-  const activatedBoardsForStudent = getStudentActivatedBoards(currentStudent);
-  const registeredBaseBoard = getPrimaryBaseBoard(currentStudent);
-  const registeredBaseClass = getPrimaryBaseClass(currentStudent);
+  const currentClassUnlocked = currentStudent
+    ? getClassSubscriptionInfo(currentStudent, effectiveClass, effectiveBoard).isPaidActive
+    : false;
 
-  const activeClassSubjects = getSubjectsForClass(currentStudent.classLevel, activeBoard);
-  const historicalSummary = inspectHistoricalStudentProgress(currentStudent);
-  const completedWorksheetsCount = mergePreservedCompletionIds(
-    currentStudent.completedWorksheetIds || [],
-    historicalSummary.preservedHistoricalWorksheetIds
-  ).filter((wsId) => {
-    const parsed = parseBoardAndClassFromWorksheetId(wsId);
-    if (!parsed.classLevel) return true;
-    const boardMatch = !parsed.board || parsed.board === activeBoard;
-    return boardMatch && parsed.classLevel === currentStudent.classLevel;
-  }).length;
+  const subjectsForCurrentClass = getSubjectsForClass(effectiveClass, effectiveBoard);
 
-  const studentAttempts = allAttempts.filter((a) => a.studentId === currentStudent.id);
-  const totalQuizzes = studentAttempts.length;
+  const handleSelectBoard = (board: EducationBoard) => {
+    if (onSelectBoard) {
+      onSelectBoard(board);
+    }
+    if (currentStudent) {
+      void switchActiveBoardAndClass(board, effectiveClass);
+    }
+  };
 
-  const levelInfo = calculateLevel(currentStudent.points);
-  const xpInCurrentLevel = currentStudent.points - levelInfo.currentThreshold;
-  const xpNeeded = levelInfo.nextThreshold - levelInfo.currentThreshold;
-  const levelProgress = Math.min(100, Math.max(0, Math.round((xpInCurrentLevel / xpNeeded) * 100)));
+  const handleSelectClass = (cls: ClassLevel) => {
+    if (onSelectClass) {
+      onSelectClass(cls);
+    }
+    if (currentStudent) {
+      void switchActiveBoardAndClass(effectiveBoard, cls);
+    }
+  };
 
-  const masteredSubjectsCount = activeClassSubjects.filter((subjName) => {
-    const prog = getSubjectLevelProgress(subjName, currentStudent.classLevel, activeBoard);
-    return prog && prog.completedLevels && prog.completedLevels.length > 0;
-  }).length;
+  const navigateToSection = (tab: string, subSection?: string) => {
+    if (onNavigateZone) {
+      onNavigateZone(tab, subSection);
+      return;
+    }
+    if (onNavigateTab) {
+      onNavigateTab(tab);
+    }
+  };
 
-  const overallProgressPercent = Math.min(
-    100,
-    Math.max(
-      levelProgress,
-      activeClassSubjects.length > 0
-        ? Math.round((masteredSubjectsCount / activeClassSubjects.length) * 100)
-        : 0
-    )
-  );
+  const triggerOpenAuth = (tab: AuthModalTab = 'login', role: PortalRegisterRole = 'student') => {
+    if (onOpenAuth) {
+      onOpenAuth(tab, role);
+      return;
+    }
+    if (onOpenPanel) {
+      onOpenPanel('student', tab === 'register' ? 'register' : 'login');
+      return;
+    }
+    setIsAuthModalOpen(true);
+  };
 
-  const planInfo = getStudentPlanInfo(
-    currentStudent,
-    undefined,
-    currentStudent.classLevel,
-    activeBoard
-  );
+  const triggerOpenPricing = (targetClass?: ClassLevel, targetBoard?: EducationBoard) => {
+    if (onOpenMembership) {
+      onOpenMembership('premium', targetClass || effectiveClass, targetBoard || effectiveBoard);
+    }
+  };
 
-  return (
-    <div className="space-y-8 pb-16">
-      {/* SECTION 1: FOCUSED HOME DASHBOARD */}
-      <ReferenceShowcaseSections
-        selectedBoard={activeBoard}
-        selectedClass={currentStudent.classLevel}
-        onSelectBoard={(board) => {
-          setSelectedCurriculumBoard(board);
-          const cInfo = getBoardClassSubscriptionInfo(currentStudent, board, currentStudent.classLevel);
-          if (cInfo.isAccessible) {
-            void switchActiveBoardAndClass(board, currentStudent.classLevel);
-          }
-        }}
-        onSelectClass={(cls) => {
-          const cInfo = getBoardClassSubscriptionInfo(currentStudent, activeBoard, cls);
-          if (cInfo.isAccessible) {
-            void switchActiveBoardAndClass(activeBoard, cls);
-          }
-        }}
-        onOpenDemo={(tab) => {
-          if (onOpenDemo) onOpenDemo(tab || 'live-quiz');
-          else onNavigateTab('quizzes');
-        }}
-        onNavigateTab={(tab, _subSection, subject) => onNavigateTab(tab, subject)}
-        onGlobalSearchJump={onGlobalSearchJump}
-        onMenuAction={onMenuAction}
-        onOpenAuth={() => onNavigateTab('profile')}
-        onOpenMembership={(targetClass, targetBoard) =>
-          onOpenMembership(
-            'premium',
-            targetClass || currentStudent.classLevel,
-            targetBoard || activeBoard
-          )
+  // Main 10 Student Portal Category Cards (ONE ICON = ONE FEATURE / CATEGORY)
+  const mainCategories = [
+    {
+      id: 'study-materials',
+      icon: '📘',
+      title: 'Study Materials',
+      description: 'Textbooks, chapter notes & question-answer solutions',
+      gradient: 'from-blue-600 to-indigo-700',
+      lightBg: 'from-blue-50 to-indigo-50/70 border-blue-200 hover:border-blue-400',
+      badge: `${subjectsForCurrentClass.length} Subjects`,
+      onClick: () => navigateToSection('study-materials', 'chapter_notes'),
+    },
+    {
+      id: 'worksheets',
+      icon: '📝',
+      title: 'Worksheets',
+      description: 'Subject-wise practice sheets & revision exercises',
+      gradient: 'from-sky-500 to-blue-600',
+      lightBg: 'from-sky-50 to-blue-50/70 border-sky-200 hover:border-sky-400',
+      badge: 'Practice Sheets',
+      onClick: () => navigateToSection('worksheets'),
+    },
+    {
+      id: 'online-exams',
+      icon: '🎯',
+      title: 'Online Exams & Quizzes',
+      description: '4-level interactive chapter quizzes & timed tests',
+      gradient: 'from-emerald-500 to-teal-700',
+      lightBg: 'from-emerald-50 to-teal-50/70 border-emerald-200 hover:border-emerald-400',
+      badge: 'Quiz Test',
+      onClick: () => {
+        if (isAuthenticated && onNavigateTab) {
+          onNavigateTab('quizzes');
+        } else if (onOpenDemo) {
+          onOpenDemo('live-quiz');
+        } else {
+          navigateToSection('quizzes');
         }
-        onStartLearningClick={() => onNavigateTab('all-courses')}
-        viewMode={viewMode}
-        onToggleViewMode={onToggleViewMode}
-        activeMainSection={activeMainSection}
-        onSelectMainSection={onSelectMainSection}
-        activeSubActionId={activeSubActionId}
-        onOpenPanel={onOpenPanel}
-        isAuthenticated={true}
-        currentRole={currentStudent.accountRole === 'teacher' ? 'teacher' : 'student'}
-        currentUserName={currentStudent.name}
-        activatedBoards={activatedBoardsForStudent}
-        getActivatedClassesForBoard={(b) => getStudentActivatedClassesForBoard(currentStudent, b)}
-        progressMetrics={{
-          isLoggedIn: true,
-          studentName: currentStudent.name,
-          coursesCompleted: masteredSubjectsCount,
-          practiceTests: totalQuizzes + completedWorksheetsCount,
-          achievements: (currentStudent.badges || []).length,
-          progressPercent: overallProgressPercent,
-          badgesList: currentStudent.badges || [],
-        }}
-      />
+      },
+    },
+    {
+      id: 'video-lessons',
+      icon: '🎬',
+      title: 'Video Lessons',
+      description: 'Chapter-wise visual explanations & expert lessons',
+      gradient: 'from-violet-600 to-purple-700',
+      lightBg: 'from-violet-50 to-purple-50/70 border-violet-200 hover:border-violet-400',
+      badge: 'Expert Videos',
+      onClick: () => navigateToSection('study-materials', 'video_lessons'),
+    },
+    {
+      id: 'dictionary',
+      icon: '📖',
+      title: 'Trilingual Dictionary',
+      description: 'English, Marathi & Hindi word meanings & examples',
+      gradient: 'from-cyan-600 to-sky-700',
+      lightBg: 'from-cyan-50 to-sky-50/70 border-cyan-200 hover:border-cyan-400',
+      badge: 'Eng • Mar • Hin',
+      onClick: () => navigateToSection('trilingual-dictionary'),
+    },
+    {
+      id: 'thought-of-the-day',
+      icon: '🌅',
+      title: 'Thought of the Day',
+      description: 'Daily motivational thoughts in 3 languages',
+      gradient: 'from-amber-500 to-orange-600',
+      lightBg: 'from-amber-50 to-orange-50/70 border-amber-200 hover:border-amber-400',
+      badge: 'Daily Suvichar',
+      onClick: () => navigateToSection('thought-of-the-day'),
+    },
+    {
+      id: 'learning-tools',
+      icon: '🧮',
+      title: 'Learning Tools & Labs',
+      description: 'Smart tools, Vedic Maths, Abacus, Phonics & PDF Studio',
+      gradient: 'from-indigo-600 to-blue-800',
+      lightBg: 'from-indigo-50 to-slate-50 border-indigo-200 hover:border-indigo-400',
+      badge: '5 Skill Tools',
+      onClick: () => setActiveFolder('learning-tools'),
+    },
+    {
+      id: 'scholarship-competitive',
+      icon: '🏅',
+      title: 'Scholarship & Olympiad',
+      description: '4th & 7th Scholarship exams, GK, Brain Logic & Sudoku',
+      gradient: 'from-rose-500 to-pink-700',
+      lightBg: 'from-rose-50 to-pink-50/70 border-rose-200 hover:border-rose-400',
+      badge: 'Competitive Prep',
+      onClick: () => setActiveFolder('scholarship-competitive'),
+    },
+    {
+      id: 'creative-cultural',
+      icon: '🎨',
+      title: 'Creative & History Hub',
+      description: 'Shivaji Maharaj History, Moral Stories & Drawing Studio',
+      gradient: 'from-orange-500 to-red-600',
+      lightBg: 'from-orange-50 to-amber-50/70 border-orange-200 hover:border-orange-400',
+      badge: 'Stories & Art',
+      onClick: () => setActiveFolder('creative-cultural'),
+    },
+    {
+      id: 'progress-account',
+      icon: '🏆',
+      title: 'Progress & Certificates',
+      description: 'Leaderboard ranks, certificates, plans & profile',
+      gradient: 'from-teal-600 to-emerald-700',
+      lightBg: 'from-teal-50 to-emerald-50/70 border-teal-200 hover:border-teal-400',
+      badge: 'My Achievements',
+      onClick: () => setActiveFolder('progress-account'),
+    },
+  ];
 
-      {/* COMPACT STUDENT WORKSPACE & ACTIVE BOARD/CLASS SWITCHER */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-indigo-200/90 shadow-md space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+  // Sub-screens when a folder category is clicked (ONE SECTION OPEN AT A TIME)
+  const folderDefinitions: Record<
+    Exclude<StudentCategoryFolderId, null>,
+    {
+      title: string;
+      subtitle: string;
+      icon: string;
+      headerGradient: string;
+      items: SubItemCard[];
+    }
+  > = {
+    'learning-tools': {
+      title: 'Learning Tools & Skill Labs',
+      subtitle: 'Select a learning tool or skill lab below to open it in full screen',
+      icon: '🧮',
+      headerGradient: 'from-indigo-600 via-blue-700 to-slate-900',
+      items: [
+        {
+          id: 'ai-tools',
+          icon: '✨',
+          title: 'Interactive Learning Tools',
+          description: 'Smart study planners, formula helpers & academic utilities',
+          color: 'border-indigo-200 bg-indigo-50/60 hover:border-indigo-500',
+          onClick: () => navigateToSection('ai-tools'),
+        },
+        {
+          id: 'vedic-maths',
+          icon: '🔢',
+          title: 'Vedic Maths Lab',
+          description: 'High-speed mental arithmetic sutras & step-by-step drills',
+          color: 'border-amber-200 bg-amber-50/60 hover:border-amber-500',
+          onClick: () => navigateToSection('core-skills-lab'),
+        },
+        {
+          id: 'abacus-lab',
+          icon: '🧮',
+          title: 'Japanese Soroban Abacus',
+          description: 'Interactive bead visualization & speed calculation practice',
+          color: 'border-emerald-200 bg-emerald-50/60 hover:border-emerald-500',
+          onClick: () => navigateToSection('core-skills-lab'),
+        },
+        {
+          id: 'phonics-lab',
+          icon: '🗣️',
+          title: 'English Phonics Audio Lab',
+          description: '4-level letter sounds, blending & pronunciation studio',
+          color: 'border-sky-200 bg-sky-50/60 hover:border-sky-500',
+          onClick: () => navigateToSection('core-skills-lab'),
+        },
+        {
+          id: 'pdf-tools',
+          icon: '📄',
+          title: 'Document & PDF Studio',
+          description: 'Convert notes, images & study files into clean PDFs',
+          color: 'border-purple-200 bg-purple-50/60 hover:border-purple-500',
+          onClick: () => navigateToSection('document-studio'),
+        },
+      ],
+    },
+    'scholarship-competitive': {
+      title: 'Scholarship & Competitive Exams',
+      subtitle: 'Prepare for Maharashtra Scholarship (MSCE), GK & logical reasoning',
+      icon: '🏅',
+      headerGradient: 'from-rose-600 via-pink-600 to-purple-800',
+      items: [
+        {
+          id: 'sch-4',
+          icon: '🎖️',
+          title: '4th Standard Scholarship (PSE)',
+          description: 'Paper I & Paper II syllabus notes, practice & mock tests',
+          color: 'border-amber-200 bg-amber-50/60 hover:border-amber-500',
+          onClick: () => {
+            handleSelectClass('Class 4');
+            navigateToSection('scholarship');
+          },
+        },
+        {
+          id: 'sch-7',
+          icon: '🏆',
+          title: '7th Standard Scholarship (UPS)',
+          description: 'Complete Paper I & II notes, intelligence tests & practice',
+          color: 'border-rose-200 bg-rose-50/60 hover:border-rose-500',
+          onClick: () => {
+            handleSelectClass('Class 7');
+            navigateToSection('scholarship');
+          },
+        },
+        {
+          id: 'gk',
+          icon: '🌍',
+          title: 'General Knowledge (GK)',
+          description: 'India, Maharashtra, Science & current affairs capsules',
+          color: 'border-sky-200 bg-sky-50/60 hover:border-sky-500',
+          onClick: () => navigateToSection('cricket'),
+        },
+        {
+          id: 'brain-quiz',
+          icon: '🧠',
+          title: 'Brain Quizzes & Logic Puzzles',
+          description: 'Aptitude, memory & critical thinking challenges',
+          color: 'border-violet-200 bg-violet-50/60 hover:border-violet-500',
+          onClick: () => navigateToSection('puzzles'),
+        },
+        {
+          id: 'sudoku',
+          icon: '🧩',
+          title: 'Student Sudoku Challenge',
+          description: 'Daily number logic grids for concentration & focus',
+          color: 'border-emerald-200 bg-emerald-50/60 hover:border-emerald-500',
+          onClick: () => navigateToSection('sudoku'),
+        },
+      ],
+    },
+    'creative-cultural': {
+      title: 'Creative & Cultural Learning Hub',
+      subtitle: 'Explore inspiring history, value education stories & creative drawing',
+      icon: '🎨',
+      headerGradient: 'from-orange-500 via-amber-600 to-red-700',
+      items: [
+        {
+          id: 'shivaji',
+          icon: '🚩',
+          title: 'Chhatrapati Shivaji Maharaj History',
+          description: 'Inspiring life events, forts, administration & quizzes',
+          color: 'border-orange-200 bg-orange-50/60 hover:border-orange-500',
+          onClick: () => navigateToSection('shivaji'),
+        },
+        {
+          id: 'stories',
+          icon: '📚',
+          title: 'Moral & Inspirational Stories',
+          description: 'Illustrated value-building stories with comprehension lessons',
+          color: 'border-amber-200 bg-amber-50/60 hover:border-amber-500',
+          onClick: () => navigateToSection('stories'),
+        },
+        {
+          id: 'drawing',
+          icon: '🎨',
+          title: 'Drawing & Art Studio',
+          description: 'Step-by-step digital drawing canvas & coloring templates',
+          color: 'border-pink-200 bg-pink-50/60 hover:border-pink-500',
+          onClick: () => navigateToSection('drawing'),
+        },
+      ],
+    },
+    'progress-account': {
+      title: 'My Progress, Certificates & Account',
+      subtitle: 'Track your academic performance, certificates, and active class plan',
+      icon: '🏆',
+      headerGradient: 'from-teal-600 via-emerald-600 to-slate-900',
+      items: [
+        {
+          id: 'leaderboard',
+          icon: '🥇',
+          title: 'Student Leaderboard & Ranks',
+          description: 'View top performers, points earned & quiz achievements',
+          color: 'border-amber-200 bg-amber-50/60 hover:border-amber-500',
+          onClick: () => navigateToSection('certificates'),
+        },
+        {
+          id: 'certificates',
+          icon: '📜',
+          title: 'My Achievement Certificates',
+          description: 'Download official verifiable certificates for completed exams',
+          color: 'border-emerald-200 bg-emerald-50/60 hover:border-emerald-500',
+          onClick: () => navigateToSection('certificates'),
+        },
+        {
+          id: 'pricing',
+          icon: '💎',
+          title: 'Class Plans & Subscription',
+          description: 'Activate or switch classes (₹99 / 365 days full access)',
+          color: 'border-indigo-200 bg-indigo-50/60 hover:border-indigo-500',
+          onClick: () => triggerOpenPricing(effectiveClass, effectiveBoard),
+        },
+        {
+          id: 'profile',
+          icon: '👤',
+          title: 'My Student Profile & Referrals',
+          description: 'Manage your profile details, active classes & referral rewards',
+          color: 'border-sky-200 bg-sky-50/60 hover:border-sky-500',
+          onClick: () => {
+            if (isAuthenticated && onNavigateTab) {
+              onNavigateTab('profile');
+            } else {
+              triggerOpenAuth('login', 'student');
+            }
+          },
+        },
+      ],
+    },
+  };
+
+  // ==================== SUB-CATEGORY FULL-SCREEN VIEW ====================
+  if (activeFolder !== null) {
+    const folder = folderDefinitions[activeFolder];
+    return (
+      <div className="space-y-5 animate-in fade-in duration-200">
+        {/* Top Back Navigation Bar */}
+        <div className="flex items-center justify-between gap-3 bg-white rounded-2xl p-3.5 sm:px-5 border border-slate-200 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setActiveFolder(null)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Student Dashboard</span>
+          </button>
+          <div className="text-xs sm:text-sm font-black text-slate-700 truncate">
+            Student Portal • {folder.title}
+          </div>
+        </div>
+
+        {/* Folder Header Banner */}
+        <div className={`rounded-3xl bg-gradient-to-r ${folder.headerGradient} text-white p-6 sm:p-8 shadow-lg`}>
           <div className="flex items-center gap-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-3xl shadow-md shrink-0 border-2 border-white">
-              {currentStudent.avatar || '🦁'}
+            <div className="w-14 h-14 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center text-3xl shrink-0">
+              {folder.icon}
+            </div>
+            <div>
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/80">
+                Student Portal Category
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-0.5">
+                {folder.title}
+              </h2>
+              <p className="text-xs sm:text-sm text-white/90 mt-1">
+                {folder.subtitle}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Sub-Category Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {folder.items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              className={`group p-5 rounded-3xl border-2 ${item.color} text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-lg flex flex-col justify-between gap-4 cursor-pointer bg-white`}
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="w-13 h-13 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform">
+                  {item.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-indigo-700 leading-snug">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs text-slate-600 font-medium mt-1 leading-relaxed">
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end text-xs font-extrabold text-indigo-700 group-hover:translate-x-0.5 transition-transform">
+                <span>Open Section</span>
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ==================== MAIN STUDENT PORTAL DASHBOARD (MAIN CATEGORY CARDS ONLY) ====================
+  return (
+    <div className="space-y-5">
+      {/* 1. COMPACT APP HEADER BAR */}
+      <div className="rounded-3xl bg-gradient-to-r from-[#0f296b] via-[#1d4ed8] to-[#0284c7] text-white p-5 sm:p-6 shadow-lg border border-sky-300/40">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          {/* Student Identity & Active Class */}
+          <div className="flex items-center gap-3.5">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/15 backdrop-blur-md border-2 border-white/30 flex items-center justify-center text-3xl shadow-inner shrink-0">
+              {isAuthenticated && currentStudent ? currentStudent.avatar : '🎓'}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-display font-black text-slate-900">
-                  {currentStudent.name}&apos;s Active Workspace
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300">
-                  {getBoardShortLabel(activeBoard)} &bull; {currentStudent.classLevel}
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-300 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                  Student Portal
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-extrabold border border-emerald-300 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>{planInfo.planDisplayName}</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-white text-xs font-extrabold border border-white/20">
+                  {getBoardShortLabel(effectiveBoard)} • Standard {formatStandardOrdinal(effectiveClass)} ({effectiveClass})
                 </span>
+                {isAuthenticated && (
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-black inline-flex items-center gap-1 ${
+                      currentClassUnlocked
+                        ? 'bg-emerald-400 text-slate-950'
+                        : 'bg-rose-500/90 text-white'
+                    }`}
+                  >
+                    {currentClassUnlocked ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Active Plan
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-3 h-3" /> Demo Mode
+                      </>
+                    )}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-slate-600 font-medium mt-1">
-                🔥 {currentStudent.streakDays} Day Streak · {currentStudent.points} XP ·{' '}
-                {currentStudent.medium ? `${currentStudent.medium} Medium · ` : ''}
-                {getActivatedBoardClassesList(currentStudent).length} Paid Class Activation
-                {getActivatedBoardClassesList(currentStudent).length === 1 ? '' : 's'}
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight mt-1">
+                {isAuthenticated && currentStudent
+                  ? `Welcome, ${currentStudent.name}!`
+                  : 'Welcome to Student Portal'}
+              </h1>
+              <p className="text-xs sm:text-sm text-sky-100 font-medium mt-0.5">
+                Select any main learning category below to open your subjects, chapters, and study tools.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {currentStudent.accountRole === 'teacher' && (
+          {/* Right Controls: Change Board/Class + Auth / Plan Action */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowBoardClassModal((prev) => !prev)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-extrabold text-xs sm:text-sm border border-white/30 transition-all cursor-pointer"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-amber-300" />
+              <span>Change Board / Class</span>
+            </button>
+
+            {!isAuthenticated ? (
               <>
                 <button
                   type="button"
-                  onClick={() => onNavigateTab('teacher-dashboard')}
-                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-[#0f2447] hover:bg-slate-900 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                  onClick={() => triggerOpenAuth('login', 'student')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-white text-[#0f296b] hover:bg-sky-50 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
                 >
-                  <Users className="w-3.5 h-3.5 text-teal-300" />
-                  <span>Teacher Command Center</span>
+                  <LogIn className="w-4 h-4" />
+                  <span>Student Login</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => onNavigateTab('lesson-planner')}
-                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs whitespace-nowrap"
+                  onClick={() => triggerOpenAuth('register', 'student')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-400 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
                 >
-                  <Calendar className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Lesson Planner</span>
+                  <UserPlus className="w-4 h-4" />
+                  <span>Register</span>
                 </button>
               </>
+            ) : (
+              !currentClassUnlocked && (
+                <button
+                  type="button"
+                  onClick={() => triggerOpenPricing(effectiveClass, effectiveBoard)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-400 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+                >
+                  <Crown className="w-4 h-4" />
+                  <span>Unlock {effectiveClass} (₹99/Yr)</span>
+                </button>
+              )
             )}
           </div>
         </div>
 
-        {/* 7-CATEGORY CLEAN STUDENT ORGANISER STRIP (Stage 3: My Learning · My Class · Study Materials · AI Study Tools · Tests & Exams · My Progress · Downloads) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="font-extrabold text-slate-700 uppercase tracking-wider text-[11px]">
-              Quick Student Categories (Instant Access)
-            </span>
-            <span className="text-[11px] font-bold text-indigo-700">
-              {getBoardShortLabel(activeBoard)} · {currentStudent.classLevel}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {[
-              {
-                id: 'cat-my-learning',
-                label: 'My Learning',
-                sub: `${activeClassSubjects.length} Subjects`,
-                icon: GraduationCap,
-                bg: 'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-200',
-                onClick: () => onNavigateTab('all-courses'),
-              },
-              {
-                id: 'cat-my-class',
-                label: 'My Class',
-                sub: `${getBoardShortLabel(activeBoard)} · ${currentStudent.classLevel}`,
-                icon: Layers,
-                bg: 'bg-sky-50 hover:bg-sky-100 text-sky-950 border-sky-200',
-                onClick: () => setShowAddBoardClassSelector((prev) => !prev),
-              },
-              {
-                id: 'cat-study-materials',
-                label: 'Study Materials',
-                sub: 'Books & Solutions',
-                icon: BookOpen,
-                bg: 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-200',
-                onClick: () => onNavigateTab('study-materials'),
-              },
-              {
-                id: 'cat-ai-study-tools',
-                label: 'AI Study Tools',
-                sub: currentStudent.accountRole === 'teacher' ? '40 Teacher Tools' : '30 Student Tools',
-                icon: ShieldCheck,
-                bg: 'bg-purple-50 hover:bg-purple-100 text-purple-950 border-purple-200',
-                onClick: () => onNavigateTab('ai-tools'),
-              },
-              {
-                id: 'cat-tests-exams',
-                label: 'Tests & Exams',
-                sub: 'Quizzes & Mocks',
-                icon: FileText,
-                bg: 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-200',
-                onClick: () => onNavigateTab('quizzes'),
-              },
-              {
-                id: 'cat-my-progress',
-                label: 'My Progress',
-                sub: `${overallProgressPercent}% Mastery`,
-                icon: Award,
-                bg: 'bg-rose-50 hover:bg-rose-100 text-rose-950 border-rose-200',
-                onClick: () => onNavigateTab('certificates'),
-              },
-              {
-                id: 'cat-downloads',
-                label: 'Downloads',
-                sub: 'PDF & Print Studio',
-                icon: Printer,
-                bg: 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300',
-                onClick: () => onNavigateTab('document-studio'),
-              },
-            ].map((cat) => {
-              const Icon = cat.icon;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={cat.onClick}
-                  className={`min-h-[48px] p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${cat.bg}`}
-                >
-                  <div className="w-8 h-8 rounded-xl bg-white/90 border border-black/5 flex items-center justify-center shrink-0 shadow-2xs">
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-black truncate">{cat.label}</div>
-                    <div className="text-[10px] font-bold opacity-75 truncate">{cat.sub}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Switch Board & Class (Shows only registered & activated boards/classes by default; allows expanding to activate additional board/class) */}
-        {(() => {
-          const visibleBoardMetaList = showAddBoardClassSelector
-            ? BOARD_META_LIST
-            : BOARD_META_LIST.filter((bm) => activatedBoardsForStudent.includes(bm.id));
-          const activeClassesForSelectedBoard = getStudentActivatedClassesForBoard(
-            currentStudent,
-            selectedCurriculumBoard
-          );
-          const visibleClassesList = showAddBoardClassSelector
-            ? ALL_10_CLASSES
-            : activeClassesForSelectedBoard;
-
-          return (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-indigo-600" />
-                  <span>
-                    {showAddBoardClassSelector
-                      ? 'Activate or Switch Any Board & Class (Maharashtra · CBSE · ICSE):'
-                      : `Your Active Board & Class Workspace (Registered: ${getBoardShortLabel(registeredBaseBoard)} · ${registeredBaseClass}):`}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  data-testid="dashboard-toggle-activate-board-class-btn"
-                  onClick={() => setShowAddBoardClassSelector((prev) => !prev)}
-                  className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-black text-[11px] cursor-pointer transition-colors"
-                >
-                  {showAddBoardClassSelector
-                    ? 'Hide Inactive Boards & Classes'
-                    : '+ Activate Another Board or Class'}
-                </button>
+        {/* Collapsible Board & Class Switcher Drawer (Only shown when user clicks "Change Board / Class") */}
+        {showBoardClassModal && (
+          <div className="mt-5 pt-5 border-t border-white/20 bg-slate-950/35 rounded-2xl p-4 space-y-4 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <div className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4" />
+                <span>Step 1: Select Your Education Board &amp; Standard (Classes 1 to 10)</span>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {visibleBoardMetaList.map((bm) => {
-                  const isTabBoard = selectedCurriculumBoard === bm.id;
-                  const activeCountOnBoard = getStudentActivatedClassesForBoard(
-                    currentStudent,
-                    bm.id
-                  ).length;
-                  const paidCountOnBoard = ALL_10_CLASSES.filter(
-                    (c) => getBoardClassSubscriptionInfo(currentStudent, bm.id, c).isPaidActive
-                  ).length;
-                  const isBoardActivated = activatedBoardsForStudent.includes(bm.id);
-                  return (
-                    <button
-                      key={bm.id}
-                      type="button"
-                      data-testid={`dashboard-board-card-${bm.id}`}
-                      onClick={() => {
-                        setSelectedCurriculumBoard(bm.id);
-                        const classesOnBoard = getStudentActivatedClassesForBoard(
-                          currentStudent,
-                          bm.id
-                        );
-                        if (!showAddBoardClassSelector && classesOnBoard.length > 0) {
-                          const targetCls = classesOnBoard.includes(currentStudent.classLevel)
-                            ? currentStudent.classLevel
-                            : classesOnBoard[0];
-                          void switchActiveBoardAndClass(bm.id, targetCls);
-                        }
-                      }}
-                      className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                        isTabBoard
-                          ? `bg-gradient-to-r ${bm.gradient} text-white border-transparent shadow-sm`
-                          : 'bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xl shrink-0">{bm.icon}</span>
-                        <div className="min-w-0">
-                          <div className="text-xs font-black truncate">{bm.shortLabel}</div>
-                          <div
-                            className={`text-[10px] font-bold truncate ${
-                              isTabBoard ? 'text-white/85' : 'text-slate-500'
-                            }`}
-                          >
-                            {bm.id === registeredBaseBoard
-                              ? `Registered (${registeredBaseClass})`
-                              : isBoardActivated
-                                ? `${activeCountOnBoard} Active Class${activeCountOnBoard === 1 ? '' : 'es'}`
-                                : bm.badgeText}
-                          </div>
-                        </div>
-                      </div>
-                      {paidCountOnBoard > 0 ? (
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                            isTabBoard ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {paidCountOnBoard} Paid
-                        </span>
-                      ) : isBoardActivated ? (
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                            isTabBoard ? 'bg-white/25 text-white' : 'bg-indigo-100 text-indigo-800'
-                          }`}
-                        >
-                          Active
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
-                {visibleClassesList.map((cls) => {
-                  const meta = ALL_10_CLASSES_META.find((m) => m.classLevel === cls);
-                  const isSelected =
-                    activeBoard === selectedCurriculumBoard && currentStudent.classLevel === cls;
-                  const cInfo = getBoardClassSubscriptionInfo(
-                    currentStudent,
-                    selectedCurriculumBoard,
-                    cls
-                  );
-                  const isOriginalRegistered =
-                    selectedCurriculumBoard === registeredBaseBoard && cls === registeredBaseClass;
-
-                  let cardStyle =
-                    'bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200 hover:border-amber-300 cursor-pointer';
-                  if (isSelected) {
-                    cardStyle =
-                      'bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-indigo-600 shadow-md cursor-default';
-                  } else if (cInfo.isPaidActive) {
-                    cardStyle =
-                      'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-400 cursor-pointer';
-                  } else if (cInfo.isAccessible) {
-                    cardStyle =
-                      'bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-300 cursor-pointer';
-                  }
-
-                  return (
-                    <button
-                      key={`${selectedCurriculumBoard}_${cls}`}
-                      type="button"
-                      data-testid={`dashboard-class-card-${selectedCurriculumBoard}-${cls.replace(/\s+/g, '')}`}
-                      onClick={() => {
-                        if (cInfo.isAccessible) {
-                          if (!isSelected) {
-                            void switchActiveBoardAndClass(selectedCurriculumBoard, cls);
-                          }
-                        } else {
-                          void activateAdditionalBoardClass(selectedCurriculumBoard, cls, true);
-                          setShowAddBoardClassSelector(false);
-                        }
-                      }}
-                      className={`p-2.5 rounded-2xl border text-center transition-all relative ${cardStyle}`}
-                    >
-                      {isSelected ? (
-                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black uppercase">
-                          Active
-                        </span>
-                      ) : cInfo.isPaidActive ? (
-                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase">
-                          Paid
-                        </span>
-                      ) : isOriginalRegistered ? (
-                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
-                          Registered
-                        </span>
-                      ) : cInfo.isAccessible ? (
-                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[9px] font-black uppercase">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold uppercase flex items-center gap-0.5">
-                          + Activate
-                        </span>
-                      )}
-                      <div className="text-xs font-black">{cls}</div>
-                      <div
-                        className={`text-[10px] font-bold mt-0.5 ${
-                          isSelected ? 'text-indigo-100' : 'text-slate-500'
-                        }`}
-                      >
-                        {selectedCurriculumBoard === 'Maharashtra'
-                          ? meta?.marathiLabel
-                          : getBoardShortLabel(selectedCurriculumBoard)}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowBoardClassModal(false)}
+                className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
+              >
+                Done ✓
+              </button>
             </div>
-          );
-        })()}
 
-        {/* MY STUDYZONE ADDITIONAL CURRICULUM — Strictly Separate Enrichment Track */}
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
-              MY STUDYZONE ADDITIONAL CURRICULUM · Supplementary Enrichment
-            </p>
-            <h3 className="text-sm font-display font-black text-slate-900">
-              10 Skill &amp; Enrichment Subjects for {getBoardShortLabel(activeBoard)} · {currentStudent.classLevel}
-            </h3>
-            <p className="text-xs text-slate-600">
-              General Knowledge · Logical Reasoning · Moral Education · Computer Knowledge · Vocabulary &amp; Grammar · Drawing · Environmental Awareness · Life Skills · General Science Activities · Financial &amp; Digital Literacy — kept strictly separate from official board textbooks.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigateTab('additional-curriculum')}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 self-start sm:self-auto whitespace-nowrap"
-          >
-            <span>Open Additional Curriculum</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Role-Scoped Categories & Paid Access Overview */}
-        {(() => {
-          const visibleCats = getVisibleExamCategoriesForStudent(currentStudent);
-          const allClassesActive =
-            hasCategoryAccess(currentStudent, 'all_classes') ||
-            getActivatedBoardClassesList(currentStudent).length > 0;
-          const sch4Info = getCategorySubscriptionInfo(currentStudent, 'scholarship_4th');
-          const sch7Info = getCategorySubscriptionInfo(currentStudent, 'scholarship_7th');
-          const tetInfo = getCategorySubscriptionInfo(currentStudent, 'maha_tet');
-          const ctet1Info = getCategorySubscriptionInfo(currentStudent, 'ctet_paper_1');
-          const ctet2Info = getCategorySubscriptionInfo(currentStudent, 'ctet_paper_2');
-
-          const rawSelectedTeacherCats: CategoryId[] =
-            visibleCats.isTeacher &&
-            Array.isArray(currentStudent.selectedTeacherCategories) &&
-            currentStudent.selectedTeacherCategories.length > 0
-              ? currentStudent.selectedTeacherCategories
-              : [
-                  'all_classes',
-                  'scholarship_4th',
-                  'scholarship_7th',
-                  'maha_tet',
-                  'ctet_paper_1',
-                  'ctet_paper_2',
-                ];
-
-          const isTeacherCatSelected = (catId: CategoryId) =>
-            rawSelectedTeacherCats.includes(catId);
-
-          const toggleDashboardTeacherCat = (catId: CategoryId | 'ctet_both') => {
-            const next = new Set<CategoryId>(rawSelectedTeacherCats);
-            if (catId === 'ctet_both') {
-              const bothOn = next.has('ctet_paper_1') && next.has('ctet_paper_2');
-              if (bothOn) {
-                next.delete('ctet_paper_1');
-                next.delete('ctet_paper_2');
-              } else {
-                next.add('ctet_paper_1');
-                next.add('ctet_paper_2');
-              }
-            } else {
-              if (next.has(catId)) {
-                if (next.size > 1) next.delete(catId);
-              } else {
-                next.add(catId);
-              }
-            }
-            void updateTeacherSelectedCategories(Array.from(next));
-          };
-
-          interface CategoryTile {
-            id: string;
-            categoryId: CategoryId;
-            title: string;
-            subtitle: string;
-            isVisible: boolean;
-            isSelectedByTeacher: boolean;
-            isUnlocked: boolean;
-            statusText: string;
-            priceLabel: string;
-            sku: PlanSkuId;
-            targetTab: string;
-          }
-
-          const teacherClassesTile: CategoryTile | null = visibleCats.isTeacher
-            ? {
-                id: 'all-classes',
-                categoryId: 'all_classes',
-                title: 'Classes 1 to 10 (All Boards)',
-                subtitle: 'Maharashtra, CBSE & ICSE Worksheets, Quizzes & Notes',
-                isVisible: true,
-                isSelectedByTeacher: isTeacherCatSelected('all_classes'),
-                isUnlocked: allClassesActive,
-                statusText: hasCategoryAccess(currentStudent, 'all_classes')
-                  ? 'All Classes Bundle Active'
-                  : allClassesActive
-                  ? `${getActivatedBoardClassesList(currentStudent).length} Class Plan(s) Active`
-                  : 'Free Demo Only',
-                priceLabel: '₹99 / Board & Class',
-                sku: 'BOARD_CLASS',
-                targetTab: 'all-courses',
-              }
-            : null;
-
-          const tiles: CategoryTile[] = [
-            ...(teacherClassesTile ? [teacherClassesTile] : []),
-            {
-              id: 'scholarship-4th',
-              categoryId: 'scholarship_4th',
-              title: '4th Scholarship (MSCE PSE)',
-              subtitle: '25 Full Mock Tests (Paper 1 & 2) + 10 Practice Sets',
-              isVisible: visibleCats.showScholarship4th,
-              isSelectedByTeacher: isTeacherCatSelected('scholarship_4th'),
-              isUnlocked: sch4Info.isPaidActive,
-              statusText: sch4Info.isPaidActive
-                ? `Unlocked (${sch4Info.daysRemainingDisplay})`
-                : 'Preview Set #1 Free • Locked',
-              priceLabel: '₹99 / 12m',
-              sku: 'SCHOLARSHIP_COMBO',
-              targetTab: 'scholarship',
-            },
-            {
-              id: 'scholarship-7th',
-              categoryId: 'scholarship_7th',
-              title: '7th Scholarship (MSCE UPS)',
-              subtitle: '25 Full Mock Tests (Paper 1 & 2) + 10 Practice Sets',
-              isVisible: visibleCats.showScholarship7th,
-              isSelectedByTeacher: isTeacherCatSelected('scholarship_7th'),
-              isUnlocked: sch7Info.isPaidActive,
-              statusText: sch7Info.isPaidActive
-                ? `Unlocked (${sch7Info.daysRemainingDisplay})`
-                : 'Preview Set #1 Free • Locked',
-              priceLabel: '₹99 / 12m',
-              sku: 'SCHOLARSHIP_COMBO',
-              targetTab: 'scholarship',
-            },
-            {
-              id: 'maha-tet',
-              categoryId: 'maha_tet',
-              title: 'Maharashtra TET (Paper 1 & 2)',
-              subtitle: '100 Full Mock Exams, Subject Drills & MSCE Syllabi',
-              isVisible: visibleCats.showMahaTet,
-              isSelectedByTeacher: isTeacherCatSelected('maha_tet'),
-              isUnlocked: tetInfo.isPaidActive,
-              statusText: tetInfo.isPaidActive
-                ? `Unlocked (${tetInfo.daysRemainingDisplay})`
-                : 'Preview Mock 01 Free • Locked',
-              priceLabel: '6M ₹199 (MRP ₹399) | 1Y ₹299 (MRP ₹599)',
-              sku: 'TET_1Y',
-              targetTab: 'tet-ctet',
-            },
-            {
-              id: 'ctet-p1',
-              categoryId: 'ctet_paper_1',
-              title: 'CTET Paper 1 (Classes 1–5)',
-              subtitle: '50 CBT Mock Tests, Pedagogy & PYQ Simulations',
-              isVisible: visibleCats.showCtetP1,
-              isSelectedByTeacher: isTeacherCatSelected('ctet_paper_1'),
-              isUnlocked: ctet1Info.isPaidActive,
-              statusText: ctet1Info.isPaidActive
-                ? `Unlocked (${ctet1Info.daysRemainingDisplay})`
-                : 'Preview Mock 01 Free • Locked',
-              priceLabel: '6M ₹199 (MRP ₹399) | 1Y ₹299 (MRP ₹599)',
-              sku: 'CTET_1Y',
-              targetTab: 'tet-ctet',
-            },
-            {
-              id: 'ctet-p2',
-              categoryId: 'ctet_paper_2',
-              title: 'CTET Paper 2 (Classes 6–8)',
-              subtitle: '50 CBT Mock Tests (Math/Science & Social Studies)',
-              isVisible: visibleCats.showCtetP2,
-              isSelectedByTeacher: isTeacherCatSelected('ctet_paper_2'),
-              isUnlocked: ctet2Info.isPaidActive,
-              statusText: ctet2Info.isPaidActive
-                ? `Unlocked (${ctet2Info.daysRemainingDisplay})`
-                : 'Preview Mock 01 Free • Locked',
-              priceLabel: '6M ₹199 (MRP ₹399) | 1Y ₹299 (MRP ₹599)',
-              sku: 'CTET_1Y',
-              targetTab: 'tet-ctet',
-            },
-          ];
-
-          const visibleTiles = tiles
-            .filter((t) => t.isVisible)
-            .sort((a, b) => Number(b.isSelectedByTeacher) - Number(a.isSelectedByTeacher));
-          if (visibleTiles.length === 0) return null;
-
-          const bothCtetSelected =
-            isTeacherCatSelected('ctet_paper_1') && isTeacherCatSelected('ctet_paper_2');
-          const bothCtetUnlocked = ctet1Info.isPaidActive && ctet2Info.isPaidActive;
-
-          return (
-            <div className="pt-4 border-t border-slate-100 space-y-3">
-              {/* FREE DEMO MOCK TESTS PROMINENT BANNER */}
-              <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 border border-amber-300 text-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-full bg-slate-950 text-white text-[9px] font-black uppercase">
-                      100% Free Demo
-                    </span>
-                    <span className="text-[11px] font-bold text-amber-950">
-                      TET · CTET · Class 4 &amp; 7 Scholarship
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-display font-black text-slate-950">
-                    Experience Full-Length Demo Mock Examinations with Real Countdown Timers
-                  </h4>
-                  <p className="text-[11px] font-semibold text-slate-800">
-                    Try authentic 150-minute TET/CTET (150 Marks) or 90-minute Scholarship (150 Marks) exams with question palettes and full solutions.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab('demo-mock-tests')}
-                  className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-black text-xs cursor-pointer shadow-xs transition-colors shrink-0 flex items-center gap-1.5 self-start sm:self-auto"
-                >
-                  <Award className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Launch Free Demo Tests</span>
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-xs sm:text-sm font-display font-black text-slate-900 flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-indigo-600" />
-                    <span>
-                      {visibleCats.isTeacher
-                        ? 'Teacher / TET Aspirant Selected Categories & Paid Access'
-                        : 'Your Class Exam & Scholarship Categories'}
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Categories are visible for browsing and free previews. Full mock tests and practice sets unlock upon plan purchase.
-                  </p>
-                </div>
-                {visibleCats.isTeacher && (
-                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onOpenMembership(
-                          'premium',
-                          currentStudent.classLevel,
-                          activeBoard,
-                          'TET_CTET_COMBO_6M'
-                        )
-                      }
-                      className="px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <Award className="w-3.5 h-3.5" />
-                      <span>
-                        TET + CTET 6M <span className="line-through opacity-75 font-bold">₹699</span> ₹349
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onOpenMembership(
-                          'premium',
-                          currentStudent.classLevel,
-                          activeBoard,
-                          'TET_CTET_COMBO_1Y'
-                        )
-                      }
-                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <Award className="w-3.5 h-3.5" />
-                      <span>
-                        TET + CTET 1Y <span className="line-through opacity-75 font-bold">₹999</span> ₹499
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Teacher Selected Registration Categories Filter / Customizer Bar */}
-              {visibleCats.isTeacher && (
-                <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <span className="font-black text-emerald-950 uppercase tracking-wider">
-                      Your Selected Teacher / TET Categories (Click to Toggle Anytime):
-                    </span>
-                    <span className="font-bold text-emerald-800">
-                      {rawSelectedTeacherCats.length} of 6 Selected
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { id: 'all_classes' as const, label: 'Classes 1 to 10', active: isTeacherCatSelected('all_classes') },
-                      { id: 'scholarship_4th' as const, label: '4th Scholarship', active: isTeacherCatSelected('scholarship_4th') },
-                      { id: 'scholarship_7th' as const, label: '7th Scholarship', active: isTeacherCatSelected('scholarship_7th') },
-                      { id: 'maha_tet' as const, label: 'Maharashtra TET', active: isTeacherCatSelected('maha_tet') },
-                      { id: 'ctet_paper_1' as const, label: 'CTET Paper 1', active: isTeacherCatSelected('ctet_paper_1') },
-                      { id: 'ctet_paper_2' as const, label: 'CTET Paper 2', active: isTeacherCatSelected('ctet_paper_2') },
-                      { id: 'ctet_both' as const, label: 'Both CTET Papers', active: bothCtetSelected },
-                    ].map((pill) => (
-                      <button
-                        key={pill.id}
-                        type="button"
-                        onClick={() => toggleDashboardTeacherCat(pill.id)}
-                        className={`px-2.5 py-1 rounded-xl text-[11px] font-black border transition-all cursor-pointer flex items-center gap-1 ${
-                          pill.active
-                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-400'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3 h-3 shrink-0" />
-                        <span>{pill.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {visibleTiles.map((tile) => (
-                  <div
-                    key={tile.id}
-                    className={`rounded-2xl border p-3.5 flex flex-col justify-between gap-3 ${
-                      tile.isUnlocked
-                        ? 'bg-emerald-50/70 border-emerald-300'
-                        : visibleCats.isTeacher && tile.isSelectedByTeacher
-                        ? 'bg-indigo-50/50 border-indigo-200'
-                        : 'bg-slate-50 border-slate-200'
+            {/* 3 Board Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {BOARD_META_LIST.map((bMeta) => {
+                const isSel = effectiveBoard === bMeta.id;
+                return (
+                  <button
+                    key={bMeta.id}
+                    type="button"
+                    onClick={() => handleSelectBoard(bMeta.id)}
+                    className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
+                      isSel
+                        ? 'bg-white text-slate-900 border-amber-300 shadow-md'
+                        : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
                     }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-display font-black text-xs sm:text-sm text-slate-900">
-                          {tile.title}
-                        </span>
-                        {tile.isUnlocked ? (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center gap-1 shrink-0">
-                            <CheckCircle2 className="w-3 h-3" /> Active
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black flex items-center gap-1 shrink-0">
-                            <Lock className="w-2.5 h-2.5" /> {tile.priceLabel}
-                          </span>
-                        )}
-                      </div>
-                      {visibleCats.isTeacher && (
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
-                              tile.isSelectedByTeacher
-                                ? 'bg-indigo-100 text-indigo-800'
-                                : 'bg-slate-200 text-slate-600'
-                            }`}
-                          >
-                            {tile.isSelectedByTeacher ? '✓ Selected Category' : 'Available Category'}
-                          </span>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-xl shrink-0">{bMeta.icon}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-black truncate">{bMeta.shortLabel}</div>
+                        <div className={`text-[10px] truncate ${isSel ? 'text-slate-600' : 'text-sky-200'}`}>
+                          {bMeta.affiliationLabel}
                         </div>
-                      )}
-                      <p className="text-[11px] text-slate-600 leading-snug">{tile.subtitle}</p>
-                      <p
-                        className={`text-[10px] font-extrabold ${
-                          tile.isUnlocked ? 'text-emerald-800' : 'text-slate-500'
-                        }`}
-                      >
-                        {tile.statusText}
-                      </p>
+                      </div>
                     </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => onNavigateTab(tile.targetTab)}
-                        className="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer transition-colors"
-                      >
-                        {tile.isUnlocked ? 'Open Test Section' : 'Open Section'}
-                      </button>
-                      {!tile.isUnlocked && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onOpenMembership(
-                              'premium',
-                              currentStudent.classLevel,
-                              selectedCurriculumBoard,
-                              tile.sku
-                            )
-                          }
-                          className="py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] cursor-pointer transition-colors shrink-0"
-                        >
-                          Unlock Plan
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    {isSel && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
-          );
-        })()}
+
+            {/* 10 Class Buttons */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+              {ALL_10_CLASSES_META.map((clsMeta) => {
+                const cls = clsMeta.classLevel;
+                const isSelected = effectiveClass === cls;
+                const unlocked = currentStudent
+                  ? getClassSubscriptionInfo(currentStudent, cls, effectiveBoard).isPaidActive
+                  : false;
+                return (
+                  <button
+                    key={cls}
+                    type="button"
+                    onClick={() => {
+                      handleSelectClass(cls);
+                      setShowBoardClassModal(false);
+                    }}
+                    className={`py-2.5 px-2 rounded-xl border-2 text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-300 text-slate-950 border-white font-black shadow-md'
+                        : unlocked
+                        ? 'bg-emerald-500/30 text-white border-emerald-300/60 font-bold hover:bg-emerald-500/40'
+                        : 'bg-white/10 text-white border-white/15 font-bold hover:bg-white/20'
+                    }`}
+                  >
+                    <div className="text-xs font-black">{cls}</div>
+                    <div className="text-[10px] opacity-85 mt-0.5">
+                      Std {formatStandardOrdinal(cls)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* DIRECT PWA MOBILE APP INSTALL BANNER AT BOTTOM OF DASHBOARD */}
-      <PWAInstallButton variant="banner" />
+      {/* 2. MAIN STUDENT PORTAL CATEGORY CARDS GRID (CLEAN APP INTERFACE) */}
+      <div>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-indigo-600" />
+              <span>Student Portal Main Categories</span>
+            </h2>
+            <p className="text-xs text-slate-500 font-medium">
+              Click any category card to open that section in full screen
+            </p>
+          </div>
+          <span className="hidden sm:inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-extrabold">
+            {getBoardShortLabel(effectiveBoard)} • {effectiveClass}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+          {mainCategories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={cat.onClick}
+              className={`group relative rounded-3xl bg-gradient-to-b ${cat.lightBg} bg-white border-2 p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl flex flex-col justify-between gap-4 cursor-pointer`}
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3.5">
+                  <div
+                    className={`w-13 h-13 rounded-2xl bg-gradient-to-br ${cat.gradient} text-white flex items-center justify-center text-2xl shadow-md group-hover:scale-105 transition-transform`}
+                  >
+                    {cat.icon}
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-white/90 border border-slate-200 text-[10px] font-black text-slate-700 shadow-2xs">
+                    {cat.badge}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-indigo-700 leading-snug">
+                  {cat.title}
+                </h3>
+                <p className="text-xs text-slate-600 font-medium mt-1 leading-relaxed">
+                  {cat.description}
+                </p>
+              </div>
+
+              <div className="pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-xs font-extrabold text-indigo-700">
+                <span>Open</span>
+                <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

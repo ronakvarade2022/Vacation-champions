@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Home,
   Info,
@@ -8,967 +8,970 @@ import {
   User,
   Edit3,
   ArrowRight,
-  BookOpen,
-  FileText,
-  Layers,
-  Clapperboard,
-  ClipboardCheck,
-  Calculator,
-  Rocket,
-  Award,
-  Users,
-  ShieldCheck,
-  Menu,
-  X,
-  GraduationCap,
+  LogIn,
+  UserPlus,
 } from 'lucide-react';
-import type { PortalRole } from '../types';
-import type { AuthModalTab, PortalRegisterRole } from './AuthModal';
+import { AuthModalTab, PortalRegisterRole } from './AuthModal';
 
 export interface PublicLandingHomepageProps {
-  onOpenPortal: (portalRole: Exclude<PortalRole, 'admin'>) => void;
+  onOpenPortal: (role: PortalRegisterRole) => void;
   onNavigateTab: (tab: string, subSection?: string) => void;
   onOpenAuth: (defaultTab: AuthModalTab, registerRole?: PortalRegisterRole) => void;
+  onOpenFeaturePage?: (featureKey: string) => void;
   isAuthenticated?: boolean;
   currentUserName?: string;
   onOpenMyDashboard?: () => void;
 }
 
-/**
- * Official MyStudyZone Open-Book + Rising Learner + Stars Logo (matches the uploaded reference image)
- */
-export const MyStudyZoneOfficialLogo: React.FC<{ className?: string }> = ({
-  className = 'w-12 h-12',
-}) => (
-  <svg viewBox="0 0 80 68" fill="none" className={className} aria-hidden="true">
-    <defs>
-      <linearGradient id="mszBookBlue" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#1D4ED8" />
-        <stop offset="100%" stopColor="#0F256E" />
-      </linearGradient>
-      <linearGradient id="mszPageGold" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#FACC15" />
-        <stop offset="100%" stopColor="#F59E0B" />
-      </linearGradient>
-      <linearGradient id="mszChildGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#EC4899" />
-        <stop offset="50%" stopColor="#9333EA" />
-        <stop offset="100%" stopColor="#3B82F6" />
-      </linearGradient>
-    </defs>
+const PORTALS: Array<{
+  id: PortalRegisterRole;
+  title: string;
+  subtitle: string;
+  description: string;
+  loginTab: AuthModalTab;
+  cardBg: string;
+  borderGlow: string;
+  arrowTextColor: string;
+  loginBtnClass: string;
+  registerBtnClass: string;
+  illustration: 'student' | 'teacher' | 'parent' | 'college' | 'institute';
+}> = [
+  {
+    id: 'student',
+    title: 'Student Portal',
+    subtitle: 'Study • Practice • Grow',
+    description: 'Classes 1–10 study notes, worksheets, quizzes & dictionary',
+    loginTab: 'login',
+    cardBg: 'from-[#38bdf8] via-[#0284c7] to-[#1e3a8a]',
+    borderGlow: 'border-sky-300/90 shadow-[0_12px_28px_rgba(2,132,199,0.28)]',
+    arrowTextColor: 'text-[#0284c7]',
+    loginBtnClass: 'bg-[#0c4a6e]/90 hover:bg-[#082f49] text-white border border-sky-300/60',
+    registerBtnClass: 'bg-white hover:bg-sky-50 text-[#0369a1] shadow-sm',
+    illustration: 'student',
+  },
+  {
+    id: 'teacher',
+    title: 'Teacher Portal',
+    subtitle: 'Plan • Teach • Assess',
+    description: 'Lesson planners, exam paper generator & classroom tools',
+    loginTab: 'teacher',
+    cardBg: 'from-[#a3e635] via-[#16a34a] to-[#14532d]',
+    borderGlow: 'border-lime-300/90 shadow-[0_12px_28px_rgba(22,163,74,0.28)]',
+    arrowTextColor: 'text-[#15803d]',
+    loginBtnClass: 'bg-[#14532d]/90 hover:bg-[#052e16] text-white border border-lime-300/60',
+    registerBtnClass: 'bg-white hover:bg-emerald-50 text-[#15803d] shadow-sm',
+    illustration: 'teacher',
+  },
+  {
+    id: 'parent',
+    title: 'Parent Portal',
+    subtitle: 'Monitor • Support • Encourage',
+    description: 'Track child progress, test scores & daily study activity',
+    loginTab: 'parent',
+    cardBg: 'from-[#f472b6] via-[#c026d3] to-[#701a75]',
+    borderGlow: 'border-fuchsia-300/90 shadow-[0_12px_28px_rgba(192,38,211,0.28)]',
+    arrowTextColor: 'text-[#a21caf]',
+    loginBtnClass: 'bg-[#701a75]/90 hover:bg-[#4a044e] text-white border border-fuchsia-300/60',
+    registerBtnClass: 'bg-white hover:bg-fuchsia-50 text-[#a21caf] shadow-sm',
+    illustration: 'parent',
+  },
+  {
+    id: 'school_admin',
+    title: 'College Portal',
+    subtitle: 'Manage • Track • Excel',
+    description: 'Academic batches, faculty allocation & institutional reports',
+    loginTab: 'school_admin',
+    cardBg: 'from-[#facc15] via-[#ea580c] to-[#9a3412]',
+    borderGlow: 'border-amber-300/90 shadow-[0_12px_28px_rgba(234,88,12,0.28)]',
+    arrowTextColor: 'text-[#c2410c]',
+    loginBtnClass: 'bg-[#7c2d12]/90 hover:bg-[#431407] text-white border border-amber-300/60',
+    registerBtnClass: 'bg-white hover:bg-amber-50 text-[#c2410c] shadow-sm',
+    illustration: 'college',
+  },
+  {
+    id: 'institute_admin',
+    title: 'Institute Portal',
+    subtitle: 'Organize • Guide • Excel',
+    description: 'Coaching batches, mock test series & performance tracking',
+    loginTab: 'institute_admin',
+    cardBg: 'from-[#2dd4bf] via-[#0d9488] to-[#115e59]',
+    borderGlow: 'border-teal-300/90 shadow-[0_12px_28px_rgba(13,148,136,0.28)]',
+    arrowTextColor: 'text-[#0f766e]',
+    loginBtnClass: 'bg-[#134e4a]/90 hover:bg-[#042f2e] text-white border border-teal-300/60',
+    registerBtnClass: 'bg-white hover:bg-teal-50 text-[#0f766e] shadow-sm',
+    illustration: 'institute',
+  },
+];
 
-    {/* Sparkle Stars at Top */}
-    <polygon
-      points="40,3 42,8 47,8.5 43,12 44.2,17 40,14.2 35.8,17 37,12 33,8.5 38,8"
-      fill="#F59E0B"
-    />
-    <polygon
-      points="24,11 25.2,14 28.5,14.3 26,16.5 26.8,19.5 24,17.8 21.2,19.5 22,16.5 19.5,14.3 22.8,14"
-      fill="#38BDF8"
-    />
-    <polygon
-      points="56,11 57.2,14 60.5,14.3 58,16.5 58.8,19.5 56,17.8 53.2,19.5 54,16.5 51.5,14.3 54.8,14"
-      fill="#EC4899"
-    />
-
-    {/* Rising Student Figure */}
-    <circle cx="40" cy="23" r="5.5" fill="url(#mszChildGrad)" />
-    <path
-      d="M27 27C32 32 36 34 40 34C44 34 48 32 53 27"
-      stroke="url(#mszChildGrad)"
-      strokeWidth="4.5"
-      strokeLinecap="round"
-    />
-    <path d="M40 33V48" stroke="url(#mszChildGrad)" strokeWidth="4.5" strokeLinecap="round" />
-
-    {/* Golden Inner Pages */}
-    <path
-      d="M14 26C24 26 33 31 40 38C47 31 56 26 66 26V50C56 50 47 54 40 61C33 54 24 50 14 50V26Z"
-      fill="url(#mszPageGold)"
-    />
-    {/* Royal Blue Outer Book Cover */}
-    <path
-      d="M8 31C20 31 31 36 40 44C49 36 60 31 72 31V55C60 55 49 59 40 66C31 59 20 55 8 55V31Z"
-      fill="url(#mszBookBlue)"
-    />
-    {/* White Page Ribbons */}
-    <path
-      d="M12 52C22 52 31 56 40 63C49 56 58 52 68 52"
-      stroke="#FFFFFF"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-    />
-    <path d="M40 38V64" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" />
-  </svg>
-);
-
-/**
- * Custom High-Definition Educational Illustrations for Hero & 5 Portal Cards
- */
-const HeroFourStudentsIllustration: React.FC = () => (
-  <svg
-    viewBox="0 0 640 310"
-    fill="none"
-    className="w-full h-full max-h-[300px] xl:max-h-[330px] object-contain select-none"
-    aria-hidden="true"
-  >
-    <defs>
-      <radialGradient id="sunHalo" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stopColor="#FEF9C3" stopOpacity="0.95" />
-        <stop offset="55%" stopColor="#FDE047" stopOpacity="0.45" />
-        <stop offset="100%" stopColor="#38BDF8" stopOpacity="0" />
-      </radialGradient>
-      <linearGradient id="schoolBuildingWall" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#FFFBEB" />
-        <stop offset="100%" stopColor="#FDE68A" />
-      </linearGradient>
-      <linearGradient id="schoolRoof" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stopColor="#EA580C" />
-        <stop offset="100%" stopColor="#F97316" />
-      </linearGradient>
-    </defs>
-
-    {/* Golden Sunburst Arch Behind Students */}
-    <circle cx="290" cy="180" r="155" fill="url(#sunHalo)" />
-    <circle
-      cx="290"
-      cy="180"
-      r="138"
-      stroke="#FDE047"
-      strokeWidth="3.5"
-      strokeDasharray="10 6"
-      opacity="0.8"
-    />
-
-    {/* Modern School Building & Campus on the Right */}
-    <g transform="translate(455, 105)">
-      {/* Roof */}
-      <polygon points="0,35 90,2 180,35" fill="url(#schoolRoof)" />
-      {/* Main Building Facade */}
-      <rect x="10" y="35" width="160" height="125" rx="4" fill="url(#schoolBuildingWall)" stroke="#F59E0B" strokeWidth="2" />
-      {/* Pillars & Windows */}
-      {[24, 58, 92, 126].map((wx) => (
-        <g key={wx}>
-          <rect x={wx} y="48" width="22" height="28" rx="3" fill="#38BDF8" stroke="#0284C7" strokeWidth="1.5" />
-          <rect x={wx} y="88" width="22" height="28" rx="3" fill="#38BDF8" stroke="#0284C7" strokeWidth="1.5" />
+function PortalIllustration({ type }: { type: 'student' | 'teacher' | 'parent' | 'college' | 'institute' }) {
+  if (type === 'student') {
+    return (
+      <svg viewBox="0 0 200 140" className="w-full h-28 sm:h-32 xl:h-36 drop-shadow-md mx-auto">
+        <defs>
+          <radialGradient id="stuGlow" cx="50%" cy="55%" r="50%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="75" r="56" fill="url(#stuGlow)" />
+        {/* Floating small grad cap */}
+        <g transform="translate(18, 42) rotate(-14)">
+          <polygon points="22,6 42,14 22,22 2,14" fill="#1e3a8a" />
+          <rect x="13" y="18" width="18" height="8" rx="2" fill="#1d4ed8" />
+          <path d="M36 16 L39 27" stroke="#facc15" strokeWidth="2" />
+          <circle cx="39" cy="27" r="2.2" fill="#facc15" />
         </g>
-      ))}
-      {/* School Clock / Emblem */}
-      <circle cx="90" cy="22" r="9" fill="#FFFFFF" stroke="#EA580C" strokeWidth="2" />
-      <path d="M90 17V22L94 24" stroke="#0F172A" strokeWidth="1.8" strokeLinecap="round" />
-      {/* Green Lawn & Trees */}
-      <ellipse cx="90" cy="162" rx="95" ry="18" fill="#22C55E" />
-      <circle cx="12" cy="138" r="22" fill="#16A34A" />
-      <circle cx="168" cy="135" r="24" fill="#15803D" />
-    </g>
+        {/* Student Avatar */}
+        <path d="M56 135 C56 104 144 104 144 135 Z" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="2" />
+        <path d="M88 106 L100 124 L112 106 Z" fill="#1d4ed8" />
+        <path d="M96 112 L100 130 L104 112 Z" fill="#ef4444" />
+        <rect x="91" y="90" width="18" height="18" rx="6" fill="#fdba74" />
+        <circle cx="100" cy="68" r="24" fill="#fed7aa" />
+        <path d="M76 62 C76 42 124 42 124 62 C120 53 80 53 76 62 Z" fill="#1e293b" />
+        <circle cx="91" cy="67" r="3" fill="#0f172a" />
+        <circle cx="109" cy="67" r="3" fill="#0f172a" />
+        <circle cx="92" cy="66" r="1" fill="#ffffff" />
+        <circle cx="110" cy="66" r="1" fill="#ffffff" />
+        <path d="M92 77 Q100 84 108 77" stroke="#c2410c" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        {/* Main Graduation Cap */}
+        <polygon points="100,24 142,39 100,53 58,39" fill="#0f172a" stroke="#334155" strokeWidth="1.5" />
+        <rect x="81" y="47" width="38" height="10" rx="4" fill="#1e293b" />
+        <path d="M132 42 L137 61" stroke="#facc15" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="137" cy="62" r="3.5" fill="#facc15" />
+        {/* Open Book in front */}
+        <g transform="translate(115, 92) rotate(-8)">
+          <path d="M0 24 Q20 18 38 26 L38 6 Q20 -2 0 4 Z" fill="#facc15" stroke="#ca8a04" strokeWidth="1.5" />
+          <path d="M38 26 Q56 18 74 24 L74 4 Q56 -2 38 6 Z" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.5" />
+        </g>
+      </svg>
+    );
+  }
 
-    {/* Glowing Idea Lightbulb Above Students */}
-    <g transform="translate(405, 18)">
-      {/* Glow rays */}
-      <line x1="28" y1="0" x2="28" y2="8" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
-      <line x1="6" y1="12" x2="13" y2="17" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
-      <line x1="50" y1="12" x2="43" y2="17" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
-      <line x1="2" y1="32" x2="10" y2="32" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
-      <line x1="54" y1="32" x2="46" y2="32" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="28" cy="30" r="16" fill="#FEF08A" stroke="#F59E0B" strokeWidth="3" />
-      <path d="M23 34C23 28 33 28 33 34" stroke="#D97706" strokeWidth="2.2" strokeLinecap="round" />
-      <rect x="22" y="45" width="12" height="7" rx="2" fill="#94A3B8" stroke="#475569" strokeWidth="1.5" />
-    </g>
+  if (type === 'teacher') {
+    return (
+      <svg viewBox="0 0 200 140" className="w-full h-28 sm:h-32 xl:h-36 drop-shadow-md mx-auto">
+        <defs>
+          <radialGradient id="teaGlow" cx="50%" cy="55%" r="50%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#84cc16" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="75" r="56" fill="url(#teaGlow)" />
+        {/* Teacher Avatar */}
+        <path d="M55 135 C55 102 145 102 145 135 Z" fill="#475569" />
+        <path d="M84 103 L100 130 L116 103 Z" fill="#ffffff" />
+        <rect x="92" y="88" width="16" height="17" rx="6" fill="#fdba74" />
+        {/* Hair behind */}
+        <path d="M70 68 C66 92 75 106 84 108 L116 108 C125 106 134 92 130 68 Z" fill="#27272a" />
+        <circle cx="100" cy="65" r="23" fill="#fed7aa" />
+        {/* Hair front */}
+        <path d="M76 62 C78 39 124 39 124 62 C115 49 86 49 76 62 Z" fill="#18181b" />
+        {/* Glasses */}
+        <rect x="82" y="59" width="15" height="10" rx="3" fill="none" stroke="#1e293b" strokeWidth="2.2" />
+        <rect x="103" y="59" width="15" height="10" rx="3" fill="none" stroke="#1e293b" strokeWidth="2.2" />
+        <line x1="97" y1="64" x2="103" y2="64" stroke="#1e293b" strokeWidth="2.2" />
+        <circle cx="89.5" cy="64" r="2.2" fill="#0f172a" />
+        <circle cx="110.5" cy="64" r="2.2" fill="#0f172a" />
+        <path d="M93 76 Q100 82 107 76" stroke="#be123c" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        {/* Pointer Stick */}
+        <line x1="134" y1="98" x2="164" y2="54" stroke="#b45309" strokeWidth="3.5" strokeLinecap="round" />
+        <circle cx="133" cy="100" r="6" fill="#fed7aa" />
+        {/* Blue Notebook held */}
+        <rect x="58" y="102" width="36" height="28" rx="4" transform="rotate(-12 58 102)" fill="#2563eb" stroke="#93c5fd" strokeWidth="1.5" />
+      </svg>
+    );
+  }
 
-    {/* Student 1 (Left): Cheerful Schoolgirl Pointing Upward Towards the Future */}
-    <g transform="translate(72, 62)">
-      {/* Pointing Right Arm */}
-      <path
-        d="M36 142L4 76"
-        stroke="#FDBA74"
-        strokeWidth="18"
-        strokeLinecap="round"
-      />
-      <circle cx="2" cy="72" r="8" fill="#FDBA74" />
-      <path d="M2 72L-7 54" stroke="#FDBA74" strokeWidth="7" strokeLinecap="round" />
-      {/* Backpack */}
-      <rect x="26" y="128" width="76" height="95" rx="18" fill="#1E40AF" />
-      {/* Hair */}
-      <path
-        d="M32 62C28 28 54 14 78 20C100 25 110 50 104 95C102 115 96 130 88 135H36C30 120 28 90 32 62Z"
-        fill="#1E1B18"
-      />
-      {/* Neck & Face */}
-      <rect x="56" y="102" width="20" height="20" rx="6" fill="#FDBA74" />
-      <circle cx="66" cy="72" r="32" fill="#FDBA74" />
-      {/* Hair Bangs */}
-      <path d="M35 60C44 34 78 30 96 56C82 44 54 44 35 60Z" fill="#1E1B18" />
-      {/* Eyes & Big Smile */}
-      <circle cx="54" cy="68" r="4.5" fill="#0F172A" />
-      <circle cx="52.5" cy="66.5" r="1.5" fill="#FFFFFF" />
-      <circle cx="78" cy="68" r="4.5" fill="#0F172A" />
-      <circle cx="76.5" cy="66.5" r="1.5" fill="#FFFFFF" />
-      <path d="M53 83Q66 96 79 83Z" fill="#991B1B" />
-      <path d="M55 84H77" stroke="#FFFFFF" strokeWidth="2.8" strokeLinecap="round" />
-      {/* White School Shirt & Tie */}
-      <path d="M26 132C26 120 44 114 66 114C88 114 106 120 106 132V235H26V132Z" fill="#EFF6FF" stroke="#BFDBFE" strokeWidth="2" />
-      <polygon points="66,118 59,145 66,178 73,145" fill="#1E3A8A" />
-      {/* Backpack Straps */}
-      <path d="M36 118V200" stroke="#1E3A8A" strokeWidth="9" strokeLinecap="round" />
-      <path d="M96 118V200" stroke="#1E3A8A" strokeWidth="9" strokeLinecap="round" />
-    </g>
+  if (type === 'parent') {
+    return (
+      <svg viewBox="0 0 200 140" className="w-full h-28 sm:h-32 xl:h-36 drop-shadow-md mx-auto">
+        <defs>
+          <radialGradient id="parGlow" cx="50%" cy="55%" r="50%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#e879f9" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="75" r="58" fill="url(#parGlow)" />
+        {/* Father (Left) */}
+        <path d="M36 135 C36 102 104 102 104 135 Z" fill="#38bdf8" />
+        <circle cx="72" cy="58" r="20" fill="#fdba74" />
+        <path d="M52 53 C52 35 92 35 92 53 C86 43 58 43 52 53 Z" fill="#0f172a" />
+        <circle cx="66" cy="58" r="2.3" fill="#0f172a" />
+        <circle cx="79" cy="58" r="2.3" fill="#0f172a" />
+        <path d="M66 67 Q72 72 79 67" stroke="#9a3412" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+        {/* Mother (Right) */}
+        <path d="M100 135 C100 104 164 104 164 135 Z" fill="#facc15" />
+        <path d="M111 62 C108 86 114 104 122 108 L146 108 C154 104 158 86 154 62 Z" fill="#18181b" />
+        <circle cx="132" cy="62" r="19" fill="#fed7aa" />
+        <path d="M113 58 C115 39 151 39 151 58 C143 48 121 48 113 58 Z" fill="#0f172a" />
+        <circle cx="126" cy="62" r="2.2" fill="#0f172a" />
+        <circle cx="138" cy="62" r="2.2" fill="#0f172a" />
+        <circle cx="132" cy="56" r="1.5" fill="#dc2626" />
+        <path d="M126 70 Q132 75 138 70" stroke="#be123c" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+        {/* Child (Center Front) */}
+        <path d="M68 138 C68 112 132 112 132 138 Z" fill="#fde047" />
+        <path d="M82 90 C80 108 84 118 90 120 L110 120 C116 118 120 108 118 90 Z" fill="#1e293b" />
+        <circle cx="100" cy="88" r="17" fill="#fed7aa" />
+        <path d="M83 84 C85 69 115 69 117 84 C110 76 90 76 83 84 Z" fill="#0f172a" />
+        <circle cx="94" cy="88" r="2.2" fill="#0f172a" />
+        <circle cx="106" cy="88" r="2.2" fill="#0f172a" />
+        <path d="M94 96 Q100 101 106 96" stroke="#be123c" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+      </svg>
+    );
+  }
 
-    {/* Student 2 (Center-Left): Schoolboy Giving Thumbs Up */}
-    <g transform="translate(182, 54)">
-      {/* Backpack */}
-      <rect x="24" y="132" width="84" height="98" rx="18" fill="#DB2777" />
-      {/* Neck & Face */}
-      <rect x="56" y="106" width="22" height="22" rx="6" fill="#FDBA74" />
-      <circle cx="67" cy="74" r="34" fill="#FDBA74" />
-      {/* Boy Hair */}
-      <path
-        d="M32 64C30 30 56 18 82 24C102 28 110 46 102 66C92 48 52 46 32 64Z"
-        fill="#1E1B18"
-      />
-      {/* Eyes & Smile */}
-      <circle cx="54" cy="70" r="4.5" fill="#0F172A" />
-      <circle cx="52.5" cy="68.5" r="1.5" fill="#FFFFFF" />
-      <circle cx="80" cy="70" r="4.5" fill="#0F172A" />
-      <circle cx="78.5" cy="68.5" r="1.5" fill="#FFFFFF" />
-      <path d="M53 86Q67 99 81 86Z" fill="#991B1B" />
-      <path d="M55 87H79" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" />
-      {/* Blue School Shirt & Tie */}
-      <path d="M24 136C24 122 44 116 67 116C90 116 110 122 110 136V242H24V136Z" fill="#3B82F6" />
-      <polygon points="52,116 67,134 82,116" fill="#FFFFFF" />
-      <polygon points="67,128 60,162 67,194 74,162" fill="#1E3A8A" />
-      {/* Thumbs Up Hand */}
-      <g transform="translate(8, 152)">
-        <rect x="6" y="16" width="22" height="22" rx="8" fill="#FDBA74" stroke="#EA580C" strokeWidth="1" />
-        <rect x="12" y="2" width="9" height="17" rx="4.5" fill="#FDBA74" stroke="#EA580C" strokeWidth="1" />
-      </g>
-    </g>
+  if (type === 'college') {
+    return (
+      <svg viewBox="0 0 200 140" className="w-full h-28 sm:h-32 xl:h-36 drop-shadow-md mx-auto">
+        <defs>
+          <radialGradient id="colGlow" cx="50%" cy="55%" r="50%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#fb923c" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="75" r="56" fill="url(#colGlow)" />
+        {/* Graduate Gown */}
+        <path d="M52 135 C52 100 148 100 148 135 Z" fill="#0f172a" />
+        <path d="M84 102 L100 132 L116 102" fill="none" stroke="#f97316" strokeWidth="5" />
+        <path d="M90 102 L100 122 L110 102 Z" fill="#ffffff" />
+        <path d="M97 108 L100 124 L103 108 Z" fill="#dc2626" />
+        <rect x="91" y="87" width="18" height="17" rx="6" fill="#fdba74" />
+        <circle cx="100" cy="65" r="23" fill="#fed7aa" />
+        <path d="M77 58 C78 40 122 40 123 58 C115 48 85 48 77 58 Z" fill="#1e293b" />
+        <circle cx="92" cy="65" r="2.5" fill="#0f172a" />
+        <circle cx="108" cy="65" r="2.5" fill="#0f172a" />
+        <path d="M93 75 Q100 81 107 75" stroke="#9a3412" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        {/* Graduation Cap */}
+        <polygon points="100,22 144,36 100,50 56,36" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5" />
+        <rect x="81" y="44" width="38" height="10" rx="4" fill="#27272a" />
+        <path d="M68 40 L64 62" stroke="#facc15" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="64" cy="63" r="3" fill="#facc15" />
+        {/* Rolled Diploma Scroll */}
+        <g transform="translate(120, 96) rotate(-28)">
+          <rect x="0" y="0" width="38" height="11" rx="5" fill="#fef9c3" stroke="#eab308" strokeWidth="1.5" />
+          <rect x="15" y="-1" width="7" height="13" rx="2" fill="#ef4444" />
+        </g>
+      </svg>
+    );
+  }
 
-    {/* Student 3 (Center-Right): Younger Girl in Yellow Shirt Holding Blue Textbook */}
-    <g transform="translate(288, 78)">
-      {/* Long Hair */}
-      <path
-        d="M28 58C26 26 50 14 74 20C96 25 104 52 98 112H24C20 86 24 72 28 58Z"
-        fill="#27170E"
-      />
-      <rect x="52" y="96" width="18" height="18" rx="5" fill="#FDBA74" />
-      <circle cx="61" cy="68" r="30" fill="#FDBA74" />
-      <path d="M32 56C42 34 74 32 90 54C76 44 48 44 32 56Z" fill="#27170E" />
-      {/* Eyes & Smile */}
-      <circle cx="49" cy="65" r="4.2" fill="#0F172A" />
-      <circle cx="47.5" cy="63.5" r="1.4" fill="#FFFFFF" />
-      <circle cx="73" cy="65" r="4.2" fill="#0F172A" />
-      <circle cx="71.5" cy="63.5" r="1.4" fill="#FFFFFF" />
-      <path d="M49 79Q61 91 73 79Z" fill="#991B1B" />
-      <path d="M51 80H71" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" />
-      {/* Bright Yellow Polo Shirt */}
-      <path d="M22 124C22 112 40 106 61 106C82 106 100 112 100 124V222H22V124Z" fill="#FACC15" stroke="#EAB308" strokeWidth="2" />
-      {/* Blue Study Book Held in Hands */}
-      <g transform="translate(28, 138)">
-        <rect x="0" y="0" width="58" height="72" rx="7" fill="#0284C7" stroke="#FFFFFF" strokeWidth="2.5" />
-        <rect x="8" y="10" width="42" height="16" rx="3" fill="#38BDF8" />
-        <line x1="12" y1="36" x2="46" y2="36" stroke="#BAE6FD" strokeWidth="3" strokeLinecap="round" />
-        <line x1="12" y1="46" x2="38" y2="46" stroke="#BAE6FD" strokeWidth="3" strokeLinecap="round" />
-      </g>
-    </g>
+  return (
+    <svg viewBox="0 0 200 140" className="w-full h-28 sm:h-32 xl:h-36 drop-shadow-md mx-auto">
+      <defs>
+        <radialGradient id="insGlow" cx="50%" cy="55%" r="50%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.88" />
+          <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <circle cx="100" cy="75" r="58" fill="url(#insGlow)" />
+      {/* Base Ground */}
+      <ellipse cx="100" cy="126" rx="76" ry="8" fill="#15803d" />
+      <ellipse cx="100" cy="124" rx="70" ry="6" fill="#22c55e" />
+      {/* Left & Right Wings */}
+      <rect x="34" y="68" width="34" height="54" rx="2" fill="#fed7aa" stroke="#ea580c" strokeWidth="1.5" />
+      <polygon points="30,68 51,52 72,68" fill="#0284c7" stroke="#0369a1" strokeWidth="1.5" />
+      <rect x="132" y="68" width="34" height="54" rx="2" fill="#fed7aa" stroke="#ea580c" strokeWidth="1.5" />
+      <polygon points="128,68 149,52 170,68" fill="#0284c7" stroke="#0369a1" strokeWidth="1.5" />
+      {/* Side Windows */}
+      {[40, 54].map((x) =>
+        [76, 92, 106].map((y) => (
+          <rect key={`lw-${x}-${y}`} x={x} y={y} width="8" height="10" rx="1" fill="#38bdf8" stroke="#ffffff" strokeWidth="1" />
+        ))
+      )}
+      {[138, 152].map((x) =>
+        [76, 92, 106].map((y) => (
+          <rect key={`rw-${x}-${y}`} x={x} y={y} width="8" height="10" rx="1" fill="#38bdf8" stroke="#ffffff" strokeWidth="1" />
+        ))
+      )}
+      {/* Center Classical Building */}
+      <rect x="64" y="54" width="72" height="68" fill="#fff7ed" stroke="#fdba74" strokeWidth="1.8" />
+      {/* Pillars */}
+      <rect x="70" y="62" width="7" height="56" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+      <rect x="84" y="62" width="7" height="56" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+      <rect x="109" y="62" width="7" height="56" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+      <rect x="123" y="62" width="7" height="56" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+      {/* Pediment Roof */}
+      <polygon points="58,55 100,28 142,55" fill="#0284c7" stroke="#0369a1" strokeWidth="2" />
+      <polygon points="66,52 100,33 134,52" fill="#fef3c7" />
+      <circle cx="100" cy="44" r="6" fill="#38bdf8" stroke="#0284c7" strokeWidth="1.5" />
+      {/* Entrance Arch */}
+      <path d="M93 122 L93 98 A7 7 0 0 1 107 98 L107 122 Z" fill="#7c2d12" />
+      {/* Trees */}
+      <circle cx="28" cy="114" r="10" fill="#16a34a" />
+      <circle cx="172" cy="114" r="10" fill="#16a34a" />
+    </svg>
+  );
+}
 
-    {/* Student 4 (Right): Boy with Glasses & Checkered Shirt */}
-    <g transform="translate(384, 72)">
-      <rect x="48" y="98" width="20" height="20" rx="6" fill="#FDBA74" />
-      <circle cx="58" cy="68" r="31" fill="#FDBA74" />
-      {/* Hair */}
-      <path
-        d="M26 58C26 28 50 16 74 22C94 26 100 44 92 62C80 46 46 44 26 58Z"
-        fill="#1E1B18"
-      />
-      {/* Glasses */}
-      <rect x="36" y="56" width="20" height="15" rx="4" fill="none" stroke="#1E293B" strokeWidth="3" />
-      <rect x="62" y="56" width="20" height="15" rx="4" fill="none" stroke="#1E293B" strokeWidth="3" />
-      <line x1="56" y1="63" x2="62" y2="63" stroke="#1E293B" strokeWidth="3" />
-      {/* Eyes & Smile */}
-      <circle cx="46" cy="63" r="3.8" fill="#0F172A" />
-      <circle cx="72" cy="63" r="3.8" fill="#0F172A" />
-      <path d="M46 80Q58 92 70 80Z" fill="#991B1B" />
-      <path d="M48 81H68" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" />
-      {/* Checkered Coral/Blue Shirt */}
-      <path d="M20 126C20 114 38 108 58 108C78 108 96 114 96 126V228H20V126Z" fill="#F43F5E" />
-      <path d="M35 110V228M58 108V228M81 110V228" stroke="#FFE4E6" strokeWidth="2" opacity="0.65" />
-      <path d="M20 145H96M20 172H96M20 199H96" stroke="#FFE4E6" strokeWidth="2" opacity="0.65" />
-      <path d="M84 120V205" stroke="#1E3A8A" strokeWidth="9" strokeLinecap="round" />
-    </g>
-  </svg>
-);
+function FeatureQuickIcon({ type }: { type: 'dictionary' | 'worksheets' | 'notes' | 'videos' | 'exams' | 'tools' }) {
+  if (type === 'dictionary') {
+    return (
+      <svg viewBox="0 0 64 64" className="w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+        <path d="M8 16 Q20 11 32 17 L32 51 Q20 45 8 50 Z" fill="#38bdf8" stroke="#0284c7" strokeWidth="2.5" />
+        <path d="M32 17 Q44 11 56 16 L56 50 Q44 45 32 51 Z" fill="#eff6ff" stroke="#0284c7" strokeWidth="2.5" />
+        <line x1="13" y1="24" x2="26" y2="22" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="13" y1="31" x2="26" y2="29" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="13" y1="38" x2="24" y2="36" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="38" y1="22" x2="50" y2="24" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="38" y1="29" x2="50" y2="31" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="38" y1="36" x2="48" y2="38" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === 'worksheets') {
+    return (
+      <svg viewBox="0 0 64 64" className="w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+        <rect x="10" y="8" width="36" height="46" rx="5" fill="#eff6ff" stroke="#2563eb" strokeWidth="2.5" />
+        <line x1="17" y1="19" x2="38" y2="19" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="17" y1="28" x2="38" y2="28" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="17" y1="37" x2="31" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+        <g transform="translate(36, 28) rotate(32)">
+          <rect x="0" y="0" width="9" height="26" rx="2" fill="#facc15" stroke="#ca8a04" strokeWidth="2" />
+          <polygon points="0,26 4.5,34 9,26" fill="#fed7aa" stroke="#ca8a04" strokeWidth="1.5" />
+        </g>
+      </svg>
+    );
+  }
+  if (type === 'notes') {
+    return (
+      <svg viewBox="0 0 64 64" className="w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+        <path d="M10 42 L32 51 L54 42 L32 33 Z" fill="#22c55e" stroke="#15803d" strokeWidth="2" />
+        <path d="M10 33 L32 42 L54 33 L32 24 Z" fill="#3b82f6" stroke="#1d4ed8" strokeWidth="2" />
+        <path d="M10 24 L32 33 L54 24 L32 15 Z" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+        <circle cx="32" cy="23" r="4" fill="#fef08a" />
+      </svg>
+    );
+  }
+  if (type === 'videos') {
+    return (
+      <svg viewBox="0 0 64 64" className="w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+        <rect x="8" y="18" width="48" height="36" rx="6" fill="#2563eb" stroke="#1d4ed8" strokeWidth="2.5" />
+        <path d="M8 18 L56 18 L53 10 L11 10 Z" fill="#38bdf8" stroke="#0284c7" strokeWidth="2" />
+        <polygon points="27,28 27,44 41,36" fill="#ffffff" />
+      </svg>
+    );
+  }
+  if (type === 'exams') {
+    return (
+      <svg viewBox="0 0 64 64" className="w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+        <rect x="12" y="10" width="38" height="46" rx="5" fill="#ffffff" stroke="#0284c7" strokeWidth="2.5" />
+        <rect x="22" y="6" width="18" height="8" rx="3" fill="#38bdf8" stroke="#0284c7" strokeWidth="2" />
+        <path d="M18 25 L22 29 L29 21" stroke="#16a34a" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <line x1="33" y1="25" x2="43" y2="25" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M18 39 L22 43 L29 35" stroke="#16a34a" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <line x1="33" y1="39" x2="43" y2="39" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 64 64" className="w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+      <rect x="13" y="8" width="38" height="48" rx="6" fill="#334155" stroke="#0f172a" strokeWidth="2.5" />
+      <rect x="19" y="14" width="26" height="10" rx="2" fill="#86efac" stroke="#15803d" strokeWidth="1.5" />
+      {[29, 38, 47].map((y, rIdx) =>
+        [20, 29, 38].map((x, cIdx) => (
+          <rect
+            key={`${rIdx}-${cIdx}`}
+            x={x}
+            y={y}
+            width="7"
+            height="6"
+            rx="1.5"
+            fill={cIdx === 2 ? '#fb923c' : '#e2e8f0'}
+          />
+        ))
+      )}
+    </svg>
+  );
+}
 
-const LeftBooksAndGradCapStack: React.FC = () => (
-  <svg viewBox="0 0 180 210" fill="none" className="w-28 sm:w-36 xl:w-44 h-auto select-none" aria-hidden="true">
-    {/* Decorative Green Leaves */}
-    <path d="M18 65C4 45 10 20 35 28C40 48 30 62 18 65Z" fill="#22C55E" opacity="0.85" />
-    <path d="M36 52C28 30 42 8 64 20C62 40 48 50 36 52Z" fill="#4ADE80" opacity="0.9" />
-    {/* Bottom Blue Book */}
-    <rect x="10" y="168" width="148" height="28" rx="6" fill="#0284C7" stroke="#0369A1" strokeWidth="2" />
-    <rect x="18" y="173" width="128" height="18" rx="3" fill="#E0F2FE" />
-    {/* Middle Green Book */}
-    <rect x="16" y="140" width="136" height="28" rx="6" fill="#16A34A" stroke="#15803D" strokeWidth="2" />
-    <rect x="24" y="145" width="116" height="18" rx="3" fill="#DCFCE7" />
-    {/* Top Red/Orange Book */}
-    <rect x="24" y="112" width="122" height="28" rx="6" fill="#EA580C" stroke="#C2410C" strokeWidth="2" />
-    <rect x="32" y="117" width="102" height="18" rx="3" fill="#FEF3C7" />
-    {/* Graduation Cap on Top */}
-    <polygon points="85,56 26,80 85,104 144,80" fill="#1E293B" stroke="#334155" strokeWidth="2" />
-    <path d="M52 91V108C52 114 67 119 85 119C103 119 118 114 118 108V91" fill="#0F172A" />
-    <path d="M126 86V112" stroke="#FACC15" strokeWidth="3.5" strokeLinecap="round" />
-    <circle cx="126" cy="114" r="4" fill="#F59E0B" />
-  </svg>
-);
-
-/**
- * 5 Portal Card Character & Campus Illustrations
- */
-const StudentPortalAvatarSvg: React.FC = () => (
-  <svg viewBox="0 0 220 150" fill="none" className="w-full h-32 sm:h-36 object-contain select-none" aria-hidden="true">
-    {/* Floating Mini Grad Cap & Sparkles */}
-    <polygon points="36,48 16,56 36,64 56,56" fill="#1E3A8A" />
-    <circle cx="182" cy="36" r="3" fill="#FEF08A" />
-    <circle cx="48" cy="28" r="2.5" fill="#BAE6FD" />
-    {/* Graduation Cap on Student */}
-    <polygon points="110,6 56,26 110,46 164,26" fill="#0F172A" stroke="#1E293B" strokeWidth="1.5" />
-    <path d="M82 34V46C82 50 95 54 110 54C125 54 138 50 138 46V34" fill="#1E293B" />
-    <path d="M148 31V52" stroke="#FACC15" strokeWidth="2.5" strokeLinecap="round" />
-    {/* Head & Face */}
-    <circle cx="110" cy="68" r="26" fill="#FDBA74" />
-    <path d="M84 60C90 44 130 44 136 60C124 52 96 52 84 60Z" fill="#1E1B18" />
-    <circle cx="100" cy="66" r="3.6" fill="#0F172A" />
-    <circle cx="120" cy="66" r="3.6" fill="#0F172A" />
-    <path d="M100 78Q110 88 120 78Z" fill="#991B1B" />
-    <path d="M102 79H118" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" />
-    {/* White Shirt & Blue Vest */}
-    <path d="M68 112C68 100 86 94 110 94C134 94 152 100 152 112V148H68V112Z" fill="#EFF6FF" />
-    <polygon points="110,96 104,120 110,142 116,120" fill="#1D4ED8" />
-    {/* Open Colourful Book in Front */}
-    <path
-      d="M74 118C88 118 100 123 110 130C120 123 132 118 146 118V144C132 144 120 140 110 147C100 140 88 144 74 144V118Z"
-      fill="#FACC15"
-      stroke="#FFFFFF"
-      strokeWidth="2"
-    />
-  </svg>
-);
-
-const TeacherPortalAvatarSvg: React.FC = () => (
-  <svg viewBox="0 0 220 150" fill="none" className="w-full h-32 sm:h-36 object-contain select-none" aria-hidden="true">
-    {/* Teacher Hair */}
-    <path d="M78 58C76 24 100 14 124 20C144 26 148 56 142 98H76C72 80 76 68 78 58Z" fill="#27170E" />
-    {/* Head & Glasses */}
-    <circle cx="110" cy="62" r="25" fill="#FDBA74" />
-    <path d="M85 52C95 34 126 34 135 52C122 44 98 44 85 52Z" fill="#27170E" />
-    <rect x="91" y="53" width="16" height="11" rx="3" stroke="#475569" strokeWidth="2.2" fill="none" />
-    <rect x="113" y="53" width="16" height="11" rx="3" stroke="#475569" strokeWidth="2.2" fill="none" />
-    <line x1="107" y1="58" x2="113" y2="58" stroke="#475569" strokeWidth="2.2" />
-    <circle cx="99" cy="58" r="2.8" fill="#0F172A" />
-    <circle cx="121" cy="58" r="2.8" fill="#0F172A" />
-    <path d="M101 72Q110 80 119 72" stroke="#991B1B" strokeWidth="2.5" strokeLinecap="round" />
-    {/* Smart Blazer & Blouse */}
-    <path d="M68 108C68 96 86 90 110 90C134 90 152 96 152 108V148H68V108Z" fill="#334155" />
-    <polygon points="96,90 110,124 124,90" fill="#F8FAFC" />
-    {/* Blue Lesson Folder & Teaching Pointer Stick */}
-    <rect x="70" y="114" width="42" height="32" rx="4" fill="#2563EB" stroke="#FFFFFF" strokeWidth="2" />
-    <line x1="146" y1="112" x2="176" y2="54" stroke="#B45309" strokeWidth="3.5" strokeLinecap="round" />
-    <circle cx="144" cy="115" r="7" fill="#FDBA74" />
-  </svg>
-);
-
-const ParentPortalAvatarSvg: React.FC = () => (
-  <svg viewBox="0 0 220 150" fill="none" className="w-full h-32 sm:h-36 object-contain select-none" aria-hidden="true">
-    {/* Father (Left) */}
-    <circle cx="76" cy="54" r="21" fill="#FDBA74" />
-    <path d="M55 46C58 26 88 26 96 44C84 36 66 36 55 46Z" fill="#1E1B18" />
-    <circle cx="69" cy="53" r="2.8" fill="#0F172A" />
-    <circle cx="83" cy="53" r="2.8" fill="#0F172A" />
-    <path d="M69 63Q76 70 83 63" stroke="#991B1B" strokeWidth="2.2" strokeLinecap="round" />
-    <path d="M44 96C44 84 58 78 76 78C94 78 108 84 108 96V148H44V96Z" fill="#38BDF8" />
-
-    {/* Mother (Right) */}
-    <path d="M122 54C122 30 144 22 162 28C176 34 180 62 174 106H122V54Z" fill="#27170E" />
-    <circle cx="148" cy="58" r="20" fill="#FDBA74" />
-    <circle cx="141" cy="57" r="2.8" fill="#0F172A" />
-    <circle cx="155" cy="57" r="2.8" fill="#0F172A" />
-    <path d="M141 67Q148 73 155 67" stroke="#991B1B" strokeWidth="2.2" strokeLinecap="round" />
-    <path d="M118 98C118 86 132 80 148 80C164 80 178 86 178 98V148H118V98Z" fill="#FBBF24" />
-
-    {/* Child (Front Center) */}
-    <circle cx="112" cy="86" r="18" fill="#FDBA74" />
-    <path d="M94 80C98 64 126 64 130 80C120 72 104 72 94 80Z" fill="#1E1B18" />
-    <circle cx="106" cy="85" r="2.5" fill="#0F172A" />
-    <circle cx="118" cy="85" r="2.5" fill="#0F172A" />
-    <path d="M105 94Q112 100 119 94" stroke="#991B1B" strokeWidth="2.2" strokeLinecap="round" />
-    <path d="M86 120C86 110 98 106 112 106C126 106 138 110 138 120V148H86V120Z" fill="#EC4899" />
-  </svg>
-);
-
-const CollegePortalAvatarSvg: React.FC = () => (
-  <svg viewBox="0 0 220 150" fill="none" className="w-full h-32 sm:h-36 object-contain select-none" aria-hidden="true">
-    {/* Graduation Cap */}
-    <polygon points="110,8 56,28 110,48 164,28" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
-    <path d="M84 36V48C84 52 96 56 110 56C124 56 136 52 136 48V36" fill="#0F172A" />
-    <path d="M74 34V58" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" />
-    {/* Graduate Face */}
-    <circle cx="110" cy="68" r="24" fill="#FDBA74" />
-    <path d="M86 60C92 44 128 44 134 60C122 52 98 52 86 60Z" fill="#1E1B18" />
-    <circle cx="101" cy="66" r="3.2" fill="#0F172A" />
-    <circle cx="119" cy="66" r="3.2" fill="#0F172A" />
-    <path d="M101 77Q110 85 119 77" stroke="#991B1B" strokeWidth="2.4" strokeLinecap="round" />
-    {/* Academic Gown & Red Tie */}
-    <path d="M64 110C64 96 84 90 110 90C136 90 156 96 156 110V148H64V110Z" fill="#1E293B" />
-    <polygon points="98,90 110,116 122,90" fill="#FFFFFF" />
-    <polygon points="110,98 106,120 110,136 114,120" fill="#DC2626" />
-    {/* Rolled Degree Scroll Tied with Red Ribbon */}
-    <g transform="translate(132, 96) rotate(18)">
-      <rect x="0" y="0" width="14" height="44" rx="5" fill="#FEF9C3" stroke="#CA8A04" strokeWidth="1.5" />
-      <rect x="0" y="18" width="14" height="6" fill="#DC2626" />
-    </g>
-  </svg>
-);
-
-const InstitutePortalBuildingSvg: React.FC = () => (
-  <svg viewBox="0 0 220 150" fill="none" className="w-full h-32 sm:h-36 object-contain select-none" aria-hidden="true">
-    {/* Soft Clouds */}
-    <circle cx="44" cy="40" r="14" fill="#FFFFFF" opacity="0.65" />
-    <circle cx="176" cy="38" r="16" fill="#FFFFFF" opacity="0.65" />
-    {/* Classical Institute Campus Building */}
-    <polygon points="28,58 110,20 192,58" fill="#EA580C" stroke="#FFFFFF" strokeWidth="2" />
-    <rect x="36" y="58" width="148" height="74" rx="3" fill="#FFFBEB" stroke="#F59E0B" strokeWidth="2" />
-    {/* Central Pediment & Clock */}
-    <polygon points="74,58 110,34 146,58" fill="#FDE68A" stroke="#D97706" strokeWidth="1.8" />
-    <circle cx="110" cy="48" r="6" fill="#FFFFFF" stroke="#B45309" strokeWidth="1.5" />
-    {/* Windows & Columns */}
-    {[48, 70, 134, 156].map((x) => (
-      <g key={x}>
-        <rect x={x} y="68" width="14" height="22" rx="2" fill="#0284C7" />
-        <rect x={x} y="98" width="14" height="22" rx="2" fill="#0284C7" />
-      </g>
-    ))}
-    {/* Grand Entrance Door */}
-    <rect x="98" y="94" width="24" height="38" rx="4" fill="#B45309" />
-    {/* Green Campus Hedges */}
-    <rect x="22" y="130" width="176" height="10" rx="5" fill="#16A34A" />
-    <circle cx="34" cy="126" r="11" fill="#15803D" />
-    <circle cx="186" cy="126" r="11" fill="#15803D" />
-  </svg>
-);
-
-export const PublicLandingHomepage: React.FC<PublicLandingHomepageProps> = ({
+export function PublicLandingHomepage({
   onOpenPortal,
   onNavigateTab,
   onOpenAuth,
-  isAuthenticated = false,
-  currentUserName,
+  onOpenFeaturePage,
+  isAuthenticated,
   onOpenMyDashboard,
-}) => {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  const navItems = [
-    {
-      id: 'home',
-      label: 'Home',
-      icon: Home,
-      isActive: true,
-      onClick: () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      },
-    },
-    {
-      id: 'about',
-      label: 'About',
-      icon: Info,
-      isActive: false,
-      onClick: () => onNavigateTab('about'),
-    },
-    {
-      id: 'features',
-      label: 'Features',
-      icon: Star,
-      isActive: false,
-      onClick: () => onNavigateTab('all-courses'),
-    },
-    {
-      id: 'achievements',
-      label: 'Achievements',
-      icon: Trophy,
-      isActive: false,
-      onClick: () => onNavigateTab('certificates'),
-    },
-    {
-      id: 'help',
-      label: 'Help',
-      icon: HelpCircle,
-      isActive: false,
-      onClick: () => onNavigateTab('help-support'),
-    },
-  ];
-
-  const mainPortals: Array<{
-    role: Exclude<PortalRole, 'admin'>;
-    title: string;
-    subtitle: string;
-    cardGradient: string;
-    borderGlow: string;
-    arrowColor: string;
-    illustration: React.ReactNode;
-  }> = [
-    {
-      role: 'student',
-      title: 'Student Portal',
-      subtitle: 'Study • Practice • Grow',
-      cardGradient: 'from-[#38bdf8] via-[#0284c7] to-[#1e3a8a]',
-      borderGlow: 'border-sky-300 hover:border-white shadow-[0_14px_30px_-6px_rgba(2,132,199,0.55)]',
-      arrowColor: 'text-blue-800',
-      illustration: <StudentPortalAvatarSvg />,
-    },
-    {
-      role: 'teacher',
-      title: 'Teacher Portal',
-      subtitle: 'Plan • Teach • Assess',
-      cardGradient: 'from-[#a3e635] via-[#22c55e] to-[#15803d]',
-      borderGlow: 'border-lime-300 hover:border-white shadow-[0_14px_30px_-6px_rgba(22,163,74,0.55)]',
-      arrowColor: 'text-emerald-800',
-      illustration: <TeacherPortalAvatarSvg />,
-    },
-    {
-      role: 'parent',
-      title: 'Parent Portal',
-      subtitle: 'Monitor • Support • Encourage',
-      cardGradient: 'from-[#f472b6] via-[#d946ef] to-[#7e22ce]',
-      borderGlow: 'border-pink-300 hover:border-white shadow-[0_14px_30px_-6px_rgba(192,38,211,0.55)]',
-      arrowColor: 'text-purple-800',
-      illustration: <ParentPortalAvatarSvg />,
-    },
-    {
-      role: 'school_admin',
-      title: 'College Portal',
-      subtitle: 'Manage • Track • Excel',
-      cardGradient: 'from-[#facc15] via-[#f97316] to-[#c2410c]',
-      borderGlow: 'border-amber-300 hover:border-white shadow-[0_14px_30px_-6px_rgba(234,88,12,0.55)]',
-      arrowColor: 'text-orange-700',
-      illustration: <CollegePortalAvatarSvg />,
-    },
-    {
-      role: 'institute_admin',
-      title: 'Institute Portal',
-      subtitle: 'Organize • Guide • Excel',
-      cardGradient: 'from-[#2dd4bf] via-[#06b6d4] to-[#0f766e]',
-      borderGlow: 'border-teal-300 hover:border-white shadow-[0_14px_30px_-6px_rgba(13,148,136,0.55)]',
-      arrowColor: 'text-teal-800',
-      illustration: <InstitutePortalBuildingSvg />,
-    },
-  ];
-
-  const sixLearningSections = [
-    {
-      id: 'dictionary',
-      title: 'Dictionary',
-      subtitle: '(Eng-Mar-Hin)',
-      icon: BookOpen,
-      iconBg: 'from-blue-500 to-indigo-600',
-      onClick: () => onNavigateTab('trilingual-dictionary'),
-    },
-    {
-      id: 'worksheets',
-      title: 'Worksheets',
-      subtitle: '(Practice Sheets)',
-      icon: FileText,
-      iconBg: 'from-sky-500 to-blue-600',
-      onClick: () => onNavigateTab('worksheets'),
-    },
-    {
-      id: 'study-notes',
-      title: 'Study Notes',
-      subtitle: '(Chapter Wise)',
-      icon: Layers,
-      iconBg: 'from-rose-500 to-amber-500',
-      onClick: () => onNavigateTab('study-materials', 'chapter_notes'),
-    },
-    {
-      id: 'video-lessons',
-      title: 'Video Lessons',
-      subtitle: '(Expert Videos)',
-      icon: Clapperboard,
-      iconBg: 'from-blue-600 to-cyan-500',
-      onClick: () => onNavigateTab('study-materials', 'video_lessons'),
-    },
-    {
-      id: 'online-exams',
-      title: 'Online Exams',
-      subtitle: '(Quiz Test)',
-      icon: ClipboardCheck,
-      iconBg: 'from-emerald-500 to-teal-600',
-      onClick: () => onNavigateTab('explore-zone', 'exam-zone'),
-    },
-    {
-      id: 'learning-tools',
-      title: 'Learning Tools',
-      subtitle: '(Calculators etc.)',
-      icon: Calculator,
-      iconBg: 'from-amber-500 to-orange-600',
-      onClick: () => onNavigateTab('ai-tools'),
-    },
-  ];
-
-  const bottomHighlights = [
-    {
-      id: 'smart-learning',
-      title: 'Smart Learning',
-      subtitle: 'Anytime, Anywhere',
-      icon: Rocket,
-      badgeBg: 'from-fuchsia-500 via-purple-600 to-indigo-600',
-    },
-    {
-      id: 'track-progress',
-      title: 'Track Your Progress',
-      subtitle: '& Earn Rewards',
-      icon: Award,
-      badgeBg: 'from-amber-400 via-orange-500 to-red-500',
-    },
-    {
-      id: 'for-everyone',
-      title: 'For Students,',
-      subtitle: 'Teachers & Parents',
-      icon: Users,
-      badgeBg: 'from-yellow-400 via-amber-500 to-orange-500',
-    },
-    {
-      id: 'safe-secure',
-      title: 'Safe, Secure',
-      subtitle: '& Reliable',
-      icon: ShieldCheck,
-      badgeBg: 'from-emerald-400 via-green-500 to-teal-600',
-    },
-  ];
+}: PublicLandingHomepageProps) {
+  const triggerFeature = (featureKey: string, fallbackTab: string, subSection?: string) => {
+    if (onOpenFeaturePage) {
+      onOpenFeaturePage(featureKey);
+    } else {
+      onNavigateTab(fallbackTab, subSection);
+    }
+  };
 
   return (
-    <div
-      data-testid="mystudyzone-public-landing-homepage"
-      className="min-h-screen w-full flex flex-col justify-between bg-gradient-to-b from-[#d8f0ff] via-[#eef8ff] to-[#ffffff] text-slate-900 overflow-x-hidden select-none"
-    >
-      {/* 1. TOP RESPONSIVE HEADER NAVIGATION */}
-      <header className="w-full bg-white/85 backdrop-blur-md border-b border-sky-200/80 shadow-xs sticky top-0 z-40">
-        <div className="max-w-[1680px] mx-auto px-3 sm:px-6 xl:px-10 py-2.5 flex items-center justify-between gap-3">
-          {/* Official MyStudyZone Logo + Tagline: Learn • Practice • Excel */}
+    <div className="min-h-screen w-full bg-gradient-to-b from-[#bae6fd] via-[#eff6ff] to-[#d9f99d] text-slate-900 font-sans overflow-x-hidden select-none flex flex-col justify-between">
+      {/* MAIN CONTAINER */}
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-6 lg:px-8 pt-2.5 sm:pt-3.5 pb-3 flex-1 flex flex-col justify-between gap-3 sm:gap-4 lg:gap-5">
+        {/* 1. HEADER NAVIGATION */}
+        <header className="w-full bg-white/95 backdrop-blur-md rounded-2xl border-2 border-sky-200/90 shadow-[0_8px_28px_rgba(2,132,199,0.14)] px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2.5">
+          {/* Official Brand Logo + Tagline */}
           <button
             type="button"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="flex items-center gap-2.5 sm:gap-3.5 text-left cursor-pointer group shrink-0"
+            className="flex items-center gap-2.5 sm:gap-3.5 text-left group focus:outline-none"
           >
-            <MyStudyZoneOfficialLogo className="w-11 h-11 sm:w-14 sm:h-14 shrink-0 group-hover:scale-105 transition-transform" />
+            <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-sky-50 via-white to-amber-50 border border-sky-200 shadow-sm flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <svg viewBox="0 0 80 72" className="w-10 h-10 sm:w-12 sm:h-12">
+                <circle cx="28" cy="12" r="3" fill="#f59e0b" />
+                <circle cx="40" cy="9" r="3.5" fill="#ec4899" />
+                <circle cx="52" cy="12" r="3" fill="#3b82f6" />
+                <circle cx="40" cy="24" r="6" fill="#d946ef" />
+                <path d="M26 22 Q40 34 54 22 Q46 36 40 44 Q34 36 26 22 Z" fill="#a21caf" />
+                <path d="M10 32 Q25 26 40 36 L40 58 Q25 48 10 54 Z" fill="#facc15" stroke="#1e3a8a" strokeWidth="2.5" />
+                <path d="M40 36 Q55 26 70 32 L70 54 Q55 48 40 58 Z" fill="#38bdf8" stroke="#1e3a8a" strokeWidth="2.5" />
+                <path d="M8 56 Q24 50 40 60 Q56 50 72 56" stroke="#1e3a8a" strokeWidth="3" fill="none" strokeLinecap="round" />
+              </svg>
+            </div>
             <div>
-              <div className="font-display font-black text-xl sm:text-3xl xl:text-[34px] tracking-tight leading-none">
-                <span className="text-[#172554]">MyStudy</span>
-                <span className="text-[#a21caf]">Zone</span>
+              <div className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-none flex items-center">
+                <span className="text-[#1e3a8a]">MyStudy</span>
+                <span className="bg-gradient-to-r from-[#c026d3] to-[#db2777] bg-clip-text text-transparent">Zone</span>
               </div>
-              <div className="text-[11px] sm:text-xs xl:text-sm font-bold italic text-[#1e3a8a] tracking-wide mt-0.5">
+              <p className="text-[11px] sm:text-xs lg:text-sm font-extrabold text-[#1e3a8a] tracking-wide mt-0.5 italic">
                 Learn • Practice • Excel
-              </div>
+              </p>
             </div>
           </button>
 
-          {/* Center Navigation Links: Home, About, Features, Achievements, Help */}
-          <nav
-            aria-label="Homepage Primary Navigation"
-            className="hidden lg:flex items-center bg-sky-100/80 border border-sky-200/90 rounded-2xl p-1.5 shadow-inner gap-1 xl:gap-2"
-          >
-            {navItems.map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <React.Fragment key={item.id}>
-                  <button
-                    type="button"
-                    onClick={item.onClick}
-                    className={`px-4 xl:px-5 py-2 rounded-xl flex flex-col items-center justify-center gap-0.5 font-extrabold text-xs xl:text-sm transition-all cursor-pointer whitespace-nowrap ${
-                      item.isActive
-                        ? 'bg-gradient-to-b from-[#2563eb] to-[#1d4ed8] text-white shadow-md scale-[1.02]'
-                        : 'text-[#0f2952] hover:bg-white/80 hover:text-blue-700'
-                    }`}
-                  >
-                    <span
-                      className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                        item.isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-[#0f2952] text-white'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                    </span>
-                    <span>{item.label}</span>
-                  </button>
-                  {index < navItems.length - 1 && (
-                    <span className="h-8 w-[1px] bg-sky-300/80" aria-hidden="true" />
-                  )}
-                </React.Fragment>
-              );
-            })}
+          {/* Center Navigation Pill Buttons */}
+          <nav className="hidden md:flex items-center bg-sky-50/90 border border-sky-200/80 rounded-2xl p-1.5 gap-1 lg:gap-2">
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-1.5 px-3.5 lg:px-5 py-2 rounded-xl bg-gradient-to-b from-[#2563eb] to-[#1d4ed8] text-white font-extrabold text-xs lg:text-sm shadow-md cursor-pointer"
+            >
+              <Home className="w-4 h-4" />
+              <span>Home</span>
+            </button>
+            <div className="h-6 w-px bg-sky-200" />
+            <button
+              type="button"
+              onClick={() => onNavigateTab('about')}
+              className="flex items-center gap-1.5 px-3 lg:px-4 py-2 rounded-xl hover:bg-sky-100 text-[#0f172a] font-extrabold text-xs lg:text-sm transition-colors cursor-pointer"
+            >
+              <Info className="w-4 h-4 text-[#1e3a8a]" />
+              <span>About</span>
+            </button>
+            <div className="h-6 w-px bg-sky-200" />
+            <button
+              type="button"
+              onClick={() => triggerFeature('study-notes', 'study-materials', 'chapter_notes')}
+              className="flex items-center gap-1.5 px-3 lg:px-4 py-2 rounded-xl hover:bg-sky-100 text-[#0f172a] font-extrabold text-xs lg:text-sm transition-colors cursor-pointer"
+            >
+              <Star className="w-4 h-4 text-[#1e3a8a] fill-[#1e3a8a]" />
+              <span>Features</span>
+            </button>
+            <div className="h-6 w-px bg-sky-200" />
+            <button
+              type="button"
+              onClick={() => onNavigateTab('certificates')}
+              className="flex items-center gap-1.5 px-3 lg:px-4 py-2 rounded-xl hover:bg-sky-100 text-[#0f172a] font-extrabold text-xs lg:text-sm transition-colors cursor-pointer"
+            >
+              <Trophy className="w-4 h-4 text-[#1e3a8a]" />
+              <span>Achievements</span>
+            </button>
+            <div className="h-6 w-px bg-sky-200" />
+            <button
+              type="button"
+              onClick={() => onNavigateTab('help-support')}
+              className="flex items-center gap-1.5 px-3 lg:px-4 py-2 rounded-xl hover:bg-sky-100 text-[#0f172a] font-extrabold text-xs lg:text-sm transition-colors cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4 text-[#1e3a8a]" />
+              <span>Help</span>
+            </button>
           </nav>
 
-          {/* Right Auth Action Buttons: Login & Register (or My Portal Dashboard when signed in) */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {isAuthenticated && onOpenMyDashboard && (
+          {/* Right Auth Action Buttons */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {isAuthenticated && onOpenMyDashboard ? (
               <button
                 type="button"
                 onClick={onOpenMyDashboard}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs xl:text-sm shadow-sm cursor-pointer transition-transform active:scale-95"
+                className="flex items-center gap-1.5 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-gradient-to-b from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white font-extrabold text-xs sm:text-sm shadow-[0_4px_14px_rgba(37,99,235,0.35)] border border-sky-300/60 transition-all cursor-pointer"
               >
-                <GraduationCap className="w-4 h-4" />
-                <span>{currentUserName ? `${currentUserName.split(' ')[0]}'s Portal` : 'My Portal'}</span>
+                <User className="w-4 h-4" />
+                <span>My Dashboard</span>
               </button>
-            )}
-
-            <button
-              type="button"
-              data-testid="homepage-login-btn"
-              onClick={() => onOpenAuth('login', 'student')}
-              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-full bg-gradient-to-b from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white font-black text-xs sm:text-sm xl:text-base shadow-[0_6px_16px_rgba(37,99,235,0.4)] border border-blue-400/50 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-            >
-              <span className="w-5 h-5 rounded-full bg-white text-blue-700 flex items-center justify-center shrink-0">
-                <User className="w-3.5 h-3.5 fill-current" />
-              </span>
-              <span>Login</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="homepage-register-btn"
-              onClick={() => onOpenAuth('register', 'student')}
-              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-full bg-gradient-to-b from-[#ec4899] via-[#db2777] to-[#9d174d] hover:brightness-110 text-white font-black text-xs sm:text-sm xl:text-base shadow-[0_6px_16px_rgba(219,39,119,0.4)] border border-pink-400/50 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-            >
-              <Edit3 className="w-4 h-4 shrink-0" />
-              <span>Register</span>
-            </button>
-
-            {/* Mobile Menu Trigger */}
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen((prev) => !prev)}
-              aria-label="Toggle Mobile Navigation"
-              className="lg:hidden p-2 rounded-xl bg-sky-100 hover:bg-sky-200 text-[#0f2952] border border-sky-300 cursor-pointer"
-            >
-              {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Collapsible Navigation Bar */}
-        {mobileNavOpen && (
-          <div className="lg:hidden bg-white border-t border-sky-200 px-4 py-3 grid grid-cols-5 gap-1.5 shadow-lg">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
+            ) : (
+              <>
                 <button
-                  key={item.id}
                   type="button"
-                  onClick={() => {
-                    setMobileNavOpen(false);
-                    item.onClick();
-                  }}
-                  className={`py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[11px] font-extrabold cursor-pointer ${
-                    item.isActive
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-sky-50 text-[#0f2952] hover:bg-sky-100'
-                  }`}
+                  onClick={() => onOpenAuth('login', 'student')}
+                  className="flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-gradient-to-b from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white font-extrabold text-xs sm:text-sm shadow-[0_4px_14px_rgba(37,99,235,0.35)] border border-sky-300/60 transition-all cursor-pointer"
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="truncate">{item.label}</span>
+                  <User className="w-4 h-4" />
+                  <span>Login</span>
                 </button>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth('register', 'student')}
+                  className="flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-gradient-to-b from-[#ec4899] via-[#db2777] to-[#9d174d] hover:from-[#db2777] hover:to-[#831843] text-white font-extrabold text-xs sm:text-sm shadow-[0_4px_14px_rgba(219,39,119,0.35)] border border-pink-300/60 transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Register</span>
+                </button>
+              </>
+            )}
           </div>
-        )}
-      </header>
 
-      {/* MAIN FULL-SCREEN CONTENT BODY */}
-      <div className="flex-1 w-full max-w-[1680px] mx-auto px-3 sm:px-6 xl:px-10 pt-2 sm:pt-4 pb-4 flex flex-col justify-between gap-4 sm:gap-5">
-        {/* 2. HERO BANNER SECTION */}
-        <section className="relative w-full rounded-3xl bg-gradient-to-r from-[#cfefff] via-[#e5f6ff] to-[#cfefff] border border-sky-200/90 shadow-[0_12px_36px_rgba(14,116,144,0.12)] px-4 sm:px-8 xl:px-12 pt-4 pb-3 overflow-hidden">
-          {/* Subtle Sky Clouds Backdrop */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-12 left-1/4 w-72 h-72 rounded-full bg-white/60 blur-2xl"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-10 right-10 w-80 h-44 rounded-full bg-emerald-200/40 blur-2xl"
-          />
+          {/* Mobile Quick Navigation Row */}
+          <div className="flex md:hidden items-center justify-between w-full pt-1.5 border-t border-sky-100 gap-1 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#2563eb] text-white font-bold text-xs shrink-0"
+            >
+              <Home className="w-3.5 h-3.5" /> Home
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('about')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-800 hover:bg-sky-100 font-bold text-xs shrink-0"
+            >
+              <Info className="w-3.5 h-3.5 text-[#1e3a8a]" /> About
+            </button>
+            <button
+              type="button"
+              onClick={() => triggerFeature('study-notes', 'study-materials', 'chapter_notes')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-800 hover:bg-sky-100 font-bold text-xs shrink-0"
+            >
+              <Star className="w-3.5 h-3.5 text-[#1e3a8a]" /> Features
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('certificates')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-800 hover:bg-sky-100 font-bold text-xs shrink-0"
+            >
+              <Trophy className="w-3.5 h-3.5 text-[#1e3a8a]" /> Achievements
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab('help-support')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-800 hover:bg-sky-100 font-bold text-xs shrink-0"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-[#1e3a8a]" /> Help
+            </button>
+          </div>
+        </header>
 
-          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-4 lg:gap-2">
-            {/* Left Stack of Books + Headline Block */}
-            <div className="lg:col-span-5 flex items-center gap-2 sm:gap-4">
-              <div className="hidden sm:block shrink-0 -ml-2">
-                <LeftBooksAndGradCapStack />
+        {/* 2. HERO BANNER */}
+        <section className="relative w-full rounded-3xl bg-gradient-to-r from-[#bae6fd] via-[#f0f9ff] to-[#e0f2fe] border-2 border-white/90 shadow-[0_12px_36px_rgba(2,132,199,0.16)] overflow-hidden px-4 sm:px-8 lg:px-12 py-5 sm:py-7 lg:py-8">
+          {/* Decorative Sunburst & Clouds */}
+          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[560px] h-[560px] rounded-full bg-gradient-to-b from-amber-200/45 via-white/50 to-transparent blur-2xl pointer-events-none" />
+
+          {/* Right School Building & Greenery Silhouette */}
+          <div className="hidden lg:block absolute right-0 bottom-0 w-72 h-52 pointer-events-none opacity-95">
+            <svg viewBox="0 0 260 190" className="w-full h-full">
+              <path d="M0 190 Q120 155 260 170 L260 190 Z" fill="#4ade80" />
+              <rect x="85" y="55" width="165" height="115" rx="4" fill="#fed7aa" stroke="#fb923c" strokeWidth="2" />
+              <polygon points="75,55 168,20 255,55" fill="#f97316" />
+              {[105, 140, 175, 210].map((x) =>
+                [72, 105, 136].map((y) => (
+                  <rect key={`sch-${x}-${y}`} x={x} y={y} width="20" height="22" rx="2" fill="#e0f2fe" stroke="#0284c7" strokeWidth="1.5" />
+                ))
+              )}
+              <circle cx="235" cy="148" r="28" fill="#16a34a" />
+              <circle cx="85" cy="156" r="22" fill="#22c55e" />
+            </svg>
+          </div>
+
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-5 lg:gap-6">
+            {/* Left Stack of Books + Headline */}
+            <div className="lg:col-span-5 flex items-center gap-3 sm:gap-5">
+              {/* Books + Grad Cap stack */}
+              <div className="hidden sm:block w-28 lg:w-36 shrink-0">
+                <svg viewBox="0 0 140 175" className="w-full h-auto drop-shadow-md">
+                  <polygon points="70,18 118,34 70,50 22,34" fill="#1e293b" stroke="#475569" strokeWidth="1.5" />
+                  <rect x="46" y="43" width="48" height="14" rx="4" fill="#0f172a" />
+                  <path d="M106 38 L112 62" stroke="#facc15" strokeWidth="3" />
+                  <circle cx="112" cy="63" r="4" fill="#facc15" />
+                  <rect x="20" y="64" width="96" height="22" rx="5" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+                  <rect x="24" y="68" width="88" height="14" rx="3" fill="#fef2f2" />
+                  <rect x="14" y="88" width="106" height="24" rx="5" fill="#f59e0b" stroke="#b45309" strokeWidth="2" />
+                  <rect x="18" y="93" width="98" height="14" rx="3" fill="#fffbeb" />
+                  <rect x="18" y="114" width="102" height="22" rx="5" fill="#22c55e" stroke="#15803d" strokeWidth="2" />
+                  <rect x="22" y="118" width="94" height="14" rx="3" fill="#f0fdf4" />
+                  <rect x="10" y="138" width="114" height="26" rx="6" fill="#2563eb" stroke="#1d4ed8" strokeWidth="2" />
+                  <rect x="15" y="143" width="104" height="16" rx="3" fill="#eff6ff" />
+                </svg>
               </div>
 
-              <div className="flex-1 text-center sm:text-left space-y-1.5 sm:space-y-2">
-                <h2 className="font-display font-black text-2xl sm:text-3xl xl:text-[38px] text-[#0f2952] tracking-tight leading-tight">
+              {/* Hero Title Block */}
+              <div className="flex-1 text-center sm:text-left">
+                <h1 className="text-2xl sm:text-3xl xl:text-4xl font-black text-[#0f296b] tracking-tight leading-tight">
                   Your Complete
-                </h2>
-
-                {/* Royal Blue Ribbon Banner: Digital Learning */}
-                <div className="inline-block relative">
-                  <div className="px-5 sm:px-7 py-1.5 sm:py-2 rounded-2xl bg-gradient-to-r from-[#1e3a8a] via-[#1d4ed8] to-[#1e3a8a] text-white font-display font-black text-2xl sm:text-3xl xl:text-[40px] tracking-tight shadow-[0_8px_20px_rgba(29,78,216,0.45)] border-2 border-sky-300/60 -rotate-1">
-                    Digital Learning
-                  </div>
-                </div>
-
-                <h1 className="font-display font-black text-3xl sm:text-4xl xl:text-[44px] text-[#0f2952] tracking-tight leading-none pt-0.5">
-                  Platform
                 </h1>
-
-                <div className="pt-1">
-                  <p className="font-display font-extrabold italic text-base sm:text-xl xl:text-2xl text-[#c026d3] tracking-wide">
-                    Learn Today... Lead Tomorrow...
-                  </p>
-                  <div className="h-1.5 w-48 sm:w-64 mx-auto sm:mx-0 mt-1 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-transparent" />
+                <div className="inline-block my-1.5 px-5 sm:px-7 py-2 rounded-2xl bg-gradient-to-r from-[#1e3a8a] via-[#1d4ed8] to-[#1e40af] text-white font-black text-2xl sm:text-3xl xl:text-4xl shadow-[0_8px_22px_rgba(29,78,216,0.38)] border-2 border-sky-300/80 transform -rotate-1">
+                  Digital Learning
                 </div>
+                <h2 className="text-2xl sm:text-3xl xl:text-4xl font-black text-[#0f296b] tracking-tight leading-tight">
+                  Platform
+                </h2>
+                <p className="mt-1.5 text-base sm:text-xl xl:text-2xl font-black italic bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#e11d48] bg-clip-text text-transparent">
+                  Learn Today... Lead Tomorrow...
+                </p>
+                <div className="mt-2.5 w-44 sm:w-56 h-1.5 mx-auto sm:mx-0 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-transparent" />
               </div>
             </div>
 
-            {/* Center & Right: 4 Cheerful Students + School Campus + Dream Big... Achieve More... */}
-            <div className="lg:col-span-7 relative flex flex-col items-center justify-end">
-              {/* Top-Right Motivational Slogan: Dream Big... Achieve More... */}
-              <div className="self-end lg:absolute lg:top-1 lg:right-2 z-20 text-right mb-1 lg:mb-0">
-                <div className="font-display font-black italic text-xl sm:text-2xl xl:text-3xl text-[#0f2952] leading-tight">
-                  Dream Big...
-                </div>
-                <div className="font-display font-black italic text-xl sm:text-2xl xl:text-3xl text-[#be185d] leading-tight">
-                  Achieve More...
-                </div>
-                <div className="h-1.5 w-36 sm:w-44 ml-auto mt-0.5 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-red-500" />
+            {/* Center-Right: Happy Students Group + Dream Big Achieve More */}
+            <div className="lg:col-span-7 relative flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Four Happy Students Illustration */}
+              <div className="w-full max-w-[540px] mx-auto">
+                <svg viewBox="0 0 520 220" className="w-full h-40 sm:h-48 lg:h-52 xl:h-56 drop-shadow-lg">
+                  <defs>
+                    <radialGradient id="heroArch" cx="50%" cy="65%" r="55%">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                      <stop offset="75%" stopColor="#fef08a" stopOpacity="0.45" />
+                      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
+                  {/* Golden Halo Arch */}
+                  <circle cx="255" cy="140" r="128" fill="url(#heroArch)" stroke="#fde047" strokeWidth="3" strokeDasharray="6 4" />
+
+                  {/* Lightbulb Idea Icon */}
+                  <g transform="translate(352, 8)">
+                    <line x1="24" y1="0" x2="24" y2="7" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="4" y1="12" x2="10" y2="16" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="44" y1="12" x2="38" y2="16" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+                    <circle cx="24" cy="24" r="13" fill="#fef08a" stroke="#d97706" strokeWidth="2.5" />
+                    <rect x="19" y="36" width="10" height="6" rx="2" fill="#94a3b8" stroke="#475569" strokeWidth="1.5" />
+                  </g>
+
+                  {/* Student 1: Girl Pointing Up (Left) */}
+                  <g transform="translate(22, 34)">
+                    <path d="M55 180 C55 125 135 125 135 180 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2" />
+                    <path d="M84 128 L95 165 L106 128 Z" fill="#1e3a8a" />
+                    {/* Raised Pointing Arm */}
+                    <path d="M62 135 L15 55 L27 49 L76 125 Z" fill="#fed7aa" />
+                    <circle cx="15" cy="52" r="7" fill="#fed7aa" />
+                    {/* Hair & Head */}
+                    <path d="M66 78 C62 115 72 134 80 138 L112 138 C120 134 126 115 122 78 Z" fill="#18181b" />
+                    <circle cx="95" cy="78" r="28" fill="#fed7aa" />
+                    <path d="M67 72 C70 44 120 44 123 72 C110 56 80 56 67 72 Z" fill="#0f172a" />
+                    <circle cx="86" cy="76" r="3.5" fill="#0f172a" />
+                    <circle cx="104" cy="76" r="3.5" fill="#0f172a" />
+                    <path d="M85 90 Q95 100 105 90 Z" fill="#be123c" />
+                  </g>
+
+                  {/* Student 2: Boy Giving Thumbs Up (Center-Left) */}
+                  <g transform="translate(148, 26)">
+                    <path d="M40 188 C40 130 132 130 132 188 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2" />
+                    <path d="M74 134 L86 172 L98 134 Z" fill="#1d4ed8" />
+                    <circle cx="86" cy="80" r="29" fill="#fdba74" />
+                    <path d="M57 72 C59 40 115 40 115 72 C104 56 68 56 57 72 Z" fill="#0f172a" />
+                    <circle cx="76" cy="78" r="3.5" fill="#0f172a" />
+                    <circle cx="96" cy="78" r="3.5" fill="#0f172a" />
+                    <path d="M75 93 Q86 103 97 93 Z" fill="#9a3412" />
+                    {/* Thumbs up hand */}
+                    <circle cx="52" cy="145" r="10" fill="#fdba74" />
+                    <rect x="49" y="130" width="6" height="12" rx="3" fill="#fdba74" />
+                  </g>
+
+                  {/* Student 3: Girl in Yellow Shirt Holding Blue Book (Center-Right) */}
+                  <g transform="translate(262, 42)">
+                    <path d="M35 174 C35 122 122 122 122 174 Z" fill="#facc15" stroke="#eab308" strokeWidth="2" />
+                    <path d="M50 76 C46 112 54 132 64 136 L96 136 C104 132 110 112 106 76 Z" fill="#18181b" />
+                    <circle cx="78" cy="76" r="26" fill="#fed7aa" />
+                    <path d="M52 70 C55 44 102 44 104 70 C93 56 64 56 52 70 Z" fill="#0f172a" />
+                    <circle cx="69" cy="75" r="3.2" fill="#0f172a" />
+                    <circle cx="87" cy="75" r="3.2" fill="#0f172a" />
+                    <path d="M69 88 Q78 96 87 88 Z" fill="#be123c" />
+                    {/* Blue Book */}
+                    <rect x="52" y="124" width="52" height="44" rx="5" transform="rotate(8 52 124)" fill="#0284c7" stroke="#bae6fd" strokeWidth="2" />
+                  </g>
+
+                  {/* Student 4: Boy with Glasses (Right) */}
+                  <g transform="translate(366, 44)">
+                    <path d="M30 172 C30 122 118 122 118 172 Z" fill="#f87171" stroke="#dc2626" strokeWidth="2" />
+                    <circle cx="74" cy="76" r="26" fill="#fed7aa" />
+                    <path d="M48 70 C50 42 98 42 100 70 C89 55 59 55 48 70 Z" fill="#1e293b" />
+                    <rect x="54" y="68" width="17" height="11" rx="3" fill="none" stroke="#0f172a" strokeWidth="2.4" />
+                    <rect x="77" y="68" width="17" height="11" rx="3" fill="none" stroke="#0f172a" strokeWidth="2.4" />
+                    <line x1="71" y1="73" x2="77" y2="73" stroke="#0f172a" strokeWidth="2.4" />
+                    <circle cx="62.5" cy="73.5" r="2.5" fill="#0f172a" />
+                    <circle cx="85.5" cy="73.5" r="2.5" fill="#0f172a" />
+                    <path d="M65 88 Q74 96 83 88" stroke="#9a3412" strokeWidth="2.8" fill="none" strokeLinecap="round" />
+                  </g>
+                </svg>
               </div>
 
-              <HeroFourStudentsIllustration />
+              {/* Top-Right Motivational Slogan */}
+              <div className="sm:absolute sm:top-0 sm:right-2 text-center sm:text-right pointer-events-none">
+                <div className="text-xl sm:text-2xl xl:text-3xl font-black italic text-[#0f296b] drop-shadow-sm transform -rotate-3">
+                  Dream Big...
+                </div>
+                <div className="text-xl sm:text-2xl xl:text-3xl font-black italic bg-gradient-to-r from-[#be185d] to-[#e11d48] bg-clip-text text-transparent transform -rotate-3">
+                  Achieve More...
+                </div>
+                <div className="mt-1 w-36 h-1.5 ml-auto rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-transparent" />
+              </div>
             </div>
           </div>
         </section>
 
-        {/* 3. FIVE MAIN PORTALS (Student, Teacher, Parent, College, Institute) */}
-        <section aria-label="Five Main Education Portals" className="w-full">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 xl:gap-5">
-            {mainPortals.map((portal) => (
-              <button
-                key={portal.role}
-                type="button"
-                data-testid={`homepage-portal-card-${portal.role}`}
-                onClick={() => onOpenPortal(portal.role)}
-                className={`group relative rounded-[26px] bg-gradient-to-b ${portal.cardGradient} p-3.5 sm:p-4 text-white border-[3px] ${portal.borderGlow} flex flex-col justify-between items-center text-center cursor-pointer transition-all duration-200 hover:-translate-y-1.5 active:scale-98 overflow-hidden`}
+        {/* 3. FIVE MAIN PORTAL CARDS (WITH DEDICATED LOGIN & REGISTER BUTTONS ON EACH PORTAL) */}
+        <section aria-label="Main Learning Portals" className="w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+            {PORTALS.map((portal) => (
+              <div
+                key={portal.id}
+                onClick={() => onOpenPortal(portal.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenPortal(portal.id);
+                  }
+                }}
+                className={`group relative rounded-3xl bg-gradient-to-b ${portal.cardBg} border-2 ${portal.borderGlow} p-3.5 sm:p-4 xl:p-5 text-white flex flex-col justify-between transition-all duration-200 hover:-translate-y-1.5 hover:shadow-2xl cursor-pointer overflow-hidden`}
               >
                 {/* Top Gloss Highlight */}
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-3 top-1.5 h-10 rounded-t-2xl bg-gradient-to-b from-white/35 to-transparent"
-                />
+                <div className="absolute inset-x-3 top-1.5 h-8 rounded-t-2xl bg-gradient-to-b from-white/35 to-transparent pointer-events-none" />
 
-                {/* Character / Campus Illustration */}
-                <div className="relative z-10 w-full flex items-center justify-center pt-1">
-                  {portal.illustration}
+                {/* Illustration */}
+                <div className="relative z-10 w-full flex items-center justify-center">
+                  <PortalIllustration type={portal.illustration} />
                 </div>
 
-                {/* Portal Title, Subtitle & Circular Arrow CTA */}
-                <div className="relative z-10 w-full pt-2 pb-0.5 flex items-end justify-between gap-2">
-                  <div className="flex-1 text-center pl-5">
-                    <h3 className="font-display font-black text-xl sm:text-2xl xl:text-[26px] leading-none tracking-tight drop-shadow-xs">
-                      {portal.title.split(' ')[0]}
-                      <span className="block">{portal.title.split(' ')[1]}</span>
+                {/* Portal Title, Subtitle & Description */}
+                <div className="relative z-10 mt-1 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-tight drop-shadow-sm">
+                      {portal.title}
                     </h3>
-                    <p className="text-[11px] sm:text-xs xl:text-[13px] font-extrabold text-white/95 tracking-tight mt-1.5 whitespace-nowrap">
-                      {portal.subtitle}
-                    </p>
+                    <span
+                      className={`w-6 h-6 rounded-full bg-white ${portal.arrowTextColor} inline-flex items-center justify-center shadow-md shrink-0 group-hover:translate-x-0.5 transition-transform`}
+                    >
+                      <ArrowRight className="w-3.5 h-3.5 stroke-[3]" />
+                    </span>
                   </div>
-
-                  <span
-                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white ${portal.arrowColor} flex items-center justify-center shadow-md shrink-0 group-hover:scale-110 transition-transform`}
-                  >
-                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.75]" />
-                  </span>
+                  <p className="text-xs sm:text-sm font-extrabold text-white/95 mt-0.5 drop-shadow">
+                    {portal.subtitle}
+                  </p>
+                  <p className="text-[11px] sm:text-xs font-medium text-white/85 mt-1 line-clamp-2">
+                    {portal.description}
+                  </p>
                 </div>
-              </button>
+
+                {/* Dedicated Portal Login & Register Buttons */}
+                <div
+                  className="relative z-10 mt-3 pt-2.5 border-t border-white/25 grid grid-cols-2 gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onOpenAuth(portal.loginTab, portal.id)}
+                    className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${portal.loginBtnClass}`}
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Login</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenAuth('register', portal.id)}
+                    className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${portal.registerBtnClass}`}
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Register</span>
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </section>
 
-        {/* 4. SIX QUICK-ACCESS LEARNING SECTIONS */}
+        {/* 4. SIX UNIQUE FEATURE ICONS STRIP (ONE ICON PER FEATURE) */}
         <section
-          aria-label="Quick-Access Learning Sections"
-          className="w-full rounded-3xl bg-white/95 border-2 border-sky-200/90 shadow-[0_10px_28px_rgba(15,41,82,0.08)] p-2.5 sm:p-3.5"
+          aria-label="Quick Educational Features"
+          className="w-full bg-white/95 backdrop-blur-md rounded-2xl border-2 border-sky-200/90 shadow-[0_8px_24px_rgba(2,132,199,0.12)] p-2.5 sm:p-3.5"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
-            {sixLearningSections.map((sec) => {
-              const Icon = sec.icon;
-              return (
-                <button
-                  key={sec.id}
-                  type="button"
-                  data-testid={`homepage-resource-${sec.id}`}
-                  onClick={sec.onClick}
-                  className="group px-3.5 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-b from-[#f8fafc] to-[#eff6ff] hover:from-white hover:to-sky-100 border border-sky-200/90 hover:border-blue-400 shadow-2xs hover:shadow-md flex items-center gap-3 text-left cursor-pointer transition-all active:scale-98"
-                >
-                  <span
-                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br ${sec.iconBg} text-white flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform`}
-                  >
-                    <Icon className="w-6 h-6" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="font-display font-black text-sm sm:text-base text-[#0f2952] leading-tight truncate">
-                      {sec.title}
-                    </div>
-                    <div className="text-xs font-extrabold text-slate-600 leading-tight truncate mt-0.5">
-                      {sec.subtitle}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            {/* 1. Dictionary */}
+            <button
+              type="button"
+              onClick={() => triggerFeature('dictionary', 'trilingual-dictionary')}
+              className="flex items-center gap-2.5 px-3 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-white to-sky-50/90 hover:from-sky-50 hover:to-sky-100/90 border border-sky-200/80 shadow-sm hover:shadow transition-all text-left group cursor-pointer"
+            >
+              <FeatureQuickIcon type="dictionary" />
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-black text-[#0f172a] group-hover:text-[#0284c7] leading-tight truncate">
+                  Dictionary
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">
+                  (Eng-Mar-Hin)
+                </div>
+              </div>
+            </button>
+
+            {/* 2. Worksheets */}
+            <button
+              type="button"
+              onClick={() => triggerFeature('worksheets', 'worksheets')}
+              className="flex items-center gap-2.5 px-3 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-white to-sky-50/90 hover:from-sky-50 hover:to-sky-100/90 border border-sky-200/80 shadow-sm hover:shadow transition-all text-left group cursor-pointer"
+            >
+              <FeatureQuickIcon type="worksheets" />
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-black text-[#0f172a] group-hover:text-[#0284c7] leading-tight truncate">
+                  Worksheets
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">
+                  (Practice Sheets)
+                </div>
+              </div>
+            </button>
+
+            {/* 3. Study Notes */}
+            <button
+              type="button"
+              onClick={() => triggerFeature('study-notes', 'study-materials', 'chapter_notes')}
+              className="flex items-center gap-2.5 px-3 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-white to-sky-50/90 hover:from-sky-50 hover:to-sky-100/90 border border-sky-200/80 shadow-sm hover:shadow transition-all text-left group cursor-pointer"
+            >
+              <FeatureQuickIcon type="notes" />
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-black text-[#0f172a] group-hover:text-[#0284c7] leading-tight truncate">
+                  Study Notes
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">
+                  (Chapter Wise)
+                </div>
+              </div>
+            </button>
+
+            {/* 4. Video Lessons */}
+            <button
+              type="button"
+              onClick={() => triggerFeature('video-lessons', 'study-materials', 'video_lessons')}
+              className="flex items-center gap-2.5 px-3 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-white to-sky-50/90 hover:from-sky-50 hover:to-sky-100/90 border border-sky-200/80 shadow-sm hover:shadow transition-all text-left group cursor-pointer"
+            >
+              <FeatureQuickIcon type="videos" />
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-black text-[#0f172a] group-hover:text-[#0284c7] leading-tight truncate">
+                  Video Lessons
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">
+                  (Expert Videos)
+                </div>
+              </div>
+            </button>
+
+            {/* 5. Online Exams */}
+            <button
+              type="button"
+              onClick={() => triggerFeature('online-exams', 'demo', 'live-quiz')}
+              className="flex items-center gap-2.5 px-3 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-white to-sky-50/90 hover:from-sky-50 hover:to-sky-100/90 border border-sky-200/80 shadow-sm hover:shadow transition-all text-left group cursor-pointer"
+            >
+              <FeatureQuickIcon type="exams" />
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-black text-[#0f172a] group-hover:text-[#0284c7] leading-tight truncate">
+                  Online Exams
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">
+                  (Quiz Test)
+                </div>
+              </div>
+            </button>
+
+            {/* 6. Learning Tools */}
+            <button
+              type="button"
+              onClick={() => triggerFeature('learning-tools', 'ai-tools')}
+              className="flex items-center gap-2.5 px-3 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-white to-sky-50/90 hover:from-sky-50 hover:to-sky-100/90 border border-sky-200/80 shadow-sm hover:shadow transition-all text-left group cursor-pointer"
+            >
+              <FeatureQuickIcon type="tools" />
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-black text-[#0f172a] group-hover:text-[#0284c7] leading-tight truncate">
+                  Learning Tools
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">
+                  (Calculators etc.)
+                </div>
+              </div>
+            </button>
           </div>
         </section>
-      </div>
 
-      {/* 5. BOTTOM HIGHLIGHTS WAVE BANNER */}
-      <footer className="w-full bg-gradient-to-r from-[#091e46] via-[#10326b] to-[#091e46] text-white border-t-4 border-sky-400/70 shadow-[0_-10px_25px_rgba(9,30,70,0.25)]">
-        <div className="max-w-[1680px] mx-auto px-3 sm:px-6 xl:px-10 py-3.5 sm:py-4 flex flex-col xl:flex-row items-center justify-between gap-4">
-          {/* Four Highlights */}
-          <div className="w-full xl:flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {bottomHighlights.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 bg-white/5 sm:bg-transparent rounded-2xl px-3 py-2 sm:p-0 border border-white/10 sm:border-0"
-                >
-                  <span
-                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br ${item.badgeBg} text-white flex items-center justify-center shadow-md border-2 border-white/80 shrink-0`}
-                  >
-                    <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="font-display font-black text-xs sm:text-sm xl:text-base text-white leading-tight">
-                      {item.title}
-                    </div>
-                    <div className="text-xs sm:text-sm font-bold text-sky-200 leading-tight">
-                      {item.subtitle}
-                    </div>
+        {/* 5. BOTTOM HIGHLIGHT BAR */}
+        <footer className="w-full rounded-3xl bg-gradient-to-r from-[#0f172a] via-[#1e3a8a] to-[#0f172a] border-2 border-sky-400/70 shadow-[0_10px_30px_rgba(15,23,42,0.38)] px-4 sm:px-7 py-3.5 sm:py-4 text-white">
+          <div className="flex flex-col xl:flex-row items-center justify-between gap-4">
+            {/* 4 Key Value Pillars */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5 w-full xl:w-auto flex-1">
+              {/* Pillar 1 */}
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 border-2 border-pink-300 flex items-center justify-center shrink-0 shadow-md">
+                  <span className="text-xl">🚀</span>
+                </div>
+                <div>
+                  <div className="text-sm sm:text-base font-black text-white leading-tight">
+                    Smart Learning
+                  </div>
+                  <div className="text-xs font-bold text-sky-200">
+                    Anytime, Anywhere
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          {/* Golden Ribbon Banner: Together for a Brighter Future */}
-          <div className="shrink-0">
+              {/* Pillar 2 */}
+              <div className="flex items-center gap-3 sm:border-l sm:border-amber-400/40 sm:pl-4">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 border-2 border-yellow-200 flex items-center justify-center shrink-0 shadow-md">
+                  <span className="text-xl">⭐</span>
+                </div>
+                <div>
+                  <div className="text-sm sm:text-base font-black text-white leading-tight">
+                    Track Your Progress
+                  </div>
+                  <div className="text-xs font-bold text-sky-200">
+                    &amp; Earn Rewards
+                  </div>
+                </div>
+              </div>
+
+              {/* Pillar 3 */}
+              <div className="flex items-center gap-3 lg:border-l lg:border-amber-400/40 lg:pl-4">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-400 to-amber-600 border-2 border-amber-200 flex items-center justify-center shrink-0 shadow-md">
+                  <span className="text-xl">👨‍👩‍👧</span>
+                </div>
+                <div>
+                  <div className="text-sm sm:text-base font-black text-white leading-tight">
+                    For Students,
+                  </div>
+                  <div className="text-xs font-bold text-sky-200">
+                    Teachers &amp; Parents
+                  </div>
+                </div>
+              </div>
+
+              {/* Pillar 4 */}
+              <div className="flex items-center gap-3 sm:border-l sm:border-amber-400/40 sm:pl-4">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-600 border-2 border-emerald-200 flex items-center justify-center shrink-0 shadow-md">
+                  <span className="text-xl">🛡️</span>
+                </div>
+                <div>
+                  <div className="text-sm sm:text-base font-black text-white leading-tight">
+                    Safe, Secure
+                  </div>
+                  <div className="text-xs font-bold text-sky-200">
+                    &amp; Reliable
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Golden Ribbon Banner: Together for a Brighter Future */}
             <button
               type="button"
               onClick={() => onOpenPortal('student')}
-              className="px-6 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:brightness-105 text-[#0f2952] font-display font-black italic text-base sm:text-lg xl:text-xl shadow-[0_8px_20px_rgba(250,204,21,0.4)] border-2 border-yellow-200 -rotate-1 cursor-pointer transition-transform hover:scale-105"
+              className="px-6 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-b from-[#fde047] via-[#facc15] to-[#eab308] hover:from-[#fef08a] hover:to-[#ca8a04] text-[#0f296b] font-black italic text-base sm:text-lg leading-tight shadow-[0_6px_20px_rgba(250,204,21,0.45)] border-2 border-yellow-200 transform -rotate-1 hover:rotate-0 transition-transform shrink-0 cursor-pointer text-center"
             >
-              <span className="block leading-tight">Together for a</span>
-              <span className="block leading-tight">Brighter Future</span>
+              <div>Together for a</div>
+              <div>Brighter Future</div>
             </button>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
-};
+}

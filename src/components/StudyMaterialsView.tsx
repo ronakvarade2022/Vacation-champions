@@ -5,6 +5,7 @@ import {
   FileText,
   GraduationCap,
   Sparkles,
+  ArrowLeft,
   ArrowRight,
   ChevronRight,
   ClipboardCheck,
@@ -265,6 +266,9 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   const [selectedPyqPaperIdx, setSelectedPyqPaperIdx] = useState<number>(0);
   const [paperSearchQuery, setPaperSearchQuery] = useState<string>('');
   const [revealedPaperAnswers, setRevealedPaperAnswers] = useState<Record<string, boolean>>({});
+  const [drillStage, setDrillStage] = useState<'subjects' | 'chapters' | 'content'>(
+    initialSubject ? 'chapters' : 'subjects'
+  );
 
   useEffect(() => {
     if (initialBoard) {
@@ -490,6 +494,7 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
       setSelectedChapterIdx(Math.max(0, target.chapterNumber - 1));
     }
     setActiveSectionTab(target.tab);
+    setDrillStage('content');
   };
 
   useEffect(() => {
@@ -651,76 +656,8 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   }, [activeChapter?.qaBank, qaFormatFilter]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Header Banner */}
-      <section className="rounded-3xl bg-slate-900 text-white p-6 sm:p-8 border border-slate-800 shadow-lg">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="space-y-2 max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-300">
-              <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 font-bold">
-                100% FREE STUDY MATERIAL LIBRARY
-              </span>
-              <span>{boardMeta.fullName}</span>
-              <span aria-hidden="true">·</span>
-              <span>
-                Standard {formatStandardOrdinal(selectedClass)} ({selectedClass})
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>{subjects.length} Syllabus Subjects</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-display font-black tracking-tight text-white [text-wrap:balance]">
-              Textbooks, Chapter Notes, Online Tests, Model Papers, PYQs &amp; Video Lessons
-            </h1>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Complete chapter-wise syllabus library for{' '}
-              <strong className="text-white">{selectedBoard} Board</strong> (
-              <strong className="text-white">{selectedClass}</strong>). Official textbook portals,
-              chapter notes, 1-page revision sheets, 9-format Q&amp;A banks, interactive chapter tests,
-              model &amp; previous year papers, and educational video lessons are{' '}
-              <strong className="text-emerald-300">100% Free for all students</strong>.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsGlobalSearchOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shadow-xs"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>Global Search (All Boards)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('quizzes', selectedSubject)}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Practice Subject Quiz</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('worksheets', selectedSubject)}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
-            >
-              <FileText className="w-3.5 h-3.5 text-indigo-300" />
-              <span>Open Worksheets</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Inline Global Search & Curated Academic Suggestions */}
-      <GlobalStudySearchBar
-        defaultBoard={selectedBoard}
-        defaultClass={selectedClass}
-        onJumpToResult={handleGlobalSearchJump}
-        onOpenToolTab={(tab) => onNavigateTab(tab)}
-        onOpenFullSearchModal={() => setIsGlobalSearchOpen(true)}
-        compact
-      />
-
-      {/* Global Cross-Library Search Modal (0 Firestore Reads, Mounted Only When Open) */}
+    <div className="space-y-5 animate-in fade-in duration-200">
+      {/* Global Cross-Library Search Modal (Mounted Only When Open) */}
       {isGlobalSearchOpen && (
         <StudyLibraryGlobalSearch
           isOpen={isGlobalSearchOpen}
@@ -731,349 +668,390 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
         />
       )}
 
-      {/* Icon-Based One-Line Quick Navigation Bar across all learning material types */}
-      <QuickStudyZoneIconBar
-        activeItem={
-          activeSectionTab === 'textbooks' || activeSectionTab === 'video_lessons'
-            ? 'chapters'
-            : activeSectionTab === 'chapter_notes' || activeSectionTab === 'short_revision'
-            ? 'notes'
-            : activeSectionTab === 'worksheets_ref'
-            ? 'worksheets'
-            : activeSectionTab === 'qa_bank'
-            ? 'practice_questions'
-            : activeSectionTab === 'chapter_test'
-            ? 'mcqs'
-            : activeSectionTab === 'model_papers'
-            ? 'tests'
-            : activeSectionTab === 'pyq_papers'
-            ? 'previous_papers'
-            : 'results'
-        }
-        board={selectedBoard}
-        classLevel={selectedClass}
-        subject={selectedSubject}
-        counts={{
-          subjects: subjects.length,
-          chapters: chapters.length,
-          notes: chapters.length,
-          mcqs: chapters.length > 0 ? 10 : 0,
-          tests: examPapersBundle.modelPapers.length,
-          previousPapers: examPapersBundle.pyqPapers.length,
-        }}
-        onNavigate={(target: QuickLearningNavId, studyTab?: StudyLibrarySectionTab) => {
-          if (target === 'subjects') {
-            onNavigateTab('all-courses', selectedSubject);
-          } else if (target === 'worksheets') {
-            onNavigateTab('worksheets', selectedSubject);
-          } else if (target === 'mcqs') {
-            if (chapters.length > 0 || inlineAdditional) setActiveSectionTab('chapter_test');
-            else onNavigateTab('quizzes', selectedSubject);
-          } else if (target === 'results') {
-            setActiveSectionTab('math_hub');
-          } else if (target === 'additional_curriculum') {
-            if (onOpenAdditionalCurriculum) {
-              onOpenAdditionalCurriculum({
-                board: selectedBoard,
-                classLevel: selectedClass,
-                medium: effectiveMedium,
-              });
-            } else {
-              onNavigateTab('additional-curriculum');
-            }
-          } else if (studyTab) {
-            setActiveSectionTab(studyTab);
-          }
-        }}
-      />
-
       {/* =====================================================================
-          STRICT ACADEMIC HIERARCHY CONTROLS (PARTS 4, 5 & 6):
-          1. Board -> 2. Medium -> 3. Class (1-10) -> 4. Subject -> 5. Chapter
-          -> 6. Sequential Material Type Tabs -> Selected Content IMMEDIATELY Below
+          STEP 1 OF STUDY MATERIALS: SELECT CLASS & SUBJECT (CARD VIEW)
           ===================================================================== */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
-        {/* STEP 1: BOARD SELECTION */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-700">
-            <GraduationCap className="w-4 h-4 text-indigo-600" />
-            <span>1. Select Education Board</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {BOARD_META_LIST.map((b) => {
-              const isSelected = selectedBoard === b.id;
-              return (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => setSelectedBoard(b.id)}
-                  className={`px-3.5 py-2 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer flex items-center justify-between gap-2 whitespace-nowrap ${
-                    isSelected
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span>{b.icon}</span>
-                    <span>{b.fullName}</span>
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold ${
-                      isSelected ? 'text-amber-300' : 'text-slate-400'
-                    }`}
-                  >
-                    {b.shortLabel}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* STEP 2: MEDIUM SELECTION */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-700">
-            <Languages className="w-4 h-4 text-emerald-600" />
-            <span>2. Select Medium ({selectedBoard} Board)</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {availableMediums.map((med) => {
-              const isSelected = selectedMedium === med;
-              return (
-                <button
-                  key={med}
-                  type="button"
-                  onClick={() => {
-                    setSelectedMedium(med);
-                    updateStudentMedium(med as InstructionMedium);
-                  }}
-                  className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-emerald-50'
-                  }`}
-                >
-                  {med} Medium
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* STEP 3: CLASS SELECTION (ASCENDING 1 TO 10) */}
-        <div className="space-y-2 pb-3 border-b border-slate-100">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-              3. Select Standard (Class 1 to Class 10)
-            </span>
-            <span className="text-xs font-bold text-emerald-700">
-              {chapters.length > 0
-                ? `All ${chapters.length} Chapters Unlocked Free · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`
-                : inlineAdditional
-                ? `Supplementary Curriculum Ready · ${inlineAdditional.chapters.length} Modules · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`
-                : `${getSyllabusStatusPresentation(syllabusResolution).badgeLabel} · ${selectedBoard} · ${selectedMedium} Medium · ${selectedClass}`}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
-            {ALL_10_CLASSES_META.map((meta) => {
-              const isSelected = selectedClass === meta.classLevel;
-              return (
-                <button
-                  key={meta.classLevel}
-                  type="button"
-                  onClick={() => setSelectedClass(meta.classLevel)}
-                  className={`px-2.5 py-2 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-indigo-50'
-                  }`}
-                >
-                  <span className="block font-black tabular-nums">{meta.shortLabel}</span>
-                  <span
-                    className={`text-[10px] block ${
-                      isSelected ? 'text-indigo-100' : 'text-emerald-700'
-                    }`}
-                  >
-                    100% Free
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* STEP 4: SUBJECT SELECTION */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-              4. Select Subject ({subjects.length} Subjects for {selectedBoard} · {selectedClass})
-            </span>
-            <span className="text-xs font-semibold text-slate-500">
-              Active Subject: <strong className="text-slate-900">{selectedSubject}</strong>
-            </span>
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {subjects.map((sub) => {
-              const sMeta = getSubjectMeta(sub, selectedBoard);
-              const active = selectedSubject === sub;
-              return (
-                <button
-                  key={sub}
-                  type="button"
-                  onClick={() => setSelectedSubject(sub)}
-                  className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
-                    active
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50'
-                  }`}
-                >
-                  <span>{sMeta.icon}</span>
-                  <span>{sub}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {externalBundleLoading && (
-        <div className="rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2 text-xs font-bold text-[#0f2952] flex items-center gap-2">
-          <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#0f2952] border-t-transparent animate-spin shrink-0" />
-          <span>Loading verified chapter pack for {selectedBoard} · {selectedClass} · {selectedSubject}...</span>
-        </div>
-      )}
-      {externalBundleError && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-xs font-bold text-amber-950 flex flex-wrap items-center justify-between gap-2">
-          <span>External verified chapter pack is temporarily unavailable.</span>
-          <button
-            type="button"
-            onClick={() => setExternalBundleRetryNonce((n) => n + 1)}
-            className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs cursor-pointer"
-          >
-            Retry Download
-          </button>
-        </div>
-      )}
-
-      {/* =====================================================================
-          PROMINENT CLASS-WISE EXERCISE NOTES & NOTEBOOK QUICK-LAUNCH BAR
-          ===================================================================== */}
-      {chapters.length > 0 && (
-        <section className="bg-gradient-to-r from-[#0f2952] via-[#17396e] to-[#1e3a8a] text-white rounded-2xl p-4 border-2 border-amber-300/80 shadow-sm space-y-3">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
-                <span>✨ NEW · Class-Wise Exercise Notes &amp; School Notebook System</span>
+      {drillStage === 'subjects' && (
+        <div className="space-y-5">
+          {/* Compact Study Materials Header */}
+          <section className="rounded-3xl bg-gradient-to-r from-[#0f296b] via-[#1d4ed8] to-[#0284c7] text-white p-5 sm:p-7 shadow-lg">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-300 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                  Step 1 • Select Class &amp; Subject
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight mt-1">
+                  Study Materials &amp; Chapter Notes
+                </h1>
+                <p className="text-xs sm:text-sm text-sky-100 mt-1">
+                  Choose your Education Board, Medium, and Standard below, then click any Subject card to view its chapters.
+                </p>
               </div>
-              <h3 className="text-sm sm:text-base font-display font-black text-white mt-1">
-                {selectedBoard} · {selectedClass} · {selectedSubject} — Chapter {activeChapter ? `${String(activeChapter.chapterNumber).padStart(2, '0')}: ${activeChapter.chapterTitle}` : ''}
-              </h3>
-              <p className="text-[11px] text-sky-100">
-                Click any button below to open full chapter Study Notes (Sections A–L), Solved Textbook Exercise Answers, or Complete Your School Class Notebook Exercises:
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsGlobalSearchOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors self-start lg:self-auto shadow-sm"
+              >
+                <Search className="w-4 h-4" />
+                <span>Search Any Topic / Chapter</span>
+              </button>
             </div>
-            {chapters.length > 1 && (
-              <div className="flex items-center gap-2 shrink-0">
-                <label htmlFor="quick-banner-chapter-select" className="text-[11px] font-bold text-amber-200 whitespace-nowrap">
-                  Jump to Chapter:
-                </label>
-                <select
-                  id="quick-banner-chapter-select"
-                  value={selectedChapterIdx}
-                  onChange={(e) => setSelectedChapterIdx(Number(e.target.value))}
-                  className="px-2.5 py-1.5 rounded-xl bg-white text-slate-900 font-bold text-xs border-2 border-amber-300 max-w-[230px] cursor-pointer"
-                >
-                  {chapters.map((ch, idx) => (
-                    <option key={ch.id} value={idx}>
-                      Ch {String(ch.chapterNumber).padStart(2, '0')}: {ch.chapterTitle}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
+          </section>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-            {[
-              {
-                id: 'chapter_notes' as StudyLibrarySectionTab,
-                icon: '📄',
-                title: '1. Study Notes (A–L)',
-                sub: 'Topic explanations, formulas & memory tricks',
-                badge: 'Complete A–L',
-              },
-              {
-                id: 'textbook_solutions' as StudyLibrarySectionTab,
-                icon: '📘',
-                title: '2. Textbook Solutions',
-                sub: 'All end-of-chapter exercise answers solved',
-                badge: `${activeChapter?.textbookExerciseSolutions?.length || 9} Solved Qs`,
-              },
-              {
-                id: 'class_notebook' as StudyLibrarySectionTab,
-                icon: '📓',
-                title: '3. Complete Class Notes',
-                sub: 'School notebook exercises + hidden answer key',
-                badge: `${activeChapter?.classNotebookExercises?.length || 10} Notebook Tasks`,
-              },
-              {
-                id: 'word_meanings' as StudyLibrarySectionTab,
-                icon: '🔤',
-                title: '4. Word Meanings',
-                sub: 'Key terms, definitions & sentence usage',
-                badge: `${activeChapter?.difficultWordsAndMeanings?.length || 8} Terms`,
-              },
-              {
-                id: 'practice_questions' as StudyLibrarySectionTab,
-                icon: '✍️',
-                title: '5. Extra Practice Q&A',
-                sub: 'Exam-oriented extra questions & HOTS',
-                badge: 'Exam Ready',
-              },
-            ].map((item) => {
-              const isCurrent = activeSectionTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveSectionTab(item.id)}
-                  className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    isCurrent
-                      ? 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a] text-[#0f2952] border-white shadow-sm'
-                      : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="text-xs font-black flex items-center gap-1">
-                      <span>{item.icon}</span>
-                      <span>{item.title}</span>
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
-                        isCurrent
-                          ? 'bg-[#0f2952] text-amber-200'
-                          : 'bg-amber-400/20 text-amber-200 border border-amber-300/30'
+          {/* Compact Board, Medium & Class Selector Card */}
+          <section className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+              {/* Board Selector */}
+              <div className="lg:col-span-7 space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600">
+                  Education Board
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {BOARD_META_LIST.map((b) => {
+                    const isSelected = selectedBoard === b.id;
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setSelectedBoard(b.id)}
+                        className={`px-3 py-2.5 rounded-xl border-2 text-left text-xs font-extrabold transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 truncate">
+                          <span>{b.icon}</span>
+                          <span className="truncate">{b.shortLabel}</span>
+                        </span>
+                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Medium Selector */}
+              <div className="lg:col-span-5 space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600">
+                  Instruction Medium
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableMediums.map((med) => {
+                    const isSelected = selectedMedium === med;
+                    return (
+                      <button
+                        key={med}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMedium(med);
+                          updateStudentMedium(med as InstructionMedium);
+                        }}
+                        className={`px-3 py-2 rounded-xl border-2 text-xs font-extrabold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-300'
+                        }`}
+                      >
+                        {med}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Standard (Class 1 to Class 10) */}
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-600">
+                  Select Standard (Class 1 to Class 10)
+                </span>
+                <span className="text-xs font-extrabold text-indigo-700">
+                  {selectedBoard} • {selectedClass}
+                </span>
+              </div>
+              <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                {ALL_10_CLASSES_META.map((meta) => {
+                  const isSelected = selectedClass === meta.classLevel;
+                  return (
+                    <button
+                      key={meta.classLevel}
+                      type="button"
+                      onClick={() => setSelectedClass(meta.classLevel)}
+                      className={`py-2 px-1.5 rounded-xl border-2 text-center text-xs font-black transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-indigo-300'
                       }`}
                     >
-                      {item.badge}
-                    </span>
-                  </div>
-                  <p className={`text-[11px] leading-snug ${isCurrent ? 'text-slate-800 font-semibold' : 'text-sky-100'}`}>
-                    {item.sub}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+                      {meta.shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* Clean Subject Cards Grid */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                  Select a Subject ({subjects.length} Subjects)
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Click any subject card below to open its chapter list
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+              {subjects.map((sub) => {
+                const sMeta = getSubjectMeta(sub, selectedBoard);
+                const subChapters = getStudyMaterialChaptersIndex(
+                  selectedBoard,
+                  selectedClass,
+                  sub,
+                  effectiveMedium
+                );
+                return (
+                  <button
+                    key={sub}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSubject(sub);
+                      setDrillStage('chapters');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="group p-5 rounded-3xl bg-white border-2 border-slate-200 hover:border-indigo-500 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl flex flex-col justify-between gap-4 cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="w-13 h-13 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-2xl shrink-0 group-hover:scale-105 transition-transform">
+                        {sMeta.icon}
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black">
+                        {subChapters.length > 0 ? `${subChapters.length} Chapters` : 'Study Pack'}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-indigo-700 leading-snug">
+                        {sub}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium mt-1">
+                        Chapter notes, textbook solutions, exercises &amp; tests
+                      </p>
+                    </div>
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-extrabold text-indigo-700">
+                      <span>Open Chapters</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
       )}
 
       {/* =====================================================================
-          TWO-LEVEL HORIZONTAL MATERIAL TABS & SUBSECTIONS
-          ROW 1: All Material Type Tabs together in ONE horizontal row
-          ROW 2: Selected Material Type's horizontal subsections directly below Row 1
-          AREA 3: Selected Subsection's complete materials immediately below Row 2
+          STEP 2 OF STUDY MATERIALS: SELECT CHAPTER FOR THE CHOSEN SUBJECT
           ===================================================================== */}
+      {drillStage === 'chapters' && (
+        <div className="space-y-5">
+          {/* Step 2 Back Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-2xl p-3.5 sm:px-5 border border-slate-200 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setDrillStage('subjects')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Subjects ({selectedClass})</span>
+            </button>
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-700">
+              <span>{selectedBoard}</span>
+              <span>•</span>
+              <span>{selectedClass}</span>
+              <span>•</span>
+              <span className="text-indigo-700">
+                {subjectMeta.icon} {selectedSubject}
+              </span>
+            </div>
+          </div>
+
+          {/* Subject Header Banner */}
+          <section className="rounded-3xl bg-gradient-to-r from-[#0f2952] via-[#1e3a8a] to-[#1d4ed8] text-white p-5 sm:p-7 shadow-lg">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-14 h-14 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center text-3xl shrink-0">
+                  {subjectMeta.icon}
+                </div>
+                <div>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-300 text-slate-950 text-[10px] font-black uppercase tracking-wider">
+                    Step 2 • Select Chapter
+                  </span>
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-0.5">
+                    {selectedSubject} — {selectedClass}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-sky-100 mt-0.5">
+                    Select any chapter below to view its Notes, Textbook Exercise Solutions, and Practice Questions.
+                  </p>
+                </div>
+              </div>
+
+              {/* Chapter Search Input */}
+              <div className="relative min-w-[230px]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search chapter title..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white text-slate-900 text-xs font-bold border border-white/30 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Subject-Level Quick Resources (Textbook PDF, Model Papers, PYQ Papers) */}
+            <div className="mt-4 pt-4 border-t border-white/15 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-extrabold text-amber-200 mr-1">
+                Subject Resources:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSectionTab('textbooks');
+                  setDrillStage('content');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-extrabold border border-white/20 cursor-pointer transition-colors"
+              >
+                📚 Official Textbook PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSectionTab('model_papers');
+                  setDrillStage('content');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-extrabold border border-white/20 cursor-pointer transition-colors"
+              >
+                📝 Model Question Papers ({examPapersBundle.modelPapers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSectionTab('pyq_papers');
+                  setDrillStage('content');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-extrabold border border-white/20 cursor-pointer transition-colors"
+              >
+                🗂️ Previous Year Papers ({examPapersBundle.pyqPapers.length})
+              </button>
+            </div>
+          </section>
+
+          {/* Chapters Grid */}
+          {filteredChapters.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              {filteredChapters.map((ch) => {
+                const realIdx = chapters.findIndex((c) => c.id === ch.id);
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedChapterIdx(realIdx >= 0 ? realIdx : 0);
+                      setActiveSectionTab('chapter_notes');
+                      setDrillStage('content');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="group p-5 rounded-3xl bg-white border-2 border-slate-200 hover:border-indigo-500 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl flex flex-col justify-between gap-3 cursor-pointer"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <span className="px-3 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-black">
+                          Chapter {String(ch.chapterNumber).padStart(2, '0')}
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Notes &amp; Solutions
+                        </span>
+                      </div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-indigo-700 leading-snug">
+                        {ch.chapterTitle}
+                      </h3>
+                      {ch.overview && (
+                        <p className="text-xs text-slate-500 font-medium mt-1.5 line-clamp-2 leading-relaxed">
+                          {ch.overview}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-extrabold text-indigo-700">
+                      <span>Open Chapter Notes &amp; Exercises</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-3">
+              <p className="text-base font-black text-slate-800">
+                Open Subject Study Resources for {selectedSubject}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSectionTab('textbooks');
+                  setDrillStage('content');
+                }}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black cursor-pointer"
+              >
+                View Textbooks &amp; Modules →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =====================================================================
+          STEP 3 OF STUDY MATERIALS: VIEW SELECTED CHAPTER CONTENT
+          ===================================================================== */}
+      {drillStage === 'content' && (
+        <div className="space-y-4">
+          {/* Step 3 Top Back Navigation Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-white rounded-2xl p-3.5 sm:px-5 border border-slate-200 shadow-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDrillStage('chapters')}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Chapters</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDrillStage('subjects')}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition-colors cursor-pointer"
+              >
+                <span>Change Subject</span>
+              </button>
+            </div>
+
+            <div className="text-xs sm:text-sm font-black text-slate-700 truncate">
+              {selectedBoard} • {selectedClass} • {subjectMeta.icon} {selectedSubject}
+              {activeChapter ? ` • Ch ${String(activeChapter.chapterNumber).padStart(2, '0')}` : ''}
+            </div>
+          </div>
+
+          {externalBundleLoading && (
+            <div className="rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2 text-xs font-bold text-[#0f2952] flex items-center gap-2">
+              <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#0f2952] border-t-transparent animate-spin shrink-0" />
+              <span>Loading verified chapter pack for {selectedBoard} · {selectedClass} · {selectedSubject}...</span>
+            </div>
+          )}
       {(() => {
         const isSpecialHubTab =
           activeSectionTab === 'math_hub' ||
@@ -4007,6 +3985,8 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
             </div>
           )}
         </section>
+      )}
+        </div>
       )}
     </div>
   );

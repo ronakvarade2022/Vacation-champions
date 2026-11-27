@@ -846,66 +846,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         })()}
       </div>
 
-      {/* Thought of the Day & Trilingual Dictionary Hub for Teachers */}
-      <DailyThoughtAndDictionaryWidget
-        onOpenDictionary={() => onNavigateTab('trilingual-dictionary')}
-        onOpenThoughts={() => onNavigateTab('thought-of-the-day')}
-      />
-
-      {/* Main Tab Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { id: 'overview' as const, label: 'Organised Workspace', icon: Layers },
-            { id: 'tools' as const, label: '130 Teacher Tools & Guides', icon: Wrench },
-            { id: 'roster' as const, label: `My Classroom (${filteredStudents.length})`, icon: Users },
-            { id: 'assignments' as const, label: `Assignments (${classAssignmentsList.length})`, icon: FileText },
-            { id: 'analytics' as const, label: 'Student Performance', icon: Award },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTeacherTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTeacherTab(tab.id)}
-                className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-[#0f2447] text-white shadow-sm border border-slate-700'
-                    : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-200'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-2">
+      {/* Prominent Back Button when a Teacher Sub-Section is Open */}
+      {activeTeacherTab !== 'overview' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white border-2 border-slate-200 rounded-2xl px-4 py-3 shadow-xs">
           <button
             type="button"
-            onClick={handlePrintRoster}
-            className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+            onClick={() => setActiveTeacherTab('overview')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-extrabold cursor-pointer transition-colors"
           >
-            <Printer className="w-3.5 h-3.5 text-amber-300" />
-            <span>Print Class Report</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Teacher Dashboard</span>
           </button>
-        </div>
-      </div>
 
-      {activeTeacherTab !== 'overview' && (
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 text-white border border-slate-700 rounded-2xl px-4 py-2.5 text-xs">
-          <div className="flex items-center gap-1.5 font-bold text-slate-300">
-            <button
-              type="button"
-              onClick={() => setActiveTeacherTab('overview')}
-              className="hover:text-white underline cursor-pointer"
-            >
-              Teacher Command Center
-            </button>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-black text-amber-300">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-800">
+            <span>Teacher Portal</span>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <span className="text-emerald-700">
               {activeTeacherTab === 'tools'
                 ? '130 Teacher Tools & Pedagogy Guides'
                 : activeTeacherTab === 'roster'
@@ -915,69 +871,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 : 'Student Performance Summary'}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setActiveTeacherTab('overview')}
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Workspace</span>
-          </button>
         </div>
       )}
 
-      {/* TAB 1: ORGANISED TEACHER WORKSPACE (8 Logical Categories & High-Contrast Navy/Slate Cards) */}
+      {/* TAB 1: ORGANISED TEACHER WORKSPACE (MAIN CATEGORY CARDS ONLY) */}
       {activeTeacherTab === 'overview' && (
-        <div className="space-y-6">
-          <GlobalStudySearchBar
-            defaultBoard={selectedBoard}
-            defaultClass={selectedClass}
-            onJumpToResult={(target) => {
-              if (onGlobalSearchJump) onGlobalSearchJump(target);
-              else onNavigateTab('study-materials', target.subject);
-            }}
-            onOpenToolTab={(tab) => onNavigateTab(tab)}
-            headline={`Teacher Syllabus, Worksheet, Exam Paper & Productivity Search (${selectedBoard} · ${selectedClass})`}
-            compact
-          />
-
-          {/* High-Contrast Dark Slate & Navy Quick Metrics Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            <div className="bg-[#0f2447] text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Total Enrolled
-              </span>
-              <div className="text-2xl font-black text-white tabular-nums">{metrics.totalStudents}</div>
-              <p className="text-[11px] text-sky-200 font-semibold">
-                {getBoardShortLabel(selectedBoard)} · {selectedClass}
-              </p>
-            </div>
-
-            <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Active Streaks
-              </span>
-              <div className="text-2xl font-black text-teal-300 tabular-nums">{metrics.activeStudents}</div>
-              <p className="text-[11px] text-slate-300 font-semibold">Regular daily practice</p>
-            </div>
-
-            <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Worksheets Solved
-              </span>
-              <div className="text-2xl font-black text-amber-300 tabular-nums">{metrics.totalWorksheetsDone}</div>
-              <p className="text-[11px] text-slate-300 font-semibold">Cumulative class attempts</p>
-            </div>
-
-            <div className="bg-[#0f2447] text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Pending Grading
-              </span>
-              <div className="text-2xl font-black text-amber-400 tabular-nums">{metrics.pendingGradingCount}</div>
-              <p className="text-[11px] text-amber-200 font-semibold">Awaiting evaluation</p>
-            </div>
-          </div>
-
+        <div className="space-y-5">
           {/* 8-Category Organised Teacher Hub */}
           <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">

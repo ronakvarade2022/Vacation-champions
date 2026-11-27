@@ -1143,86 +1143,178 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClose();
   };
 
+  const activePortalMeta = (() => {
+    const role =
+      tab === 'login'
+        ? 'student'
+        : tab === 'teacher'
+        ? 'teacher'
+        : tab === 'parent'
+        ? 'parent'
+        : tab === 'school_admin'
+        ? 'school_admin'
+        : tab === 'institute_admin'
+        ? 'institute_admin'
+        : regRoleType;
+
+    switch (role) {
+      case 'teacher':
+        return {
+          role: 'teacher' as const,
+          loginTab: 'teacher' as const,
+          portalName: 'Teacher Portal',
+          icon: '👩‍🏫',
+          gradient: 'from-emerald-600 via-green-600 to-teal-700',
+          accentText: 'text-emerald-700',
+          loginHeading: 'Teacher Portal Login',
+          registerHeading: 'Teacher Portal Registration',
+          loginInstruction: 'Sign in with your registered Teacher Email & Password to access lesson planners, exam generators & TET tools.',
+          registerInstruction: 'Complete the Teacher Registration Form below with your qualification, teaching subjects, and classes taught.',
+        };
+      case 'parent':
+        return {
+          role: 'parent' as const,
+          loginTab: 'parent' as const,
+          portalName: 'Parent Portal',
+          icon: '👨‍👩‍👧',
+          gradient: 'from-fuchsia-600 via-pink-600 to-rose-600',
+          accentText: 'text-fuchsia-700',
+          loginHeading: 'Parent Portal Login',
+          registerHeading: 'Parent Portal Registration',
+          loginInstruction: 'Sign in to monitor your child’s study progress, test performance, and daily learning activity.',
+          registerInstruction: 'Complete the Parent Registration Form below and optionally link your child’s registered email or mobile.',
+        };
+      case 'school_admin':
+        return {
+          role: 'school_admin' as const,
+          loginTab: 'school_admin' as const,
+          portalName: 'College Portal',
+          icon: '🏛️',
+          gradient: 'from-amber-500 via-orange-600 to-red-700',
+          accentText: 'text-orange-700',
+          loginHeading: 'College Portal Login',
+          registerHeading: 'College Portal Registration',
+          loginInstruction: 'Sign in with your College / School Administrator credentials to manage classes, faculty, and academic reports.',
+          registerInstruction: 'Complete the College / Institution Registration Form below to create your campus administration workspace.',
+        };
+      case 'institute_admin':
+        return {
+          role: 'institute_admin' as const,
+          loginTab: 'institute_admin' as const,
+          portalName: 'Institute Portal',
+          icon: '🏫',
+          gradient: 'from-teal-600 via-cyan-600 to-emerald-700',
+          accentText: 'text-teal-700',
+          loginHeading: 'Institute Portal Login',
+          registerHeading: 'Institute Portal Registration',
+          loginInstruction: 'Sign in to manage coaching batches, mock test series, trainers, and student performance.',
+          registerInstruction: 'Complete the Institute Registration Form below to set up your coaching or skill academy portal.',
+        };
+      default:
+        return {
+          role: 'student' as const,
+          loginTab: 'login' as const,
+          portalName: 'Student Portal',
+          icon: '🎓',
+          gradient: 'from-sky-600 via-blue-600 to-indigo-700',
+          accentText: 'text-blue-700',
+          loginHeading: 'Student Portal Login',
+          registerHeading: 'Student Portal Registration',
+          loginInstruction: 'Sign in with your registered Student Email & Password to open your class study materials, quizzes & tools.',
+          registerInstruction: 'Complete the Student Registration Form below for Classes 1 to 10 (Maharashtra Board, CBSE, or ICSE).',
+        };
+    }
+  })();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto overscroll-contain">
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-indigo-100 animate-in fade-in zoom-in-95 duration-200 m-auto my-auto">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white relative">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-1">
-            <Sparkles className="w-4 h-4" /> MyStudyZone – An Interactive Learning Platform for Students
+        {/* Portal-Specific Header */}
+        <div className={`bg-gradient-to-r ${activePortalMeta.gradient} p-5 sm:p-6 text-white relative`}>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-extrabold transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 border border-white/25 text-xs font-extrabold">
+              <span className="text-base leading-none">{activePortalMeta.icon}</span>
+              <span>{activePortalMeta.portalName}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black">
-            {tab === 'login' && 'Student Portal Login'}
-            {tab === 'teacher' && 'Teacher Portal Login'}
-            {tab === 'parent' && 'Parent Portal Login'}
-            {tab === 'school_admin' && 'School & College Portal Login'}
-            {tab === 'institute_admin' && 'Coaching Institute Portal Login'}
-            {tab === 'register' &&
-              (regRoleType === 'teacher'
-                ? 'Teacher / TET Aspirant Registration'
-                : regRoleType === 'parent'
-                ? 'Parent Account Registration'
-                : regRoleType === 'school_admin'
-                ? 'School & College Registration'
-                : regRoleType === 'institute_admin'
-                ? 'Coaching Institute Registration'
-                : 'Student Registration (Classes 1 to 10)')}
-            {tab === 'forgot' && 'Forgot / Reset Password'}
-            {tab === 'admin' && 'Platform Admin Console'}
+
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+            {tab === 'register'
+              ? activePortalMeta.registerHeading
+              : tab === 'forgot'
+              ? `${activePortalMeta.portalName} Password Reset`
+              : tab === 'admin'
+              ? 'Platform Admin Console'
+              : activePortalMeta.loginHeading}
           </h2>
-          <p className="text-amber-200 font-bold text-xs mt-0.5">
-            Learn, Practice, Explore and Achieve Excellence.
-          </p>
-          <p className="text-indigo-100 text-xs sm:text-sm mt-1">
-            {tab === 'login' && 'Sign in with your registered Email Address & Password'}
-            {tab === 'teacher' && 'Access Classes 1–10, 4th & 7th Scholarship, MAHA TET, and CTET Papers 1 & 2'}
-            {tab === 'parent' && 'Sign in to view your linked child’s attendance, homework & progress'}
-            {tab === 'school_admin' && 'Sign in to manage your school or college campus workspace'}
-            {tab === 'institute_admin' && 'Sign in to manage batches, trainers, fee ledgers & certificates'}
-            {tab === 'register' && 'Select your portal role below for tailored registration'}
-            {tab === 'forgot' && 'Enter your registered email address to receive a secure Firebase password reset link'}
-            {tab === 'admin' && 'Authorized Administrator sign-in to manage platform settings'}
+          <p className="text-white/90 text-xs sm:text-sm mt-1 leading-relaxed">
+            {tab === 'register'
+              ? activePortalMeta.registerInstruction
+              : tab === 'forgot'
+              ? 'Enter your registered email address to receive a secure password reset link.'
+              : tab === 'admin'
+              ? 'Authorized Administrator sign-in to manage platform settings.'
+              : activePortalMeta.loginInstruction}
           </p>
         </div>
 
-        {/* Navigation Tabs (All 5 Portals + Register + Admin) */}
-        <div className="flex flex-wrap border-b border-slate-200 bg-slate-50 px-3 pt-2.5 gap-1">
-          {[
-            { id: 'login' as const, label: 'Student' },
-            { id: 'teacher' as const, label: 'Teacher' },
-            { id: 'parent' as const, label: 'Parent' },
-            { id: 'school_admin' as const, label: 'School' },
-            { id: 'institute_admin' as const, label: 'Coaching' },
-            { id: 'register' as const, label: 'Register' },
-            { id: 'admin' as const, label: 'Admin' },
-          ].map((item) => {
-            const isAct = tab === item.id || (item.id === 'login' && tab === 'forgot');
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setTab(item.id);
-                  setError('');
-                  setSuccessMsg('');
-                }}
-                className={`px-2.5 py-2 text-[11px] font-bold rounded-t-xl transition-colors cursor-pointer ${
-                  isAct
-                    ? 'bg-white text-indigo-700 border-t border-x border-slate-200 -mb-px'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Focused Two-Option Bar for the Selected Portal (Login vs Register) */}
+        {tab !== 'admin' && (
+          <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-100 p-1.5 gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setTab(activePortalMeta.loginTab);
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`py-2.5 px-3 text-xs sm:text-sm font-black rounded-xl transition-all cursor-pointer ${
+                tab !== 'register'
+                  ? `bg-white ${activePortalMeta.accentText} shadow-sm`
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {activePortalMeta.portalName} Login
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRegRoleType(activePortalMeta.role);
+                if (activePortalMeta.role === 'teacher') setRegAvatar('👩‍🏫');
+                else if (activePortalMeta.role === 'student') setRegAvatar('🌟');
+                setTab('register');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`py-2.5 px-3 text-xs sm:text-sm font-black rounded-xl transition-all cursor-pointer ${
+                tab === 'register'
+                  ? `bg-white ${activePortalMeta.accentText} shadow-sm`
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {activePortalMeta.portalName} Register
+            </button>
+          </div>
+        )}
+
 
         {/* Body */}
         <div className="p-6 max-h-[78vh] overflow-y-auto">
@@ -1409,13 +1501,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
 
                 <p className="text-center text-xs text-slate-500">
-                  New Student or Teacher?{' '}
+                  New to Student Portal?{' '}
                   <button
                     type="button"
-                    onClick={() => { setTab('register'); setError(''); setSuccessMsg(''); }}
+                    onClick={() => {
+                      setRegRoleType('student');
+                      setRegAvatar('🌟');
+                      setTab('register');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
                     className="text-indigo-600 font-bold hover:underline cursor-pointer"
                   >
-                    Create Class-Wise Account
+                    Register Student Account
                   </button>
                 </p>
               </div>
@@ -1794,61 +1892,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </form>
           )}
 
-          {/* ==================== NEW REGISTRATION TAB (ALL 5 PORTALS) ==================== */}
+          {/* ==================== PORTAL-SPECIFIC REGISTRATION TAB ==================== */}
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3.5">
-              {/* 1. Account Type Selection Across All 5 Portals */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Select Portal Registration Type *
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    { role: 'student' as const, label: 'Student Registration' },
-                    { role: 'teacher' as const, label: 'Teacher Registration' },
-                    { role: 'parent' as const, label: 'Parent Registration' },
-                    { role: 'school_admin' as const, label: 'College Registration' },
-                    { role: 'institute_admin' as const, label: 'Institute Registration' },
-                  ].map((item) => (
-                    <button
-                      key={item.role}
-                      type="button"
-                      onClick={() => {
-                        setRegRoleType(item.role);
-                        if (item.role === 'teacher') setRegAvatar('👩‍🏫');
-                        else if (item.role === 'student') setRegAvatar('🌟');
-                        setError('');
-                      }}
-                      className={`p-2.5 rounded-xl border-2 text-xs font-extrabold transition-all cursor-pointer text-left flex items-center justify-between ${
-                        regRoleType === item.role
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-950 shadow-xs'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                      }`}
-                    >
-                      <span>{item.label}</span>
-                      {regRoleType === item.role && (
-                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                      )}
-                    </button>
-                  ))}
+              {/* Portal Registration Summary Banner (Strict Single-Portal View) */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50/90 border border-indigo-200 flex items-start gap-2.5">
+                <span className="text-xl leading-none shrink-0 mt-0.5">{activePortalMeta.icon}</span>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-indigo-950">
+                    {activePortalMeta.registerHeading}
+                  </div>
+                  <p className="text-[11px] font-medium text-indigo-900 leading-snug mt-0.5">
+                    {regRoleType === 'teacher' &&
+                      'Dedicated Teacher Registration: Add your qualification, subjects taught, classes taught, and select your teaching categories.'}
+                    {regRoleType === 'student' &&
+                      'Dedicated Student Registration (Classes 1–10): Choose your Education Board, Medium, and Standard.'}
+                    {regRoleType === 'parent' &&
+                      'Dedicated Parent Registration: Create your parent account and link your child’s registered student email or mobile.'}
+                    {regRoleType === 'school_admin' &&
+                      'Dedicated College & School Registration: Register your academic institution to manage classes, faculty, and reports.'}
+                    {regRoleType === 'institute_admin' &&
+                      'Dedicated Institute Registration: Register your coaching center or skill academy to manage batches, tests, and certificates.'}
+                  </p>
                 </div>
-              </div>
-
-              {/* Role Registration Summary Banner */}
-              <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
-                <span className="text-[11px] font-bold text-indigo-950 leading-snug">
-                  {regRoleType === 'teacher' &&
-                    'Free Teacher / TET Registration: Add qualification, subjects & classes taught and pick your categories.'}
-                  {regRoleType === 'student' &&
-                    'Free Student Registration (Classes 1–10): Choose your Board, Medium & Class. Existing Email+Mobile lets you add more classes anytime.'}
-                  {regRoleType === 'parent' &&
-                    'Parent Registration: Securely link a child via their registered email/ID and mobile number without creating duplicate student accounts.'}
-                  {regRoleType === 'school_admin' &&
-                    'School & College Registration: Creates an isolated multi-tenant campus workspace (starts with PENDING_VERIFICATION status).'}
-                  {regRoleType === 'institute_admin' &&
-                    'Coaching & Skill Institute Registration: Launches your batch, trainer, fee ledger, and certificate portal (PENDING_VERIFICATION status).'}
-                </span>
               </div>
 
               {/* Avatar Picker */}
@@ -2430,9 +2496,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {/* 5B. Select Education Board, Medium & Class (Student / Teacher) */}
-              {(regRoleType === 'student' ||
-                (regRoleType === 'teacher' && regTeacherCategories.includes('all_classes'))) && (
+              {/* 5B. Select Education Board, Medium & Class (Student Portal Only) */}
+              {regRoleType === 'student' && (
               <div className="space-y-2.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -2490,9 +2555,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <div className="flex items-center justify-between pt-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    {regRoleType === 'teacher'
-                      ? `Default Classroom View (${getBoardShortLabel(regBoard)} • Classes 1 to 10)`
-                      : `Select Class (${getBoardShortLabel(regBoard)} • Class 1 to Class 10) *`}
+                    Select Class ({getBoardShortLabel(regBoard)} • Class 1 to Class 10) *
                   </label>
                   <span className="text-[10px] font-bold text-emerald-700">
                     {existingAccountMatch
@@ -2658,15 +2721,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {isLoading
                   ? 'Creating Account...'
                   : regRoleType === 'teacher'
-                  ? `Register Teacher / TET Aspirant (${regTeacherCategories.length} Categor${regTeacherCategories.length === 1 ? 'y' : 'ies'} Selected)`
+                  ? 'Complete Teacher Portal Registration'
                   : regRoleType === 'parent'
-                  ? 'Create Parent Portal Account'
+                  ? 'Complete Parent Portal Registration'
                   : regRoleType === 'school_admin'
-                  ? 'Register School & College Portal'
+                  ? 'Complete College Portal Registration'
                   : regRoleType === 'institute_admin'
-                  ? 'Register Coaching Institute Portal'
-                  : `Register Student (${getBoardShortLabel(regBoard)} • Standard ${formatStandardOrdinal(regClass)})`}
+                  ? 'Complete Institute Portal Registration'
+                  : `Complete Student Registration (${getBoardShortLabel(regBoard)} • Std ${formatStandardOrdinal(regClass)})`}
               </button>
+
+              {/* Existing Login Option & Back Button */}
+              <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold transition-colors cursor-pointer w-full sm:w-auto justify-center"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back</span>
+                </button>
+                <p className="text-slate-600 font-medium text-center sm:text-right">
+                  Already have a {activePortalMeta.portalName} account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTab(activePortalMeta.loginTab);
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className={`${activePortalMeta.accentText} font-black hover:underline cursor-pointer`}
+                  >
+                    Login Here
+                  </button>
+                </p>
+              </div>
             </form>
           )}
 

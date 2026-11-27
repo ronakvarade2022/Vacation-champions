@@ -622,12 +622,6 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
         })()}
       </div>
 
-      {/* Thought of the Day & Trilingual Dictionary Hub for Parents & Children */}
-      <DailyThoughtAndDictionaryWidget
-        onOpenDictionary={() => onNavigateTab('trilingual-dictionary')}
-        onOpenThoughts={() => onNavigateTab('thought-of-the-day')}
-      />
-
       {/* Sub-navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2.5">
         {[

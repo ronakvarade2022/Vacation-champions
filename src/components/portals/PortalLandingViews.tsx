@@ -1,655 +1,760 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
-  Building2,
   CheckCircle2,
-  FileDown,
-  GraduationCap,
-  HeartHandshake,
   LogIn,
-  Monitor,
-  QrCode,
-  Search,
-  ShieldCheck,
-  Sparkles,
   UserPlus,
-  Users,
-  Wrench,
-  X,
+  Sparkles,
 } from 'lucide-react';
-import type { PortalRole } from '../../types';
-import { ALL_130_TEACHER_TOOLS, TEACHER_LEARNING_MATERIALS } from '../../data/teacherTools/teacherToolsCatalog';
-import { PARENT_LEARNING_MATERIALS } from '../../data/parentZone/parentLearningMaterials';
-import { INSTITUTION_ACADEMIC_MATERIALS } from '../../data/schoolCollege/academicMaterialsCatalog';
-import { ALL_18_SKILL_PROGRAMS } from '../../data/skillPrograms/skillProgramsCatalog';
-import { GlobalStudySearchBar } from '../StudyLibraryGlobalSearch';
+import type { PortalRegisterRole } from '../AuthModal';
 
-export interface PortalLandingViewsProps {
-  portalRole: Exclude<PortalRole, 'admin'>;
-  onSelectPortalRole: (role: Exclude<PortalRole, 'admin'>) => void;
-  onLoginPortal: (role: Exclude<PortalRole, 'admin'>) => void;
-  onRegisterPortal: (role: Exclude<PortalRole, 'admin'>) => void;
-  onExploreResources: (tab: string) => void;
-  onBackHome: () => void;
+export interface PortalLandingViewProps {
+  portalRole: PortalRegisterRole;
+  onSelectPortalRole?: (role: PortalRegisterRole) => void;
+  onSelectPortal?: (role: PortalRegisterRole) => void;
+  onLoginPortal: (role: PortalRegisterRole) => void;
+  onRegisterPortal: (role: PortalRegisterRole) => void;
+  onExploreResources: (targetTab: string) => void;
   isSignedInAsThisPortal?: boolean;
   onOpenActiveDashboard?: () => void;
+  onBackHome?: () => void;
 }
 
-interface PortalMetaConfig {
-  role: Exclude<PortalRole, 'admin'>;
+interface PortalCategoryCard {
+  id: string;
+  icon: string;
   title: string;
-  subtitle: string;
-  badgeText: string;
-  accentGradient: string;
-  accentBorder: string;
-  buttonAccent: string;
-  icon: React.ComponentType<{ className?: string }>;
-  highlights: string[];
-  publicPreviewLabel: string;
-  publicPreviewTab: string;
-  verificationNote?: string;
-  searchChips: string[];
-  searchPlaceholder: string;
+  description: string;
+  badge: string;
+  details: string[];
+  actionLabel: string;
+  targetTab?: string;
+  requiresAuth?: boolean;
 }
 
-const PORTAL_CONFIGS: Record<Exclude<PortalRole, 'admin'>, PortalMetaConfig> = {
+interface PortalDefinition {
+  role: PortalRegisterRole;
+  portalName: string;
+  tagline: string;
+  description: string;
+  icon: string;
+  headerGradient: string;
+  cardBorderHover: string;
+  accentText: string;
+  categories: PortalCategoryCard[];
+}
+
+const PORTAL_DEFINITIONS: Record<PortalRegisterRole, PortalDefinition> = {
   student: {
     role: 'student',
-    title: 'Student Zone Portal',
-    subtitle:
-      'Complete school syllabus for Maharashtra, CBSE & ICSE (Classes 1–10), verified chapter notes, textbook exercise solutions, worksheets, 4-level quizzes, AI Tools, and Skill Labs.',
-    badgeText: 'Classes 1–10 · Free Library & Mock Prep',
-    accentGradient: 'from-slate-900 via-indigo-950 to-slate-900',
-    accentBorder: 'border-indigo-500/40',
-    buttonAccent: 'bg-indigo-600 hover:bg-indigo-700 text-white',
-    icon: GraduationCap,
-    highlights: [
-      'Board, Medium & Class-isolated Textbooks, Notes (A–L), and Solved Exercises',
-      '23+ Interactive Worksheets per subject, Brain Puzzles, Sudoku & Daily GK',
-      'Std 4th & 7th MSCE Scholarship Mock Exams & 365-Day ₹99 Class Plans',
-      'Access AI Study Studio & Interactive Vedic Maths / Abacus / Phonics Labs',
+    portalName: 'Student Portal',
+    tagline: 'Study • Practice • Grow',
+    description: 'Classes 1–10 study materials, worksheets, quizzes, video lessons & trilingual dictionary.',
+    icon: '🎓',
+    headerGradient: 'from-sky-600 via-blue-600 to-indigo-800',
+    cardBorderHover: 'hover:border-sky-500',
+    accentText: 'text-sky-700',
+    categories: [
+      {
+        id: 'study',
+        icon: '📘',
+        title: 'Study Materials',
+        description: 'Textbooks, chapter notes & exercise solutions',
+        badge: 'Classes 1–10',
+        details: [
+          'Board-wise and class-wise textbook chapters',
+          'Topic-wise notes and solved textbook exercises',
+          'Printable A4 revision sheets and question banks',
+        ],
+        actionLabel: 'Open Study Materials',
+        targetTab: 'study-materials',
+      },
+      {
+        id: 'worksheets',
+        icon: '📝',
+        title: 'Practice Worksheets',
+        description: 'Subject-wise printable & interactive worksheets',
+        badge: 'All Subjects',
+        details: [
+          'Chapter-wise practice sheets for daily revision',
+          'Instant answer verification and score tracking',
+          'Downloadable PDF format for home practice',
+        ],
+        actionLabel: 'Open Worksheets',
+        targetTab: 'worksheets',
+      },
+      {
+        id: 'quiz',
+        icon: '🎯',
+        title: 'Online Exams & Quizzes',
+        description: '4-level chapter quizzes & timed mock exams',
+        badge: 'Interactive',
+        details: [
+          'Easy, Medium, Hard, and Expert difficulty levels',
+          'Instant performance report with explanations',
+          'Earn points and certificates on completion',
+        ],
+        actionLabel: 'Open Online Exams',
+        targetTab: 'demo-mock-tests',
+      },
+      {
+        id: 'dictionary',
+        icon: '📖',
+        title: 'Trilingual Dictionary',
+        description: 'English • Marathi • Hindi meanings & usage',
+        badge: '3 Languages',
+        details: [
+          'Instant single-word search across 3 languages',
+          'Pronunciation, grammar, synonyms, and antonyms',
+          'Student-friendly example sentences',
+        ],
+        actionLabel: 'Open Dictionary',
+        targetTab: 'trilingual-dictionary',
+      },
     ],
-    publicPreviewLabel: 'Explore Free Study Library',
-    publicPreviewTab: 'study-materials',
-    searchChips: ['Mathematics', 'Science', 'Worksheets', 'Model Papers', 'Scholarship'],
-    searchPlaceholder: 'Search student chapters, notes, exercise solutions, worksheets or AI study tools...',
   },
   teacher: {
     role: 'teacher',
-    title: 'Teacher & Educator Zone Portal',
-    subtitle:
-      'Dedicated educator command center featuring 130 Teacher Tools, Annual/Monthly/Daily Lesson Planner, MAHA TET & CTET (200 Mocks), Question Paper Builder, and Student Roster.',
-    badgeText: '130 Teacher Tools · Planner · TET & CTET',
-    accentGradient: 'from-slate-900 via-emerald-950 to-teal-950',
-    accentBorder: 'border-emerald-500/40',
-    buttonAccent: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-    icon: Wrench,
-    highlights: [
-      'All 130 Interactive Classroom Tools with PDF & Print exports',
-      'Board-aligned 3-Tab Lesson Planner (Maharashtra, CBSE & ICSE)',
-      'MAHA TET & CTET Paper 1 & 2 Exam Prep (200 Full Mock Exams)',
-      'Real AI Worksheet, Question Paper, Notes & Presentation Makers',
+    portalName: 'Teacher Portal',
+    tagline: 'Plan • Teach • Assess',
+    description: 'Dedicated workspace for school educators & TET/CTET aspirants with lesson planners and assessment tools.',
+    icon: '👩‍🏫',
+    headerGradient: 'from-emerald-600 via-green-600 to-teal-800',
+    cardBorderHover: 'hover:border-emerald-500',
+    accentText: 'text-emerald-700',
+    categories: [
+      {
+        id: 'lesson-planner',
+        icon: '📅',
+        title: 'Academic Lesson Planner',
+        description: 'Annual, monthly & daily structured lesson plans',
+        badge: 'Auto-Scheduled',
+        details: [
+          'Board-aligned annual, monthly, and daily teaching plans',
+          'Automatic holiday and working-day adjustment',
+          'One-click A4 PDF export for school submission',
+        ],
+        actionLabel: 'Open Lesson Planner',
+        targetTab: 'lesson-planner',
+        requiresAuth: true,
+      },
+      {
+        id: 'paper-generator',
+        icon: '📝',
+        title: 'Worksheet & Question Paper Creator',
+        description: 'Generate unit tests, term papers & answer keys',
+        badge: 'Print Ready',
+        details: [
+          'Create custom unit tests and term exam papers',
+          'Balanced question formats (MCQ, short & long answer)',
+          'Instant printable question paper and marking scheme',
+        ],
+        actionLabel: 'Open Paper Creator',
+        targetTab: 'worksheets',
+      },
+      {
+        id: 'teaching-notes',
+        icon: '📚',
+        title: 'Classroom Teaching Notes (Std 1–10)',
+        description: 'Board-wise chapter notes, diagrams & solutions',
+        badge: '3 Boards',
+        details: [
+          'Complete Maharashtra State Board, CBSE & ICSE syllabus',
+          'Solved textbook exercises and classroom notebook tasks',
+          'Science diagrams, math formulas, and grammar hubs',
+        ],
+        actionLabel: 'Browse Teaching Notes',
+        targetTab: 'study-materials',
+      },
+      {
+        id: 'tet-ctet-prep',
+        icon: '🎓',
+        title: 'MAHA TET & CTET Exam Hub',
+        description: 'Paper 1 & Paper 2 pedagogy notes & mock exams',
+        badge: 'Teacher Exams',
+        details: [
+          'Child Development & Pedagogy (CDP) structured notes',
+          'MAHA TET & CTET Paper I and Paper II practice tests',
+          'Subject-specific teaching methodology modules',
+        ],
+        actionLabel: 'Open TET & CTET Hub',
+        targetTab: 'tet-ctet',
+      },
+      {
+        id: 'quiz-assessments',
+        icon: '🎯',
+        title: 'Student Quiz & Test Bank',
+        description: 'Chapter-wise objective quizzes for classroom practice',
+        badge: 'Assessment',
+        details: [
+          'Ready-to-use 4-level chapter quizzes across subjects',
+          'Track accuracy and question-level explanations',
+          'Ideal for classroom revision and oral tests',
+        ],
+        actionLabel: 'Explore Quiz Bank',
+        targetTab: 'demo-mock-tests',
+      },
+      {
+        id: 'teacher-tools',
+        icon: '✨',
+        title: 'Educator Productivity Tools',
+        description: 'Smart teaching utilities & document PDF studio',
+        badge: 'Smart Tools',
+        details: [
+          'Create lesson summaries, rubrics, and study handouts',
+          'Convert and format classroom documents into clean PDFs',
+          'Trilingual dictionary and daily assembly thoughts',
+        ],
+        actionLabel: 'Open Educator Tools',
+        targetTab: 'ai-tools',
+      },
     ],
-    publicPreviewLabel: 'Preview TET & CTET Mocks',
-    publicPreviewTab: 'tet-ctet',
-    searchChips: ['Lesson Plan', 'Question Paper', 'Rubric', 'TET & CTET', 'Bloom'],
-    searchPlaceholder: 'Search 130 Teacher Tools, Pedagogy Guides, Lesson Planner, or TET & CTET Mocks...',
   },
   parent: {
     role: 'parent',
-    title: 'Parent & Family Zone Portal',
-    subtitle:
-      'Monitor your linked child’s attendance, homework feedback, worksheet mastery, and read research-backed parenting guides tailored from Classes 1 to 10.',
-    badgeText: 'Verified Child Progress · Parenting Guides',
-    accentGradient: 'from-slate-900 via-rose-950 to-indigo-950',
-    accentBorder: 'border-rose-500/40',
-    buttonAccent: 'bg-rose-600 hover:bg-rose-700 text-white',
-    icon: HeartHandshake,
-    highlights: [
-      'Secure email + mobile child verification (zero duplicate student accounts)',
-      'Live attendance, homework grades, and subject quiz mastery overview',
-      'Direct Parent–Teacher communication & observation notes log',
-      'Structured parenting & home-study habit guides (always free to read)',
+    portalName: 'Parent Portal',
+    tagline: 'Monitor • Support • Encourage',
+    description: 'Dedicated parent dashboard to monitor your child’s daily study progress, test scores, and learning milestones.',
+    icon: '👨‍👩‍👧',
+    headerGradient: 'from-fuchsia-600 via-purple-600 to-indigo-900',
+    cardBorderHover: 'hover:border-fuchsia-500',
+    accentText: 'text-fuchsia-700',
+    categories: [
+      {
+        id: 'child-progress',
+        icon: '📈',
+        title: 'Child Academic Progress',
+        description: 'Monitor subject-wise chapter completion & mastery',
+        badge: 'Live Tracking',
+        details: [
+          'View completed chapters and active study subjects',
+          'Track weekly consistency and learning milestones',
+          'Support multiple children from a single parent account',
+        ],
+        actionLabel: 'Login to View Child Progress',
+        requiresAuth: true,
+      },
+      {
+        id: 'test-reports',
+        icon: '🎯',
+        title: 'Exam & Quiz Scorecards',
+        description: 'Review test performance, accuracy & weak areas',
+        badge: 'Score Reports',
+        details: [
+          'Detailed quiz scorecards with subject-wise accuracy',
+          'Identify topics that need extra revision at home',
+          'View earned certificates and leaderboard standing',
+        ],
+        actionLabel: 'Login to View Scorecards',
+        requiresAuth: true,
+      },
+      {
+        id: 'homework-status',
+        icon: '📝',
+        title: 'Worksheet & Homework Tracker',
+        description: 'Check daily practice sheets & notebook exercises',
+        badge: 'Daily Practice',
+        details: [
+          'Review completed practice worksheets and exercises',
+          'Access printable revision sheets for home guidance',
+          'Verify chapter-wise class notebook completion',
+        ],
+        actionLabel: 'Login to Check Homework',
+        requiresAuth: true,
+      },
+      {
+        id: 'attendance-activity',
+        icon: '📅',
+        title: 'Study Routine & Activity Log',
+        description: 'Track daily learning time & active study days',
+        badge: 'Daily Log',
+        details: [
+          'Monitor daily study streaks and recent learning sessions',
+          'Encourage regular study habits with clear goal tracking',
+          'Safe, distraction-free educational environment',
+        ],
+        actionLabel: 'Login to View Activity Log',
+        requiresAuth: true,
+      },
+      {
+        id: 'parent-notices',
+        icon: '💬',
+        title: 'Teacher Feedback & Notices',
+        description: 'View educator remarks & important academic updates',
+        badge: 'Communication',
+        details: [
+          'Receive direct academic remarks and progress notes',
+          'Stay informed about exam schedules and scholarship dates',
+          'Simple, transparent parent-educator communication',
+        ],
+        actionLabel: 'Login to View Notices',
+        requiresAuth: true,
+      },
+      {
+        id: 'link-child',
+        icon: '🔗',
+        title: 'Link Child Student Account',
+        description: 'Connect your child’s registered email or mobile',
+        badge: 'Easy Setup',
+        details: [
+          'Link your child’s existing Student Portal account in seconds',
+          'No duplicate student registration required',
+          'Secure verification using registered student email & mobile',
+        ],
+        actionLabel: 'Register / Link Child Account',
+        requiresAuth: true,
+      },
     ],
-    publicPreviewLabel: 'Read Parenting Guides',
-    publicPreviewTab: 'parent-zone',
-    searchChips: ['Routine', 'Exam Stress', 'Screen Time', 'Reading', 'Attendance'],
-    searchPlaceholder: 'Search Parenting Guides, Home-Study Routines, Child Linking, or Progress Reports...',
   },
   school_admin: {
     role: 'school_admin',
-    title: 'School & College Zone Portal',
-    subtitle:
-      'Isolated multi-tenant campus ERP for Schools (Std 1–10), Junior Colleges (Std 11–12), and Degree Colleges with rosters, academic years, GPA report cards, and notices.',
-    badgeText: 'Multi-Tenant Campus ERP & Practical Manuals',
-    accentGradient: 'from-slate-900 via-sky-950 to-indigo-950',
-    accentBorder: 'border-sky-500/40',
-    buttonAccent: 'bg-sky-700 hover:bg-sky-800 text-white',
-    icon: Building2,
-    highlights: [
-      'Classes, Divisions & Departments setup with Academic Year management',
-      'Tenant-partitioned Student & Faculty Rosters + Session Attendance',
-      'Marks Entry, GPA Computation & Real PDF Report Card Generation',
-      'Campus Circulars + Verified Practical Lab & Viva Manuals',
+    portalName: 'College Portal',
+    tagline: 'Manage • Track • Excel',
+    description: 'Isolated institutional workspace for schools and junior/degree colleges to manage divisions, faculty, and academic reports.',
+    icon: '🏛️',
+    headerGradient: 'from-amber-500 via-orange-600 to-red-800',
+    cardBorderHover: 'hover:border-orange-500',
+    accentText: 'text-orange-700',
+    categories: [
+      {
+        id: 'classes-divisions',
+        icon: '🏛️',
+        title: 'Classes, Streams & Divisions',
+        description: 'Organize academic standards, divisions & batches',
+        badge: 'Campus Setup',
+        details: [
+          'Configure classes, divisions, and academic streams',
+          'Manage board affiliations (State Board, CBSE, ICSE)',
+          'Structured academic year and term administration',
+        ],
+        actionLabel: 'Login to Manage Divisions',
+        requiresAuth: true,
+      },
+      {
+        id: 'faculty-allocation',
+        icon: '👩‍🏫',
+        title: 'Faculty & Subject Allocation',
+        description: 'Assign subject teachers & monitor syllabus progress',
+        badge: 'Faculty Hub',
+        details: [
+          'Maintain complete teaching faculty directory',
+          'Allocate subjects and divisions to faculty members',
+          'Track annual and monthly lesson plan completion',
+        ],
+        actionLabel: 'Login to Faculty Hub',
+        requiresAuth: true,
+      },
+      {
+        id: 'student-roster',
+        icon: '🎓',
+        title: 'Student Directory & Admissions',
+        description: 'Manage enrolled students across classes & divisions',
+        badge: 'Student Records',
+        details: [
+          'Centralized division-wise student enrollment roster',
+          'Track active student accounts and academic participation',
+          'Export clean division lists and academic reports',
+        ],
+        actionLabel: 'Login to Student Roster',
+        requiresAuth: true,
+      },
+      {
+        id: 'academic-calendar',
+        icon: '📅',
+        title: 'Institutional Calendar & Timetable',
+        description: 'Manage working days, holidays & exam schedules',
+        badge: 'Schedule',
+        details: [
+          'Set institutional working days, holidays, and exam windows',
+          'Synchronize academic calendar with teacher lesson planners',
+          'Plan unit tests, term exams, and practical schedules',
+        ],
+        actionLabel: 'Login to Calendar Setup',
+        requiresAuth: true,
+      },
+      {
+        id: 'exam-analytics',
+        icon: '📊',
+        title: 'Examination & Result Analytics',
+        description: 'Division-wise performance & assessment reports',
+        badge: 'Analytics',
+        details: [
+          'Monitor class-wise and subject-wise assessment averages',
+          'Identify top performers and subjects needing attention',
+          'Download institutional academic summary reports',
+        ],
+        actionLabel: 'Login to Result Analytics',
+        requiresAuth: true,
+      },
+      {
+        id: 'campus-circulars',
+        icon: '📢',
+        title: 'Campus Notices & Circulars',
+        description: 'Publish official announcements for staff & students',
+        badge: 'Circulars',
+        details: [
+          'Broadcast academic notices to teachers, students & parents',
+          'Share exam timetables, holiday notices, and circulars',
+          'Maintain organized digital notice board archives',
+        ],
+        actionLabel: 'Login to Publish Notices',
+        requiresAuth: true,
+      },
     ],
-    publicPreviewLabel: 'Browse Practical & Viva Manuals',
-    publicPreviewTab: 'school-college-zone',
-    verificationNote: 'New institutions start as PENDING_VERIFICATION until reviewed by platform administration.',
-    searchChips: ['Physics', 'Chemistry', 'Biology', 'GPA Report Card', 'Timetable'],
-    searchPlaceholder: 'Search School/College Practical Manuals, Campus ERP Modules, GPA Reports, or Notices...',
   },
   institute_admin: {
     role: 'institute_admin',
-    title: 'Coaching & Skill Institute Zone Portal',
-    subtitle:
-      'Run Abacus Centres, Vedic Maths Academies & Coaching Classes with batch schedules, trainers, fee ledgers, and real PDF certificates — alongside 18 self-paced skill tracks.',
-    badgeText: '18 Skill Programs + Academy ERP',
-    accentGradient: 'from-slate-900 via-indigo-950 to-amber-950',
-    accentBorder: 'border-amber-500/40',
-    buttonAccent: 'bg-amber-500 hover:bg-amber-600 text-slate-950',
-    icon: Sparkles,
-    highlights: [
-      'Isolated Batches, Trainer Assignments & Custom Course Management',
-      'Daily Batch Attendance, Fee Collection Ledger & Pending Balance tracking',
-      'Course Learning Materials, Quizzes & Printable PDF Completion Certificates',
-      'Direct Independent Learner track for Vedic Maths, Abacus & Phonics',
+    portalName: 'Institute Portal',
+    tagline: 'Organize • Guide • Excel',
+    description: 'Dedicated portal for coaching institutes, tuition classes, and skill academies to manage batches, tests, and certificates.',
+    icon: '🏫',
+    headerGradient: 'from-teal-600 via-cyan-600 to-slate-900',
+    cardBorderHover: 'hover:border-teal-500',
+    accentText: 'text-teal-700',
+    categories: [
+      {
+        id: 'coaching-batches',
+        icon: '🏫',
+        title: 'Coaching Batches & Timings',
+        description: 'Create and manage weekday & weekend study batches',
+        badge: 'Batch Manager',
+        details: [
+          'Organize foundation, board exam, and skill batches',
+          'Assign batch timings, capacity, and active students',
+          'Track batch-wise attendance and syllabus coverage',
+        ],
+        actionLabel: 'Login to Manage Batches',
+        requiresAuth: true,
+      },
+      {
+        id: 'mock-test-series',
+        icon: '🎯',
+        title: 'Mock Test Series & Rankings',
+        description: 'Conduct chapter tests, scholarship mocks & rank lists',
+        badge: 'Test Series',
+        details: [
+          'Schedule subject-wise and full-length mock exams',
+          'Automated scoring, rank lists, and performance analysis',
+          'Ideal for board exam, scholarship, and Olympiad coaching',
+        ],
+        actionLabel: 'Login to Test Series Hub',
+        requiresAuth: true,
+      },
+      {
+        id: 'skill-programs',
+        icon: '🧮',
+        title: 'Skill Academy Programs',
+        description: 'Abacus, Vedic Maths, Phonics & Spoken English labs',
+        badge: '18 Programs',
+        details: [
+          'Interactive Japanese Soroban Abacus & Vedic Maths drills',
+          '4-Level English Phonics and vocabulary development',
+          'Level-wise student progression and practice modules',
+        ],
+        actionLabel: 'Explore Skill Labs',
+        targetTab: 'core-skills-lab',
+      },
+      {
+        id: 'trainer-faculty',
+        icon: '👨‍🏫',
+        title: 'Trainer & Faculty Roster',
+        description: 'Manage institute trainers & batch assignments',
+        badge: 'Trainers',
+        details: [
+          'Maintain trainer profiles and subject specializations',
+          'Allocate trainers to active coaching and skill batches',
+          'Monitor session completion and batch feedback',
+        ],
+        actionLabel: 'Login to Trainer Roster',
+        requiresAuth: true,
+      },
+      {
+        id: 'fee-ledger',
+        icon: '💳',
+        title: 'Enrollment & Fee Ledger',
+        description: 'Track student admissions, fee plans & installments',
+        badge: 'Accounts',
+        details: [
+          'Record student enrollments and course fee structures',
+          'Track paid installments, pending dues, and receipts',
+          'Export clean batch-wise enrollment and fee summaries',
+        ],
+        actionLabel: 'Login to Fee Ledger',
+        requiresAuth: true,
+      },
+      {
+        id: 'institute-certificates',
+        icon: '📜',
+        title: 'Course Completion Certificates',
+        description: 'Generate verifiable certificates for completed courses',
+        badge: 'Certificates',
+        details: [
+          'Issue official course and level completion certificates',
+          'Includes student name, program level, grade, and date',
+          'Print-ready A4 certificate layout for award ceremonies',
+        ],
+        actionLabel: 'Login to Issue Certificates',
+        requiresAuth: true,
+      },
     ],
-    publicPreviewLabel: 'Explore 18 Skill Programs',
-    publicPreviewTab: 'coaching-zone',
-    verificationNote: 'Academy accounts launch with PENDING_VERIFICATION status for transparent listing.',
-    searchChips: ['Abacus', 'Vedic Maths', 'Phonics', 'Chess', 'Coding'],
-    searchPlaceholder: 'Search 18 Skill Development Programs, Core Skill Labs, Batches, or Academy ERP...',
   },
 };
 
-const PORTAL_TABS: Array<{ role: Exclude<PortalRole, 'admin'>; label: string }> = [
-  { role: 'student', label: '1. Student' },
-  { role: 'teacher', label: '2. Teacher' },
-  { role: 'parent', label: '3. Parent' },
-  { role: 'school_admin', label: '4. School & College' },
-  { role: 'institute_admin', label: '5. Coaching Institute' },
-];
-
-export const PortalLandingViews: React.FC<PortalLandingViewsProps> = ({
+export const PortalLandingViews: React.FC<PortalLandingViewProps> = ({
   portalRole,
-  onSelectPortalRole,
   onLoginPortal,
   onRegisterPortal,
   onExploreResources,
-  onBackHome,
-  isSignedInAsThisPortal = false,
+  isSignedInAsThisPortal,
   onOpenActiveDashboard,
+  onBackHome,
 }) => {
-  const config = PORTAL_CONFIGS[portalRole] || PORTAL_CONFIGS.student;
-  const Icon = config.icon;
-  const [query, setQuery] = useState<string>('');
-  const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const portal = PORTAL_DEFINITIONS[portalRole] || PORTAL_DEFINITIONS.teacher;
+  const [selectedCategory, setSelectedCategory] = useState<PortalCategoryCard | null>(null);
 
-  const portalSearchResults = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
+  // ==================== FULL-SCREEN CATEGORY DETAIL VIEW (ONE SECTION OPEN AT A TIME) ====================
+  if (selectedCategory) {
+    return (
+      <div className="space-y-5 animate-in fade-in duration-200">
+        {/* Top Back Navigation Bar */}
+        <div className="flex items-center justify-between gap-3 bg-white rounded-2xl p-3.5 sm:px-5 border border-slate-200 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(null)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to {portal.portalName}</span>
+          </button>
+          <div className="text-xs sm:text-sm font-black text-slate-700 truncate">
+            {portal.portalName} • {selectedCategory.title}
+          </div>
+        </div>
 
-    if (portalRole === 'teacher') {
-      const tools = ALL_130_TEACHER_TOOLS.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.category.toLowerCase().includes(q) ||
-          t.shortDesc.toLowerCase().includes(q)
-      )
-        .slice(0, 6)
-        .map((t) => ({
-          id: `tool_${t.id}`,
-          badge: `Teacher Tool #${t.number}`,
-          title: t.name,
-          subtitle: t.shortDesc,
-          targetTab: 'teacher-dashboard',
-        }));
+        {/* Selected Category Full-Screen Card */}
+        <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-lg overflow-hidden">
+          <div className={`bg-gradient-to-r ${portal.headerGradient} text-white p-6 sm:p-8`}>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center text-4xl shrink-0">
+                {selectedCategory.icon}
+              </div>
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-300 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                  {portal.portalName} • {selectedCategory.badge}
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-1">
+                  {selectedCategory.title}
+                </h2>
+                <p className="text-xs sm:text-sm text-white/90 mt-1">
+                  {selectedCategory.description}
+                </p>
+              </div>
+            </div>
+          </div>
 
-      const guides = TEACHER_LEARNING_MATERIALS.filter(
-        (g) =>
-          g.title.toLowerCase().includes(q) ||
-          g.category.toLowerCase().includes(q) ||
-          g.summary.toLowerCase().includes(q)
-      )
-        .slice(0, 4)
-        .map((g) => ({
-          id: `guide_${g.id}`,
-          badge: `Pedagogy Guide · ${g.category}`,
-          title: g.title,
-          subtitle: g.summary,
-          targetTab: 'teacher-dashboard',
-        }));
+          <div className="p-6 sm:p-8 space-y-6">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500 mb-3">
+                Key Features in This Section
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {selectedCategory.details.map((detail, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-2.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">
+                      {detail}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-      return [...tools, ...guides];
-    }
+            <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(null)}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs sm:text-sm cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
 
-    if (portalRole === 'parent') {
-      return PARENT_LEARNING_MATERIALS.filter(
-        (g) =>
-          g.title.toLowerCase().includes(q) ||
-          g.stage.toLowerCase().includes(q) ||
-          g.category.toLowerCase().includes(q) ||
-          g.summary.toLowerCase().includes(q)
-      ).map((g) => ({
-        id: g.id,
-        badge: `${g.stage} · ${g.category}`,
-        title: g.title,
-        subtitle: g.summary,
-        targetTab: 'parent-zone',
-      }));
-    }
+              <div className="flex flex-wrap items-center gap-2.5">
+                {selectedCategory.targetTab && !selectedCategory.requiresAuth ? (
+                  <button
+                    type="button"
+                    onClick={() => onExploreResources(selectedCategory.targetTab!)}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs sm:text-sm shadow-md cursor-pointer"
+                  >
+                    <span>{selectedCategory.actionLabel}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : isSignedInAsThisPortal && onOpenActiveDashboard ? (
+                  <button
+                    type="button"
+                    onClick={onOpenActiveDashboard}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md cursor-pointer"
+                  >
+                    <span>Open in {portal.portalName} Dashboard</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onLoginPortal(portal.role)}
+                      className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm shadow-md cursor-pointer"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      <span>{portal.portalName} Login</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRegisterPortal(portal.role)}
+                      className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Register {portal.portalName}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-    if (portalRole === 'school_admin') {
-      return INSTITUTION_ACADEMIC_MATERIALS.filter(
-        (m) =>
-          m.title.toLowerCase().includes(q) ||
-          m.tier.toLowerCase().includes(q) ||
-          m.streamOrSubject.toLowerCase().includes(q) ||
-          m.overview.toLowerCase().includes(q)
-      ).map((m) => ({
-        id: m.id,
-        badge: `${m.tier} · ${m.streamOrSubject}`,
-        title: m.title,
-        subtitle: m.overview,
-        targetTab: 'school-college-zone',
-      }));
-    }
-
-    if (portalRole === 'institute_admin') {
-      return ALL_18_SKILL_PROGRAMS.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.tagline.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q)
-      ).map((p) => ({
-        id: p.id,
-        badge: `Program #${p.number} · ${p.category}`,
-        title: p.title,
-        subtitle: p.tagline,
-        targetTab: 'coaching-zone',
-      }));
-    }
-
-    return [];
-  }, [portalRole, query]);
-
+  // ==================== MAIN PORTAL DASHBOARD (MAIN CATEGORY CARDS ONLY) ====================
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
-      {/* Top Portal Switcher, Shifted Quick-Navigation Buttons & Back Home */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
+    <div className="space-y-5 animate-in fade-in duration-200">
+      {onBackHome && (
+        <div className="flex items-center justify-between gap-3 bg-white rounded-2xl p-3 sm:px-5 border border-slate-200 shadow-xs">
           <button
             type="button"
             onClick={onBackHome}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-extrabold text-white cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-amber-300" />
-            <span>Back to Main Home</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Homepage</span>
           </button>
-
-          {/* Shifted Header Quick-Access Buttons (Visible inside portals) */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onExploreResources('study-materials')}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-800 hover:text-indigo-800 border border-slate-200 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Study Library</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onExploreResources('ai-tools')}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-800 hover:text-indigo-800 border border-slate-200 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>AI Tools</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onExploreResources('document-studio')}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-800 hover:text-indigo-800 border border-slate-200 text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
-            >
-              <QrCode className="w-3.5 h-3.5 text-teal-600" />
-              <span>Generators</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-100 max-w-full">
-          {PORTAL_TABS.map((t) => {
-            const active = t.role === portalRole;
-            return (
-              <button
-                key={t.role}
-                type="button"
-                onClick={() => {
-                  onSelectPortalRole(t.role);
-                  setQuery('');
-                  setSearchOpen(false);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap cursor-pointer border transition-colors ${
-                  active
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Dedicated Hero Card */}
-      <section
-        className={`rounded-3xl bg-gradient-to-br ${config.accentGradient} text-white p-6 sm:p-10 shadow-xl border ${config.accentBorder} space-y-6`}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-300">
-            <Icon className="w-4 h-4" />
-            <span>{config.badgeText}</span>
-          </div>
-          <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Isolated Role Portal · Zero Feature Clutter</span>
+          <span className="text-xs sm:text-sm font-black text-slate-700">
+            {portal.portalName} Dashboard
           </span>
-        </div>
-
-        <div className="space-y-3 max-w-3xl">
-          <h1 className="text-2xl sm:text-4xl font-display font-black tracking-tight leading-tight">
-            {config.title}
-          </h1>
-          <p className="text-sm sm:text-base text-slate-200 leading-relaxed">{config.subtitle}</p>
-        </div>
-
-        {config.verificationNote && (
-          <div className="px-4 py-2.5 rounded-2xl bg-amber-400/15 border border-amber-300/30 text-amber-100 text-xs font-semibold max-w-2xl">
-            Verification Policy: {config.verificationNote}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          {isSignedInAsThisPortal && onOpenActiveDashboard ? (
-            <button
-              type="button"
-              onClick={onOpenActiveDashboard}
-              className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-md"
-            >
-              <span>Open My {config.title.replace(' Portal', '')} Dashboard</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => onLoginPortal(portalRole)}
-                className={`px-6 py-3 rounded-2xl font-black text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-md transition-all ${config.buttonAccent}`}
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Login to {config.title.replace(' Portal', '')}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onRegisterPortal(portalRole)}
-                className="px-6 py-3 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-black text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-sm transition-all"
-              >
-                <UserPlus className="w-4 h-4 text-indigo-700" />
-                <span>Register New Account</span>
-              </button>
-            </>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onExploreResources(config.publicPreviewTab)}
-            className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm cursor-pointer flex items-center gap-2 transition-all"
-          >
-            <BookOpen className="w-4 h-4 text-amber-300" />
-            <span>{config.publicPreviewLabel}</span>
-          </button>
-        </div>
-      </section>
-
-      {/* Portal-Scoped Search Bar */}
-      {portalRole === 'student' ? (
-        <GlobalStudySearchBar
-          defaultBoard="Maharashtra"
-          defaultClass="Class 5"
-          onJumpToResult={() => onExploreResources('study-materials')}
-          onOpenToolTab={(tab) => onExploreResources(tab)}
-          headline="Search Student Zone Syllabus, Textbooks, Chapter Notes, Solutions, Worksheets & AI Tools"
-        />
-      ) : (
-        <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
-                {config.title} Content Search
-              </span>
-              <h2 className="text-sm sm:text-base font-display font-black text-slate-900 mt-1">
-                Search inside {config.title}
-              </h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {config.searchChips.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => {
-                    setQuery(chip);
-                    setSearchOpen(true);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 text-[11px] font-bold text-slate-700 hover:text-indigo-800 border border-slate-200 cursor-pointer"
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setSearchOpen(true);
-            }}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-          >
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setSearchOpen(true);
-                }}
-                onFocus={() => setSearchOpen(true)}
-                placeholder={config.searchPlaceholder}
-                className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery('');
-                    setSearchOpen(false);
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-500 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm cursor-pointer flex items-center justify-center gap-1.5 shadow-xs shrink-0"
-            >
-              <Search className="w-4 h-4 text-amber-300" />
-              <span>Search {config.title.replace(' Zone Portal', '')}</span>
-            </button>
-          </form>
-
-          {searchOpen && query.trim().length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 space-y-2.5 max-h-80 overflow-y-auto">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-600">
-                <span>
-                  Found {portalSearchResults.length} matching item{portalSearchResults.length === 1 ? '' : 's'} in {config.title}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSearchOpen(false)}
-                  className="text-slate-500 hover:text-slate-900 font-black cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-              {portalSearchResults.length === 0 ? (
-                <div className="text-xs text-slate-600 py-3 text-center">
-                  No direct matches found for &ldquo;{query}&rdquo; in {config.title}.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {portalSearchResults.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        onExploreResources(item.targetTab);
-                        setSearchOpen(false);
-                      }}
-                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-indigo-50 border border-slate-200 text-left cursor-pointer transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900">
-                          {item.badge}
-                        </span>
-                        <div className="text-xs font-black text-slate-900 truncate mt-1">{item.title}</div>
-                        <div className="text-[11px] text-slate-500 truncate">{item.subtitle}</div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-indigo-700 shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Capabilities Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <h2 className="text-base font-display font-black text-slate-900 flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-600" />
-            <span>What This Dedicated Portal Includes</span>
-          </h2>
-          <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700">
-            {config.highlights.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="leading-snug font-medium">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {/* 1. COMPACT PORTAL APP HEADER */}
+      <section className={`rounded-3xl bg-gradient-to-r ${portal.headerGradient} text-white p-5 sm:p-7 shadow-lg`}>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/15 border-2 border-white/30 flex items-center justify-center text-3xl shrink-0 shadow-inner">
+              {portal.icon}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-300 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                  {portal.portalName}
+                </span>
+                <span className="text-xs font-extrabold text-white/90">
+                  {portal.tagline}
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight mt-1">
+                Welcome to {portal.portalName}
+              </h1>
+              <p className="text-xs sm:text-sm text-white/90 font-medium mt-0.5 max-w-2xl">
+                {portal.description}
+              </p>
+            </div>
+          </div>
 
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
-          <div className="space-y-2">
-            <h2 className="text-base font-display font-black text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-              <span>Interactive Tools &amp; Skill Studios</span>
+          {/* Dedicated Portal Login & Register Actions */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {isSignedInAsThisPortal && onOpenActiveDashboard ? (
+              <button
+                type="button"
+                onClick={onOpenActiveDashboard}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-300 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-md cursor-pointer"
+              >
+                <span>Open Active Workspace</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onLoginPortal(portal.role)}
+                  className="inline-flex items-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-2xl bg-white text-slate-950 hover:bg-slate-100 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>{portal.portalName} Login</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRegisterPortal(portal.role)}
+                  className="inline-flex items-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-400 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Register</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 2. MAIN CATEGORY CARDS ONLY */}
+      <div>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-indigo-600" />
+              <span>{portal.portalName} Main Categories</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              Access our AI Study &amp; Educator Tools Studio (powered by Gemini when configured) and our hands-on Vedic Maths, Japanese Soroban Abacus &amp; 4-Level Phonics Audio Lab.
+            <p className="text-xs text-slate-500 font-medium">
+              Click any category card below to open that section
             </p>
           </div>
-          <div className="flex flex-wrap gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={() => onExploreResources('ai-tools')}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black cursor-pointer"
-            >
-              Open 10 AI Tools Studio
-            </button>
-            <button
-              type="button"
-              onClick={() => onExploreResources('core-skills-lab')}
-              className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
-            >
-              Open Vedic / Abacus / Phonics Lab
-            </button>
-          </div>
         </div>
-      </div>
 
-      {/* Shifted Portal Quick-Action & Capability Icons Strip (Visible when Portal Opens) */}
-      <div
-        aria-label="Portal Capabilities Quick Bar"
-        className="w-full rounded-2xl bg-[#07152e] text-white border border-sky-400/35 px-3.5 py-3 shadow-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2"
-      >
-        {[
-          {
-            id: 'portal-pill-ai-tools',
-            icon: Sparkles,
-            title: '100+ AI Tools',
-            subtitle: '& Generators',
-            onClick: () => onExploreResources('ai-tools'),
-          },
-          {
-            id: 'portal-pill-study-library',
-            icon: BookOpen,
-            title: 'Complete Study',
-            subtitle: 'Material Library',
-            onClick: () => onExploreResources('study-materials'),
-          },
-          {
-            id: 'portal-pill-pdf-word-excel',
-            icon: FileDown,
-            title: 'PDF, Word, Excel',
-            subtitle: '& More Formats',
-            onClick: () => onExploreResources('document-studio'),
-          },
-          {
-            id: 'portal-pill-safe-secure',
-            icon: ShieldCheck,
-            title: 'Safe & Secure',
-            subtitle: 'for Everyone',
-            onClick: () => onLoginPortal(portalRole),
-          },
-          {
-            id: 'portal-pill-all-devices',
-            icon: Monitor,
-            title: 'Works on All Devices',
-            subtitle: '(Web, Mobile, TV)',
-            onClick: () => onExploreResources('all-courses'),
-          },
-        ].map((pill) => {
-          const PillIcon = pill.icon;
-          return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {portal.categories.map((cat) => (
             <button
-              key={pill.id}
+              key={cat.id}
               type="button"
-              onClick={pill.onClick}
-              className="min-h-[44px] px-2.5 py-1.5 rounded-xl hover:bg-white/10 text-left flex items-center gap-2.5 cursor-pointer transition-colors group"
+              onClick={() => setSelectedCategory(cat)}
+              className={`group rounded-3xl bg-white border-2 border-slate-200 ${portal.cardBorderHover} p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl flex flex-col justify-between gap-4 cursor-pointer`}
             >
-              <span className="w-8 h-8 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-300 flex items-center justify-center shrink-0 group-hover:bg-amber-400 group-hover:text-slate-950 transition-colors">
-                <PillIcon className="w-4 h-4" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[11px] font-black text-white leading-tight truncate">
-                  {pill.title}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="w-13 h-13 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-center text-2xl shadow-2xs group-hover:scale-105 transition-transform">
+                    {cat.icon}
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[10px] font-black">
+                    {cat.badge}
+                  </span>
                 </div>
-                <div className="text-[10px] font-bold text-sky-200 leading-tight truncate">
-                  {pill.subtitle}
-                </div>
+                <h3 className={`text-base sm:text-lg font-black text-slate-900 group-hover:${portal.accentText} leading-snug`}>
+                  {cat.title}
+                </h3>
+                <p className="text-xs text-slate-600 font-medium mt-1 leading-relaxed">
+                  {cat.description}
+                </p>
+              </div>
+
+              <div className={`pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-extrabold ${portal.accentText}`}>
+                <span>Open Category</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </button>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
