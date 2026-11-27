@@ -1223,9 +1223,7 @@ const AppContent: React.FC = () => {
 
   const planInfo = getStudentPlanInfo(currentStudent, undefined, currentStudent?.classLevel, activeBoard);
   const isPremiumActive = planInfo.effectivePlan === 'premium' || planInfo.effectivePlan === 'basic';
-  const isPublicHomepageView =
-    currentTab === 'public-home' ||
-    (currentTab === 'dashboard' && isLearningPortal && !currentStudent);
+  const isPublicHomepageView = false;
 
   return (
     <div

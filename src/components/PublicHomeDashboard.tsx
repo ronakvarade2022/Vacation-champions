@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { ClassLevel, EducationBoard, PortalRole, SubjectName } from '../types';
 import type { AuthModalTab, PortalRegisterRole } from './AuthModal';
 import { MainMenuId, NavSubActionId } from '../data/navigationConfig';
-import { InteractiveWallpaperHero } from './InteractiveWallpaperHero';
+import { safeScrollToElementById } from '../utils/smartTvCompatibility';
+import { ReferenceShowcaseSections } from './ReferenceShowcaseSections';
 
 export type HomeScrollTarget =
   | 'home-overview'
@@ -41,16 +42,17 @@ interface PublicHomeDashboardProps {
 }
 
 /**
- * PUBLIC HOMEPAGE (https://mystudyzone.in)
- * Renders the full-screen MyStudyZone high-resolution educational wallpaper homepage
- * with Mobile View (Portrait) and Desktop Site (Landscape) switcher at top-right
- * and all 5 clickable portal cards visible on screen.
+ * PUBLIC HOMEPAGE DASHBOARD (https://mystudyzone.in)
+ * Renders the complete, well-organized Student Portal / Main Learning Dashboard
+ * (ReferenceShowcaseSections) directly on the homepage for easy handling and navigation.
  */
 export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   selectedBoard,
   selectedClass,
   onSelectBoard,
   onSelectClass,
+  scrollTarget,
+  onClearScrollTarget,
   onOpenDemo,
   onNavigateZone,
   onOpenAuth,
@@ -62,33 +64,56 @@ export const PublicHomeDashboard: React.FC<PublicHomeDashboardProps> = ({
   currentUserName,
   isDesktopMode = false,
   onToggleViewMode,
-  onSetViewMode,
   onMenuAction,
+  activeMainSection,
+  onSelectMainSection,
+  activeSubActionId,
   onGlobalSearchJump,
 }) => {
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const timer = setTimeout(() => {
+      safeScrollToElementById(scrollTarget, { behavior: 'smooth', block: 'start' });
+      if (onClearScrollTarget) onClearScrollTarget();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [scrollTarget, onClearScrollTarget]);
+
   return (
-    <div id="home-overview" className="w-full">
-      <InteractiveWallpaperHero
+    <div id="home-overview" className="w-full space-y-8 pb-10">
+      <ReferenceShowcaseSections
         selectedBoard={selectedBoard}
         selectedClass={selectedClass}
         onSelectBoard={onSelectBoard}
         onSelectClass={onSelectClass}
-        isAuthenticated={isAuthenticated}
-        currentRole={currentRole}
-        currentUserName={currentUserName}
-        isDesktopMode={isDesktopMode}
-        onToggleViewMode={onToggleViewMode}
-        onSetViewMode={onSetViewMode}
         onOpenDemo={onOpenDemo}
-        onOpenMembership={onOpenMembership}
-        onMenuAction={onMenuAction}
         onNavigateTab={(tab, subSection, subject) =>
           onNavigateZone(tab, subSection || 'overview', subject)
         }
         onGlobalSearchJump={onGlobalSearchJump}
-        onOpenAuth={onOpenAuth}
+        onMenuAction={onMenuAction}
+        onOpenAuth={(defaultTab) => onOpenAuth(defaultTab)}
         onOpenPanel={onOpenPanel}
         onOpenPortalLanding={onOpenPortalLanding}
+        isAuthenticated={isAuthenticated}
+        currentRole={currentRole}
+        currentUserName={currentUserName}
+        onOpenMembership={onOpenMembership}
+        onStartLearningClick={() => onNavigateZone('all-courses')}
+        viewMode={isDesktopMode ? 'desktop' : 'auto'}
+        onToggleViewMode={onToggleViewMode}
+        activeMainSection={activeMainSection}
+        onSelectMainSection={onSelectMainSection}
+        activeSubActionId={activeSubActionId}
+        progressMetrics={{
+          isLoggedIn: isAuthenticated,
+          studentName: currentUserName,
+          coursesCompleted: 0,
+          practiceTests: 0,
+          achievements: 0,
+          progressPercent: 0,
+          badgesList: [],
+        }}
       />
     </div>
   );
