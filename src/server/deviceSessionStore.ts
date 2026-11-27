@@ -12,7 +12,7 @@ import {
 } from '../../firebase/admin.ts';
 
 export const SESSION_LOGGED_IN_ELSEWHERE_MESSAGE =
-  'Your account has been logged in on another device. Please log in again.';
+  'Your account has been signed in on another device. Please log in again if you want to use this device.';
 
 export const SINGLE_DEVICE_BLOCK_MESSAGE = SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
 
@@ -20,11 +20,40 @@ export const SINGLE_DEVICE_BLOCK_MESSAGE = SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
 export const SESSION_INACTIVITY_TTL_MS = 12 * 60 * 60 * 1000;
 const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_RECOVERY_COUNT_24H = 3;
+const MAX_IN_MEMORY_SESSIONS = 5000;
 
 export const serverDeviceSessions = new Map<string, DeviceSessionRecord>();
+const userSessionLocks = new Map<string, Promise<unknown>>();
+
+async function withUserSessionLock<T>(
+  userId: string,
+  task: () => Promise<T>
+): Promise<T> {
+  const cleanId = String(userId || '').trim() || '__anonymous__';
+  const previous = userSessionLocks.get(cleanId) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => task());
+  const tracked = next.finally(() => {
+    if (userSessionLocks.get(cleanId) === tracked) {
+      userSessionLocks.delete(cleanId);
+    }
+  });
+  userSessionLocks.set(cleanId, tracked);
+  return next;
+}
+
+function pruneExpiredInMemorySessions(nowMs: number = Date.now()): void {
+  if (serverDeviceSessions.size <= MAX_IN_MEMORY_SESSIONS) return;
+  for (const [uid, rec] of serverDeviceSessions.entries()) {
+    if (rec.status !== 'ACTIVE' || Number(rec.expiresAtMs || 0) <= nowMs) {
+      serverDeviceSessions.delete(uid);
+    }
+    if (serverDeviceSessions.size <= MAX_IN_MEMORY_SESSIONS) break;
+  }
+}
 
 export function clearInMemoryDeviceSessionsForTests(): void {
   serverDeviceSessions.clear();
+  userSessionLocks.clear();
 }
 
 export function generateActiveSessionId(): string {
@@ -71,6 +100,7 @@ export interface ValidateSessionResult {
     | 'NO_ACTIVE_SESSION'
     | 'TERMINATED'
     | 'EXPIRED'
+    | 'SESSION_SUPERSEDED'
     | 'HARDWARE_OR_SESSION_MISMATCH';
   terminatedBy?: DeviceSessionRecord['terminatedBy'];
   error?: string;
@@ -102,17 +132,6 @@ export function isSessionExpired(
   return !Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs;
 }
 
-function toPublicDeviceSummary(record: DeviceSessionRecord) {
-  return {
-    deviceName: record.deviceName || 'Registered Device',
-    deviceType: normalizeDeviceType(record.deviceType),
-    browser: record.browser || 'Browser',
-    os: record.os || 'OS',
-    loginAt: record.loginAt,
-    lastActivityAt: record.lastActivityAt
-  };
-}
-
 export async function loadDeviceSessionFromStore(
   userId: string
 ): Promise<DeviceSessionRecord | null> {
@@ -129,6 +148,7 @@ export async function loadDeviceSessionFromStore(
     if (docData && docData.userId && docData.activeSessionId) {
       const record = docData as DeviceSessionRecord;
       serverDeviceSessions.set(cleanId, record);
+      pruneExpiredInMemorySessions();
       return record;
     }
   } catch {
@@ -142,6 +162,7 @@ async function persistDeviceSessionToStore(
   record: DeviceSessionRecord
 ): Promise<void> {
   serverDeviceSessions.set(record.userId, record);
+  pruneExpiredInMemorySessions();
   try {
     await serverSetDoc('device_sessions', record.userId, record as Record<string, any>, {
       merge: false
@@ -160,6 +181,7 @@ function buildFreshActiveSession(
   const nowIso = new Date(nowMs).toISOString();
   const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
   const expiresAt = new Date(expiresAtMs).toISOString();
+  const nextVersion = Math.max(1, Number(prior?.sessionVersion || 0) + 1);
 
   return {
     userId: String(input.userId).trim(),
@@ -168,6 +190,7 @@ function buildFreshActiveSession(
     studentName: String(input.studentName || prior?.studentName || 'Student').slice(0, 100),
     accountRole: input.accountRole === 'teacher' ? 'teacher' : 'student',
     activeSessionId: sessionIdOverride || generateActiveSessionId(),
+    sessionVersion: nextVersion,
     deviceId: String(input.deviceId).trim().slice(0, 128),
     hardwareSignature: String(input.hardwareSignature).trim().slice(0, 128),
     deviceSignature: String(input.deviceSignature).trim().slice(0, 128),
@@ -181,14 +204,18 @@ function buildFreshActiveSession(
     lastActivityAt: nowIso,
     expiresAt,
     expiresAtMs,
+    previousSessionId: prior?.activeSessionId || undefined,
+    previousDeviceId: prior?.deviceId || undefined,
     recoveryCount24h: prior?.recoveryCount24h || 0,
     lastRecoveryAt: prior?.lastRecoveryAt
   };
 }
 
 /**
- * Acquires or resumes the single active session for an account.
- * Strictly blocks if another device already holds a non-expired ACTIVE session.
+ * Latest Login Wins:
+ * Acquires the single authoritative active session for a student account atomically.
+ * Never blocks login on a new device; immediately invalidates any prior active session
+ * (across phones, browsers, offline/crashed tabs, or cleared cache) and bumps sessionVersion.
  */
 export async function acquireDeviceSessionServer(
   input: DeviceClientMetadataInput,
@@ -212,75 +239,33 @@ export async function acquireDeviceSessionServer(
     };
   }
 
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    const fresh = buildFreshActiveSession(
+      input,
+      nowMs,
+      existing,
+      input.preferredSessionId
+    );
+    await persistDeviceSessionToStore(fresh);
 
-  if (existing && !isSessionExpired(existing, nowMs)) {
-    const isSamePhysicalDevice =
-      existing.deviceId === cleanDeviceId &&
-      existing.hardwareSignature === cleanHwSig &&
-      existing.deviceSignature === cleanDevSig;
-
-    if (!isSamePhysicalDevice) {
-      // Requirement 2: When the same student logs in on another device or browser,
-      // automatically invalidate the previous session and issue a fresh active session.
-      const fresh = buildFreshActiveSession(input, nowMs, existing);
-      fresh.previousSessionId = existing.activeSessionId;
-      fresh.previousDeviceId = existing.deviceId;
-      await persistDeviceSessionToStore(fresh);
-      return {
-        allowed: true,
-        resumed: false,
-        session: fresh
-      };
-    }
-
-    // Same physical device & browser safely resuming or re-logging in
-    const nowIso = new Date(nowMs).toISOString();
-    const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
-    const resumedRecord: DeviceSessionRecord = {
-      ...existing,
-      firebaseUid: input.firebaseUid || existing.firebaseUid,
-      email: normalizeEmail(input.email || existing.email),
-      studentName: String(input.studentName || existing.studentName || 'Student').slice(0, 100),
-      accountRole: input.accountRole === 'teacher' ? 'teacher' : existing.accountRole,
-      activeSessionId: input.preferredSessionId || existing.activeSessionId,
-      deviceName: String(input.deviceName || existing.deviceName || 'Registered Browser').slice(0, 120),
-      deviceType: normalizeDeviceType(input.deviceType || existing.deviceType),
-      browser: String(input.browser || existing.browser || 'Browser').slice(0, 60),
-      os: String(input.os || existing.os || 'Unknown OS').slice(0, 60),
-      userAgentSummary: String(input.userAgentSummary || existing.userAgentSummary || '').slice(0, 200),
-      status: 'ACTIVE',
-      lastActivityAt: nowIso,
-      expiresAt: new Date(expiresAtMs).toISOString(),
-      expiresAtMs
-    };
-
-    await persistDeviceSessionToStore(resumedRecord);
     return {
       allowed: true,
-      resumed: true,
-      session: resumedRecord
+      resumed: false,
+      session: fresh
     };
-  }
-
-  // No active session, or previous session expired / terminated: issue fresh session
-  const fresh = buildFreshActiveSession(input, nowMs, existing);
-  await persistDeviceSessionToStore(fresh);
-
-  return {
-    allowed: true,
-    resumed: false,
-    session: fresh
-  };
+  });
 }
 
 /**
- * Validates whether the caller's session ID + hardware signature match the authoritative active session.
+ * Validates whether the caller's session ID, sessionVersion, and hardware signature
+ * match the authoritative active session.
  */
 export async function validateDeviceSessionServer(
   input: {
     userId: string;
     activeSessionId?: string;
+    sessionVersion?: number;
     deviceId: string;
     hardwareSignature: string;
     deviceSignature: string;
@@ -306,137 +291,154 @@ export async function validateDeviceSessionServer(
     };
   }
 
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
 
-  if (!existing) {
-    if (
-      input.allowBootstrapIfMissing &&
-      input.deviceId?.length >= 6 &&
-      input.hardwareSignature?.length >= 8 &&
-      input.deviceSignature?.length >= 8
-    ) {
-      const preferredSid =
-        input.activeSessionId &&
-        input.activeSessionId.length >= 8 &&
-        input.activeSessionId.length <= 128
-          ? input.activeSessionId
-          : undefined;
-      const fresh = buildFreshActiveSession(
-        {
-          userId: cleanUserId,
-          firebaseUid: input.firebaseUid || cleanUserId,
-          email: input.email || '',
-          studentName: input.studentName || 'Student',
-          accountRole: input.accountRole || 'student',
-          deviceId: input.deviceId,
-          hardwareSignature: input.hardwareSignature,
-          deviceSignature: input.deviceSignature,
-          deviceName: input.deviceName,
-          deviceType: input.deviceType,
-          browser: input.browser,
-          os: input.os,
-          userAgentSummary: input.userAgentSummary
-        },
-        nowMs,
-        null,
-        preferredSid
-      );
-      await persistDeviceSessionToStore(fresh);
+    if (!existing) {
+      if (
+        input.allowBootstrapIfMissing &&
+        input.deviceId?.length >= 6 &&
+        input.hardwareSignature?.length >= 8 &&
+        input.deviceSignature?.length >= 8
+      ) {
+        const preferredSid =
+          input.activeSessionId &&
+          input.activeSessionId.length >= 8 &&
+          input.activeSessionId.length <= 128
+            ? input.activeSessionId
+            : undefined;
+        const fresh = buildFreshActiveSession(
+          {
+            userId: cleanUserId,
+            firebaseUid: input.firebaseUid || cleanUserId,
+            email: input.email || '',
+            studentName: input.studentName || 'Student',
+            accountRole: input.accountRole || 'student',
+            deviceId: input.deviceId,
+            hardwareSignature: input.hardwareSignature,
+            deviceSignature: input.deviceSignature,
+            deviceName: input.deviceName,
+            deviceType: input.deviceType,
+            browser: input.browser,
+            os: input.os,
+            userAgentSummary: input.userAgentSummary
+          },
+          nowMs,
+          null,
+          preferredSid
+        );
+        await persistDeviceSessionToStore(fresh);
+        return {
+          valid: true,
+          bootstrapped: true,
+          session: fresh
+        };
+      }
+
+      return {
+        valid: false,
+        reason: 'NO_ACTIVE_SESSION',
+        error: SINGLE_DEVICE_BLOCK_MESSAGE
+      };
+    }
+
+    if (existing.status === 'TERMINATED') {
+      const isAdmin = existing.terminatedBy === 'ADMIN';
+      const isRecovery = existing.terminatedBy === 'USER_RECOVERY';
+      const isNewDevice = existing.terminatedBy === 'NEW_DEVICE_LOGIN';
+      return {
+        valid: false,
+        reason: 'TERMINATED',
+        terminatedBy: existing.terminatedBy,
+        error: isAdmin
+          ? 'Your session was terminated by the MyStudyZone Administrator. Please log in again.'
+          : isRecovery || isNewDevice
+          ? SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+          : 'Your account session was signed out. Please log in again.'
+      };
+    }
+
+    if (existing.status === 'EXPIRED' || Number(existing.expiresAtMs || 0) <= nowMs) {
+      const expiredRecord: DeviceSessionRecord = {
+        ...existing,
+        status: 'EXPIRED',
+        terminatedBy: existing.terminatedBy || 'EXPIRED',
+        terminatedAt: existing.terminatedAt || new Date(nowMs).toISOString(),
+        terminationReason: existing.terminationReason || 'Session expired due to inactivity'
+      };
+      await persistDeviceSessionToStore(expiredRecord);
+      return {
+        valid: false,
+        reason: 'EXPIRED',
+        error: 'Your session has expired due to inactivity. Please log in again.'
+      };
+    }
+
+    const sameHardwareAndBrowser =
+      existing.deviceId === input.deviceId &&
+      existing.hardwareSignature === input.hardwareSignature &&
+      existing.deviceSignature === input.deviceSignature;
+
+    const sameSessionId = Boolean(
+      input.activeSessionId && existing.activeSessionId === input.activeSessionId
+    );
+
+    const parsedInputVersion =
+      input.sessionVersion !== undefined && Number.isFinite(Number(input.sessionVersion))
+        ? Number(input.sessionVersion)
+        : undefined;
+    const versionMismatch =
+      parsedInputVersion !== undefined &&
+      existing.sessionVersion !== undefined &&
+      parsedInputVersion !== Number(existing.sessionVersion);
+
+    if (versionMismatch || (input.activeSessionId && !sameSessionId)) {
+      return {
+        valid: false,
+        reason: 'SESSION_SUPERSEDED',
+        error: SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      };
+    }
+
+    if (!sameHardwareAndBrowser) {
+      return {
+        valid: false,
+        reason: 'HARDWARE_OR_SESSION_MISMATCH',
+        error: SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      };
+    }
+
+    // Refresh sliding inactivity expiration if >= 30 seconds since last activity update
+    const lastActivityMs = Date.parse(existing.lastActivityAt || '') || 0;
+    if (nowMs - lastActivityMs >= 30_000) {
+      const refreshed: DeviceSessionRecord = {
+        ...existing,
+        lastActivityAt: new Date(nowMs).toISOString(),
+        expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+        expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+      };
+      await persistDeviceSessionToStore(refreshed);
       return {
         valid: true,
-        bootstrapped: true,
-        session: fresh
+        session: refreshed
       };
     }
 
     return {
-      valid: false,
-      reason: 'NO_ACTIVE_SESSION',
-      error: SINGLE_DEVICE_BLOCK_MESSAGE
-    };
-  }
-
-  if (existing.status === 'TERMINATED') {
-    const isAdmin = existing.terminatedBy === 'ADMIN';
-    const isRecovery = existing.terminatedBy === 'USER_RECOVERY';
-    const isNewDevice = existing.terminatedBy === 'NEW_DEVICE_LOGIN';
-    return {
-      valid: false,
-      reason: 'TERMINATED',
-      terminatedBy: existing.terminatedBy,
-      error: isAdmin
-        ? 'Your session was terminated by the MyStudyZone Administrator. Please log in again.'
-        : (isRecovery || isNewDevice)
-        ? SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
-        : 'Your account session was logged out. Please sign in again.'
-    };
-  }
-
-  if (existing.status === 'EXPIRED' || Number(existing.expiresAtMs || 0) <= nowMs) {
-    const expiredRecord: DeviceSessionRecord = {
-      ...existing,
-      status: 'EXPIRED',
-      terminatedBy: existing.terminatedBy || 'EXPIRED',
-      terminatedAt: existing.terminatedAt || new Date(nowMs).toISOString(),
-      terminationReason: existing.terminationReason || 'Session expired due to inactivity'
-    };
-    await persistDeviceSessionToStore(expiredRecord);
-    return {
-      valid: false,
-      reason: 'EXPIRED',
-      error: 'Your session has expired due to inactivity. Please log in again.'
-    };
-  }
-
-  // Strict zero-trust comparison: activeSessionId + deviceId + hardwareSignature + deviceSignature
-  const sameHardwareAndBrowser =
-    existing.deviceId === input.deviceId &&
-    existing.hardwareSignature === input.hardwareSignature &&
-    existing.deviceSignature === input.deviceSignature;
-
-  const sameSessionId = Boolean(
-    input.activeSessionId && existing.activeSessionId === input.activeSessionId
-  );
-
-  // Allow safe browser reopen on the exact same physical device & browser if caller didn't send an old conflicting session
-  if (!sameHardwareAndBrowser || (!sameSessionId && input.activeSessionId)) {
-    return {
-      valid: false,
-      reason: 'HARDWARE_OR_SESSION_MISMATCH',
-      error: SINGLE_DEVICE_BLOCK_MESSAGE
-    };
-  }
-
-  // Refresh sliding inactivity expiration if > 30 seconds since last update
-  const lastActivityMs = Date.parse(existing.lastActivityAt || '') || 0;
-  if (nowMs - lastActivityMs >= 30_000) {
-    const refreshed: DeviceSessionRecord = {
-      ...existing,
-      lastActivityAt: new Date(nowMs).toISOString(),
-      expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
-      expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
-    };
-    await persistDeviceSessionToStore(refreshed);
-    return {
       valid: true,
-      session: refreshed
+      session: existing
     };
-  }
-
-  return {
-    valid: true,
-    session: existing
-  };
+  });
 }
 
 /**
- * Heartbeat updates lastActivityAt & extends expiresAtMs ONLY for the active device & session.
- * Supports authenticated recovery after server restarts when the caller presents a verified Firebase Auth ID token.
+ * Heartbeat updates lastActivityAt & extends expiresAtMs ONLY for the active device, session ID & version.
  */
 export async function heartbeatDeviceSessionServer(
   input: {
     userId: string;
     activeSessionId: string;
+    sessionVersion?: number;
     deviceId: string;
     hardwareSignature: string;
     deviceSignature: string;
@@ -453,27 +455,40 @@ export async function heartbeatDeviceSessionServer(
   },
   nowMs: number = Date.now()
 ): Promise<ValidateSessionResult> {
+  const cleanUserId = String(input.userId || '').trim();
   const check = await validateDeviceSessionServer(input, nowMs);
-  if (!check.valid || !check.session) {
+  if (!check.valid || !check.session || !cleanUserId) {
     return check;
   }
 
-  const updated: DeviceSessionRecord = {
-    ...check.session,
-    lastActivityAt: new Date(nowMs).toISOString(),
-    expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
-    expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
-  };
-  await persistDeviceSessionToStore(updated);
-  return {
-    valid: true,
-    bootstrapped: Boolean(check.bootstrapped),
-    session: updated
-  };
+  return withUserSessionLock(cleanUserId, async () => {
+    // Re-read inside lock in case a newer device acquired during validation await
+    const latest = await loadDeviceSessionFromStore(cleanUserId);
+    if (!latest || latest.status !== 'ACTIVE' || latest.activeSessionId !== check.session!.activeSessionId) {
+      return {
+        valid: false,
+        reason: 'SESSION_SUPERSEDED',
+        error: SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      };
+    }
+
+    const updated: DeviceSessionRecord = {
+      ...latest,
+      lastActivityAt: new Date(nowMs).toISOString(),
+      expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+      expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+    };
+    await persistDeviceSessionToStore(updated);
+    return {
+      valid: true,
+      bootstrapped: Boolean(check.bootstrapped),
+      session: updated
+    };
+  });
 }
 
 /**
- * Releases an active session immediately on logout so another device can log in.
+ * Releases an active session immediately on explicit logout so no stale session remains active.
  */
 export async function releaseDeviceSessionServer(
   input: {
@@ -488,43 +503,42 @@ export async function releaseDeviceSessionServer(
   const cleanUserId = String(input.userId || '').trim();
   if (!cleanUserId) return { released: false, error: 'userId is required.' };
 
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  if (!existing) {
-    return { released: true };
-  }
-
-  // Prevent Device B from blindly releasing Device A's active session unless same device/session
-  if (existing.status === 'ACTIVE' && !isSessionExpired(existing, nowMs)) {
-    const matchesSession =
-      !input.activeSessionId || existing.activeSessionId === input.activeSessionId;
-    const matchesHardware =
-      !input.hardwareSignature || existing.hardwareSignature === input.hardwareSignature;
-    if (!matchesSession || !matchesHardware) {
-      return {
-        released: false,
-        error: SINGLE_DEVICE_BLOCK_MESSAGE
-      };
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    if (!existing) {
+      return { released: true };
     }
-  }
 
-  const nowIso = new Date(nowMs).toISOString();
-  const terminated: DeviceSessionRecord = {
-    ...existing,
-    status: 'TERMINATED',
-    terminatedBy: 'USER_LOGOUT',
-    terminatedAt: nowIso,
-    terminationReason: input.reason || 'Logged out by user',
-    expiresAt: nowIso,
-    expiresAtMs: nowMs
-  };
-  await persistDeviceSessionToStore(terminated);
-  return { released: true };
+    // Do not let an old/superseded device accidentally terminate a newer device's active session!
+    if (existing.status === 'ACTIVE' && !isSessionExpired(existing, nowMs)) {
+      const matchesSession =
+        !input.activeSessionId || existing.activeSessionId === input.activeSessionId;
+      const matchesHardware =
+        !input.hardwareSignature || existing.hardwareSignature === input.hardwareSignature;
+      if (!matchesSession || !matchesHardware) {
+        return {
+          released: true
+        };
+      }
+    }
+
+    const nowIso = new Date(nowMs).toISOString();
+    const terminated: DeviceSessionRecord = {
+      ...existing,
+      status: 'TERMINATED',
+      terminatedBy: 'USER_LOGOUT',
+      terminatedAt: nowIso,
+      terminationReason: input.reason || 'Logged out by user',
+      expiresAt: nowIso,
+      expiresAtMs: nowMs
+    };
+    await persistDeviceSessionToStore(terminated);
+    return { released: true };
+  });
 }
 
 /**
- * Lost / Damaged Device Recovery:
- * Verifies user identity (verified Firebase token UID + registered email/mobile match),
- * rate-limits abuse, terminates the prior device session, and activates the new device.
+ * Legacy-compatible endpoint helper (delegates safely under Latest Login Wins).
  */
 export async function recoverDeviceSessionServer(
   input: DeviceClientMetadataInput & { mobile?: string },
@@ -543,91 +557,55 @@ export async function recoverDeviceSessionServer(
     return {
       success: false,
       statusCode: 400,
-      error: 'Registered email and account ID are required for device recovery.'
+      error: 'Registered email and account ID are required.'
     };
   }
 
-  if (providedMobile.length !== 10) {
-    return {
-      success: false,
-      statusCode: 400,
-      error: 'Please enter your registered 10-digit mobile number to verify device recovery.'
-    };
-  }
-
-  // Verify against stored student profile if available
-  let storedStudent: Record<string, any> | null = null;
-  try {
-    storedStudent = await serverGetDoc('students', cleanUserId);
-    if (!storedStudent && cleanEmail) {
-      const matched = await serverQueryEqualsLimit1('students', 'email', cleanEmail);
-      if (matched) storedStudent = matched.data;
-    }
-  } catch {
-    storedStudent = null;
-  }
-
-  if (storedStudent) {
-    const storedEmail = normalizeEmail(storedStudent.email);
-    const storedMobile = normalizeMobileDigits(storedStudent.mobile);
-    if (storedEmail && storedEmail !== cleanEmail) {
-      return {
-        success: false,
-        statusCode: 403,
-        error: 'Email address does not match the registered student account.'
-      };
-    }
-    if (storedMobile && storedMobile.length === 10 && storedMobile !== providedMobile) {
-      return {
-        success: false,
-        statusCode: 403,
-        error: 'Entered mobile number does not match the registered mobile number for this account.'
-      };
-    }
-  }
-
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  if (existing && existing.email && normalizeEmail(existing.email) !== cleanEmail) {
-    return {
-      success: false,
-      statusCode: 403,
-      error: 'Email does not match the active device session owner.'
-    };
-  }
-
-  // Enforce 24-hour rolling recovery rate limit to deter credential sharing
-  let nextCount = 1;
-  if (existing?.lastRecoveryAt) {
-    const lastRecMs = Date.parse(existing.lastRecoveryAt) || 0;
-    if (nowMs - lastRecMs < RECOVERY_WINDOW_MS) {
-      const currentCount = Number(existing.recoveryCount24h || 0);
-      if (currentCount >= MAX_RECOVERY_COUNT_24H) {
-        return {
-          success: false,
-          statusCode: 429,
-          error:
-            'Device recovery limit reached (max 3 recoveries per 24 hours). Please contact MyStudyZone support or wait 24 hours.'
-        };
+  return withUserSessionLock(cleanUserId, async () => {
+    if (providedMobile.length === 10) {
+      let storedStudent: Record<string, any> | null = null;
+      try {
+        storedStudent = await serverGetDoc('students', cleanUserId);
+        if (!storedStudent && cleanEmail) {
+          const matched = await serverQueryEqualsLimit1('students', 'email', cleanEmail);
+          if (matched) storedStudent = matched.data;
+        }
+      } catch {
+        storedStudent = null;
       }
-      nextCount = currentCount + 1;
+      if (storedStudent) {
+        const storedMobile = normalizeMobileDigits(storedStudent.mobile);
+        if (storedMobile && storedMobile.length === 10 && storedMobile !== providedMobile) {
+          return {
+            success: false,
+            statusCode: 403,
+            error: 'Entered mobile number does not match the registered mobile number for this account.'
+          };
+        }
+      }
     }
-  }
 
-  const nowIso = new Date(nowMs).toISOString();
-  const recovered = buildFreshActiveSession(input, nowMs, existing);
-  recovered.recoveryCount24h = nextCount;
-  recovered.lastRecoveryAt = nowIso;
-  recovered.terminationReason = undefined;
-  recovered.terminatedAt = undefined;
-  recovered.terminatedBy = undefined;
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    let nextCount = existing?.recoveryCount24h || 0;
+    const nowIso = new Date(nowMs).toISOString();
+    if (existing?.lastRecoveryAt && nowMs - (Date.parse(existing.lastRecoveryAt) || 0) < RECOVERY_WINDOW_MS) {
+      nextCount = Math.min(MAX_RECOVERY_COUNT_24H, nextCount + 1);
+    }
 
-  await persistDeviceSessionToStore(recovered);
+    const recovered = buildFreshActiveSession(input, nowMs, existing);
+    recovered.recoveryCount24h = nextCount;
+    recovered.lastRecoveryAt = nowIso;
+    recovered.terminationReason = undefined;
+    recovered.terminatedAt = undefined;
+    recovered.terminatedBy = undefined;
 
-  return {
-    success: true,
-    statusCode: 200,
-    session: recovered
-  };
+    await persistDeviceSessionToStore(recovered);
+    return {
+      success: true,
+      statusCode: 200,
+      session: recovered
+    };
+  });
 }
 
 /**
@@ -683,8 +661,7 @@ export async function listDeviceSessionsAdminServer(
 }
 
 /**
- * Admin Action: Immediately terminate a user's active session so they are forced out on Device A
- * and unlocked to sign in on a new device.
+ * Admin Action: Immediately terminate a user's active session so they are forced out on Device A.
  */
 export async function terminateDeviceSessionAdminServer(
   userId: string,
@@ -696,44 +673,49 @@ export async function terminateDeviceSessionAdminServer(
     throw new Error('userId is required to terminate a session.');
   }
 
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  const nowIso = new Date(nowMs).toISOString();
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    const nowIso = new Date(nowMs).toISOString();
+    const nextVersion = Math.max(1, Number(existing?.sessionVersion || 0) + 1);
 
-  const terminated: DeviceSessionRecord = existing
-    ? {
-        ...existing,
-        activeSessionId: `terminated_${crypto.randomBytes(10).toString('hex')}`,
-        status: 'TERMINATED',
-        terminatedBy: 'ADMIN',
-        terminatedAt: nowIso,
-        terminationReason: reason,
-        expiresAt: nowIso,
-        expiresAtMs: nowMs
-      }
-    : {
-        userId: cleanUserId,
-        email: '',
-        studentName: 'Student',
-        accountRole: 'student',
-        activeSessionId: `terminated_${crypto.randomBytes(10).toString('hex')}`,
-        deviceId: 'admin_terminated',
-        hardwareSignature: 'admin_terminated',
-        deviceSignature: 'admin_terminated',
-        deviceName: 'No Active Device',
-        deviceType: 'Desktop',
-        browser: 'N/A',
-        os: 'N/A',
-        userAgentSummary: '',
-        status: 'TERMINATED',
-        loginAt: nowIso,
-        lastActivityAt: nowIso,
-        expiresAt: nowIso,
-        expiresAtMs: nowMs,
-        terminatedBy: 'ADMIN',
-        terminatedAt: nowIso,
-        terminationReason: reason
-      };
+    const terminated: DeviceSessionRecord = existing
+      ? {
+          ...existing,
+          activeSessionId: `terminated_${crypto.randomBytes(10).toString('hex')}`,
+          sessionVersion: nextVersion,
+          status: 'TERMINATED',
+          terminatedBy: 'ADMIN',
+          terminatedAt: nowIso,
+          terminationReason: reason,
+          expiresAt: nowIso,
+          expiresAtMs: nowMs
+        }
+      : {
+          userId: cleanUserId,
+          email: '',
+          studentName: 'Student',
+          accountRole: 'student',
+          activeSessionId: `terminated_${crypto.randomBytes(10).toString('hex')}`,
+          sessionVersion: nextVersion,
+          deviceId: 'admin_terminated',
+          hardwareSignature: 'admin_terminated',
+          deviceSignature: 'admin_terminated',
+          deviceName: 'No Active Device',
+          deviceType: 'Desktop',
+          browser: 'N/A',
+          os: 'N/A',
+          userAgentSummary: '',
+          status: 'TERMINATED',
+          loginAt: nowIso,
+          lastActivityAt: nowIso,
+          expiresAt: nowIso,
+          expiresAtMs: nowMs,
+          terminatedBy: 'ADMIN',
+          terminatedAt: nowIso,
+          terminationReason: reason
+        };
 
-  await persistDeviceSessionToStore(terminated);
-  return { success: true, session: terminated };
+    await persistDeviceSessionToStore(terminated);
+    return { success: true, session: terminated };
+  });
 }

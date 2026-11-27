@@ -5,11 +5,12 @@ import { StudentDashboard } from './components/StudentDashboard';
 import { PublicHomeDashboard } from './components/PublicHomeDashboard';
 import { PublicLandingHomepage } from './components/PublicLandingHomepage';
 import { HelpSupportAssistant } from './components/HelpSupportAssistant';
-import { PWAInstallButton, PWAOfflineIndicator } from './components/PWAInstallButton';
+import { PWAOfflineIndicator } from './components/PWAInstallButton';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SectionLoadingFallback } from './components/SectionLoadingFallback';
 import { LiveAnnouncementTicker } from './components/LiveAnnouncementTicker';
 import { EXAM_RETURN_TO_DASHBOARD_EVENT } from './hooks/useExamFullscreen';
+import { speechService } from './services/speechService';
 import { lazyWithRetry, sanitizeDiagnosticErrorMessage } from './utils/lazyWithRetry';
 import {
   useSmartTvNavigation,
@@ -441,6 +442,30 @@ const AppContent: React.FC = () => {
     };
   }, [currentStudent]);
 
+  // Listen for Latest-Login-Wins session invalidation on superseded devices and redirect cleanly to login
+  useEffect(() => {
+    const handleForceLoginRedirect = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ role?: string }>).detail;
+      speechService.stop();
+      setIsResetModalOpen(false);
+      setIsMembershipOpen(false);
+      setIsHelpDrawerOpen(false);
+      setUpgradePrompt((prev) => ({ ...prev, isOpen: false }));
+      setCurrentTab('public-home');
+      const targetTab: AuthModalTab = detail?.role === 'teacher' ? 'teacher' : 'login';
+      const targetRole: PortalRegisterRole = detail?.role === 'teacher' ? 'teacher' : 'student';
+      setAuthInitialRegisterRole(targetRole);
+      setAuthDefaultTab(targetTab);
+      setIsAuthOpen(true);
+      setIsAuthModalOpen(true);
+      safeScrollToTop();
+    };
+    window.addEventListener('msz-force-login-redirect', handleForceLoginRedirect);
+    return () => {
+      window.removeEventListener('msz-force-login-redirect', handleForceLoginRedirect);
+    };
+  }, [setIsAuthModalOpen]);
+
   // Keep browser tab title dynamic and professional for each portal
   useEffect(() => {
     if (currentTab === 'admin' || (activeRole === 'admin' && currentUser?.role === 'admin')) {
@@ -636,6 +661,8 @@ const AppContent: React.FC = () => {
       return;
     }
 
+    speechService.stop();
+
     if (tab === 'demo-mock-tests') {
       openDemoWithTab('demo-mock-tests');
       return;
@@ -797,11 +824,11 @@ const AppContent: React.FC = () => {
         return;
       }
       case 'open_ai_tools': {
-        handleNavigateTab('ai-tools-studio');
+        handleNavigateTab('ai-tools');
         return;
       }
       case 'open_dictionary': {
-        handleNavigateTab('dictionary');
+        handleNavigateTab('trilingual-dictionary');
         return;
       }
       case 'open_thought_of_the_day': {
@@ -2241,7 +2268,6 @@ const AppContent: React.FC = () => {
                         <Award className="w-3.5 h-3.5 text-purple-300" />
                         <span>TET &amp; CTET (200 Mocks)</span>
                       </button>
-                      <PWAInstallButton variant="teacher" />
                     </div>
                   </div>
                 )}

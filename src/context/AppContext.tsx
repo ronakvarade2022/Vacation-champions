@@ -49,15 +49,18 @@ import {
   clearLocalActiveSessionState,
   getLocalActiveSessionState,
   getLocalSessionHeaders,
+  notifyIfSessionInvalidatedResponse,
   recoverSingleDeviceSession,
   releaseSingleDeviceSession,
   sendDeviceSessionHeartbeat,
   SESSION_LOGGED_IN_ELSEWHERE_MESSAGE,
   SINGLE_DEVICE_BLOCK_MESSAGE,
   subscribeToUserDeviceSession,
+  teardownAllDeviceSessionWatches,
   validateActiveDeviceSession,
   verifyLocalSessionNotCopied
 } from '../services/deviceSessionService';
+import { speechService } from '../services/speechService';
 import type { ShivajiStory } from '../data/shivajiStoriesData';
 import { 
   auth,
@@ -1481,7 +1484,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  const forceInvalidateSessionState = (reasonMessage: string) => {
+  const forceInvalidateSessionState = useCallback((reasonMessage: string) => {
+    const prevRole: 'student' | 'teacher' =
+      currentStudent?.accountRole === 'teacher' || activeRole === 'teacher'
+        ? 'teacher'
+        : 'student';
+    try {
+      speechService.stop();
+    } catch {
+      // Ignore audio stop errors
+    }
+    teardownAllDeviceSessionWatches();
     clearLocalActiveSessionState();
     safeRemoveLocalStorage('vc_current_student');
     safeRemoveLocalStorage('vc_current_user');
@@ -1492,7 +1505,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveRole('student');
     setSessionSecurityNotice(reasonMessage);
     void signOutFirebaseUser();
-  };
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('msz-force-login-redirect', {
+            detail: { message: reasonMessage, role: prevRole }
+          })
+        );
+      } catch {
+        // Ignore custom event errors
+      }
+    }
+  }, [activeRole, currentStudent?.accountRole]);
 
   // Detect copied localStorage tokens on initial mount immediately
   useEffect(() => {
@@ -1781,71 +1805,117 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Real-Time Firestore Session Listener + 60s Heartbeat + Window Focus Guard (forces immediate logout on revocation/mismatch)
+  // Real-Time Firestore Session Listener + 25s Heartbeat + Window Focus + 401 API + Cross-Tab Storage Guard
+  // Immediately logs out Mobile A when a newer login wins on Mobile B
   useEffect(() => {
     const activeId = currentStudent?.id;
     if (!activeId || currentUser?.role === 'admin') return;
 
     let cancelled = false;
+    let heartbeatInFlight = false;
 
     const verifyCurrentDeviceLive = async () => {
-      if (cancelled) return;
+      if (cancelled || heartbeatInFlight) return;
       const copyCheck = verifyLocalSessionNotCopied(activeId);
       if (!copyCheck.valid) {
-        forceInvalidateSessionState(SINGLE_DEVICE_BLOCK_MESSAGE);
+        forceInvalidateSessionState(SESSION_LOGGED_IN_ELSEWHERE_MESSAGE);
         return;
       }
-      const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
-      const hb = await sendDeviceSessionHeartbeat(activeId, idToken);
-      if (cancelled) return;
-      if (!hb.valid) {
-        forceInvalidateSessionState(hb.error || SINGLE_DEVICE_BLOCK_MESSAGE);
-        return;
-      }
-      if (hb.session) {
-        setActiveDeviceSession(hb.session);
+      heartbeatInFlight = true;
+      try {
+        const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+        const hb = await sendDeviceSessionHeartbeat(activeId, idToken);
+        if (cancelled) return;
+        if (!hb.valid) {
+          forceInvalidateSessionState(hb.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE);
+          return;
+        }
+        if (hb.session) {
+          setActiveDeviceSession(hb.session);
+        }
+      } finally {
+        heartbeatInFlight = false;
       }
     };
 
-    const unsubSession = subscribeToUserDeviceSession(activeId, (remote) => {
-      if (cancelled) return;
-      const local = getLocalActiveSessionState();
-      const copyCheck = verifyLocalSessionNotCopied(activeId);
-      if (!local || !copyCheck.valid) {
-        forceInvalidateSessionState(SINGLE_DEVICE_BLOCK_MESSAGE);
-        return;
-      }
-      const expiredByTime = Number(remote.expiresAtMs || 0) <= Date.now();
-      if (
-        remote.status !== 'ACTIVE' ||
-        expiredByTime ||
-        remote.activeSessionId !== local.activeSessionId ||
-        remote.hardwareSignature !== local.hardwareSignature ||
-        remote.deviceId !== local.deviceId
-      ) {
-        const msg =
-          remote.terminatedBy === 'ADMIN'
-            ? 'Your active session was terminated by the MyStudyZone Administrator. Please log in again.'
-            : remote.terminatedBy === 'USER_LOGOUT'
-            ? 'Your session was logged out. Please sign in again.'
-            : 'Your account has been logged in on another device. Please log in again.';
-        forceInvalidateSessionState(msg);
-      } else {
-        setActiveDeviceSession(remote);
-      }
-    });
+    const unsubSession = subscribeToUserDeviceSession(
+      activeId,
+      (remote) => {
+        if (cancelled) return;
+        const local = getLocalActiveSessionState();
+        const copyCheck = verifyLocalSessionNotCopied(activeId);
+        if (!local || !copyCheck.valid) {
+          forceInvalidateSessionState(SESSION_LOGGED_IN_ELSEWHERE_MESSAGE);
+          return;
+        }
+        const expiredByTime = Number(remote.expiresAtMs || 0) <= Date.now();
+        const versionMismatch = Boolean(
+          local.sessionVersion &&
+            remote.sessionVersion &&
+            Number(remote.sessionVersion) !== Number(local.sessionVersion)
+        );
+        if (
+          remote.status !== 'ACTIVE' ||
+          expiredByTime ||
+          remote.activeSessionId !== local.activeSessionId ||
+          versionMismatch ||
+          remote.hardwareSignature !== local.hardwareSignature ||
+          remote.deviceId !== local.deviceId
+        ) {
+          const msg =
+            remote.terminatedBy === 'ADMIN'
+              ? 'Your active session was terminated by the MyStudyZone Administrator. Please log in again.'
+              : remote.terminatedBy === 'USER_LOGOUT'
+              ? 'Your session was logged out. Please sign in again.'
+              : SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
+          forceInvalidateSessionState(msg);
+        } else {
+          setActiveDeviceSession(remote);
+        }
+      },
+      currentStudent?.firebaseUid
+    );
 
     const intervalId = window.setInterval(() => {
       void verifyCurrentDeviceLive();
-    }, 60_000);
+    }, 25_000);
 
     const onFocusOrVisible = () => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') {
         void verifyCurrentDeviceLive();
       }
     };
+
+    const onApiSessionInvalidated = (e: Event) => {
+      if (cancelled) return;
+      const custom = e as CustomEvent<{ message?: string }>;
+      forceInvalidateSessionState(
+        custom?.detail?.message || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      );
+    };
+
+    const onStorageSync = (e: StorageEvent) => {
+      if (cancelled) return;
+      if (e.key === 'vc_is_logged_out' && e.newValue === 'true') {
+        forceInvalidateSessionState(SESSION_LOGGED_IN_ELSEWHERE_MESSAGE);
+        return;
+      }
+      if (
+        e.key === 'vc_active_session_id' ||
+        e.key === 'vc_session_version' ||
+        e.key === 'vc_session_user_id'
+      ) {
+        const check = verifyLocalSessionNotCopied(activeId);
+        if (!check.valid) {
+          forceInvalidateSessionState(SESSION_LOGGED_IN_ELSEWHERE_MESSAGE);
+        }
+      }
+    };
+
     window.addEventListener('focus', onFocusOrVisible);
     document.addEventListener('visibilitychange', onFocusOrVisible);
+    window.addEventListener('msz-session-invalidated', onApiSessionInvalidated);
+    window.addEventListener('storage', onStorageSync);
 
     return () => {
       cancelled = true;
@@ -1853,8 +1923,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.clearInterval(intervalId);
       window.removeEventListener('focus', onFocusOrVisible);
       document.removeEventListener('visibilitychange', onFocusOrVisible);
+      window.removeEventListener('msz-session-invalidated', onApiSessionInvalidated);
+      window.removeEventListener('storage', onStorageSync);
     };
-  }, [currentStudent?.id, currentUser?.role]);
+  }, [currentStudent?.id, currentStudent?.firebaseUid, currentUser?.role, forceInvalidateSessionState]);
 
   // Synchronize displayed subscription status with actual subscription stored in Firebase Firestore
   useEffect(() => {
@@ -2443,8 +2515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser(null);
         return {
           success: false,
-          blockedByActiveDevice: true,
-          message: sessionAttempt.error || SINGLE_DEVICE_BLOCK_MESSAGE
+          message: sessionAttempt.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
         };
       }
 
@@ -4840,14 +4911,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           body: syncBody,
           signal: controller.signal
         });
+        if (res.status === 401) {
+          const payload = await res.clone().json().catch(() => null);
+          notifyIfSessionInvalidatedResponse(res.status, payload);
+        }
         const contentType = (res.headers.get('content-type') || '').toLowerCase();
         if (res.status === 404 || contentType.includes('text/html')) {
-          await fetch('/.netlify/functions/api/subscription/sync', {
+          const fallbackRes = await fetch('/.netlify/functions/api/subscription/sync', {
             method: 'POST',
             headers,
             body: syncBody,
             signal: controller.signal
           });
+          if (fallbackRes.status === 401) {
+            const payload = await fallbackRes.clone().json().catch(() => null);
+            notifyIfSessionInvalidatedResponse(fallbackRes.status, payload);
+          }
         }
       } finally {
         clearTimeout(timeoutId);

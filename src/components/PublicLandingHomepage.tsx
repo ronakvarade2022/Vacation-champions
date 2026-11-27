@@ -12,6 +12,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { AuthModalTab, PortalRegisterRole } from './AuthModal';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export interface PublicLandingHomepageProps {
   onOpenPortal: (role: PortalRegisterRole) => void;
@@ -483,8 +484,9 @@ export function PublicLandingHomepage({
             </button>
           </nav>
 
-          {/* Right Auth Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right Auth & Install App Action Buttons */}
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+            <PWAInstallButton variant="public-header" />
             {isAuthenticated && onOpenMyDashboard ? (
               <button
                 type="button"

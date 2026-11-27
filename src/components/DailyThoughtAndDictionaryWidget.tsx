@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sparkles,
   Languages,
@@ -19,6 +19,7 @@ import {
   loadLocalComprehensiveDictionary,
   recordRecentSearchedWord,
 } from '../services/dictionaryFirestoreService';
+import { speechService } from '../services/speechService';
 
 interface DailyThoughtAndDictionaryWidgetProps {
   onOpenDictionary: (initialQuery?: string) => void;
@@ -108,17 +109,14 @@ export const DailyThoughtAndDictionaryWidget: React.FC<DailyThoughtAndDictionary
     setTimeout(() => setSharedThought(false), 2500);
   };
 
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
   const handleSpeak = (text: string, lang: 'en-IN' | 'mr-IN' | 'hi-IN') => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-      utterance.rate = 0.92;
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // ignore
-    }
+    void speechService.speakSimpleText(text, lang, { rate: 0.92 });
   };
 
   return (

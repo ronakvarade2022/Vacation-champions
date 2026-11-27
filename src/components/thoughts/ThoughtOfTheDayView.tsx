@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sparkles,
   Copy,
@@ -24,6 +24,7 @@ import {
   getThoughtForDate,
   getPreviousDaysThoughts,
 } from '../../data/thoughtsOfTheDayData';
+import { speechService } from '../../services/speechService';
 
 interface ThoughtOfTheDayViewProps {
   onBack?: () => void;
@@ -131,17 +132,21 @@ export const ThoughtOfTheDayView: React.FC<ThoughtOfTheDayViewProps> = ({ onBack
     }
   };
 
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
   const handleSpeak = (text: string, lang: 'en-IN' | 'mr-IN' | 'hi-IN') => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-      utterance.rate = 0.92;
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // Ignore speech synthesis errors
-    }
+    void speechService.speakSimpleText(text, lang, {
+      rate: 0.92,
+      onState: (info) => {
+        if (info.error) {
+          setShareFeedback(info.error);
+        }
+      },
+    });
   };
 
   const todayThought = todayInfo.thought;

@@ -1524,6 +1524,7 @@ app.post('/api/referrals/payout-request', async (req: Request, res: Response) =>
     if (!sessionCheck.valid) {
       return res.status(sessionCheck.statusCode).json({
         success: false,
+        code: 'SINGLE_DEVICE_SESSION_INVALID',
         message: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
       });
     }
@@ -2390,6 +2391,11 @@ async function verifyRequestDeviceSession(
   }
 
   const sessionId = String(req.headers['x-session-id'] || '').trim();
+  const sessionVersionRaw = req.headers['x-session-version'];
+  const sessionVersion =
+    sessionVersionRaw !== undefined && String(sessionVersionRaw).trim() !== ''
+      ? Number(sessionVersionRaw)
+      : undefined;
   const deviceId = String(req.headers['x-device-id'] || '').trim();
   const hardwareSignature = String(req.headers['x-hardware-signature'] || '').trim();
   const deviceSignature = String(req.headers['x-device-signature'] || '').trim();
@@ -2413,6 +2419,7 @@ async function verifyRequestDeviceSession(
     const check = await validateDeviceSessionServer({
       userId: cleanId,
       activeSessionId: sessionId || undefined,
+      sessionVersion: Number.isFinite(sessionVersion as number) ? sessionVersion : undefined,
       deviceId: deviceId || '',
       hardwareSignature: hardwareSignature || '',
       deviceSignature: deviceSignature || '',
@@ -2430,7 +2437,7 @@ async function verifyRequestDeviceSession(
   return { valid: true, statusCode: 200 };
 }
 
-// 8.0a Acquire Single Device Login Session (blocks concurrent login on another device)
+// 8.0a Acquire Single Device Login Session (Latest Login Wins; replaces any prior device session atomically)
 app.post('/api/auth/session/acquire', async (req: Request, res: Response) => {
   try {
     let verifiedUid: string | undefined;
@@ -2467,7 +2474,7 @@ app.post('/api/auth/session/acquire', async (req: Request, res: Response) => {
     });
 
     if (!result.allowed) {
-      return res.status(result.code === 'INVALID_INPUT' ? 400 : 403).json({
+      return res.status(400).json({
         success: false,
         allowed: false,
         code: result.code,
@@ -2517,9 +2524,16 @@ app.post('/api/auth/session/validate', async (req: Request, res: Response) => {
         (verifiedUid === userId || (body.firebaseUid && verifiedUid === String(body.firebaseUid).trim()))
     );
 
+    const rawVer = body.sessionVersion ?? req.headers['x-session-version'];
+    const sessionVersion =
+      rawVer !== undefined && String(rawVer).trim() !== '' && Number.isFinite(Number(rawVer))
+        ? Number(rawVer)
+        : undefined;
+
     const result = await validateDeviceSessionServer({
       userId,
       activeSessionId: body.activeSessionId || (req.headers['x-session-id'] as string) || undefined,
+      sessionVersion,
       deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
       hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
       deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
@@ -2539,6 +2553,7 @@ app.post('/api/auth/session/validate', async (req: Request, res: Response) => {
       return res.status(401).json({
         success: false,
         valid: false,
+        code: 'SINGLE_DEVICE_SESSION_INVALID',
         reason: result.reason,
         terminatedBy: result.terminatedBy,
         error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
@@ -2587,9 +2602,16 @@ app.post('/api/auth/session/heartbeat', async (req: Request, res: Response) => {
         (verifiedUid === userId || (body.firebaseUid && verifiedUid === String(body.firebaseUid).trim()))
     );
 
+    const rawVer = body.sessionVersion ?? req.headers['x-session-version'];
+    const sessionVersion =
+      rawVer !== undefined && String(rawVer).trim() !== '' && Number.isFinite(Number(rawVer))
+        ? Number(rawVer)
+        : undefined;
+
     const result = await heartbeatDeviceSessionServer({
       userId,
       activeSessionId: String(body.activeSessionId || req.headers['x-session-id'] || ''),
+      sessionVersion,
       deviceId: String(body.deviceId || req.headers['x-device-id'] || ''),
       hardwareSignature: String(body.hardwareSignature || req.headers['x-hardware-signature'] || ''),
       deviceSignature: String(body.deviceSignature || req.headers['x-device-signature'] || ''),
@@ -2609,6 +2631,7 @@ app.post('/api/auth/session/heartbeat', async (req: Request, res: Response) => {
       return res.status(401).json({
         success: false,
         valid: false,
+        code: 'SINGLE_DEVICE_SESSION_INVALID',
         reason: result.reason,
         error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
       });
@@ -2775,6 +2798,7 @@ app.post('/api/subscription/sync', async (req: Request, res: Response) => {
       if (!sessionCheck.valid) {
         return res.status(sessionCheck.statusCode).json({
           success: false,
+          code: 'SINGLE_DEVICE_SESSION_INVALID',
           error: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
         });
       }
@@ -3378,6 +3402,7 @@ app.post('/api/subscription/verify-access', async (req: Request, res: Response) 
     if (!sessionCheck.valid) {
       return res.status(sessionCheck.statusCode).json({
         allowed: false,
+        code: 'SINGLE_DEVICE_SESSION_INVALID',
         error: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE,
         message: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
       });

@@ -23,7 +23,7 @@ import {
 } from './adminCacheService';
 
 export const SESSION_LOGGED_IN_ELSEWHERE_MESSAGE =
-  'Your account has been logged in on another device. Please log in again.';
+  'Your account has been signed in on another device. Please log in again if you want to use this device.';
 
 export const SINGLE_DEVICE_BLOCK_MESSAGE = SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
 
@@ -31,6 +31,7 @@ export const SESSION_INACTIVITY_TTL_MS = 12 * 60 * 60 * 1000;
 
 const LS_DEVICE_ID = 'vc_device_id';
 const LS_SESSION_ID = 'vc_active_session_id';
+const LS_SESSION_VERSION = 'vc_session_version';
 const LS_HARDWARE_SIG = 'vc_hardware_signature';
 const LS_DEVICE_SIG = 'vc_device_signature';
 const LS_SESSION_USER_ID = 'vc_session_user_id';
@@ -38,6 +39,7 @@ const LS_SESSION_USER_ID = 'vc_session_user_id';
 export interface LocalActiveSessionState {
   userId: string;
   activeSessionId: string;
+  sessionVersion?: number;
   deviceId: string;
   hardwareSignature: string;
   deviceSignature: string;
@@ -192,13 +194,26 @@ export function getLocalActiveSessionState(): LocalActiveSessionState | null {
   try {
     const userId = window.localStorage.getItem(LS_SESSION_USER_ID) || '';
     const activeSessionId = window.localStorage.getItem(LS_SESSION_ID) || '';
+    const versionRaw = window.localStorage.getItem(LS_SESSION_VERSION);
+    const parsedVersion = versionRaw ? Number(versionRaw) : undefined;
+    const sessionVersion =
+      parsedVersion !== undefined && Number.isFinite(parsedVersion) && parsedVersion >= 1
+        ? parsedVersion
+        : undefined;
     const deviceId = window.localStorage.getItem(LS_DEVICE_ID) || '';
     const hardwareSignature = window.localStorage.getItem(LS_HARDWARE_SIG) || '';
     const deviceSignature = window.localStorage.getItem(LS_DEVICE_SIG) || '';
     if (!activeSessionId || !deviceId || !hardwareSignature || !deviceSignature) {
       return null;
     }
-    return { userId, activeSessionId, deviceId, hardwareSignature, deviceSignature };
+    return {
+      userId,
+      activeSessionId,
+      sessionVersion,
+      deviceId,
+      hardwareSignature,
+      deviceSignature
+    };
   } catch {
     return null;
   }
@@ -209,6 +224,11 @@ export function setLocalActiveSessionState(state: LocalActiveSessionState): void
   try {
     window.localStorage.setItem(LS_SESSION_USER_ID, state.userId);
     window.localStorage.setItem(LS_SESSION_ID, state.activeSessionId);
+    if (state.sessionVersion !== undefined && Number.isFinite(Number(state.sessionVersion))) {
+      window.localStorage.setItem(LS_SESSION_VERSION, String(state.sessionVersion));
+    } else {
+      window.localStorage.removeItem(LS_SESSION_VERSION);
+    }
     window.localStorage.setItem(LS_DEVICE_ID, state.deviceId);
     window.localStorage.setItem(LS_HARDWARE_SIG, state.hardwareSignature);
     window.localStorage.setItem(LS_DEVICE_SIG, state.deviceSignature);
@@ -222,11 +242,43 @@ export function clearLocalActiveSessionState(): void {
   try {
     window.localStorage.removeItem(LS_SESSION_USER_ID);
     window.localStorage.removeItem(LS_SESSION_ID);
+    window.localStorage.removeItem(LS_SESSION_VERSION);
     window.localStorage.removeItem(LS_HARDWARE_SIG);
     window.localStorage.removeItem(LS_DEVICE_SIG);
   } catch {
     // Ignore
   }
+}
+
+export function emitSessionInvalidatedEvent(message?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('msz-session-invalidated', {
+        detail: { message: message || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE }
+      })
+    );
+  } catch {
+    // Ignore
+  }
+}
+
+export function notifyIfSessionInvalidatedResponse(
+  status: number,
+  body?: { code?: string; error?: string; message?: string } | null
+): boolean {
+  if (
+    status === 401 &&
+    (body?.code === 'SINGLE_DEVICE_SESSION_INVALID' ||
+      body?.error === SESSION_LOGGED_IN_ELSEWHERE_MESSAGE ||
+      body?.message === SESSION_LOGGED_IN_ELSEWHERE_MESSAGE)
+  ) {
+    emitSessionInvalidatedEvent(
+      body?.error || body?.message || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+    );
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -265,6 +317,9 @@ export function getLocalSessionHeaders(): Record<string, string> {
   };
   if (local?.activeSessionId) {
     headers['x-session-id'] = local.activeSessionId;
+  }
+  if (local?.sessionVersion !== undefined) {
+    headers['x-session-version'] = String(local.sessionVersion);
   }
   return headers;
 }
@@ -342,20 +397,19 @@ export async function acquireSingleDeviceSession(params: {
   const nowIso = new Date(nowMs).toISOString();
   const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
 
-  // Check existing session doc if any (prior session ID is tracked for audit)
-  let priorActiveSessionId: string | undefined;
+  // Read any prior Firestore session so offline fallback still increments sessionVersion cleanly
+  let priorRecord: DeviceSessionRecord | null = null;
   try {
     const ref = doc(db, 'device_sessions', params.userId);
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      const existing = snap.data() as DeviceSessionRecord;
-      priorActiveSessionId = existing.activeSessionId;
+      priorRecord = snap.data() as DeviceSessionRecord;
     }
   } catch {
     // Proceed to backend acquire
   }
 
-  // 2. Acquire via backend API (authoritative across devices even if Firestore Admin is enabled)
+  // Acquire via backend API (authoritative across devices & atomic per-user mutex)
   const apiRes = await callSessionApi<{
     success: boolean;
     allowed: boolean;
@@ -385,14 +439,17 @@ export async function acquireSingleDeviceSession(params: {
     params.idToken
   );
 
-  if (apiRes.status === 403 || apiRes.status === 409 || apiRes.data?.allowed === false) {
-    clearLocalActiveSessionState();
+  if (apiRes.status === 400 && apiRes.data?.allowed === false) {
     return {
       allowed: false,
-      blockedByActiveDevice: true,
-      error: apiRes.data?.error || SINGLE_DEVICE_BLOCK_MESSAGE
+      error: apiRes.data?.error || 'Unable to register device session.'
     };
   }
+
+  const nextVersion = Math.max(
+    1,
+    Number(apiRes.data?.session?.sessionVersion || (priorRecord?.sessionVersion || 0) + 1)
+  );
 
   const sessionRecord: DeviceSessionRecord = apiRes.data?.session || {
     userId: params.userId,
@@ -401,6 +458,7 @@ export async function acquireSingleDeviceSession(params: {
     studentName: params.studentName || 'Student',
     accountRole: params.accountRole,
     activeSessionId: createClientSessionId(),
+    sessionVersion: nextVersion,
     deviceId: meta.deviceId,
     hardwareSignature: meta.hardwareSignature,
     deviceSignature: meta.deviceSignature,
@@ -413,32 +471,28 @@ export async function acquireSingleDeviceSession(params: {
     loginAt: nowIso,
     lastActivityAt: nowIso,
     expiresAt: new Date(expiresAtMs).toISOString(),
-    expiresAtMs
+    expiresAtMs,
+    previousSessionId: priorRecord?.activeSessionId || undefined,
+    previousDeviceId: priorRecord?.deviceId || undefined
   };
 
-  // 3. Persist directly to Firestore as the authenticated Firebase user (enforced by firestore.rules)
-  try {
-    const cleanPayload = JSON.parse(JSON.stringify(sessionRecord));
-    await setDoc(doc(db, 'device_sessions', params.userId), cleanPayload);
-  } catch (fsErr: any) {
-    // If Firestore security rules reject write because another device holds an active lock -> fail closed!
-    if (String(fsErr?.code || fsErr?.message || '').includes('permission')) {
-      clearLocalActiveSessionState();
-      return {
-        allowed: false,
-        blockedByActiveDevice: true,
-        error: SINGLE_DEVICE_BLOCK_MESSAGE
-      };
-    }
-  }
-
+  // Write local active session state FIRST so any immediate Firestore snapshot on this device matches cleanly
   setLocalActiveSessionState({
     userId: params.userId,
     activeSessionId: sessionRecord.activeSessionId,
+    sessionVersion: sessionRecord.sessionVersion,
     deviceId: meta.deviceId,
     hardwareSignature: meta.hardwareSignature,
     deviceSignature: meta.deviceSignature
   });
+
+  // Persist directly to Firestore so Mobile A's onSnapshot listener triggers immediate logout
+  try {
+    const cleanPayload = JSON.parse(JSON.stringify(sessionRecord));
+    await setDoc(doc(db, 'device_sessions', params.userId), cleanPayload);
+  } catch {
+    // Backend serverSetDoc or next heartbeat maintains authoritative state under Latest Login Wins
+  }
 
   return {
     allowed: true,
@@ -487,13 +541,13 @@ export async function validateActiveDeviceSession(params: {
         clearLocalActiveSessionState();
         return {
           valid: false,
-          blockedByAnotherDevice: false,
+          blockedByAnotherDevice: remote.terminatedBy === 'NEW_DEVICE_LOGIN' || remote.terminatedBy === 'USER_RECOVERY',
           error:
             remote.terminatedBy === 'ADMIN'
               ? 'Your active session was terminated by an administrator. Please log in again.'
-              : remote.terminatedBy === 'USER_RECOVERY'
-              ? 'Your account session was recovered on another device.'
-              : 'Your session was logged out. Please sign in again.'
+              : remote.terminatedBy === 'USER_LOGOUT'
+              ? 'Your session was logged out. Please sign in again.'
+              : SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
         };
       }
       if (remote.status === 'EXPIRED' || Number(remote.expiresAtMs || 0) <= nowMs) {
@@ -511,8 +565,13 @@ export async function validateActiveDeviceSession(params: {
         remote.deviceSignature === meta.deviceSignature;
       const sameSession =
         !local?.activeSessionId || local.activeSessionId === remote.activeSessionId;
+      const versionMismatch = Boolean(
+        local?.sessionVersion &&
+          remote.sessionVersion &&
+          Number(remote.sessionVersion) !== Number(local.sessionVersion)
+      );
 
-      if (!sameHardware || !sameSession) {
+      if (!sameHardware || !sameSession || versionMismatch) {
         clearLocalActiveSessionState();
         return {
           valid: false,
@@ -525,6 +584,7 @@ export async function validateActiveDeviceSession(params: {
       setLocalActiveSessionState({
         userId: params.userId,
         activeSessionId: remote.activeSessionId,
+        sessionVersion: remote.sessionVersion,
         deviceId: meta.deviceId,
         hardwareSignature: meta.hardwareSignature,
         deviceSignature: meta.deviceSignature
@@ -552,6 +612,7 @@ export async function validateActiveDeviceSession(params: {
       body: JSON.stringify({
         userId: params.userId,
         activeSessionId: local?.activeSessionId,
+        sessionVersion: local?.sessionVersion,
         deviceId: meta.deviceId,
         hardwareSignature: meta.hardwareSignature,
         deviceSignature: meta.deviceSignature,
@@ -574,7 +635,10 @@ export async function validateActiveDeviceSession(params: {
     clearLocalActiveSessionState();
     return {
       valid: false,
-      blockedByAnotherDevice: apiRes.data?.reason === 'HARDWARE_OR_SESSION_MISMATCH' || apiRes.data?.reason === 'NO_ACTIVE_SESSION',
+      blockedByAnotherDevice:
+        apiRes.data?.reason === 'SESSION_SUPERSEDED' ||
+        apiRes.data?.reason === 'HARDWARE_OR_SESSION_MISMATCH' ||
+        apiRes.data?.reason === 'NO_ACTIVE_SESSION',
       error: apiRes.data?.error || SINGLE_DEVICE_BLOCK_MESSAGE
     };
   }
@@ -583,6 +647,7 @@ export async function validateActiveDeviceSession(params: {
     setLocalActiveSessionState({
       userId: params.userId,
       activeSessionId: apiRes.data.session.activeSessionId,
+      sessionVersion: apiRes.data.session.sessionVersion,
       deviceId: meta.deviceId,
       hardwareSignature: meta.hardwareSignature,
       deviceSignature: meta.deviceSignature
@@ -641,10 +706,16 @@ export async function sendDeviceSessionHeartbeat(
     const snap = await getDoc(doc(db, 'device_sessions', userId));
     if (snap.exists()) {
       const remote = snap.data() as DeviceSessionRecord;
+      const versionMismatch = Boolean(
+        local.sessionVersion &&
+          remote.sessionVersion &&
+          Number(remote.sessionVersion) !== Number(local.sessionVersion)
+      );
       if (
         remote.status !== 'ACTIVE' ||
         Number(remote.expiresAtMs || 0) <= nowMs ||
         remote.activeSessionId !== local.activeSessionId ||
+        versionMismatch ||
         remote.hardwareSignature !== local.hardwareSignature ||
         remote.deviceId !== local.deviceId
       ) {
@@ -686,6 +757,7 @@ export async function sendDeviceSessionHeartbeat(
       body: JSON.stringify({
         userId,
         activeSessionId: local.activeSessionId,
+        sessionVersion: local.sessionVersion,
         deviceId: local.deviceId,
         hardwareSignature: local.hardwareSignature,
         deviceSignature: local.deviceSignature,
@@ -822,13 +894,14 @@ export async function recoverSingleDeviceSession(params: {
       success: false,
       error:
         res.data?.error ||
-        'Device recovery could not be completed. Please verify your registered email, password, and 10-digit mobile number.'
+        'Device session transfer could not be completed. Please try signing in again.'
     };
   }
 
   setLocalActiveSessionState({
     userId: params.userId,
     activeSessionId: res.data.session.activeSessionId,
+    sessionVersion: res.data.session.sessionVersion,
     deviceId: meta.deviceId,
     hardwareSignature: meta.hardwareSignature,
     deviceSignature: meta.deviceSignature
@@ -861,6 +934,12 @@ function teardownUserDeviceSessionWatch(userId: string): void {
   entry.callbacks.clear();
 }
 
+export function teardownAllDeviceSessionWatches(): void {
+  for (const uid of Array.from(activeSessionWatchRegistry.keys())) {
+    teardownUserDeviceSessionWatch(uid);
+  }
+}
+
 export function getActiveSessionWatchCount(userId?: string): {
   activeFirestoreListeners: number;
   subscriberCallbacks: number;
@@ -885,10 +964,18 @@ export function getActiveSessionWatchCount(userId?: string): {
 
 export function subscribeToUserDeviceSession(
   userId: string,
-  onRemoteUpdate: (record: DeviceSessionRecord) => void
+  onRemoteUpdate: (record: DeviceSessionRecord) => void,
+  expectedFirebaseUid?: string
 ): Unsubscribe {
   const cleanId = String(userId || '').trim();
-  if (!cleanId || !auth.currentUser || auth.currentUser.uid !== cleanId) {
+  if (!cleanId || !auth.currentUser) {
+    return () => {};
+  }
+  if (
+    expectedFirebaseUid &&
+    auth.currentUser.uid !== cleanId &&
+    auth.currentUser.uid !== expectedFirebaseUid
+  ) {
     return () => {};
   }
 
@@ -1081,6 +1168,7 @@ export async function adminTerminateUserSession(
         lastActivityAt: nowIso
       }),
       activeSessionId: `terminated_${nowMs.toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      sessionVersion: Math.max(1, Number(existing?.sessionVersion || 0) + 1),
       status: 'TERMINATED',
       terminatedBy: 'ADMIN',
       terminatedAt: nowIso,

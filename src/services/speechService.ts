@@ -682,6 +682,64 @@ export class SpeechNarrator {
   }
 
   /**
+   * Speaks any short or medium text (dictionary word/meaning, thought of the day, phonics cue, etc.)
+   * using the unified voice-locked narration engine so there is zero overlap across sections.
+   */
+  public async speakSimpleText(
+    text: string,
+    langInput: 'en-IN' | 'mr-IN' | 'hi-IN' | StoryLanguage,
+    options?: {
+      rate?: number;
+      onState?: (info: {
+        speaking: boolean;
+        paused: boolean;
+        status: PlaybackStatus;
+        error?: string;
+        warning?: string;
+      }) => void;
+    }
+  ): Promise<boolean> {
+    const clean = (text || '').trim();
+    if (!clean) return false;
+
+    if (!this.isSupported()) {
+      options?.onState?.({
+        speaking: false,
+        paused: false,
+        status: 'idle',
+        error: 'Audio playback is unavailable in this browser.',
+      });
+      return false;
+    }
+
+    const mappedLang: StoryLanguage =
+      langInput === 'mr-IN' || langInput === 'Marathi'
+        ? 'Marathi'
+        : langInput === 'hi-IN' || langInput === 'Hindi'
+        ? 'Hindi'
+        : 'English';
+
+    if (typeof options?.rate === 'number' && !Number.isNaN(options.rate)) {
+      this.rate = Math.max(0.5, Math.min(2.0, options.rate));
+    }
+
+    await this.startStoryNarration(
+      [clean],
+      mappedLang,
+      (state) => {
+        options?.onState?.({
+          speaking: state.isPlaying,
+          paused: state.isPaused,
+          status: state.status,
+          error: state.error,
+          warning: state.voiceWarning,
+        });
+      }
+    );
+    return true;
+  }
+
+  /**
    * Starts full story narration across all paragraphs from startParagraphIndex (default 0).
    */
   public async startStoryNarration(
@@ -695,11 +753,19 @@ export class SpeechNarrator {
     const token = ++this.sessionToken;
     this.activeChunkToken++;
 
-    if (this.synth) {
-      try {
-        this.synth.cancel();
-      } catch (e) {}
+    if (!this.synth) {
+      this.isPlaying = false;
+      this.isPaused = false;
+      this.status = 'idle';
+      this.currentLang = lang;
+      this.onStateChange = onStateUpdate;
+      this.notifyState('Audio playback is unavailable in this browser.');
+      return;
     }
+
+    try {
+      this.synth.cancel();
+    } catch {}
 
     this.currentLang = lang;
     this.onStateChange = onStateUpdate;
@@ -881,13 +947,34 @@ export class SpeechNarrator {
 
     utterance.onerror = (e) => {
       if (token !== this.sessionToken || chunkToken !== this.activeChunkToken) return;
-
-      // Because all intentional cancels (pause, stop, setRate, jump) increment sessionToken or activeChunkToken
-      // BEFORE calling synth.cancel(), any onerror reaching here while isPlaying && !isPaused is an unexpected
-      // browser glitch. Retry once or advance so playback never stops mid-story!
       if (!this.isPlaying || this.isPaused) return;
 
-      if (this.chunkRetryCount < 1 && e.error !== 'language-unavailable' && e.error !== 'voice-unavailable') {
+      const errCode = (e?.error || '').toLowerCase();
+      if (errCode === 'not-allowed' || errCode === 'audio-busy') {
+        this.clearTimers();
+        this.isPlaying = false;
+        this.isPaused = false;
+        this.status = 'stopped';
+        this.notifyState(
+          errCode === 'not-allowed'
+            ? 'Audio playback was blocked by browser autoplay rules. Please tap Play again.'
+            : 'Device audio is busy right now. Please tap Play again in a moment.'
+        );
+        return;
+      }
+
+      if (errCode === 'language-unavailable' || errCode === 'voice-unavailable') {
+        this.clearTimers();
+        this.isPlaying = false;
+        this.isPaused = false;
+        this.status = 'stopped';
+        this.notifyState(
+          `${this.currentLang} speech voice is not installed on this device browser.`
+        );
+        return;
+      }
+
+      if (this.chunkRetryCount < 1) {
         this.chunkRetryCount++;
         this.sentenceTimer = setTimeout(() => {
           if (token === this.sessionToken && this.isPlaying && !this.isPaused) {
@@ -907,7 +994,11 @@ export class SpeechNarrator {
       this.synth.speak(utterance);
     } catch (err) {
       console.warn('Speech synthesis speak notice:', err);
-      this.advanceToNextChunk(token, chunkToken);
+      this.clearTimers();
+      this.isPlaying = false;
+      this.isPaused = false;
+      this.status = 'stopped';
+      this.notifyState('Could not start audio playback on this browser. Please tap Play again.');
     }
   }
 

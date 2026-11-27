@@ -68,7 +68,7 @@ import {
   WORKSHEET_PREMIUM_UPGRADE_MESSAGE,
   WORKSHEET_CLASS_LOCK_MESSAGE
 } from '../utils/subscriptionAccess';
-import { getLocalSessionHeaders } from '../services/deviceSessionService';
+import { getLocalSessionHeaders, notifyIfSessionInvalidatedResponse } from '../services/deviceSessionService';
 import { auth } from '../services/firebase';
 import { QuickStudyZoneIconBar } from './OneLineIconNavBar';
 import type { StudyLibrarySectionTab } from './StudyMaterialsView';
@@ -342,6 +342,13 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
           selectedClass: ws.classLevel
         })
       });
+      if (resp.status === 401) {
+        const payload = await resp.clone().json().catch(() => null);
+        if (notifyIfSessionInvalidatedResponse(resp.status, payload)) {
+          setLockedModalWorksheet(ws);
+          return;
+        }
+      }
       if (resp.status === 403) {
         setLockedModalWorksheet(ws);
         return;
@@ -366,7 +373,7 @@ export const WorksheetsView: React.FC<WorksheetsViewProps> = ({
   };
 
   const handleSubmitWorksheet = () => {
-    if (!activeWorksheet) return;
+    if (!activeWorksheet || isSubmitted) return;
     const wsBoard = activeWorksheet.board || selectedBoard;
     const access = canAccessWorksheet(currentStudent, activeWorksheet.id, activeWorksheet.classLevel, undefined, wsBoard);
     if (!access.allowed) {

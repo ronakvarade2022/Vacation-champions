@@ -45,6 +45,7 @@ import {
   loadFavouriteWords,
   toggleFavouriteWord,
 } from '../../services/dictionaryFirestoreService';
+import { speechService } from '../../services/speechService';
 
 interface TrilingualDictionaryViewProps {
   onBack?: () => void;
@@ -278,18 +279,15 @@ export const TrilingualDictionaryView: React.FC<TrilingualDictionaryViewProps> =
     }
   };
 
-  // Audio Pronunciation via Web Speech API
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
+  // Audio Pronunciation via unified EN/MR/HI SpeechNarrator
   const handleSpeak = (text: string, lang: 'en-IN' | 'mr-IN' | 'hi-IN') => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-      utterance.rate = 0.92;
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // Ignore speech synthesis errors on unsupported browsers
-    }
+    void speechService.speakSimpleText(text, lang, { rate: 0.92 });
   };
 
   // Copy full trilingual entry to clipboard

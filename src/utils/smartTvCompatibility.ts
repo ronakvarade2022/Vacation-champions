@@ -433,6 +433,8 @@ export function useSmartTvNavigation({
 }: UseSmartTvNavigationOptions): void {
   const isHandlingPopStateRef = useRef(false);
   const tabHistoryStackRef = useRef<string[]>([currentTab]);
+  const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+  const prevTabRef = useRef<string>(currentTab);
   const latestStateRef = useRef({
     currentTab,
     defaultHomeTab,
@@ -453,9 +455,29 @@ export function useSmartTvNavigation({
     installGlobalSmartTvCompatibility();
   }, []);
 
+  const restoreScrollForTab = (targetTab: string) => {
+    const savedY = scrollPositionsRef.current.get(targetTab);
+    if (typeof savedY === 'number' && savedY > 0) {
+      try {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: savedY, behavior: 'auto' });
+        });
+      } catch {
+        window.scrollTo(0, savedY);
+      }
+      return;
+    }
+    safeScrollToTop();
+  };
+
   // Push history state whenever currentTab or modal open state changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (prevTabRef.current !== currentTab && !isHandlingPopStateRef.current) {
+      scrollPositionsRef.current.set(prevTabRef.current, window.scrollY || 0);
+    }
+    prevTabRef.current = currentTab;
+
     const stack = tabHistoryStackRef.current;
     if (stack[stack.length - 1] !== currentTab) {
       stack.push(currentTab);
@@ -490,6 +512,14 @@ export function useSmartTvNavigation({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    const stopSpeechOnBack = () => {
+      try {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      } catch {}
+    };
+
     const handlePopState = (e: PopStateEvent) => {
       const {
         currentTab: activeTab,
@@ -504,12 +534,17 @@ export function useSmartTvNavigation({
         return;
       }
 
-      // 2. If history state specifies a target tab, restore it
+      // 2. If history state specifies a target tab, restore it and its scroll position
       const targetTab = e.state?.mszTab;
       if (typeof targetTab === 'string' && targetTab && targetTab !== activeTab) {
+        stopSpeechOnBack();
         isHandlingPopStateRef.current = true;
+        const stack = tabHistoryStackRef.current;
+        if (stack.length > 1 && stack[stack.length - 2] === targetTab) {
+          stack.pop();
+        }
         navigateTab(targetTab);
-        safeScrollToTop();
+        restoreScrollForTab(targetTab);
         return;
       }
 
@@ -519,17 +554,19 @@ export function useSmartTvNavigation({
         stack.pop();
         const prevTab = stack[stack.length - 1] || homeTab;
         if (prevTab !== activeTab) {
+          stopSpeechOnBack();
           isHandlingPopStateRef.current = true;
           navigateTab(prevTab);
-          safeScrollToTop();
+          restoreScrollForTab(prevTab);
           return;
         }
       }
 
       if (activeTab !== homeTab && activeTab !== 'dashboard' && activeTab !== 'public-home') {
+        stopSpeechOnBack();
         isHandlingPopStateRef.current = true;
         navigateTab(homeTab);
-        safeScrollToTop();
+        restoreScrollForTab(homeTab);
       }
     };
 
@@ -577,19 +614,23 @@ export function useSmartTvNavigation({
         return;
       }
 
-      // If TV Back key (or Escape when not inside an input) is pressed on a sub-page, return to dashboard
+      // If TV Back key (or Escape when not inside an input) is pressed on a sub-page, return to previous tab with saved scroll
       if (isTvBackKey || (isEscapeKey && !isInputFocused)) {
         if (activeTab !== homeTab && activeTab !== 'dashboard' && activeTab !== 'public-home') {
           e.preventDefault();
+          stopSpeechOnBack();
           const stack = tabHistoryStackRef.current;
           if (stack.length > 1) {
             stack.pop();
             const prevTab = stack[stack.length - 1] || homeTab;
+            isHandlingPopStateRef.current = true;
             navigateTab(prevTab);
+            restoreScrollForTab(prevTab);
           } else {
+            isHandlingPopStateRef.current = true;
             navigateTab(homeTab);
+            restoreScrollForTab(homeTab);
           }
-          safeScrollToTop();
         }
       }
     };

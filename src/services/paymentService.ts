@@ -6,7 +6,7 @@ import {
   getPlanCatalogItem,
   resolvePlanSku
 } from '../data/planCatalog';
-import { getLocalSessionHeaders } from './deviceSessionService';
+import { getLocalSessionHeaders, notifyIfSessionInvalidatedResponse } from './deviceSessionService';
 import { buildBoardClassKey, normalizeBoardValue } from '../utils/subscriptionAccess';
 
 export interface RazorpayConfigResponse {
@@ -159,10 +159,15 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       ...options,
       signal: controller.signal
     });
+    if (res.status === 401) {
+      const payload = await res.clone().json().catch(() => null);
+      notifyIfSessionInvalidatedResponse(res.status, payload);
+    }
+    return res;
   } catch (err: any) {
     if (err?.name === 'AbortError') {
       throw new Error(

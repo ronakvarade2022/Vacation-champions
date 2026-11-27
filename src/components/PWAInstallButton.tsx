@@ -12,7 +12,7 @@ import {
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface PWAInstallButtonProps {
-  variant?: 'banner' | 'compact' | 'teacher' | 'header';
+  variant?: 'banner' | 'compact' | 'teacher' | 'header' | 'public-header';
   className?: string;
 }
 
@@ -33,6 +33,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
   const [isPrompting, setIsPrompting] = useState(false);
+
+  useEffect(() => {
+    if (!showInstructionsModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowInstructionsModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showInstructionsModal]);
 
   if (isInstalled || isStandalone) {
     return null;
@@ -111,6 +122,25 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             <span className="text-white">📲 INSTALL MYSTUDYZONE APP</span>
           </button>
         </section>
+      ) : variant === 'public-header' ? (
+        <button
+          type="button"
+          onClick={() => void handleInstallClick()}
+          disabled={isPrompting}
+          data-testid="pwa-install-btn-public-header"
+          title="Install MyStudyZone App onto your device"
+          className={`min-h-[40px] sm:min-h-[44px] px-3 sm:px-4 py-1.5 rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#1d4ed8] to-[#0284c7] hover:brightness-110 disabled:opacity-70 text-white font-black text-xs sm:text-sm tracking-wide shadow-[0_4px_14px_rgba(2,132,199,0.3)] border-2 border-amber-300/90 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${className}`}
+        >
+          <img
+            src="/pwa-192x192.png"
+            alt=""
+            width={22}
+            height={22}
+            className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-white p-0.5 shrink-0 object-contain border border-amber-200"
+          />
+          <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+          <span className="text-white">INSTALL APP</span>
+        </button>
       ) : variant === 'header' ? (
         <button
           type="button"
@@ -167,6 +197,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Install MyStudyZone App Instructions"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowInstructionsModal(false);
+              }
+            }}
           >
           <div className="w-full max-w-md bg-white rounded-3xl border-2 border-amber-200 shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-[#0f2952] to-[#1e3a8a] text-white px-5 py-4 flex items-center justify-between gap-3">

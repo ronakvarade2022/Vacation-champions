@@ -27,7 +27,12 @@ import {
   Trophy,
   Printer,
   Globe,
+  Volume2,
+  Play,
+  Pause,
+  Square,
 } from 'lucide-react';
+import { speechService, type SpeechParagraphState, type StoryLanguage } from '../services/speechService';
 import { StudyLibrarySpecialHubs } from './StudyLibrarySpecialHubs';
 import {
   QuickStudyZoneIconBar,
@@ -602,6 +607,56 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
   const handleRetryChapterTest = () => {
     setTestAnswers({});
     setTestSubmitted(false);
+  };
+
+  // Study Notes Audio Narration (Listen / Pause / Resume / Stop)
+  const [notesAudioState, setNotesAudioState] = useState<SpeechParagraphState | null>(null);
+  useEffect(() => {
+    speechService.stop();
+    setNotesAudioState(null);
+  }, [activeChapter?.id, activeSectionTab]);
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
+  const handleToggleChapterNotesAudio = () => {
+    if (!activeChapter) return;
+    if (notesAudioState?.isPlaying) {
+      speechService.pause();
+      return;
+    }
+    if (notesAudioState?.isPaused) {
+      speechService.resume();
+      return;
+    }
+
+    const paragraphs: string[] = [
+      activeChapter.overview,
+      ...(activeChapter.detailedExplanation || []),
+      ...(activeChapter.chapterSummary ? [activeChapter.chapterSummary] : []),
+      ...activeChapter.keyPoints,
+    ].filter((t) => typeof t === 'string' && t.trim().length > 0);
+
+    const lang: StoryLanguage =
+      selectedMedium === 'Marathi' || selectedSubject === 'Marathi'
+        ? 'Marathi'
+        : selectedMedium === 'Hindi' || selectedSubject === 'Hindi'
+        ? 'Hindi'
+        : 'English';
+
+    void speechService.startStoryNarration(
+      paragraphs,
+      lang,
+      (st) => setNotesAudioState(st),
+      () => setNotesAudioState(null)
+    );
+  };
+
+  const handleStopChapterNotesAudio = () => {
+    speechService.stop();
+    setNotesAudioState(null);
   };
 
   // Record recently viewed chapter locally (0 Firestore writes)
@@ -2094,6 +2149,61 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({
                 const matchesSearch = (text: string) => !sq || text.toLowerCase().includes(sq);
                 return (
                   <div className="space-y-6">
+                    {/* Chapter Notes Audio Player Bar */}
+                    <div className="rounded-xl bg-indigo-50/90 border border-indigo-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Volume2 className="w-4 h-4 text-indigo-700 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-indigo-950 truncate">
+                            Listen to Chapter Notes Audio ({selectedMedium})
+                          </p>
+                          <p className="text-[11px] text-indigo-700 truncate">
+                            {notesAudioState?.error
+                              ? notesAudioState.error
+                              : notesAudioState?.isPlaying
+                              ? `Playing (${notesAudioState.progressPercent}%) • ${notesAudioState.voiceName || 'Active Voice'}`
+                              : notesAudioState?.isPaused
+                              ? 'Audio paused — tap Resume to continue'
+                              : 'Play clear narration of Chapter Introduction, Explanation, Summary & Key Points'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleToggleChapterNotesAudio}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-extrabold cursor-pointer transition-colors"
+                        >
+                          {notesAudioState?.isPlaying ? (
+                            <>
+                              <Pause className="w-3.5 h-3.5" />
+                              <span>Pause</span>
+                            </>
+                          ) : notesAudioState?.isPaused ? (
+                            <>
+                              <Play className="w-3.5 h-3.5" />
+                              <span>Resume</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="w-3.5 h-3.5" />
+                              <span>Listen Notes</span>
+                            </>
+                          )}
+                        </button>
+                        {(notesAudioState?.isPlaying || notesAudioState?.isPaused) && (
+                          <button
+                            type="button"
+                            onClick={handleStopChapterNotesAudio}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 text-xs font-extrabold cursor-pointer transition-colors"
+                          >
+                            <Square className="w-3 h-3" />
+                            <span>Stop</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
                     {/* A. Chapter Introduction */}
                     {matchesSearch(activeChapter.overview) && (
                       <section className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">

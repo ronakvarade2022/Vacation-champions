@@ -606,7 +606,8 @@ service cloud.firestore {
              (!('browser' in data) || (data.browser is string && data.browser.size() <= 60)) &&
              (!('os' in data) || (data.os is string && data.os.size() <= 60)) &&
              (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
-             (!('studentName' in data) || (data.studentName is string && data.studentName.size() <= 100));
+             (!('studentName' in data) || (data.studentName is string && data.studentName.size() <= 100)) &&
+             (!('sessionVersion' in data) || (data.sessionVersion is number && data.sessionVersion >= 1));
     }
 
     // 12. Collection: /device_sessions/{userId}

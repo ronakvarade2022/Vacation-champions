@@ -266,6 +266,7 @@
         "studentName": { "type": "string", "maxLength": 100 },
         "accountRole": { "type": "string", "enum": ["student", "teacher"] },
         "activeSessionId": { "type": "string", "maxLength": 128 },
+        "sessionVersion": { "type": "number", "minimum": 1 },
         "deviceId": { "type": "string", "maxLength": 128 },
         "hardwareSignature": { "type": "string", "maxLength": 128 },
         "deviceSignature": { "type": "string", "maxLength": 128 },

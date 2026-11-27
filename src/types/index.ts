@@ -889,6 +889,7 @@ export interface DeviceSessionRecord {
   studentName: string;
   accountRole: 'student' | 'teacher';
   activeSessionId: string;
+  sessionVersion?: number;
   deviceId: string;
   hardwareSignature: string;
   deviceSignature: string;

@@ -29,6 +29,7 @@ import {
   loadCoreSkillProgress,
   saveCoreSkillProgress,
 } from '../../services/portalFirestoreService';
+import { speechService } from '../../services/speechService';
 
 export type CoreSkillProgramId = 'vedic-maths' | 'abacus' | 'phonics';
 
@@ -258,23 +259,28 @@ export const CoreSkillLabView: React.FC<CoreSkillLabViewProps> = ({
   const activePhonicsLevel =
     PHONICS_LEVEL_MODULES.find((l) => l.id === selectedPhonicsLevelId) || PHONICS_LEVEL_MODULES[0];
 
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
   const speakText = (text: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (!speechService.isSupported()) {
       setSpeechStatus(
         'Audio pronunciation is unavailable in this browser; read the phonetic sound cue printed on the card.'
       );
       return;
     }
-    try {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'en-IN';
-      utter.rate = 0.88;
-      window.speechSynthesis.speak(utter);
-      setSpeechStatus(`Spoken aloud: "${text}"`);
-    } catch {
-      setSpeechStatus(`Phonetic cue: "${text}"`);
-    }
+    setSpeechStatus(`Spoken aloud: "${text}"`);
+    void speechService.speakSimpleText(text, 'en-IN', {
+      rate: 0.88,
+      onState: (info) => {
+        if (info.error) {
+          setSpeechStatus(info.error);
+        }
+      },
+    });
   };
 
   const startDictationPrompt = () => {

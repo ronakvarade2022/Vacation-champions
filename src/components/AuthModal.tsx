@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X, User, Lock, Phone, Mail, School, GraduationCap, ShieldAlert,
-  Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin, Smartphone
+  Sparkles, CheckCircle2, Eye, EyeOff, ArrowLeft, KeyRound, Gift, MapPin
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CategoryId, ClassLevel, EducationBoard, PortalRole, SubjectName } from '../types';
@@ -165,7 +165,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     loginPortalAccount,
     recoverAccount,
     acquireSessionAfterRegistration,
-    recoverBlockedDeviceSession,
     sessionSecurityNotice,
     updateTeacherSelectedCategories,
   } = useApp();
@@ -255,6 +254,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Multi-Class & Multi-Board Existing Account Recognition State
   const [existingAccountMatch, setExistingAccountMatch] = useState<{
@@ -270,11 +270,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   } | null>(null);
   const [existingAccountPassword, setExistingAccountPassword] = useState('');
   const [showExistingPassword, setShowExistingPassword] = useState(false);
-
-  // Single-Device Lost/Damaged Device Recovery State
-  const [showDeviceRecovery, setShowDeviceRecovery] = useState(false);
-  const [recoveryMobile, setRecoveryMobile] = useState('');
-  const [recoveryRole, setRecoveryRole] = useState<'student' | 'teacher'>('student');
 
   useEffect(() => {
     setTab(defaultTab);
@@ -303,8 +298,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setSuccessMsg('');
     setExistingAccountMatch(null);
     setExistingAccountPassword('');
-    setShowDeviceRecovery(false);
-    setRecoveryMobile('');
   }, [defaultTab, initialRegisterRole, initialEmail, initialBoard, initialClass, isOpen, sessionSecurityNotice]);
 
   // Live detect if Mobile + Email match an existing student/teacher account (for seamless multi-board & multi-class addition)
@@ -426,9 +419,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     });
   };
 
-  // --- 1. Student/Teacher Login via Email & Password ---
+  // --- 1. Student/Teacher Login via Email & Password (Latest Login Wins) ---
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     setError('');
     setSuccessMsg('');
 
@@ -441,73 +435,70 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
-    const normalizedRefCode = sanitizeReferralCode(regReferralCode);
-    let verifiedReferrerUserId: string | undefined;
+    try {
+      const normalizedRefCode = sanitizeReferralCode(regReferralCode);
+      let verifiedReferrerUserId: string | undefined;
 
-    if (normalizedRefCode) {
-      const refCheck = await referralService.validateCode(normalizedRefCode);
-      if (!refCheck?.valid) {
-        setIsLoading(false);
-        setError(
-          refCheck?.message ||
-            refCheck?.error ||
-            `Invalid referral code "${normalizedRefCode}". Please enter a valid referral code or leave the field blank.`
-        );
+      if (normalizedRefCode) {
+        const refCheck = await referralService.validateCode(normalizedRefCode);
+        if (!refCheck?.valid) {
+          setError(
+            refCheck?.message ||
+              refCheck?.error ||
+              `Invalid referral code "${normalizedRefCode}". Please enter a valid referral code or leave the field blank.`
+          );
+          return;
+        }
+        verifiedReferrerUserId = refCheck.referrerUserId;
+      }
+
+      const res = await loginWithEmail(loginEmail.trim(), loginPassword);
+      if (!res.success) {
+        setError(res.message);
         return;
       }
-      verifiedReferrerUserId = refCheck.referrerUserId;
-    }
 
-    const res = await loginWithEmail(loginEmail.trim(), loginPassword);
-    setIsLoading(false);
-
-    if (!res.success) {
-      setError(res.message);
-      if (res.blockedByActiveDevice) {
-        setShowDeviceRecovery(true);
-        setRecoveryRole('student');
+      // Never overwrite an existing user's referral information.
+      // Only apply if user explicitly typed a manual code AND user has no prior referral record.
+      if (
+        normalizedRefCode &&
+        res.student &&
+        !res.student.referredByCode &&
+        !res.student.referredByStudentId
+      ) {
+        const ownCode = sanitizeReferralCode(res.student.referralCode);
+        if (ownCode !== normalizedRefCode && res.student.id !== verifiedReferrerUserId) {
+          res.student.referredByCode = normalizedRefCode;
+          res.student.referredByStudentId = verifiedReferrerUserId;
+          await saveStudentProfileToFirestore(res.student).catch(() => {});
+          await referralService
+            .trackSignup({
+              newUserId: res.student.id,
+              newUserName: res.student.name,
+              newUserRole: 'student',
+              newUserClass: res.student.classLevel,
+              schoolName: res.student.schoolName || '',
+              city: 'Pune',
+              email: res.student.email,
+              mobile: res.student.mobile,
+              referralCodeUsed: normalizedRefCode,
+            })
+            .catch(() => {});
+        }
       }
-      return;
-    }
 
-    // Never overwrite an existing user's referral information.
-    // Only apply if user explicitly typed a manual code AND user has no prior referral record.
-    if (
-      normalizedRefCode &&
-      res.student &&
-      !res.student.referredByCode &&
-      !res.student.referredByStudentId
-    ) {
-      const ownCode = sanitizeReferralCode(res.student.referralCode);
-      if (ownCode !== normalizedRefCode && res.student.id !== verifiedReferrerUserId) {
-        res.student.referredByCode = normalizedRefCode;
-        res.student.referredByStudentId = verifiedReferrerUserId;
-        await saveStudentProfileToFirestore(res.student).catch(() => {});
-        await referralService
-          .trackSignup({
-            newUserId: res.student.id,
-            newUserName: res.student.name,
-            newUserRole: 'student',
-            newUserClass: res.student.classLevel,
-            schoolName: res.student.schoolName || '',
-            city: 'Pune',
-            email: res.student.email,
-            mobile: res.student.mobile,
-            referralCodeUsed: normalizedRefCode,
-          })
-          .catch(() => {});
-      }
+      clearStoredBrowserReferralCodes();
+      setRegReferralCode('');
+      onClearReferralCode?.();
+      onSuccess?.();
+      onPortalAuthSuccess?.(res.student?.accountRole === 'teacher' ? 'teacher' : 'student');
+      onClose();
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
     }
-
-    clearStoredBrowserReferralCodes();
-    setRegReferralCode('');
-    onClearReferralCode?.();
-    setShowDeviceRecovery(false);
-    setRecoveryMobile('');
-    onSuccess?.();
-    onPortalAuthSuccess?.(res.student?.accountRole === 'teacher' ? 'teacher' : 'student');
-    onClose();
   };
 
   // --- Parent / School / Coaching Portal Login ---
@@ -516,6 +507,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     expectedRole: 'parent' | 'school_admin' | 'institute_admin'
   ) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     setError('');
     setSuccessMsg('');
     if (!isValidEmail(portalLoginEmail)) {
@@ -526,65 +518,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('Please enter your password.');
       return;
     }
+    isSubmittingRef.current = true;
     setIsLoading(true);
-    const res = await loginPortalAccount(portalLoginEmail.trim(), portalLoginPassword, expectedRole);
-    setIsLoading(false);
-    if (!res.success) {
-      setError(res.message);
-      return;
+    try {
+      const res = await loginPortalAccount(portalLoginEmail.trim(), portalLoginPassword, expectedRole);
+      if (!res.success) {
+        setError(res.message);
+        return;
+      }
+      onSuccess?.();
+      onPortalAuthSuccess?.(expectedRole);
+      onClose();
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
     }
-    onSuccess?.();
-    onPortalAuthSuccess?.(expectedRole);
-    onClose();
-  };
-
-  // --- Lost or Damaged Previous Device Recovery Flow ---
-  const handleRecoverBlockedDevice = async (roleForRecovery: 'student' | 'teacher') => {
-    setError('');
-    setSuccessMsg('');
-
-    const targetEmail = (roleForRecovery === 'teacher' ? teacherEmail : loginEmail).trim().toLowerCase();
-    const targetPassword = roleForRecovery === 'teacher' ? teacherPassword : loginPassword;
-    const cleanMobile = recoveryMobile.replace(/\D/g, '').slice(-10);
-
-    if (!isValidEmail(targetEmail)) {
-      setError('Please enter your registered email address above before recovering device access.');
-      return;
-    }
-    if (!targetPassword) {
-      setError('Please enter your account password above to verify ownership.');
-      return;
-    }
-    if (!isValidMobile(cleanMobile)) {
-      setError('Please enter your registered 10-digit mobile number to confirm device recovery.');
-      return;
-    }
-
-    setIsLoading(true);
-    const res = await recoverBlockedDeviceSession({
-      email: targetEmail,
-      password: targetPassword,
-      mobile: cleanMobile,
-      preferredRole: roleForRecovery,
-    });
-    setIsLoading(false);
-
-    if (!res.success) {
-      setError(res.message);
-      return;
-    }
-
-    setShowDeviceRecovery(false);
-    setRecoveryMobile('');
-    onSuccess?.();
-    onPortalAuthSuccess?.(roleForRecovery);
-    onClose();
   };
 
   // --- Existing Account Verification -> Proceed Directly to Activate Additional Class (No Duplicate Account) ---
   const handleVerifyExistingAccountAndProceed = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!existingAccountMatch) return;
+    if (!existingAccountMatch || isSubmittingRef.current) return;
 
     setError('');
     setSuccessMsg('');
@@ -595,18 +549,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
-    const loginRes =
-      existingAccountMatch.accountRole === 'teacher'
-        ? await loginAsTeacher(existingAccountMatch.email, passwordToUse)
-        : await loginWithEmail(existingAccountMatch.email, passwordToUse);
-    setIsLoading(false);
+    let loginRes: Awaited<ReturnType<typeof loginWithEmail>> | Awaited<ReturnType<typeof loginAsTeacher>>;
+    try {
+      loginRes =
+        existingAccountMatch.accountRole === 'teacher'
+          ? await loginAsTeacher(existingAccountMatch.email, passwordToUse)
+          : await loginWithEmail(existingAccountMatch.email, passwordToUse);
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
+    }
 
     if (!loginRes.success) {
       setError(loginRes.message);
-      if (loginRes.blockedByActiveDevice) {
-        setRecoveryRole(existingAccountMatch.accountRole);
-      }
       return;
     }
 
@@ -645,6 +602,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // --- 3. All 5 Portals Registration Handler ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     setError('');
     setSuccessMsg('');
 
@@ -687,8 +645,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
+      isSubmittingRef.current = true;
       setIsLoading(true);
-      const regRes = await registerPortalAccount({
+      let regRes: Awaited<ReturnType<typeof registerPortalAccount>>;
+      try {
+      regRes = await registerPortalAccount({
         role: regRoleType,
         name: regName.trim(),
         email: cleanEmail,
@@ -717,7 +678,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         programIdsOffered:
           regRoleType === 'institute_admin' ? regProgramsOffered : undefined,
       });
-      setIsLoading(false);
+      } finally {
+        isSubmittingRef.current = false;
+        setIsLoading(false);
+      }
 
       if (!regRes.success) {
         setError(regRes.message);
@@ -782,9 +746,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const roleLabel = regRoleType === 'teacher' ? 'Teacher' : 'Student';
 
     // Check if this Email + Mobile belongs to an existing account before blocking or creating duplicates
+    isSubmittingRef.current = true;
     setIsLoading(true);
-    const existingCheck = await checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass, regBoard);
-    setIsLoading(false);
+    let existingCheck: Awaited<ReturnType<typeof checkAccountForMultiClassRegistration>>;
+    try {
+      existingCheck = await checkAccountForMultiClassRegistration(cleanEmail, cleanMobile, regClass, regBoard);
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
+    }
 
     if (existingCheck.exists) {
       if (existingCheck.matchedPair) {
@@ -807,12 +777,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         // If user already entered their password in the password box, authenticate directly!
         if (regPassword.length >= 6 || existingAccountPassword.length >= 1) {
           const pw = existingAccountPassword || regPassword;
+          isSubmittingRef.current = true;
           setIsLoading(true);
-          const loginRes =
-            matchedState.accountRole === 'teacher'
-              ? await loginAsTeacher(cleanEmail, pw)
-              : await loginWithEmail(cleanEmail, pw);
-          setIsLoading(false);
+          let loginRes: Awaited<ReturnType<typeof loginWithEmail>> | Awaited<ReturnType<typeof loginAsTeacher>>;
+          try {
+            loginRes =
+              matchedState.accountRole === 'teacher'
+                ? await loginAsTeacher(cleanEmail, pw)
+                : await loginWithEmail(cleanEmail, pw);
+          } finally {
+            isSubmittingRef.current = false;
+            setIsLoading(false);
+          }
           if (!loginRes.success) {
             setError(
               `Existing account found for ${matchedState.studentName}! Enter your registered account password below to unlock ${getBoardShortLabel(regBoard)} ${regClass}. (${loginRes.message})`
@@ -866,7 +842,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // NOTE: School Name is strictly OPTIONAL for both Students and Teachers!
+    isSubmittingRef.current = true;
     setIsLoading(true);
+    try {
 
     // Validate optional manual referral code or automatically process active referral link code
     const manualRefCode = sanitizeReferralCode(regReferralCode);
@@ -1015,14 +993,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     clearStoredBrowserReferralCodes();
     setRegReferralCode('');
     onClearReferralCode?.();
-    setIsLoading(false);
     onSuccess?.();
     onPortalAuthSuccess?.(regRoleType === 'teacher' ? 'teacher' : 'student');
     onClose();
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
+    }
   };
 
   // --- 4. Forgot Password / Reset Password via Firebase Authentication ---
   const sendResetLinkToRegisteredEmail = async () => {
+    if (isSubmittingRef.current) return;
     setError('');
     setSuccessMsg('');
 
@@ -1037,17 +1019,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
-    const res = await recoverAccount(cleanEmail);
-    setIsLoading(false);
+    try {
+      const res = await recoverAccount(cleanEmail);
+      if (!res.success) {
+        setError(res.message);
+        return;
+      }
 
-    if (!res.success) {
-      setError(res.message);
-      return;
+      setResetEmailSentCount((prev) => prev + 1);
+      setSuccessMsg(res.message);
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
     }
-
-    setResetEmailSentCount((prev) => prev + 1);
-    setSuccessMsg(res.message);
   };
 
   const handleRecoverPassword = async (e: React.FormEvent) => {
@@ -1058,89 +1044,93 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // --- 5. Teacher Portal Login ---
   const handleTeacherSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     setError('');
+    isSubmittingRef.current = true;
     setIsLoading(true);
+    try {
+      const normalizedRefCode = sanitizeReferralCode(regReferralCode);
+      let verifiedReferrerUserId: string | undefined;
 
-    const normalizedRefCode = sanitizeReferralCode(regReferralCode);
-    let verifiedReferrerUserId: string | undefined;
+      if (normalizedRefCode) {
+        const refCheck = await referralService.validateCode(normalizedRefCode);
+        if (!refCheck?.valid) {
+          setError(
+            refCheck?.message ||
+              refCheck?.error ||
+              `Invalid referral code "${normalizedRefCode}". Please enter a valid referral code or leave the field blank.`
+          );
+          return;
+        }
+        verifiedReferrerUserId = refCheck.referrerUserId;
+      }
 
-    if (normalizedRefCode) {
-      const refCheck = await referralService.validateCode(normalizedRefCode);
-      if (!refCheck?.valid) {
-        setIsLoading(false);
-        setError(
-          refCheck?.message ||
-            refCheck?.error ||
-            `Invalid referral code "${normalizedRefCode}". Please enter a valid referral code or leave the field blank.`
-        );
+      const res = await loginAsTeacher(teacherEmail, teacherPassword);
+      if (!res.success) {
+        setError(res.message);
         return;
       }
-      verifiedReferrerUserId = refCheck.referrerUserId;
-    }
 
-    const res = await loginAsTeacher(teacherEmail, teacherPassword);
-    setIsLoading(false);
-    if (!res.success) {
-      setError(res.message);
-      if (res.blockedByActiveDevice) {
-        setShowDeviceRecovery(true);
-        setRecoveryRole('teacher');
+      // Never overwrite an existing user's referral information.
+      if (
+        normalizedRefCode &&
+        res.teacher &&
+        !res.teacher.referredByCode &&
+        !res.teacher.referredByStudentId
+      ) {
+        const ownCode = sanitizeReferralCode(res.teacher.referralCode);
+        if (ownCode !== normalizedRefCode && res.teacher.id !== verifiedReferrerUserId) {
+          res.teacher.referredByCode = normalizedRefCode;
+          res.teacher.referredByStudentId = verifiedReferrerUserId;
+          await saveStudentProfileToFirestore(res.teacher).catch(() => {});
+          await referralService
+            .trackSignup({
+              newUserId: res.teacher.id,
+              newUserName: res.teacher.name,
+              newUserRole: 'teacher',
+              newUserClass: res.teacher.classLevel,
+              schoolName: res.teacher.schoolName || '',
+              city: 'Pune',
+              email: res.teacher.email,
+              mobile: res.teacher.mobile,
+              referralCodeUsed: normalizedRefCode,
+            })
+            .catch(() => {});
+        }
       }
-      return;
-    }
 
-    // Never overwrite an existing user's referral information.
-    if (
-      normalizedRefCode &&
-      res.teacher &&
-      !res.teacher.referredByCode &&
-      !res.teacher.referredByStudentId
-    ) {
-      const ownCode = sanitizeReferralCode(res.teacher.referralCode);
-      if (ownCode !== normalizedRefCode && res.teacher.id !== verifiedReferrerUserId) {
-        res.teacher.referredByCode = normalizedRefCode;
-        res.teacher.referredByStudentId = verifiedReferrerUserId;
-        await saveStudentProfileToFirestore(res.teacher).catch(() => {});
-        await referralService
-          .trackSignup({
-            newUserId: res.teacher.id,
-            newUserName: res.teacher.name,
-            newUserRole: 'teacher',
-            newUserClass: res.teacher.classLevel,
-            schoolName: res.teacher.schoolName || '',
-            city: 'Pune',
-            email: res.teacher.email,
-            mobile: res.teacher.mobile,
-            referralCodeUsed: normalizedRefCode,
-          })
-          .catch(() => {});
-      }
+      clearStoredBrowserReferralCodes();
+      setRegReferralCode('');
+      onClearReferralCode?.();
+      onSuccess?.();
+      onPortalAuthSuccess?.('teacher');
+      onClose();
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
     }
-
-    clearStoredBrowserReferralCodes();
-    setRegReferralCode('');
-    onClearReferralCode?.();
-    setShowDeviceRecovery(false);
-    setRecoveryMobile('');
-    onSuccess?.();
-    onPortalAuthSuccess?.('teacher');
-    onClose();
   };
 
   // --- 6. Admin Login ---
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     setError('');
+    isSubmittingRef.current = true;
     setIsLoading(true);
-    const res = await loginAsAdmin(adminEmail, adminPassword);
-    setIsLoading(false);
-    if (!res.success) {
-      setError(res.message);
-      return;
+    try {
+      const res = await loginAsAdmin(adminEmail, adminPassword);
+      if (!res.success) {
+        setError(res.message);
+        return;
+      }
+      onSuccess?.();
+      onPortalAuthSuccess?.('admin');
+      onClose();
+    } finally {
+      isSubmittingRef.current = false;
+      setIsLoading(false);
     }
-    onSuccess?.();
-    onPortalAuthSuccess?.('admin');
-    onClose();
   };
 
   const activePortalMeta = (() => {
@@ -1318,10 +1308,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Body */}
         <div className="p-6 max-h-[78vh] overflow-y-auto">
-          {error && (
+          {(error || sessionSecurityNotice) && (
             <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>{error}</span>
+              <span>{error || sessionSecurityNotice}</span>
             </div>
           )}
 
@@ -1443,63 +1433,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </form>
 
               <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
-                <div className="flex items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRecoveryRole('student');
-                      setShowDeviceRecovery((prev) => !(prev && recoveryRole === 'student'));
-                      setError('');
-                    }}
-                    className="text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Lost or Damaged Previous Device? Recover Access</span>
-                  </button>
-                </div>
-
-                {showDeviceRecovery && recoveryRole === 'student' && (
-                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-3 text-xs">
-                    <div className="space-y-1">
-                      <p className="font-black text-amber-950 flex items-center gap-1.5">
-                        <Smartphone className="w-4 h-4 text-amber-700" />
-                        <span>Lost / Damaged Device Access Recovery</span>
-                      </p>
-                      <p className="text-[11px] text-amber-900 leading-relaxed">
-                        Verify your registered <strong>10-digit mobile number</strong> along with your email &amp; password above. This will automatically log out your previous device and activate this device immediately (max 3 recoveries per 24 hours).
-                      </p>
-                    </div>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-amber-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        value={recoveryMobile}
-                        onChange={(e) => setRecoveryMobile(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Enter registered 10-digit mobile number"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-amber-300 bg-white focus:border-amber-600 focus:outline-none text-xs font-bold"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={isLoading}
-                        onClick={() => handleRecoverBlockedDevice('student')}
-                        className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-black text-xs shadow-xs cursor-pointer transition-colors"
-                      >
-                        {isLoading ? 'Recovering Access...' : 'Log Out Old Device & Sign In Here'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowDeviceRecovery(false)}
-                        className="px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-amber-900 font-bold text-xs hover:bg-amber-100 cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <p className="text-center text-xs text-slate-500">
                   New to Student Portal?{' '}
                   <button
@@ -1639,63 +1572,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </form>
 
               <div className="pt-2 border-t border-slate-100 space-y-3">
-                <div className="flex items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRecoveryRole('teacher');
-                      setShowDeviceRecovery((prev) => !(prev && recoveryRole === 'teacher'));
-                      setError('');
-                    }}
-                    className="text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Lost or Damaged Previous Device? Recover Access</span>
-                  </button>
-                </div>
-
-                {showDeviceRecovery && recoveryRole === 'teacher' && (
-                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-3 text-xs">
-                    <div className="space-y-1">
-                      <p className="font-black text-amber-950 flex items-center gap-1.5">
-                        <Smartphone className="w-4 h-4 text-amber-700" />
-                        <span>Lost / Damaged Device Access Recovery</span>
-                      </p>
-                      <p className="text-[11px] text-amber-900 leading-relaxed">
-                        Verify your registered <strong>10-digit mobile number</strong> along with your teacher email &amp; password above to log out your previous device and sign in here.
-                      </p>
-                    </div>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-amber-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        value={recoveryMobile}
-                        onChange={(e) => setRecoveryMobile(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Enter registered 10-digit mobile number"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-amber-300 bg-white focus:border-amber-600 focus:outline-none text-xs font-bold"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={isLoading}
-                        onClick={() => handleRecoverBlockedDevice('teacher')}
-                        className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-black text-xs shadow-xs cursor-pointer transition-colors"
-                      >
-                        {isLoading ? 'Recovering Access...' : 'Log Out Old Device & Sign In Here'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowDeviceRecovery(false)}
-                        className="px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-amber-900 font-bold text-xs hover:bg-amber-100 cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <p className="text-center text-xs text-slate-500">
                   Want to register as a Teacher?{' '}
                   <button
