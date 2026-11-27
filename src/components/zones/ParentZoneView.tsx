@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PARENT_LEARNING_MATERIALS, type ParentingGuideItem } from '../../data/parentZone/parentLearningMaterials';
 import { saveParentMessageToFirestore } from '../../services/portalFirestoreService';
+import { DailyThoughtAndDictionaryWidget } from '../DailyThoughtAndDictionaryWidget';
 import type { StudentProfile } from '../../types';
 import {
   ArrowLeft,
@@ -478,6 +479,20 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
               keywords: 'teacher notes message communication parent feedback',
               action: () => setParentTab('communication'),
             },
+            {
+              title: 'Trilingual Dictionary (English • मराठी • हिन्दी)',
+              badge: 'Dictionary',
+              desc: 'Help your child learn Classes 1–10 vocabulary in English, Marathi & Hindi',
+              keywords: 'dictionary vocabulary word meaning english marathi hindi synonym antonym',
+              action: () => onNavigateTab('trilingual-dictionary'),
+            },
+            {
+              title: 'Thought of the Day (1,085+ Trilingual Suvichar)',
+              badge: 'Daily Thought',
+              desc: 'Daily moral, educational & motivational thoughts in English, Marathi & Hindi',
+              keywords: 'thought of the day suvichar quotes motivational educational moral',
+              action: () => onNavigateTab('thought-of-the-day'),
+            },
           ].filter(
             (s) =>
               s.title.toLowerCase().includes(q) ||
@@ -606,6 +621,12 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
           );
         })()}
       </div>
+
+      {/* Thought of the Day & Trilingual Dictionary Hub for Parents & Children */}
+      <DailyThoughtAndDictionaryWidget
+        onOpenDictionary={() => onNavigateTab('trilingual-dictionary')}
+        onOpenThoughts={() => onNavigateTab('thought-of-the-day')}
+      />
 
       {/* Sub-navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2.5">

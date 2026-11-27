@@ -57,6 +57,7 @@ import {
 } from './DashboardIllustrations';
 import { QuickStudyZoneIconBar, type QuickLearningNavId } from './OneLineIconNavBar';
 import { GlobalStudySearchBar, type GlobalSearchJumpTarget } from './StudyLibraryGlobalSearch';
+import { DailyThoughtAndDictionaryWidget } from './DailyThoughtAndDictionaryWidget';
 
 export interface RealStudentProgressMetrics {
   isLoggedIn: boolean;
@@ -366,6 +367,10 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
       onNavigateTab('qr-barcode-centre');
     } else if (actionId === 'sl-core-skills-lab') {
       onNavigateTab('core-skills-lab');
+    } else if (actionId === 'sl-trilingual-dictionary') {
+      onNavigateTab('trilingual-dictionary');
+    } else if (actionId === 'sl-thought-of-the-day') {
+      onNavigateTab('thought-of-the-day');
     } else if (actionId === 'sl-additional-curriculum') {
       onNavigateTab('additional-curriculum');
     } else if (actionId === 'sl-creative' || actionId === 'sl-programs') {
@@ -657,6 +662,20 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
         borderClass: 'border-amber-500/50',
       };
     }
+    if (subId === 'sl-trilingual-dictionary') {
+      return {
+        emojiIcon: '📘',
+        cardGradient: 'from-[#bae6fd] via-[#7dd3fc] to-[#38bdf8]',
+        borderClass: 'border-sky-500/50',
+      };
+    }
+    if (subId === 'sl-thought-of-the-day') {
+      return {
+        emojiIcon: '🌟',
+        cardGradient: 'from-[#fef3c7] via-[#fde68a] to-[#facc15]',
+        borderClass: 'border-amber-500/60',
+      };
+    }
     if (subId === 'sl-creative') {
       return {
         illustrationType: 'writing',
@@ -927,6 +946,14 @@ export const ReferenceShowcaseSections: React.FC<ReferenceShowcaseSectionsProps>
             triggerSubAction('sl-additional-curriculum');
           }
         }}
+      />
+
+      {/* =====================================================================
+          THOUGHT OF THE DAY (1,085+ TRILINGUAL SUVICHAR) & TRILINGUAL DICTIONARY HUB
+          ===================================================================== */}
+      <DailyThoughtAndDictionaryWidget
+        onOpenDictionary={() => onNavigateTab('trilingual-dictionary')}
+        onOpenThoughts={() => onNavigateTab('thought-of-the-day')}
       />
 
       {/* =====================================================================

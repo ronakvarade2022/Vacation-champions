@@ -38,6 +38,8 @@ export type NavSubActionId =
   | 'sl-document-studio'
   | 'sl-qr-barcode'
   | 'sl-core-skills-lab'
+  | 'sl-trilingual-dictionary'
+  | 'sl-thought-of-the-day'
   // SECTION 4: STUDY MATERIAL
   | 'sm-textbook-learning'
   | 'sm-notes'
@@ -275,6 +277,18 @@ export const MAIN_NAV_MENUS: NavMenuGroupConfig[] = [
         label: 'Barcode & QR Generator Centre',
         description: 'Generate 15 types of QR & Barcodes (School/Student/Teacher IDs, Attendance, EAN-13, Code 128, ISBN, vCard, Wi-Fi & Bulk Label Sheets)',
         badgeText: '15 QR Tools',
+      },
+      {
+        id: 'sl-trilingual-dictionary',
+        label: 'Trilingual Dictionary (EN • मराठी • हिन्दी)',
+        description: 'English–Marathi–Hindi Dictionary with pronunciation, synonyms, antonyms, daily vocabulary & A–Z browser for Classes 1–10',
+        badgeText: '3 Languages',
+      },
+      {
+        id: 'sl-thought-of-the-day',
+        label: 'Thought of the Day (1,085+ सुविचार)',
+        description: '1,085+ unique English, Marathi & Hindi daily thoughts across 5 categories with verified quotes, past archive, share & copy',
+        badgeText: '1,085+ Thoughts',
       },
       {
         id: 'sl-core-skills-lab',

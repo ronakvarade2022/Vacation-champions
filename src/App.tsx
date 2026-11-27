@@ -158,6 +158,16 @@ const CoreSkillLabView = lazyWithRetry(() =>
     default: m.CoreSkillLabView,
   }))
 );
+const TrilingualDictionaryView = lazyWithRetry(() =>
+  import('./components/dictionary/TrilingualDictionaryView').then((m) => ({
+    default: m.TrilingualDictionaryView,
+  }))
+);
+const ThoughtOfTheDayView = lazyWithRetry(() =>
+  import('./components/thoughts/ThoughtOfTheDayView').then((m) => ({
+    default: m.ThoughtOfTheDayView,
+  }))
+);
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
   <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
@@ -203,6 +213,8 @@ const FEATURE_TITLES: Record<string, string> = {
   'document-studio': 'Document, Image, PDF (19 Tools) & Print Preview Studio',
   'qr-barcode-centre': 'Barcode & QR Generator Centre (15 Tools)',
   'core-skills-lab': 'Vedic Maths, Abacus & Phonics Interactive Lab',
+  'trilingual-dictionary': 'English–Marathi–Hindi Trilingual Dictionary (Classes 1–10)',
+  'thought-of-the-day': 'Thought of the Day (1,085+ English, Marathi & Hindi Thoughts)',
   certificates: 'Official Champion Certificates & Leaderboard',
   leaderboard: 'Official Champion Certificates & Leaderboard',
   referrals: 'Learn • Share • Grow • Earn Referral Hub',
@@ -642,6 +654,7 @@ const AppContent: React.FC = () => {
       'demo', 'demo-mock-tests', 'dashboard', 'dashboard-student-preview', 'public-home', 'portal-landing',
       'explore-zone', 'all-courses', 'other-programs',
       'coaching-zone', 'parent-zone', 'school-college-zone', 'ai-tools', 'document-studio', 'qr-barcode-centre', 'core-skills-lab',
+      'trilingual-dictionary', 'thought-of-the-day',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
       'worksheets', 'study-materials', 'study-material', 'lesson-planner', 'teacher-dashboard', 'additional-curriculum',
@@ -927,6 +940,14 @@ const AppContent: React.FC = () => {
         handleNavigateTab('core-skills-lab');
         return;
       }
+      case 'sl-trilingual-dictionary': {
+        handleNavigateTab('trilingual-dictionary');
+        return;
+      }
+      case 'sl-thought-of-the-day': {
+        handleNavigateTab('thought-of-the-day');
+        return;
+      }
       case 'sl-additional-curriculum': {
         openAdditionalCurriculum({
           board: currentStudent ? activeBoard : publicBoard,
@@ -1120,6 +1141,8 @@ const AppContent: React.FC = () => {
       currentTab === 'document-studio' ||
       currentTab === 'qr-barcode-centre' ||
       currentTab === 'core-skills-lab' ||
+      currentTab === 'trilingual-dictionary' ||
+      currentTab === 'thought-of-the-day' ||
       currentTab === 'other-programs'
     ) {
       return 'special-learning';
@@ -1478,6 +1501,10 @@ const AppContent: React.FC = () => {
                 ? 'sl-qr-barcode'
                 : currentTab === 'core-skills-lab'
                 ? 'sl-core-skills-lab'
+                : currentTab === 'trilingual-dictionary'
+                ? 'sl-trilingual-dictionary'
+                : currentTab === 'thought-of-the-day'
+                ? 'sl-thought-of-the-day'
                 : currentTab === 'additional-curriculum'
                 ? 'sl-additional-curriculum'
                 : currentTab === 'other-programs'
@@ -1607,6 +1634,8 @@ const AppContent: React.FC = () => {
                   'document-studio',
                   'qr-barcode-centre',
                   'core-skills-lab',
+                  'trilingual-dictionary',
+                  'thought-of-the-day',
                   'referrals',
                   'faqs',
                 ]);
@@ -1854,6 +1883,22 @@ const AppContent: React.FC = () => {
               initialProgram={initialCoreSkillProgram}
               userId={currentStudent?.id || currentUser?.uid}
               onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
+          ) : currentTab === 'trilingual-dictionary' ? (
+            <TrilingualDictionaryView
+              onBack={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
+          ) : currentTab === 'thought-of-the-day' ? (
+            <ThoughtOfTheDayView
+              onBack={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
                 safeScrollToTop();

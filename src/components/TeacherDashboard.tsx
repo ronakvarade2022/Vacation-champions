@@ -31,6 +31,7 @@ import {
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { SectionLoadingFallback } from './SectionLoadingFallback';
 import { GlobalStudySearchBar, type GlobalSearchJumpTarget } from './StudyLibraryGlobalSearch';
+import { DailyThoughtAndDictionaryWidget } from './DailyThoughtAndDictionaryWidget';
 import { useApp } from '../context/AppContext';
 import type {
   ClassLevel,
@@ -679,6 +680,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               keywords: 'pdf word excel convert image resize qr barcode print',
               action: () => onNavigateTab('document-studio'),
             },
+            {
+              title: 'Trilingual Dictionary (English • मराठी • हिन्दी)',
+              badge: 'Dictionary',
+              desc: 'Classes 1–10 vocabulary with meanings, pronunciation, synonyms, antonyms & examples',
+              keywords: 'dictionary vocabulary word meaning english marathi hindi synonym antonym',
+              action: () => onNavigateTab('trilingual-dictionary'),
+            },
+            {
+              title: 'Thought of the Day (1,085+ Trilingual Suvichar)',
+              badge: 'Daily Thought',
+              desc: '1,085+ English, Marathi & Hindi daily thoughts with verified personality quotes',
+              keywords: 'thought of the day suvichar quotes motivational educational moral',
+              action: () => onNavigateTab('thought-of-the-day'),
+            },
           ].filter(
             (m) =>
               m.title.toLowerCase().includes(q) ||
@@ -830,6 +845,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           );
         })()}
       </div>
+
+      {/* Thought of the Day & Trilingual Dictionary Hub for Teachers */}
+      <DailyThoughtAndDictionaryWidget
+        onOpenDictionary={() => onNavigateTab('trilingual-dictionary')}
+        onOpenThoughts={() => onNavigateTab('thought-of-the-day')}
+      />
 
       {/* Main Tab Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
