@@ -20,14 +20,19 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { 
+  SUPPORT_USER_CATEGORY_LABELS,
   SupportCategory, 
-  SupportTicket 
+  SupportTicket,
+  SupportUserCategory,
+  formatSupportTicketStatusLabel,
+  normalizeSupportUserCategory
 } from '../types/support';
 import { 
   createSupportTicket, 
   getSupportTickets, 
   getSupportTicketByNumber 
 } from '../services/supportService';
+import { openHelpSupportDrawer } from '../services/helpAssistantService';
 
 const PROBLEM_CATEGORIES: SupportCategory[] = [
   'Registration & Login',
@@ -55,6 +60,9 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'create' | 'track' | 'faqs'>('create');
 
   // Form State
+  const [userCategory, setUserCategory] = useState<SupportUserCategory>(
+    normalizeSupportUserCategory(currentStudent?.accountRole)
+  );
   const [studentName, setStudentName] = useState(currentStudent?.name || '');
   const [email, setEmail] = useState(currentStudent?.email || '');
   const [mobile, setMobile] = useState(currentStudent?.mobile || '');
@@ -127,6 +135,7 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
         studentName: studentName.trim(),
         email: email.trim(),
         mobile: mobile.trim(),
+        userCategory,
         category,
         subject: subject.trim(),
         description: description.trim(),
@@ -226,6 +235,15 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
 
           <button
             type="button"
+            onClick={() => openHelpSupportDrawer()}
+            className="px-4 py-2 rounded-xl text-xs font-extrabold bg-indigo-900 hover:bg-indigo-950 text-amber-300 border border-amber-300/40 transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-amber-300" />
+            <span>Open AI Help &amp; Support Assistant</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => onNavigateTab?.('terms')}
             className="px-4 py-2 rounded-xl text-xs font-extrabold bg-black/20 hover:bg-black/30 text-white transition-all cursor-pointer flex items-center gap-1.5 ml-auto hidden sm:flex"
           >
@@ -286,7 +304,7 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
                   <div className="flex justify-between">
                     <span className="text-slate-500">Initial Status:</span>
                     <span className="font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                      ● {createdTicket.status}
+                      ● {formatSupportTicketStatusLabel(createdTicket.status)}
                     </span>
                   </div>
                 </div>
@@ -326,11 +344,35 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
                     {formError}
                   </div>
                 )}
+
+                {/* User Category Selector (All 5 Portals) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    User Category <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {(['student', 'teacher', 'parent', 'college', 'institute'] as const).map((catId) => (
+                      <button
+                        key={catId}
+                        type="button"
+                        onClick={() => setUserCategory(catId)}
+                        className={`py-2 px-2 rounded-xl border text-xs font-extrabold transition-all cursor-pointer ${
+                          userCategory === catId
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50'
+                        }`}
+                      >
+                        {SUPPORT_USER_CATEGORY_LABELS[catId]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Student Name */}
+                  {/* Full Name */}
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700">
-                      Student Name <span className="text-red-500">*</span>
+                      Full Name / Institution Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"

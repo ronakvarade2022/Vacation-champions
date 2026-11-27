@@ -1,7 +1,10 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import fs from 'fs';
+import path from 'path';
 import {
   isFirebaseAdminConfigured,
   serverSetDoc,
+  serverUpdateDoc,
   verifyBearerIdToken,
 } from '../firebase/admin';
 import {
@@ -10,6 +13,7 @@ import {
   SupportLanguage,
   SupportNavigationAction,
   SupportNavigationActionId,
+  SupportPortalContext,
   buildNavigationAction,
   detectQueryLanguage,
   extractBoard,
@@ -17,6 +21,13 @@ import {
   matchKnowledgeBaseFastPath,
 } from '../src/data/helpSupportKnowledgeBase';
 import type { ClassLevel, EducationBoard } from '../src/types';
+import {
+  SUPPORT_USER_CATEGORY_LABELS,
+  SupportTicket,
+  SupportUserCategory,
+  TicketStatus,
+  normalizeSupportUserCategory,
+} from '../src/types/support';
 
 export interface SupportChatHistoryTurn {
   role: 'user' | 'assistant';
@@ -31,6 +42,7 @@ export interface SupportChatResponsePayload {
   language: SupportLanguage;
   navigationActions: SupportNavigationAction[];
   suggestSupportTicket: boolean;
+  portalContext?: SupportPortalContext;
   notice?: string;
 }
 
@@ -61,6 +73,13 @@ const VALID_SUPPORT_CATEGORIES = new Set([
   'General Queries',
 ]);
 
+const VALID_TICKET_STATUSES = new Set<TicketStatus>([
+  'OPEN',
+  'IN_PROGRESS',
+  'RESOLVED',
+  'CLOSED',
+]);
+
 const MAX_MESSAGE_CHARS = 600;
 const MAX_HISTORY_TURNS = 6;
 const CHAT_WINDOW_MS = 10 * 60 * 1000;
@@ -68,7 +87,7 @@ const MAX_REQUESTS_PER_IP = 45;
 const MAX_AI_CALLS_PER_IP = 15;
 const MAX_DAILY_AI_CALLS = 500;
 const TICKET_WINDOW_MS = 15 * 60 * 1000;
-const MAX_TICKETS_PER_IP = 6;
+const MAX_TICKETS_PER_IP = 10;
 
 const ipRequestTimestamps = new Map<string, number[]>();
 const ipAiTimestamps = new Map<string, number[]>();
@@ -77,7 +96,134 @@ const ipTicketTimestamps = new Map<string, number[]>();
 let dailyAiTracker = {
   dateKey: new Date().toISOString().slice(0, 10),
   count: 0,
+  quotaExhaustedUntilDate: '',
 };
+
+// Persistent Server Support Tickets Store (Disk + Memory + Firestore sync)
+const SUPPORT_STORE_DIR = path.join(process.cwd(), 'data');
+const SUPPORT_STORE_FILE = path.join(SUPPORT_STORE_DIR, 'support_tickets_store.json');
+const serverSupportTicketsMap = new Map<string, SupportTicket>();
+let supportTicketsLoadedFromDisk = false;
+
+function ensureServerSupportTicketsLoaded(): void {
+  if (supportTicketsLoadedFromDisk) return;
+  supportTicketsLoadedFromDisk = true;
+  try {
+    if (fs.existsSync(SUPPORT_STORE_FILE)) {
+      const raw = fs.readFileSync(SUPPORT_STORE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item.id === 'string' && typeof item.ticketNumber === 'string') {
+            serverSupportTicketsMap.set(item.id, item as SupportTicket);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Support Store Load Warning]:', err);
+  }
+}
+
+function flushServerSupportTicketsToDisk(): boolean {
+  try {
+    if (!fs.existsSync(SUPPORT_STORE_DIR)) {
+      fs.mkdirSync(SUPPORT_STORE_DIR, { recursive: true });
+    }
+    const list = Array.from(serverSupportTicketsMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    fs.writeFileSync(SUPPORT_STORE_FILE, JSON.stringify(list, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.warn('[Support Store Save Warning]:', err);
+    return serverSupportTicketsMap.size > 0;
+  }
+}
+
+export function getServerSupportTickets(studentId?: string): SupportTicket[] {
+  ensureServerSupportTicketsLoaded();
+  const list = Array.from(serverSupportTicketsMap.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  if (studentId) {
+    return list.filter((t) => t.studentId === studentId);
+  }
+  return list;
+}
+
+export async function updateServerSupportTicketStatus(
+  ticketId: string,
+  statusRaw: string,
+  adminResponseRaw?: string
+): Promise<{
+  statusCode: number;
+  payload: Record<string, unknown>;
+}> {
+  ensureServerSupportTicketsLoaded();
+  const cleanId = String(ticketId || '').trim();
+  if (!cleanId) {
+    return {
+      statusCode: 400,
+      payload: { success: false, error: 'Ticket ID is required.' },
+    };
+  }
+
+  const normalizedUpper = String(statusRaw || '').trim().toUpperCase();
+  const mappedStatus: TicketStatus =
+    normalizedUpper === 'NEW' || normalizedUpper === 'OPEN'
+      ? 'OPEN'
+      : normalizedUpper === 'IN_PROGRESS' || normalizedUpper === 'IN PROGRESS' || normalizedUpper === 'PENDING'
+      ? 'IN_PROGRESS'
+      : normalizedUpper === 'RESOLVED'
+      ? 'RESOLVED'
+      : normalizedUpper === 'CLOSED'
+      ? 'CLOSED'
+      : VALID_TICKET_STATUSES.has(statusRaw as TicketStatus)
+      ? (statusRaw as TicketStatus)
+      : 'IN_PROGRESS';
+
+  const nowIso = new Date().toISOString();
+  const cleanResponse =
+    adminResponseRaw !== undefined ? String(adminResponseRaw).trim().slice(0, 2000) : undefined;
+
+  const existing = serverSupportTicketsMap.get(cleanId);
+  let updatedTicket: SupportTicket | undefined;
+  if (existing) {
+    updatedTicket = {
+      ...existing,
+      status: mappedStatus,
+      ...(cleanResponse !== undefined ? { adminResponse: cleanResponse } : {}),
+      updatedAt: nowIso,
+    };
+    serverSupportTicketsMap.set(cleanId, updatedTicket);
+    flushServerSupportTicketsToDisk();
+  }
+
+  if (isFirebaseAdminConfigured()) {
+    try {
+      await serverUpdateDoc('support_tickets', cleanId, {
+        status: mappedStatus,
+        ...(cleanResponse !== undefined ? { adminResponse: cleanResponse } : {}),
+        updatedAt: nowIso,
+      });
+    } catch (err) {
+      console.warn('[Support Ticket Firestore Admin Update Warning]:', err);
+    }
+  }
+
+  return {
+    statusCode: 200,
+    payload: {
+      success: true,
+      ticketId: cleanId,
+      status: mappedStatus,
+      adminResponse: cleanResponse,
+      updatedAt: nowIso,
+      ticket: updatedTicket,
+    },
+  };
+}
 
 function pruneAndCheckWindow(
   store: Map<string, number[]>,
@@ -114,39 +260,85 @@ function getConfiguredGeminiKey(): string {
   return raw;
 }
 
-function buildFallbackMessage(lang: SupportLanguage, userMessage: string, suggestTicket: boolean): {
+function resolvePortalContext(rawRole: unknown, rawPortal: unknown): SupportPortalContext {
+  const portalStr = String(rawPortal || rawRole || '').trim().toLowerCase();
+  if (portalStr === 'teacher') return 'teacher';
+  if (portalStr === 'parent' || portalStr === 'parent-zone') return 'parent';
+  if (portalStr === 'college' || portalStr === 'school_admin' || portalStr === 'school-college-zone') {
+    return 'college';
+  }
+  if (portalStr === 'institute' || portalStr === 'institute_admin' || portalStr === 'coaching-zone') {
+    return 'institute';
+  }
+  if (portalStr === 'student') return 'student';
+  if (portalStr === 'homepage' || portalStr === 'public-home') return 'homepage';
+  return 'visitor';
+}
+
+function buildFallbackMessage(
+  lang: SupportLanguage,
+  userMessage: string,
+  suggestTicket: boolean,
+  portalContext: SupportPortalContext
+): {
   reply: string;
   navigationActions: SupportNavigationAction[];
 } {
   const cls = extractClassLevel(userMessage);
   const board = extractBoard(userMessage);
-  const actions: SupportNavigationAction[] = [
-    buildNavigationAction('open_all_courses', cls, board),
-    buildNavigationAction('open_worksheets', cls, board),
-    buildNavigationAction('open_syllabus', cls, board),
-    buildNavigationAction('open_teacher_resources'),
-  ];
+  const actions: SupportNavigationAction[] =
+    portalContext === 'teacher'
+      ? [
+          buildNavigationAction('open_teacher_resources'),
+          buildNavigationAction('open_lesson_planner'),
+          buildNavigationAction('open_worksheets', cls, board),
+          buildNavigationAction('open_ai_tools'),
+        ]
+      : portalContext === 'parent'
+      ? [
+          buildNavigationAction('open_parent_portal'),
+          buildNavigationAction('open_register'),
+          buildNavigationAction('open_login'),
+        ]
+      : portalContext === 'college'
+      ? [
+          buildNavigationAction('open_college_portal'),
+          buildNavigationAction('open_register'),
+          buildNavigationAction('open_login'),
+        ]
+      : portalContext === 'institute'
+      ? [
+          buildNavigationAction('open_institute_portal'),
+          buildNavigationAction('open_register'),
+          buildNavigationAction('open_login'),
+        ]
+      : [
+          buildNavigationAction('open_syllabus', cls, board),
+          buildNavigationAction('open_worksheets', cls, board),
+          buildNavigationAction('open_ai_tools'),
+          buildNavigationAction('open_teacher_resources'),
+        ];
 
   if (lang === 'hi') {
     return {
       reply: suggestTicket
-        ? 'आप सीधे नीचे दिए गए नेविगेशन बटन से संबंधित सेक्शन खोल सकते हैं। यदि यह आपके खाते, लॉगिन, पेमेंट या किसी तकनीकी समस्या से जुड़ा है, तो कृपया SUBMIT A SUPPORT REQUEST बटन पर क्लिक करके अपनी समस्या भेजें।'
-        : 'आप नीचे दिए गए डायरेक्ट बटन से कोर्स (कक्षा 1–10), वर्कशीट, सिलेबस नोट्स, स्कॉलरशिप, TET/CTET या टीचर सुविधाएँ खोल सकते हैं। यदि किसी व्यक्तिगत समस्या में मदद चाहिए, तो आप Support Request भी भेज सकते हैं।',
+        ? 'आप सीधे नीचे दिए गए नेविगेशन बटन से संबंधित पोर्टल या सेक्शन खोल सकते हैं। यदि यह आपके खाते, लॉगिन, पेमेंट या किसी तकनीकी समस्या से जुड़ा है, तो कृपया SUBMIT A SUPPORT REQUEST बटन पर क्लिक करके अपनी समस्या भेजें।'
+        : 'आप नीचे दिए गए डायरेक्ट बटन से स्टडी नोट्स, वर्कशीट, AI जनरेटर, टीचर लेसन प्लानर या अपने पोर्टल (Student, Teacher, Parent, College, Institute) खोल सकते हैं। किसी व्यक्तिगत समस्या के लिए आप Support Request भी भेज सकते हैं।',
       navigationActions: actions,
     };
   }
   if (lang === 'mr') {
     return {
       reply: suggestTicket
-        ? 'तुम्ही खालील डायरेक्ट बटणांद्वारे संबंधित विभाग उघडू शकता. ही तुमच्या खात्याशी, लॉगिन, पेमेंट किंवा तांत्रिक अडचणीशी संबंधित समस्या असल्यास कृपया खालील SUBMIT A SUPPORT REQUEST बटणावर क्लिक करा.'
-        : 'तुम्ही खालील डायरेक्ट बटणांद्वारे कोर्स (इयत्ता १–१०), वर्कशीट्स, अभ्यासक्रम व नोट्स, शिष्यवृत्ती, TET/CTET किंवा शिक्षक सुविधा उघडू शकता. वैयक्तिक अडचणीसाठी Support Request देखील पाठवू शकता.',
+        ? 'तुम्ही खालील डायरेक्ट बटणांद्वारे संबंधित पोर्टल किंवा विभाग उघडू शकता. ही तुमच्या खात्याशी, लॉगिन, पेमेंट किंवा तांत्रिक अडचणीशी संबंधित समस्या असल्यास कृपया खालील SUBMIT A SUPPORT REQUEST बटणावर क्लिक करा.'
+        : 'तुम्ही खालील डायरेक्ट बटणांद्वारे स्टडी नोट्स, वर्कशीट्स, AI जनरेटर, शिक्षक लेसन प्लानर किंवा तुमचे पोर्टल (Student, Teacher, Parent, College, Institute) उघडू शकता. वैयक्तिक अडचणीसाठी Support Request देखील पाठवू शकता.',
       navigationActions: actions,
     };
   }
   return {
     reply: suggestTicket
-      ? 'You can jump directly to key MyStudyZone sections using the buttons below. If you are facing a personal account, login, payment, or technical issue, click SUBMIT A SUPPORT REQUEST below to reach our support team.'
-      : 'You can use the direct navigation buttons below to open Courses (Classes 1–10), Worksheets, Syllabus & Study Notes, Scholarship, TET/CTET, or Teacher Resources. Feel free to ask a more specific question or submit a Support Request if needed.',
+      ? 'You can jump directly to key MyStudyZone portals and sections using the buttons below. If you are facing a personal account, login, payment, or technical issue, click SUBMIT A SUPPORT REQUEST below to escalate your request to our Admin Support team.'
+      : 'You can use the direct navigation buttons below to open Study Notes, Worksheets, the AI Generator, Teacher Lesson Planner, or any of the 5 Portals (Student, Teacher, Parent, College, Institute). Feel free to ask a specific question or click SUBMIT A SUPPORT REQUEST if you need admin assistance.',
     navigationActions: actions,
   };
 }
@@ -170,12 +362,7 @@ export async function handleSupportChatRequest(
 
   const message = rawMessage.slice(0, MAX_MESSAGE_CHARS);
   const lang = detectQueryLanguage(message);
-  const userRole =
-    body?.userRole === 'teacher'
-      ? 'teacher'
-      : body?.userRole === 'student'
-      ? 'student'
-      : 'visitor';
+  const portalContext = resolvePortalContext(body?.userRole, body?.portalContext);
 
   const withinGlobalLimit = pruneAndCheckWindow(
     ipRequestTimestamps,
@@ -197,12 +384,13 @@ export async function handleSupportChatRequest(
       language: lang,
       navigationActions: [buildNavigationAction('open_dashboard')],
       suggestSupportTicket: true,
+      portalContext,
       notice: 'Rate limit reached to keep MyStudyZone Help Desk fast and free for everyone.',
     };
   }
 
   // 1. Knowledge Base & Typo-Tolerant Navigation Fast Path (Zero AI cost)
-  const kbMatch = matchKnowledgeBaseFastPath(message, { userRole });
+  const kbMatch = matchKnowledgeBaseFastPath(message, { userRole: portalContext });
   if (kbMatch.matched) {
     return {
       success: true,
@@ -212,13 +400,14 @@ export async function handleSupportChatRequest(
       language: kbMatch.language,
       navigationActions: kbMatch.navigationActions,
       suggestSupportTicket: kbMatch.suggestSupportTicket,
+      portalContext,
     };
   }
 
-  // 2. Check AI key & free-tier quota guardrails before calling Gemini
+  // 2. Check AI key & strict free-tier quota guardrails before calling Gemini
   const apiKey = getConfiguredGeminiKey();
   if (!apiKey) {
-    const fb = buildFallbackMessage(lang, message, false);
+    const fb = buildFallbackMessage(lang, message, false, portalContext);
     return {
       success: true,
       source: 'kb_fallback',
@@ -227,14 +416,32 @@ export async function handleSupportChatRequest(
       language: lang,
       navigationActions: fb.navigationActions,
       suggestSupportTicket: true,
+      portalContext,
       notice:
-        'Live AI assistant is currently running in Knowledge Base mode (GEMINI_API_KEY is not configured on the server). You can still navigate directly or submit a Support Request.',
+        'Live AI assistant is running in Knowledge Base mode (GEMINI_API_KEY is not configured on the server). Direct navigation and Support Ticket escalation remain active.',
     };
   }
 
   const todayKey = new Date().toISOString().slice(0, 10);
   if (dailyAiTracker.dateKey !== todayKey) {
-    dailyAiTracker = { dateKey: todayKey, count: 0 };
+    dailyAiTracker = { dateKey: todayKey, count: 0, quotaExhaustedUntilDate: '' };
+  }
+
+  // Strict Free API Policy: If free quota was already exhausted today, stop AI calls immediately
+  if (dailyAiTracker.quotaExhaustedUntilDate === todayKey || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
+    const fb = buildFallbackMessage(lang, message, true, portalContext);
+    return {
+      success: true,
+      source: 'kb_fallback',
+      aiStatus: 'quota_exceeded',
+      reply: fb.reply,
+      language: lang,
+      navigationActions: fb.navigationActions,
+      suggestSupportTicket: true,
+      portalContext,
+      notice:
+        'Free-tier AI quota is temporarily exhausted for today. Paid models are never activated automatically. Standard Knowledge Base navigation and Admin Support Ticket submission remain fully active.',
+    };
   }
 
   const withinAiIpLimit = pruneAndCheckWindow(
@@ -243,8 +450,8 @@ export async function handleSupportChatRequest(
     CHAT_WINDOW_MS,
     MAX_AI_CALLS_PER_IP
   );
-  if (!withinAiIpLimit || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
-    const fb = buildFallbackMessage(lang, message, true);
+  if (!withinAiIpLimit) {
+    const fb = buildFallbackMessage(lang, message, true, portalContext);
     return {
       success: true,
       source: 'kb_fallback',
@@ -253,12 +460,13 @@ export async function handleSupportChatRequest(
       language: lang,
       navigationActions: fb.navigationActions,
       suggestSupportTicket: true,
+      portalContext,
       notice:
-        'AI chat limit reached for now. Showing Knowledge Base guidance & direct links.',
+        'Free AI chat limit reached for this session window. Showing Knowledge Base guidance & direct links.',
     };
   }
 
-  // 3. Call server-side @google/genai using free-tier model gemini-4-hydrogen
+  // 3. Call server-side @google/genai using ONLY free-tier eligible model gemini-4-hydrogen
   try {
     dailyAiTracker.count += 1;
     const ai = new GoogleGenAI({
@@ -280,7 +488,7 @@ export async function handleSupportChatRequest(
       .join('\n');
 
     const promptText = [
-      `Current User Portal Role: ${userRole}`,
+      `Current User Portal Context: ${portalContext}`,
       historyText ? `Recent Conversation:\n${historyText}` : '',
       `Latest User Question: ${message}`,
     ]
@@ -301,7 +509,7 @@ export async function handleSupportChatRequest(
             reply: {
               type: Type.STRING,
               description:
-                'Helpful, concise, accurate answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features.',
+                'Simple, friendly, short, step-by-step answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features.',
             },
             language: {
               type: Type.STRING,
@@ -366,7 +574,12 @@ export async function handleSupportChatRequest(
 
     const cleanReply = String(parsed.reply || '').trim();
     if (!cleanReply) {
-      const fb = buildFallbackMessage(replyLang, message, Boolean(parsed.suggestSupportTicket));
+      const fb = buildFallbackMessage(
+        replyLang,
+        message,
+        Boolean(parsed.suggestSupportTicket),
+        portalContext
+      );
       return {
         success: true,
         source: 'kb_fallback',
@@ -375,6 +588,7 @@ export async function handleSupportChatRequest(
         language: replyLang,
         navigationActions: validActions.length ? validActions : fb.navigationActions,
         suggestSupportTicket: Boolean(parsed.suggestSupportTicket),
+        portalContext,
       };
     }
 
@@ -386,6 +600,7 @@ export async function handleSupportChatRequest(
       language: replyLang,
       navigationActions: validActions,
       suggestSupportTicket: Boolean(parsed.suggestSupportTicket),
+      portalContext,
     };
   } catch (err: any) {
     const errMsg = String(err?.message || err || '');
@@ -396,7 +611,11 @@ export async function handleSupportChatRequest(
       errMsg.toLowerCase().includes('quota');
     console.warn('[Support Assistant AI Fallback]:', errMsg);
 
-    const fb = buildFallbackMessage(lang, message, true);
+    if (isQuota) {
+      dailyAiTracker.quotaExhaustedUntilDate = todayKey;
+    }
+
+    const fb = buildFallbackMessage(lang, message, true, portalContext);
     return {
       success: true,
       source: 'kb_fallback',
@@ -405,8 +624,9 @@ export async function handleSupportChatRequest(
       language: lang,
       navigationActions: fb.navigationActions,
       suggestSupportTicket: true,
+      portalContext,
       notice: isQuota
-        ? 'AI usage quota is temporarily full. Showing Knowledge Base guidance, direct links, and Support Request option.'
+        ? 'Free-tier AI quota is currently exhausted. Paid models are never activated automatically. Showing Knowledge Base guidance and Support Request option.'
         : 'AI assistant is temporarily unavailable. Showing Knowledge Base guidance and Support Request option.',
     };
   }
@@ -420,6 +640,8 @@ export async function handleSupportTicketSubmission(
   statusCode: number;
   payload: Record<string, unknown>;
 }> {
+  ensureServerSupportTicketsLoaded();
+
   const withinTicketLimit = pruneAndCheckWindow(
     ipTicketTimestamps,
     clientIp || 'unknown',
@@ -437,14 +659,20 @@ export async function handleSupportTicketSubmission(
     };
   }
 
-  const requesterRole = body?.requesterRole === 'teacher' ? 'teacher' : 'student';
+  const userCategory: SupportUserCategory = normalizeSupportUserCategory(
+    String(body?.userCategory || body?.requesterRole || 'student')
+  );
+  const categoryLabel = SUPPORT_USER_CATEGORY_LABELS[userCategory];
   const name = String(body?.name || '').trim().slice(0, 100);
   const email = String(body?.email || '').trim().toLowerCase().slice(0, 150);
   const mobile = String(body?.mobile || '').replace(/[^\d+\-\s]/g, '').trim().slice(0, 20);
   const rawCategory = String(body?.category || 'General Queries').trim();
-  const category = VALID_SUPPORT_CATEGORIES.has(rawCategory) ? rawCategory : 'General Queries';
+  const category = (VALID_SUPPORT_CATEGORIES.has(rawCategory)
+    ? rawCategory
+    : 'General Queries') as SupportTicket['category'];
   const description = String(body?.description || '').trim().slice(0, 1800);
   const subjectInput = String(body?.subject || '').trim().slice(0, 180);
+  const portalContext = String(body?.portalContext || userCategory).trim().slice(0, 40);
 
   if (name.length < 2) {
     return {
@@ -477,33 +705,20 @@ export async function handleSupportTicketSubmission(
     }
   }
 
-  if (!isFirebaseAdminConfigured()) {
-    return {
-      statusCode: 503,
-      payload: {
-        success: false,
-        persisted: false,
-        requiresClientAuthFallback: true,
-        error:
-          'Server-side Firebase Admin credentials (FIREBASE_SERVICE_ACCOUNT_JSON) are not configured yet for guest ticket writes.',
-      },
-    };
-  }
-
   const nowIso = new Date().toISOString();
   const rand = Math.floor(10000 + Math.random() * 90000);
-  const ticketNumber = `TKT-VC-${rand}`;
+  const ticketNumber = `TKT-MSZ-${rand}`;
   const ticketId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const subject =
-    subjectInput ||
-    `[${requesterRole === 'teacher' ? 'Teacher' : 'Student'}] ${category}`;
+  const subject = subjectInput || `[${categoryLabel}] ${category}`;
 
-  const ticketDoc = {
+  const ticketDoc: SupportTicket = {
     id: ticketId,
     ticketNumber,
     studentId: verifiedUid || String(body?.studentId || 'guest_helpdesk').slice(0, 128),
     studentName: name,
-    requesterRole,
+    userCategory,
+    requesterRole: userCategory,
+    portalContext,
     email,
     mobile,
     category,
@@ -511,21 +726,34 @@ export async function handleSupportTicketSubmission(
     description,
     status: 'OPEN',
     priority: category.includes('Payment') ? 'HIGH' : 'MEDIUM',
-    source: 'ai_help_desk',
     createdAt: nowIso,
     updatedAt: nowIso,
   };
 
   try {
-    const writeRes = await serverSetDoc('support_tickets', ticketId, ticketDoc, { merge: false });
-    if (!writeRes.usedAdminSdk) {
+    // 1. Always save into the persistent server ticket store first
+    serverSupportTicketsMap.set(ticketId, ticketDoc);
+    const savedToDisk = flushServerSupportTicketsToDisk();
+
+    // 2. Also persist to Firestore if Admin SDK is configured
+    let savedToFirestoreAdmin = false;
+    if (isFirebaseAdminConfigured()) {
+      const writeRes = await serverSetDoc(
+        'support_tickets',
+        ticketId,
+        ticketDoc as unknown as Record<string, unknown>,
+        { merge: false }
+      ).catch(() => ({ usedAdminSdk: false }));
+      savedToFirestoreAdmin = Boolean(writeRes?.usedAdminSdk);
+    }
+
+    if (!savedToDisk && !savedToFirestoreAdmin && serverSupportTicketsMap.size === 0) {
       return {
-        statusCode: 503,
+        statusCode: 500,
         payload: {
           success: false,
           persisted: false,
-          requiresClientAuthFallback: true,
-          error: 'Firebase Admin SDK is required to persist unauthenticated support requests.',
+          error: 'Unable to save your support request right now. Please try again.',
         },
       };
     }
@@ -535,7 +763,7 @@ export async function handleSupportTicketSubmission(
       payload: {
         success: true,
         persisted: true,
-        storage: 'firestore_admin',
+        storage: savedToFirestoreAdmin ? 'firestore_admin' : 'server_persistent_store',
         ticket: ticketDoc,
       },
     };

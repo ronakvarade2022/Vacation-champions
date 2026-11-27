@@ -91,8 +91,10 @@ import {
   type PlanSkuId
 } from './src/data/planCatalog.ts';
 import {
+  getServerSupportTickets,
   handleSupportChatRequest,
-  handleSupportTicketSubmission
+  handleSupportTicketSubmission,
+  updateServerSupportTicketStatus
 } from './server/supportAssistant.ts';
 import {
   getAiServiceStatus,
@@ -3731,6 +3733,25 @@ app.post('/api/support/chat', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/support/tickets', async (req: Request, res: Response) => {
+  try {
+    const studentId = req.query.studentId ? String(req.query.studentId).trim() : undefined;
+    const tickets = getServerSupportTickets(studentId);
+    return res.json({
+      success: true,
+      count: tickets.length,
+      tickets,
+    });
+  } catch (err: any) {
+    console.error('[Support Ticket List Route Error]:', err);
+    return res.status(500).json({
+      success: false,
+      tickets: [],
+      error: 'Unable to load support requests right now.',
+    });
+  }
+});
+
 app.post('/api/support/tickets', async (req: Request, res: Response) => {
   try {
     const result = await handleSupportTicketSubmission(
@@ -3745,6 +3766,25 @@ app.post('/api/support/tickets', async (req: Request, res: Response) => {
       success: false,
       persisted: false,
       error: 'Unable to submit your support request right now. Please try again shortly.',
+    });
+  }
+});
+
+app.patch('/api/support/tickets/:ticketId', async (req: Request, res: Response) => {
+  try {
+    const ticketId = String(req.params.ticketId || '').trim();
+    const { status, adminResponse } = (req.body || {}) as Record<string, unknown>;
+    const result = await updateServerSupportTicketStatus(
+      ticketId,
+      String(status || 'IN_PROGRESS'),
+      adminResponse !== undefined ? String(adminResponse) : undefined
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err: any) {
+    console.error('[Support Ticket Update Route Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to update support ticket status.',
     });
   }
 });

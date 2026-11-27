@@ -13,10 +13,13 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { 
+  SUPPORT_USER_CATEGORY_LABELS,
   SupportTicket, 
   GrievanceRecord, 
   QuestionReport, 
-  FaqItem 
+  FaqItem,
+  formatSupportTicketStatusLabel,
+  normalizeSupportUserCategory
 } from '../types/support';
 import { 
   getSupportTickets, 
@@ -41,6 +44,7 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
   const [ticketReplyText, setTicketReplyText] = useState('');
   const [ticketStatusSelect, setTicketStatusSelect] = useState<SupportTicket['status']>('IN_PROGRESS');
   const [ticketFilter, setTicketFilter] = useState<string>('ALL');
+  const [ticketUserCategoryFilter, setTicketUserCategoryFilter] = useState<string>('ALL');
   const [ticketSearch, setTicketSearch] = useState<string>('');
 
   // 2. Grievances State
@@ -184,20 +188,35 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
     showNotice('FAQ deleted.', 'info');
   };
 
+  // Summary KPI counts
+  const ticketStats = useMemo(() => {
+    const total = tickets.length;
+    const newCount = tickets.filter((t) => t.status === 'OPEN').length;
+    const pendingInProgressCount = tickets.filter((t) => t.status === 'IN_PROGRESS').length;
+    const resolvedCount = tickets.filter(
+      (t) => t.status === 'RESOLVED' || t.status === 'CLOSED'
+    ).length;
+    return { total, newCount, pendingInProgressCount, resolvedCount };
+  }, [tickets]);
+
   // Filtered lists (memoized)
   const filteredTickets = useMemo(() => {
     const q = ticketSearch.toLowerCase().trim();
     return tickets.filter(t => {
       const matchesStatus = ticketFilter === 'ALL' || t.status === ticketFilter;
-      if (!q) return matchesStatus;
+      const resolvedUserCat = normalizeSupportUserCategory(t.userCategory || t.requesterRole);
+      const matchesUserCat =
+        ticketUserCategoryFilter === 'ALL' || resolvedUserCat === ticketUserCategoryFilter;
+      if (!q) return matchesStatus && matchesUserCat;
       const matchesSearch =
         t.ticketNumber.toLowerCase().includes(q) ||
         t.studentName.toLowerCase().includes(q) ||
         t.email.toLowerCase().includes(q) ||
-        t.subject.toLowerCase().includes(q);
-      return matchesStatus && matchesSearch;
+        t.subject.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q);
+      return matchesStatus && matchesUserCat && matchesSearch;
     });
-  }, [tickets, ticketFilter, ticketSearch]);
+  }, [tickets, ticketFilter, ticketUserCategoryFilter, ticketSearch]);
 
   const filteredGrievances = useMemo(
     () => grievances.filter(g => grievanceFilter === 'ALL' || g.status === grievanceFilter),
@@ -206,7 +225,7 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
 
   useEffect(() => {
     setTicketPage(1);
-  }, [ticketFilter, ticketSearch]);
+  }, [ticketFilter, ticketUserCategoryFilter, ticketSearch]);
 
   useEffect(() => {
     setGrievancePage(1);
@@ -331,6 +350,49 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
       {/* 1. SUPPORT TICKETS TAB */}
       {activeTab === 'tickets' && (
         <div className="space-y-4">
+          {/* Help & Support KPI Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Total Support Requests
+              </span>
+              <p className="text-2xl font-display font-extrabold text-slate-900 mt-1">
+                {ticketStats.total}
+              </p>
+              <span className="text-[11px] text-slate-500">All 5 Portals Combined</span>
+            </div>
+
+            <div className="bg-amber-50/70 rounded-2xl border border-amber-200 p-4 shadow-xs">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-800">
+                New Requests
+              </span>
+              <p className="text-2xl font-display font-extrabold text-amber-900 mt-1">
+                {ticketStats.newCount}
+              </p>
+              <span className="text-[11px] text-amber-700">Awaiting initial review</span>
+            </div>
+
+            <div className="bg-blue-50/70 rounded-2xl border border-blue-200 p-4 shadow-xs">
+              <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">
+                Pending / In Progress
+              </span>
+              <p className="text-2xl font-display font-extrabold text-blue-900 mt-1">
+                {ticketStats.pendingInProgressCount}
+              </p>
+              <span className="text-[11px] text-blue-700">Currently being handled</span>
+            </div>
+
+            <div className="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-4 shadow-xs">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                Resolved Requests
+              </span>
+              <p className="text-2xl font-display font-extrabold text-emerald-900 mt-1">
+                {ticketStats.resolvedCount}
+              </p>
+              <span className="text-[11px] text-emerald-700">Resolved &amp; Closed tickets</span>
+            </div>
+          </div>
+
           {/* Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200">
             <div className="flex-1 w-full sm:max-w-xs relative">
@@ -338,25 +400,43 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
                 type="text"
                 value={ticketSearch}
                 onChange={(e) => setTicketSearch(e.target.value)}
-                placeholder="Search ticket #, name, or email..."
+                placeholder="Search ticket #, name, email, or category..."
                 className="w-full px-3.5 py-2 pl-9 rounded-xl border border-slate-200 text-xs text-slate-800"
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             </div>
 
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <span className="text-xs font-bold text-slate-500">Status:</span>
-              <select
-                value={ticketFilter}
-                onChange={(e) => setTicketFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white text-slate-800"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="OPEN">Open</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RESOLVED">Resolved</option>
-                <option value="CLOSED">Closed</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-3 self-end sm:self-auto">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-500">User Category:</span>
+                <select
+                  value={ticketUserCategoryFilter}
+                  onChange={(e) => setTicketUserCategoryFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white text-slate-800 font-semibold"
+                >
+                  <option value="ALL">All Categories</option>
+                  <option value="student">Student</option>
+                  <option value="teacher">Teacher</option>
+                  <option value="parent">Parent</option>
+                  <option value="college">College</option>
+                  <option value="institute">Institute</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-500">Status:</span>
+                <select
+                  value={ticketFilter}
+                  onChange={(e) => setTicketFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white text-slate-800 font-semibold"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="OPEN">New</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -378,45 +458,67 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {paginatedTickets.map(ticket => (
-                  <div
-                    key={ticket.id}
-                    onClick={() => {
-                      setSelectedTicket(ticket);
-                      setTicketStatusSelect(ticket.status);
-                      setTicketReplyText(ticket.adminResponse || '');
-                    }}
-                    className="p-4 hover:bg-amber-50/50 transition-colors cursor-pointer flex flex-wrap items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
-                          {ticket.ticketNumber}
-                        </span>
-                        <span className="font-bold text-slate-800">{ticket.studentName}</span>
-                        <span className="text-slate-400 font-mono text-[11px]">&lt;{ticket.email}&gt;</span>
+                {paginatedTickets.map(ticket => {
+                  const userCategoryKey = normalizeSupportUserCategory(
+                    ticket.userCategory || ticket.requesterRole
+                  );
+                  const userCategoryLabel = SUPPORT_USER_CATEGORY_LABELS[userCategoryKey];
+                  return (
+                    <div
+                      key={ticket.id}
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setTicketStatusSelect(ticket.status);
+                        setTicketReplyText(ticket.adminResponse || '');
+                      }}
+                      className="p-4 hover:bg-amber-50/50 transition-colors cursor-pointer flex flex-wrap items-start justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1.5 flex-1 min-w-[240px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
+                            {ticket.ticketNumber}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-100 text-indigo-800 uppercase">
+                            {userCategoryLabel}
+                          </span>
+                          <span className="font-bold text-slate-800">{ticket.studentName}</span>
+                          <span className="text-slate-400 font-mono text-[11px]">&lt;{ticket.email}&gt;</span>
+                          <span className="text-[11px] text-slate-400">
+                            • {new Date(ticket.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="font-extrabold text-slate-900">{ticket.subject}</p>
+                        <p className="text-[11px] text-slate-600 line-clamp-1">{ticket.description}</p>
+                        <div className="text-[11px] pt-0.5">
+                          <span className="font-bold text-slate-500">Admin Response: </span>
+                          {ticket.adminResponse ? (
+                            <span className="font-semibold text-emerald-800">
+                              {ticket.adminResponse}
+                            </span>
+                          ) : (
+                            <span className="italic text-slate-400">No response sent yet</span>
+                          )}
+                        </div>
                       </div>
-                      <p className="font-extrabold text-slate-900">{ticket.subject}</p>
-                      <p className="text-[11px] text-slate-500 line-clamp-1">{ticket.description}</p>
-                    </div>
 
-                    <div className="flex items-center gap-3">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
-                        {ticket.category}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        ticket.status === 'RESOLVED' || ticket.status === 'CLOSED'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : ticket.status === 'IN_PROGRESS'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        ● {ticket.status}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                          {ticket.category}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          ticket.status === 'RESOLVED' || ticket.status === 'CLOSED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : ticket.status === 'IN_PROGRESS'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          ● {formatSupportTicketStatusLabel(ticket.status)}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -445,7 +547,19 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
 
                 <div className="p-4 rounded-2xl bg-slate-50 space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Student:</span>
+                    <span className="text-slate-500">User Category:</span>
+                    <span className="font-extrabold text-indigo-800">
+                      {
+                        SUPPORT_USER_CATEGORY_LABELS[
+                          normalizeSupportUserCategory(
+                            selectedTicket.userCategory || selectedTicket.requesterRole
+                          )
+                        ]
+                      }
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Requester Name &amp; Email:</span>
                     <span className="font-bold text-slate-800">{selectedTicket.studentName} ({selectedTicket.email})</span>
                   </div>
                   {selectedTicket.mobile && (
@@ -455,11 +569,11 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Category:</span>
+                    <span className="text-slate-500">Issue Category:</span>
                     <span className="font-bold text-amber-800">{selectedTicket.category}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Date Logged:</span>
+                    <span className="text-slate-500">Date and Time:</span>
                     <span className="font-bold text-slate-700">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
@@ -493,7 +607,7 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
                       onChange={(e) => setTicketStatusSelect(e.target.value as any)}
                       className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800"
                     >
-                      <option value="OPEN">Open</option>
+                      <option value="OPEN">New</option>
                       <option value="IN_PROGRESS">In Progress</option>
                       <option value="RESOLVED">Resolved</option>
                       <option value="CLOSED">Closed</option>
@@ -501,12 +615,12 @@ export const AdminSupportPanel: React.FC = React.memo(() => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700">Official Admin Response (Visible to student):</label>
+                    <label className="font-bold text-slate-700">Official Admin Response (Visible to user):</label>
                     <textarea
                       rows={3}
                       value={ticketReplyText}
                       onChange={(e) => setTicketReplyText(e.target.value)}
-                      placeholder="Type response to student..."
+                      placeholder="Type official admin response..."
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
                     />
                   </div>

@@ -12,13 +12,50 @@ export type SupportCategory =
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
+export type SupportUserCategory = 'student' | 'teacher' | 'parent' | 'college' | 'institute';
+
+export const SUPPORT_USER_CATEGORY_LABELS: Record<SupportUserCategory, string> = {
+  student: 'Student',
+  teacher: 'Teacher',
+  parent: 'Parent',
+  college: 'College',
+  institute: 'Institute',
+};
+
+export function formatSupportTicketStatusLabel(status: TicketStatus): string {
+  switch (status) {
+    case 'OPEN':
+      return 'New';
+    case 'IN_PROGRESS':
+      return 'In Progress';
+    case 'RESOLVED':
+      return 'Resolved';
+    case 'CLOSED':
+      return 'Closed';
+    default:
+      return 'New';
+  }
+}
+
+export function normalizeSupportUserCategory(raw?: string | null): SupportUserCategory {
+  const val = String(raw || '').trim().toLowerCase();
+  if (val === 'teacher') return 'teacher';
+  if (val === 'parent') return 'parent';
+  if (val === 'college' || val === 'school_admin' || val === 'school') return 'college';
+  if (val === 'institute' || val === 'institute_admin' || val === 'coaching') return 'institute';
+  return 'student';
+}
+
 export interface SupportTicket {
   id: string;
-  ticketNumber: string; // e.g. TKT-VC-10245
+  ticketNumber: string; // e.g. TKT-MSZ-10245 or TKT-VC-10245
   studentId: string;
   studentName: string;
   email: string;
   mobile?: string;
+  userCategory?: SupportUserCategory;
+  requesterRole?: SupportUserCategory;
+  portalContext?: string;
   category: SupportCategory;
   subject: string;
   description: string;

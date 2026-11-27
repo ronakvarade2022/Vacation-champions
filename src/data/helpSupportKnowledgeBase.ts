@@ -1,9 +1,11 @@
 import type { ClassLevel, EducationBoard } from '../types';
+import type { SupportUserCategory } from '../types/support';
 
 export type SupportLanguage = 'en' | 'hi' | 'mr';
+export type SupportPortalContext = SupportUserCategory | 'visitor' | 'homepage';
 
 export const HELP_DESK_WELCOME_MESSAGE =
-  'Welcome to MyStudyZone Help Desk!\n\nHello! I am your MyStudyZone assistant. Ask me anything about using our website. I am here to help students and teachers.';
+  'Welcome to MyStudyZone AI Help & Support Assistant!\n\nHello! I am your intelligent MyStudyZone guide for Students, Teachers, Parents, Colleges, and Institutes. Ask me anything in English, Hindi, or Marathi about registration, study notes, worksheets, exams, teacher lesson planner, parent child-linking, college & institute management, or AI tools.';
 
 export type SupportNavigationActionId =
   | 'open_worksheets'
@@ -13,6 +15,14 @@ export type SupportNavigationActionId =
   | 'open_scholarship'
   | 'open_tet_ctet'
   | 'open_teacher_resources'
+  | 'open_lesson_planner'
+  | 'open_student_portal'
+  | 'open_parent_portal'
+  | 'open_college_portal'
+  | 'open_institute_portal'
+  | 'open_ai_tools'
+  | 'open_dictionary'
+  | 'open_thought_of_the_day'
   | 'open_stories'
   | 'open_shivaji'
   | 'open_drawing'
@@ -68,8 +78,40 @@ export const SUPPORT_NAVIGATION_ALLOWLIST: Record<
     description: 'MAHA TET and CTET Paper 1 & Paper 2 full-length CBT mock tests',
   },
   open_teacher_resources: {
-    defaultLabel: 'OPEN TEACHER RESOURCES',
-    description: 'Educator Hub for Classes 1–10 worksheets, chapter notes, Scholarship & TET/CTET',
+    defaultLabel: 'OPEN TEACHER PORTAL',
+    description: 'Teacher Portal for Classes 1–10 worksheets, lesson planner, notes & TET/CTET',
+  },
+  open_lesson_planner: {
+    defaultLabel: 'OPEN TEACHER LESSON PLANNER',
+    description: 'Annual, Monthly & Daily Lesson Planner with A4 PDF export for teachers',
+  },
+  open_student_portal: {
+    defaultLabel: 'OPEN STUDENT PORTAL',
+    description: 'Student Portal dashboard for Classes 1–10 study notes, worksheets & exams',
+  },
+  open_parent_portal: {
+    defaultLabel: 'OPEN PARENT PORTAL',
+    description: 'Parent Portal for child account linking, progress reports & attendance tracking',
+  },
+  open_college_portal: {
+    defaultLabel: 'OPEN COLLEGE PORTAL',
+    description: 'College & School Portal for divisions, faculty allocation, student roster & analytics',
+  },
+  open_institute_portal: {
+    defaultLabel: 'OPEN INSTITUTE PORTAL',
+    description: 'Coaching & Skill Institute Portal for batches, mock test series, fees & certificates',
+  },
+  open_ai_tools: {
+    defaultLabel: 'OPEN AI GENERATOR & TOOLS',
+    description: 'AI Generator Studio for worksheets, notes, question papers, quizzes & slides',
+  },
+  open_dictionary: {
+    defaultLabel: 'OPEN TRILINGUAL DICTIONARY',
+    description: 'Original MyStudyZone English–Marathi–Hindi Trilingual Dictionary',
+  },
+  open_thought_of_the_day: {
+    defaultLabel: 'OPEN THOUGHT OF THE DAY',
+    description: '1,000+ trilingual motivational & educational Thoughts of the Day',
   },
   open_stories: {
     defaultLabel: 'OPEN STORY WORLD',
@@ -133,7 +175,7 @@ export const SUPPORT_NAVIGATION_ALLOWLIST: Record<
   },
   open_register: {
     defaultLabel: 'OPEN REGISTRATION',
-    description: 'Create a new Student or Teacher account',
+    description: 'Create a new Student, Teacher, Parent, College or Institute account',
   },
   open_password_reset: {
     defaultLabel: 'OPEN PASSWORD RESET',
@@ -317,7 +359,7 @@ interface KbTopicDefinition {
   id: string;
   priority: number;
   keywords: string[];
-  actionIds: (cls?: ClassLevel, board?: EducationBoard, userRole?: 'student' | 'teacher' | 'visitor') => SupportNavigationActionId[];
+  actionIds: (cls?: ClassLevel, board?: EducationBoard, userRole?: SupportPortalContext) => SupportNavigationActionId[];
   suggestSupportTicket?: boolean;
   responses: Record<SupportLanguage, (cls?: ClassLevel, board?: EducationBoard) => string>;
 }
@@ -329,15 +371,21 @@ const KB_TOPICS: KbTopicDefinition[] = [
     keywords: ['hello', 'hi', 'hey', 'namaste', 'namaskar', 'good morning', 'good afternoon', 'good evening', 'नमस्ते', 'नमस्कार', 'हॅलो'],
     actionIds: (_c, _b, role) =>
       role === 'teacher'
-        ? ['open_teacher_resources', 'open_worksheets', 'open_tet_ctet']
-        : ['open_all_courses', 'open_worksheets', 'open_demo'],
+        ? ['open_teacher_resources', 'open_lesson_planner', 'open_worksheets']
+        : role === 'parent'
+        ? ['open_parent_portal', 'open_register', 'open_login']
+        : role === 'college'
+        ? ['open_college_portal', 'open_register', 'open_login']
+        : role === 'institute'
+        ? ['open_institute_portal', 'open_register', 'open_login']
+        : ['open_student_portal', 'open_syllabus', 'open_worksheets'],
     responses: {
       en: () =>
-        'Hello! I am your MyStudyZone Help Desk assistant. You can ask me in English, Hindi, or Marathi about Classes 1–10 courses, Maharashtra/CBSE/ICSE syllabus, worksheets, Scholarship (4th & 7th), MAHA TET & CTET, Story World, Shivaji Maharaj Stories, Drawing Studio, quizzes, login, password reset, or Teacher resources.',
+        'Hello! I am your MyStudyZone AI Help & Support Assistant.\n\nI can guide you step by step across all 5 portals:\n1. Student Portal: Registration, finding subjects & chapters, study notes, worksheets, online exams & ₹99 class plan.\n2. Teacher Portal: Registration, Lesson Planner (Annual/Monthly/Daily), assignments, student management & TET/CTET.\n3. Parent Portal: Registration, linking child student accounts, progress reports & attendance.\n4. College Portal: Divisions, faculty allocation, student roster, calendar & result analytics.\n5. Institute Portal: Coaching batches, mock test series, 18 skill programs, fee ledger & certificates.\n\nWhat would you like help with today?',
       hi: () =>
-        'नमस्ते! मैं आपका MyStudyZone हेल्प डेस्क सहायक हूँ। आप मुझसे हिंदी, अंग्रेजी या मराठी में कक्षा 1 से 10 के कोर्स, सिलेबस, वर्कशीट, स्कॉलरशिप (4थी व 7वीं), MAHA TET व CTET, कहानियाँ, ड्राइंग, क्विज़, लॉगिन, पासवर्ड रीसेट या टीचर सुविधाओं के बारे में पूछ सकते हैं।',
+        'नमस्ते! मैं आपका MyStudyZone AI हेल्प एंड सपोर्ट सहायक हूँ।\n\nमैं सभी 5 पोर्टल्स के लिए चरण-दर-चरण मार्गदर्शन देता हूँ:\n1. Student Portal: रजिस्ट्रेशन, विषय व अध्याय ढूँढना, स्टडी नोट्स, वर्कशीट, ऑनलाइन परीक्षा और ₹99 प्लान।\n2. Teacher Portal: टीचर रजिस्ट्रेशन, लेसन प्लानर, असाइनमेंट, छात्र प्रबंधन और TET/CTET।\n3. Parent Portal: पैरेंट रजिस्ट्रेशन, बच्चे का अकाउंट लिंक करना और प्रोग्रेस रिपोर्ट देखना।\n4. College Portal: डिवीज़न, फैकल्टी आवंटन, छात्र सूची, कैलेंडर और परिणाम विश्लेषण।\n5. Institute Portal: कोचिंग बैच, मॉक टेस्ट सीरीज़, स्किल प्रोग्राम, फीस लेजर और सर्टिफिकेट।\n\nबताइए, आज मैं आपकी क्या मदद करूँ?',
       mr: () =>
-        'नमस्कार! मी तुमचा MyStudyZone हेल्प डेस्क सहाय्यक आहे. तुम्ही मला मराठी, हिंदी किंवा इंग्रजीमध्ये इयत्ता १ ते १० चे कोर्स, अभ्यासक्रम, वर्कशीट, शिष्यवृत्ती (४ थी व ७ वी), MAHA TET व CTET, गोष्टी, चित्रकला, क्विझ, लॉगिन, पासवर्ड रीसेट किंवा शिक्षक सुविधांबद्दल काहीही विचारू शकता.',
+        'नमस्कार! मी तुमचा MyStudyZone AI हेल्प अँड सपोर्ट सहाय्यक आहे.\n\nमी सर्व ५ पोर्टल्ससाठी पायरी-पायरीने मार्गदर्शन करतो:\n1. Student Portal: नोंदणी, विषय व धडे शोधणे, स्टडी नोट्स, वर्कशीट्स, ऑनलाइन परीक्षा आणि ₹९९ प्लान.\n2. Teacher Portal: शिक्षक नोंदणी, लेसन प्लानर, असाइनमेंट्स, विद्यार्थी व्यवस्थापन व TET/CTET.\n3. Parent Portal: पालक नोंदणी, मुलाचे खाते जोडणे आणि प्रगती अहवाल पाहणे.\n4. College Portal: तुकड्या (Divisions), शिक्षक नियोजन, विद्यार्थी यादी, कॅलेंडर व निकाल विश्लेषण.\n5. Institute Portal: कोचिंग बॅचेस, मॉक टेस्ट सिरीज, कौशल्य उपक्रम, फी लेजर व प्रमाणपत्रे.\n\nसांगा, आज मी तुमची काय मदत करू?',
     },
   },
   {
@@ -347,18 +395,19 @@ const KB_TOPICS: KbTopicDefinition[] = [
       'cannot login', 'cant login', 'login failed', 'login error', 'not opening', 'payment deducted',
       'paid but locked', 'plan not activated', 'still locked', 'wrong class', 'change class',
       'single device', 'another device', 'blocked', 'bug', 'technical error', 'not working',
-      'submit request', 'support request', 'complaint', 'raise ticket', 'support ticket',
+      'submit request', 'support request', 'complaint', 'raise ticket', 'support ticket', 'contact support',
+      'escalate', 'talk to admin', 'help desk ticket',
       'लॉगिन नहीं', 'समस्या', 'पेमेंट कट', 'अडचण', 'लॉगिन होत नाही', 'तक्रार'
     ],
     suggestSupportTicket: true,
     actionIds: () => ['open_password_reset', 'open_login'],
     responses: {
       en: () =>
-        'Here are quick troubleshooting steps you can check right away:\n1. Make sure you are signing in on the matching portal (Student Login vs Teacher Login) with your registered email.\n2. MyStudyZone protects accounts with Single-Device Session security—if you are logged in on another phone/browser, log out there first or use Lost/Damaged Device Recovery inside the Login box.\n3. If you forgot your password, use Forgot Password to receive a reset link on your registered email.\n4. For a ₹99 payment that has not reflected, sign out and log back in, or check your profile subscription card.\n\nNote: For your safety, never share your password, OTP, or UPI/card PIN. If the issue is still not resolved, click SUBMIT A SUPPORT REQUEST below to send it directly to our support team.',
+        'Here are quick step-by-step checks before escalating to our Support Team:\n1. Verify Portal Role: Make sure you are logging into the matching portal (Student, Teacher, Parent, College, or Institute) with your registered email.\n2. Single-Device Protection: If your account is active on another phone/browser, sign out there first or click "Lost/Damaged Device Recovery" inside the Login window.\n3. Forgot Password: Click "Forgot Password" in the Login modal to get an instant reset link on your email.\n4. Payment Refresh: If a ₹99 plan payment was deducted but appears locked, log out and log back in once.\n\nHow to Contact Support:\nClick the "SUBMIT A SUPPORT REQUEST" button below, choose your User Category (Student, Teacher, Parent, College, or Institute), fill in your Name, Registered Email, Issue Category, and Problem Description, and receive an official Ticket Number for Admin review.',
       hi: () =>
-        'कृपया पहले ये आसान कदम आज़माएँ:\n1. सुनिश्चित करें कि आप सही पोर्टल (Student Login या Teacher Login) पर अपने पंजीकृत ईमेल से लॉगिन कर रहे हैं।\n2. MyStudyZone में Single-Device सुरक्षा है—यदि आपका अकाउंट किसी दूसरे फोन/ब्राउज़र में खुला है, तो पहले वहाँ से Logout करें या Login बॉक्स में Device Recovery का उपयोग करें।\n3. पासवर्ड भूल गए हों तो Forgot Password से ईमेल पर रीसेट लिंक मँगवाएँ।\n4. पेमेंट के बाद प्लान सक्रिय न दिखे तो एक बार Logout करके दोबारा Login करें।\n\nसुरक्षा सूचना: कभी भी अपना पासवर्ड, OTP या UPI/कार्ड PIN साझा न करें। यदि समस्या बनी रहती है, तो नीचे SUBMIT A SUPPORT REQUEST बटन दबाकर हमारी टीम को भेजें।',
+        'सपोर्ट टीम को समस्या भेजने से पहले ये आसान कदम आज़माएँ:\n1. सही पोर्टल चुनें: सुनिश्चित करें कि आप सही पोर्टल (Student, Teacher, Parent, College या Institute) पर पंजीकृत ईमेल से लॉगिन कर रहे हैं।\n2. Single-Device सुरक्षा: यदि अकाउंट किसी दूसरे फोन/ब्राउज़र में खुला है, तो वहाँ से Logout करें या Login बॉक्स में Device Recovery चुनें।\n3. पासवर्ड रीसेट: पासवर्ड भूल गए हों तो Forgot Password से ईमेल पर रीसेट लिंक प्राप्त करें।\n4. पेमेंट रिफ्रेश: ₹99 पेमेंट के बाद प्लान लॉक दिखे तो एक बार Logout करके फिर Login करें।\n\nसपोर्ट टीम से संपर्क कैसे करें:\nनीचे "SUBMIT A SUPPORT REQUEST" बटन दबाएँ, अपनी श्रेणी (Student/Teacher/Parent/College/Institute), नाम, ईमेल, समस्या श्रेणी व विवरण भरें और तुरंत अपना टिकट नंबर प्राप्त करें।',
       mr: () =>
-        'कृपया आधी खालील उपाय करून पहा:\n1. तुम्ही योग्य पोर्टलवर (Student Login किंवा Teacher Login) तुमच्या नोंदणीकृत ईमेलने लॉगिन करत आहात याची खात्री करा.\n2. Single-Device सुरक्षेमुळे तुमचे खाते दुसऱ्या डिव्हाइसवर सुरू असल्यास आधी तेथून Logout करा किंवा Login विंडोमधील Device Recovery वापरा.\n3. पासवर्ड विसरल्यास Forgot Password वापरून ईमेलवर रीसेट लिंक मिळवा.\n4. पेमेंटनंतर प्लान दिसत नसल्यास एकदा Logout करून पुन्हा Login करा.\n\nसुरक्षा सूचना: कधीही पासवर्ड, OTP किंवा UPI/कार्ड PIN शेअर करू नका. समस्या सुटली नसल्यास खालील SUBMIT A SUPPORT REQUEST बटणावर क्लिक करा.',
+        'सपोर्ट टीमकडे तक्रार पाठवण्यापूर्वी खालील सोप्या पायऱ्या तपासा:\n1. योग्य पोर्टल निवडा: तुम्ही योग्य पोर्टलवर (Student, Teacher, Parent, College किंवा Institute) तुमच्या नोंदणीकृत ईमेलने लॉगिन करत आहात याची खात्री करा.\n2. Single-Device सुरक्षा: तुमचे खाते दुसऱ्या डिव्हाइसवर सुरू असल्यास तेथून Logout करा किंवा Login विंडोमधील Device Recovery वापरा.\n3. पासवर्ड रीसेट: पासवर्ड विसरल्यास Forgot Password वापरून ईमेलवर रीसेट लिंक मिळवा.\n4. पेमेंट रिफ्रेश: ₹९९ पेमेंटनंतर प्लान लॉक दिसत असल्यास एकदा Logout करून पुन्हा Login करा.\n\nसपोर्ट टीमशी संपर्क कसा साधावा:\nखालील "SUBMIT A SUPPORT REQUEST" बटणावर क्लिक करा, तुमचा प्रकार (Student/Teacher/Parent/College/Institute), नाव, ईमेल व समस्येचे वर्णन भरा आणि अधिकृत तिकीट क्रमांक मिळवा.',
     },
   },
   {
@@ -372,11 +421,101 @@ const KB_TOPICS: KbTopicDefinition[] = [
     actionIds: () => ['open_password_reset', 'open_login'],
     responses: {
       en: () =>
-        'To reset your MyStudyZone password:\n1. Click Login at the top-right and select "Forgot Password" (or click OPEN PASSWORD RESET below).\n2. Enter your registered email address and submit.\n3. Open the password reset email sent by MyStudyZone (check Spam/Promotions if not in Inbox) and set a new password.\n\nNever share your password with anyone. If you still cannot access your email or reset link, click SUBMIT A SUPPORT REQUEST below.',
+        'How to Reset Your Password Step by Step:\n1. Click Login at the top-right and select "Forgot Password" (or click OPEN PASSWORD RESET below).\n2. Enter your registered email address and submit.\n3. Open the password reset email sent by MyStudyZone (check Spam/Promotions if not in Inbox) and set a new password.\n\nSafety Rule: Never share your password or OTP with anyone. If you still need help, click SUBMIT A SUPPORT REQUEST below.',
       hi: () =>
-        'अपना पासवर्ड रीसेट करने के लिए:\n1. ऊपर दाईं ओर Login पर क्लिक करें और "Forgot Password" चुनें (या नीचे OPEN PASSWORD RESET दबाएँ)।\n2. अपना पंजीकृत ईमेल दर्ज करें।\n3. आपके ईमेल पर आए रीसेट लिंक (Spam फ़ोल्डर भी देखें) से नया पासवर्ड सेट करें।\n\nयदि फिर भी दिक्कत हो, तो नीचे SUBMIT A SUPPORT REQUEST पर क्लिक करें।',
+        'अपना पासवर्ड रीसेट करने के चरण:\n1. ऊपर दाईं ओर Login पर क्लिक करें और "Forgot Password" चुनें (या नीचे OPEN PASSWORD RESET दबाएँ)।\n2. अपना पंजीकृत ईमेल दर्ज करें।\n3. आपके ईमेल पर आए रीसेट लिंक (Spam फ़ोल्डर भी देखें) से नया पासवर्ड सेट करें।\n\nयदि फिर भी दिक्कत हो, तो नीचे SUBMIT A SUPPORT REQUEST पर क्लिक करें।',
       mr: () =>
-        'पासवर्ड रीसेट करण्यासाठी:\n1. वर उजवीकडे Login वर क्लिक करून "Forgot Password" निवडा (किंवा खालील OPEN PASSWORD RESET दाबा).\n2. तुमचा नोंदणीकृत ईमेल पत्ता टाका.\n3. ईमेलवर आलेल्या लिंकवर क्लिक करून (Spam फोल्डरही तपासा) नवीन पासवर्ड सेट करा.\n\nअडचण येत असल्यास खालील SUBMIT A SUPPORT REQUEST बटणावर क्लिक करा.',
+        'पासवर्ड रीसेट करण्याच्या पायऱ्या:\n1. वर उजवीकडे Login वर क्लिक करून "Forgot Password" निवडा (किंवा खालील OPEN PASSWORD RESET दाबा).\n2. तुमचा नोंदणीकृत ईमेल पत्ता टाका.\n3. ईमेलवर आलेल्या लिंकवर क्लिक करून (Spam फोल्डरही तपासा) नवीन पासवर्ड सेट करा.\n\nअडचण येत असल्यास खालील SUBMIT A SUPPORT REQUEST बटणावर क्लिक करा.',
+    },
+  },
+  {
+    id: 'parent_portal_support',
+    priority: 89,
+    keywords: [
+      'parent', 'parents', 'parent portal', 'parent login', 'parent register', 'parent registration',
+      'link child', 'connect student', 'child progress', 'student progress', 'parent report',
+      'parent dashboard', 'palak', 'पालक', 'पैरेंट', 'बच्चे की प्रगति', 'मुलाची प्रगती'
+    ],
+    actionIds: () => ['open_parent_portal', 'open_register', 'open_login'],
+    responses: {
+      en: () =>
+        'Parent Portal Guide — Step by Step:\n1. Parent Registration & Login: From the homepage, click the "Parent Portal" card (or click Register → select Parent), enter your Parent Name, Email, Mobile Number, and Password.\n2. Connecting with Your Child’s Student Account: Inside the Parent Portal, open "Link Child Account" and enter your child’s registered Student Email and Mobile Number to connect their profile.\n3. Understanding Student Progress & Reports:\n   • View subject-wise progress, completed chapters, and worksheet scores.\n   • Check online exam/quiz scorecards, accuracy percentage, and attendance.\n   • Download/view progress reports and communicate with teachers.\n\nClick OPEN PARENT PORTAL below to go directly to the Parent Portal.',
+      hi: () =>
+        'Parent Portal (अभिभावक पोर्टल) — चरण-दर-चरण मार्गदर्शिका:\n1. पैरेंट रजिस्ट्रेशन और लॉगिन: होमपेज पर "Parent Portal" कार्ड पर क्लिक करें (या Register → Parent चुनें) और अपना नाम, ईमेल, मोबाइल व पासवर्ड दर्ज करें।\n2. बच्चे के Student Account से कैसे जुड़ें: Parent Portal के अंदर "Link Child Account" में अपने बच्चे का पंजीकृत Student Email और Mobile Number डालकर प्रोफ़ाइल लिंक करें।\n3. प्रगति और रिपोर्ट कैसे देखें:\n   • विषय-वार प्रगति, पूरे किए गए अध्याय और वर्कशीट स्कोर देखें।\n   • ऑनलाइन परीक्षा/क्विज़ स्कोरकार्ड, सटीकता प्रतिशत और उपस्थिति (Attendance) ट्रैक करें।\n\nसीधे जाने के लिए नीचे OPEN PARENT PORTAL बटन दबाएँ।',
+      mr: () =>
+        'Parent Portal (पालक पोर्टल) — पायरी-पायरीने माहिती:\n1. पालक नोंदणी आणि लॉगिन: मुख्यपृष्ठावरील "Parent Portal" कार्डवर क्लिक करा (किंवा Register → Parent निवडा) आणि तुमचे नाव, ईमेल, मोबाइल व पासवर्ड टाका.\n2. मुलाच्या Student खात्याशी कसे जोडावे: Parent Portal मध्ये "Link Child Account" निवडून मुलाचा नोंदणीकृत Student Email आणि मोबाइल नंबर टाकून खाते जोडा.\n3. मुलाची प्रगती आणि अहवाल (Reports):\n   • विषयनिहाय प्रगती, पूर्ण झालेले धडे आणि वर्कशीट गुण पहा.\n   • ऑनलाइन परीक्षा निकाल, अचूकता टक्केवारी आणि उपस्थिती (Attendance) तपासा.\n\nथेट उघडण्यासाठी खालील OPEN PARENT PORTAL बटणावर क्लिक करा.',
+    },
+  },
+  {
+    id: 'college_portal_support',
+    priority: 88,
+    keywords: [
+      'college', 'colleges', 'college portal', 'school portal', 'school admin', 'college login',
+      'college register', 'college registration', 'college dashboard', 'divisions', 'faculty allocation',
+      'institutional', 'महाविद्यालय', 'कॉलेज', 'शाळा पोर्टल'
+    ],
+    actionIds: () => ['open_college_portal', 'open_register', 'open_login'],
+    responses: {
+      en: () =>
+        'College & School Portal Guide — Step by Step:\n1. Registration & Account Setup: Click the "College Portal" card on the homepage, select Register as College/School, and enter your Institution Name, UDISE / Registration Code, City, Official Email, Mobile, and Password.\n2. Available College Features & Dashboard Navigation:\n   • Overview & Academic KPIs: Monitor total enrolled students, active faculty, divisions, and average pass rate.\n   • Classes, Streams & Divisions: Manage standards/streams, divisions, class teachers, and room allocations.\n   • Faculty Allocation: Assign teachers to subjects and divisions and track workload.\n   • Student Directory: View student roster, attendance percentage, and fee status.\n   • Institutional Calendar, Result Analytics & Campus Circulars: Publish notices, schedule exams, and inspect class-wise result analytics.\n\nClick OPEN COLLEGE PORTAL below to access the College Portal.',
+      hi: () =>
+        'College Portal (कॉलेज व स्कूल पोर्टल) — चरण-दर-चरण मार्गदर्शिका:\n1. रजिस्ट्रेशन और लॉगिन: होमपेज पर "College Portal" कार्ड खोलें, Register में संस्था का नाम, UDISE/रजिस्ट्रेशन कोड, शहर, आधिकारिक ईमेल, मोबाइल और पासवर्ड भरें।\n2. कॉलेज डैशबोर्ड की मुख्य सुविधाएँ:\n   • Classes & Divisions: कक्षाएँ, स्ट्रीम, डिवीज़न और क्लास टीचर प्रबंधित करें।\n   • Faculty Allocation: शिक्षकों को विषय और डिवीज़न आवंटित करें।\n   • Student Directory: छात्रों की सूची, उपस्थिति और फीस स्थिति देखें।\n   • Calendar, Result Analytics & Circulars: परीक्षा कैलेंडर, परिणाम विश्लेषण और कैंपस नोटिस जारी करें।\n\nनीचे OPEN COLLEGE PORTAL बटन दबाकर सीधे खोलें।',
+      mr: () =>
+        'College Portal (महाविद्यालय व शाळा पोर्टल) — पायरी-पायरीने माहिती:\n1. नोंदणी आणि लॉगिन: मुख्यपृष्ठावरील "College Portal" कार्डवर क्लिक करा, Register मध्ये संस्थेचे नाव, UDISE/नोंदणी कोड, शहर, अधिकृत ईमेल, मोबाइल व पासवर्ड भरा.\n2. कॉलेज डॅशबोर्डवरील प्रमुख सुविधा:\n   • Classes & Divisions: वर्ग, शाखा (Streams), तुकड्या आणि वर्गशिक्षक व्यवस्थापित करा.\n   • Faculty Allocation: शिक्षकांना विषय व तुकड्या नेमून द्या.\n   • Student Directory: विद्यार्थी यादी, उपस्थिती व फी स्थिती पहा.\n   • Calendar, Result Analytics & Circulars: शैक्षणिक दिनदर्शिका, निकाल विश्लेषण आणि परिपत्रके प्रसिद्ध करा.\n\nथेट उघडण्यासाठी खालील OPEN COLLEGE PORTAL बटणावर क्लिक करा.',
+    },
+  },
+  {
+    id: 'institute_portal_support',
+    priority: 88,
+    keywords: [
+      'institute', 'institutes', 'institute portal', 'coaching', 'coaching portal', 'coaching institute',
+      'institute login', 'institute register', 'institute dashboard', 'batches', 'batch management',
+      'fee ledger', 'mock test series', 'इन्स्टिट्यूट', 'कोचिंग', 'संस्था पोर्टल'
+    ],
+    actionIds: () => ['open_institute_portal', 'open_register', 'open_login'],
+    responses: {
+      en: () =>
+        'Institute Portal Guide — Step by Step:\n1. Registration & Login: Click the "Institute Portal" card on the homepage, select Register as Institute, and fill in your Coaching/Academy Name, Registration Code, Focus Stream (Scholarship/Foundation/Olympiad/Skill Academy), Official Email, Mobile, and Password.\n2. Institute Dashboard & Management Features:\n   • Batches & Schedules: Create and manage morning/evening coaching batches, timings, mentors, and seat capacity.\n   • Mock Test Series: Conduct Scholarship, Olympiad, Foundation, and TET/CTET mock test series and view top scores.\n   • 18 Skill Academy Programs: Run Abacus, Vedic Maths, English Phonics, Coding, Handwriting, Robotics, and more.\n   • Trainer Roster & Fee Ledger: Manage faculty assignments, fee collection status, and issue Course Completion Certificates.\n\nClick OPEN INSTITUTE PORTAL below to open the Institute Portal.',
+      hi: () =>
+        'Institute Portal (कोचिंग व स्किल इंस्टीट्यूट पोर्टल) — चरण-दर-चरण मार्गदर्शिका:\n1. रजिस्ट्रेशन और लॉगिन: होमपेज पर "Institute Portal" कार्ड पर क्लिक करें, Register में अपने इंस्टीट्यूट का नाम, कोड, फोकस स्ट्रीम, ईमेल, मोबाइल और पासवर्ड दर्ज करें।\n2. इंस्टीट्यूट डैशबोर्ड की प्रबंधन सुविधाएँ:\n   • Batches & Schedules: कोचिंग बैच, समय, मेंटर और छात्र क्षमता प्रबंधित करें।\n   • Mock Test Series: स्कॉलरशिप, ओलंपियाड, फाउंडेशन और TET/CTET मॉक टेस्ट सीरीज़ चलाएँ।\n   • 18 Skill Academy Programs: अबेकस, वैदिक मैथ्स, फोनिक्स, कोडिंग आदि कोर्स संचालित करें।\n   • Trainer Roster, Fee Ledger & Certificates: ट्रेनर सूची, फीस लेजर और कोर्स सर्टिफिकेट जारी करें।\n\nनीचे OPEN INSTITUTE PORTAL बटन दबाकर सीधे खोलें।',
+      mr: () =>
+        'Institute Portal (कोचिंग व कौशल्य संस्था पोर्टल) — पायरी-पायरीने माहिती:\n1. नोंदणी आणि लॉगिन: मुख्यपृष्ठावरील "Institute Portal" कार्डवर क्लिक करा, Register मध्ये संस्थेचे नाव, नोंदणी कोड, मुख्य विभाग, ईमेल, मोबाइल व पासवर्ड भरा.\n2. इन्स्टिट्यूट डॅशबोर्डवरील व्यवस्थापन सुविधा:\n   • Batches & Schedules: कोचिंग बॅचेस, वेळ, मार्गदर्शक आणि विद्यार्थी क्षमता व्यवस्थापित करा.\n   • Mock Test Series: शिष्यवृत्ती, ऑलिम्पियाड, फाउंडेशन व TET/CTET सराव चाचण्या घ्या.\n   • 18 Skill Academy Programs: अबॅकस, वैदिक गणित, फोनिक्स, कोडिंग इत्यादी १८ उपक्रम चालवा.\n   • Trainer Roster, Fee Ledger & Certificates: प्रशिक्षक यादी, फी लेजर आणि कोर्स पूर्णत्वाची प्रमाणपत्रे द्या.\n\nथेट उघडण्यासाठी खालील OPEN INSTITUTE PORTAL बटणावर क्लिक करा.',
+    },
+  },
+  {
+    id: 'teacher_lesson_planner_and_assignments',
+    priority: 87,
+    keywords: [
+      'lesson plan', 'lesson planner', 'annual plan', 'monthly plan', 'daily plan',
+      'assignment', 'create assignment', 'homework', 'student management', 'manage students',
+      'लेसन प्लानर', 'असाइनमेंट', 'पाठ्याचे नियोजन', 'टाचण'
+    ],
+    actionIds: () => ['open_lesson_planner', 'open_teacher_resources', 'open_ai_tools'],
+    responses: {
+      en: () =>
+        'Teacher Support — Lesson Planner, Assignments & Student Management:\n1. How to Use the Lesson Planner:\n   • Open the Teacher Portal and click "Lesson Planner" (or click OPEN TEACHER LESSON PLANNER below).\n   • Select your Board (Maharashtra / CBSE / ICSE), Medium, Class (1–10), and Subject.\n   • Switch between Annual Plan, Monthly Plan, and Daily Lesson Plan tabs, customize school holidays in the School Calendar Drawer, and export clean A4 PDFs.\n2. Assignment & Worksheet Creation:\n   • Use the Teacher AI Generator / Worksheet & Question Paper Maker in the Teacher Portal to generate custom assignments, chapter tests, and answer keys.\n3. Student Management:\n   • Track student attendance, review submitted worksheets/quizzes, and monitor class performance from your Teacher Dashboard.',
+      hi: () =>
+        'टीचर सपोर्ट — लेसन प्लानर, असाइनमेंट और छात्र प्रबंधन:\n1. Lesson Planner कैसे उपयोग करें:\n   • Teacher Portal में "Lesson Planner" खोलें (या नीचे OPEN TEACHER LESSON PLANNER दबाएँ)।\n   • अपना बोर्ड (Maharashtra / CBSE / ICSE), माध्यम, कक्षा (1–10) और विषय चुनें।\n   • Annual Plan, Monthly Plan और Daily Lesson Plan तैयार करें और A4 PDF डाउनलोड/प्रिंट करें।\n2. Assignment और Worksheet निर्माण:\n   • Teacher AI Generator से कस्टम वर्कशीट, प्रश्न-पत्र और उत्तर-कुंजी तैयार करें।\n3. Student Management:\n   • टीचर डैशबोर्ड से छात्रों की उपस्थिति, क्विज़ स्कोर और प्रगति ट्रैक करें।',
+      mr: () =>
+        'शिक्षक मदत — लेसन प्लानर, असाइनमेंट आणि विद्यार्थी व्यवस्थापन:\n1. Lesson Planner कसा वापरावा:\n   • Teacher Portal मध्ये "Lesson Planner" उघडा (किंवा खालील OPEN TEACHER LESSON PLANNER दाबा).\n   • तुमचे बोर्ड (Maharashtra / CBSE / ICSE), माध्यम, इयत्ता (१–१०) आणि विषय निवडा.\n   • वार्षिक (Annual), मासिक (Monthly) आणि दैनंदिन (Daily) पाठ टाचण तयार करा व A4 PDF डाउनलोड करा.\n2. Assignment व Worksheet तयार करणे:\n   • Teacher AI Generator वापरून सरावपत्रिका, प्रश्नपत्रिका व उत्तरसूची तयार करा.\n3. विद्यार्थी व्यवस्थापन:\n   • शिक्षक डॅशबोर्डवरून विद्यार्थ्यांची उपस्थिती, गुण आणि प्रगती तपासा.',
+    },
+  },
+  {
+    id: 'ai_generator_and_tools',
+    priority: 86,
+    keywords: [
+      'ai generator', 'ai tool', 'ai tools', 'how to use ai', 'learning tools', 'pdf maker',
+      'question paper generator', 'notes generator', 'worksheet generator', 'presentation maker',
+      'dictionary', 'trilingual dictionary', 'thought of the day', 'शब्दकोश', 'सुविचार', 'एआई जनरेटर'
+    ],
+    actionIds: () => ['open_ai_tools', 'open_dictionary', 'open_thought_of_the_day'],
+    responses: {
+      en: () =>
+        'How to Use the MyStudyZone AI Generator & Learning Tools Step by Step:\n1. AI Generator Studio (100+ Tools):\n   • Click "Learning Tools" on the homepage or "AI Tools Studio" inside your portal (or click OPEN AI GENERATOR & TOOLS below).\n   • Pick a tool (Worksheet Generator, Notes Generator, Question Paper Maker, Quiz Generator, Presentation Slides, Flashcards, or PDF Maker).\n   • Select your Board, Class (1–10), Subject, Language (English / Marathi / Hindi), and enter your Chapter or Topic.\n   • Click Generate to get structured educational content ready to view or export.\n2. Trilingual Dictionary (English–Marathi–Hindi):\n   • Type any single word in English, Marathi, or Hindi to view its pronunciation, simple & detailed meanings in all 3 languages, synonyms, antonyms, and example sentences.\n3. Thought of the Day:\n   • Explore 1,000+ verified motivational and educational thoughts in English, Marathi, and Hindi.',
+      hi: () =>
+        'MyStudyZone AI Generator और Learning Tools का उपयोग कैसे करें:\n1. AI Generator Studio:\n   • होमपेज पर "Learning Tools" या पोर्टल में "AI Tools Studio" खोलें (या नीचे OPEN AI GENERATOR & TOOLS दबाएँ)।\n   • अपना टूल चुनें (Worksheet Generator, Notes Generator, Question Paper, Quiz या Slides)।\n   • बोर्ड, कक्षा (1–10), विषय, भाषा (English/Marathi/Hindi) और टॉपिक भरकर Generate दबाएँ।\n2. Trilingual Dictionary (अंग्रेजी–मराठी–हिंदी शब्दकोश):\n   • किसी भी एक शब्द को खोजें और तीनों भाषाओं में अर्थ, उच्चारण, समानार्थी, विरुद्धार्थी और उदाहरण वाक्य देखें।\n3. Thought of the Day:\n   • तीनों भाषाओं में 1,000+ प्रेरणादायक सुविचार पढ़ें।',
+      mr: () =>
+        'MyStudyZone AI Generator आणि Learning Tools कसे वापरावे:\n1. AI Generator Studio:\n   • मुख्यपृष्ठावर "Learning Tools" किंवा पोर्टलमध्ये "AI Tools Studio" उघडा (किंवा खालील OPEN AI GENERATOR & TOOLS दाबा).\n   • आवश्यक टूल निवडा (Worksheet Generator, Notes Generator, Question Paper, Quiz किंवा Slides).\n   • बोर्ड, इयत्ता (१–१०), विषय, भाषा (English/Marathi/Hindi) आणि घटक टाकून Generate वर क्लिक करा.\n2. Trilingual Dictionary (इंग्रजी–मराठी–हिंदी शब्दकोश):\n   • कोणताही एक शब्द शोधा आणि तिन्ही भाषांमध्ये अर्थ, उच्चार, समानार्थी, विरुद्धार्थी शब्द व उदाहरणे पहा.\n3. Thought of the Day (आजचा सुविचार):\n   • इंग्रजी, मराठी आणि हिंदीतील १,०००+ प्रेरणादायी सुविचार वाचा.',
     },
   },
   {
@@ -385,19 +524,19 @@ const KB_TOPICS: KbTopicDefinition[] = [
     keywords: [
       'teacher resources', 'teaching resources', 'teaching material', 'teacher portal', 'teacher dashboard',
       'teacher facility', 'teacher facilities', 'for teachers', 'educator', 'techer', 'shikshak',
-      'शिक्षक', 'अध्यापन'
+      'how to access teacher portal', 'शिक्षक', 'अध्यापन'
     ],
     actionIds: (_c, _b, role) =>
       role === 'teacher'
-        ? ['open_teacher_resources', 'open_worksheets', 'open_syllabus', 'open_tet_ctet']
-        : ['open_teacher_login', 'open_teacher_resources', 'open_tet_ctet'],
+        ? ['open_teacher_resources', 'open_lesson_planner', 'open_worksheets', 'open_tet_ctet']
+        : ['open_teacher_login', 'open_teacher_resources', 'open_lesson_planner', 'open_tet_ctet'],
     responses: {
       en: () =>
-        'MyStudyZone Teacher Portal gives educators unified access to:\n• Classes 1 to 10 curriculum across Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE)\n• Class-wise interactive Worksheets & Chapter Study Notes with solved examples\n• 4-Level Practice Quizzes across school subjects\n• 4th & 7th Standard MSCE Scholarship preparation\n• MAHA TET & CTET (Paper 1 & Paper 2) mock tests\n• Multilingual Audio Stories, Chhatrapati Shivaji Maharaj 50 historical chapters, Drawing Studio, Cricket & GK\n\nUse the Teacher Login portal at the top or click OPEN TEACHER RESOURCES below to jump straight in.',
+        'How to Access & Use the MyStudyZone Teacher Portal:\n1. From the homepage, click the "Teacher Portal" card (or click Login / Register → select Teacher).\n2. Inside the Teacher Portal, you get unified access to:\n   • Teacher Lesson Planner (Annual, Monthly & Daily plans with A4 PDF export)\n   • AI Worksheet, Question Paper & Assignment Generators\n   • Classes 1 to 10 curriculum across Maharashtra State Board, CBSE, and ICSE\n   • Class-wise interactive Worksheets, Chapter Study Notes & 4-Level Quizzes\n   • MAHA TET & CTET (Paper 1 & Paper 2) mock tests and 4th & 7th Scholarship prep\n\nClick OPEN TEACHER PORTAL or OPEN TEACHER LESSON PLANNER below to begin.',
       hi: () =>
-        'MyStudyZone टीचर पोर्टल पर शिक्षकों के लिए ये वास्तविक सुविधाएँ उपलब्ध हैं:\n• महाराष्ट्र बोर्ड, CBSE (NCERT) और ICSE (CISCE) के कक्षा 1 से 10 तक के विषय\n• कक्षा-वार इंटरैक्टिव वर्कशीट, चैप्टर स्टडी नोट्स और हल किए गए उदाहरण\n• 4-लेवल प्रैक्टिस क्विज़\n• कक्षा 4थी और 7वीं स्कॉलरशिप (MSCE) मॉक टेस्ट\n• MAHA TET और CTET (पेपर 1 व 2) परीक्षा तैयारी\n• कहानियाँ (अंग्रेजी/हिंदी/मराठी), शिवाजी महाराज के 50 अध्याय, ड्राइंग स्टूडियो और GK।\n\nसीधे जाने के लिए नीचे दिए बटन पर क्लिक करें।',
+        'MyStudyZone टीचर पोर्टल कैसे खोलें और उपयोग करें:\n1. होमपेज पर "Teacher Portal" कार्ड पर क्लिक करें (या Login / Register → Teacher चुनें)।\n2. टीचर पोर्टल में शिक्षकों के लिए उपलब्ध सुविधाएँ:\n   • Teacher Lesson Planner (वार्षिक, मासिक व दैनिक पाठ योजना + A4 PDF एक्सपोर्ट)\n   • AI वर्कशीट, प्रश्न-पत्र और असाइनमेंट जनरेटर\n   • महाराष्ट्र बोर्ड, CBSE और ICSE के कक्षा 1 से 10 तक के नोट्स व वर्कशीट\n   • MAHA TET और CTET (पेपर 1 व 2) तथा स्कॉलरशिप मॉक टेस्ट।\n\nसीधे जाने के लिए नीचे दिए बटन पर क्लिक करें।',
       mr: () =>
-        'MyStudyZone शिक्षक पोर्टलवर शिक्षकांसाठी पुढील सुविधा उपलब्ध आहेत:\n• महाराष्ट्र बोर्ड, CBSE (NCERT) व ICSE (CISCE) मधील इयत्ता १ ते १० चे सर्व विषय\n• इयत्तावार ऑनलाइन वर्कशीट्स, पाठनिहाय स्टडी नोट्स आणि सोडवलेली उदाहरणे\n• ४-लेव्हल सराव क्विझ\n• इयत्ता ४ थी व ७ वी MSCE शिष्यवृत्ती सराव परीक्षा\n• MAHA TET आणि CTET (पेपर १ व २) मॉक टेस्ट\n• गोष्टी (मराठी/हिंदी/इंग्रजी ऑडिओ), छत्रपती शिवाजी महाराजांचे ५० अध्याय, ड्रॉइंग स्टुडिओ व सामान्य ज्ञान.\n\nखालील बटणावर क्लिक करून थेट प्रवेश करा.',
+        'MyStudyZone शिक्षक पोर्टल कसे उघडावे आणि वापरावे:\n1. मुख्यपृष्ठावरील "Teacher Portal" कार्डवर क्लिक करा (किंवा Login / Register → Teacher निवडा).\n2. शिक्षक पोर्टलवरील प्रमुख सुविधा:\n   • Teacher Lesson Planner (वार्षिक, मासिक व दैनंदिन पाठ नियोजन + A4 PDF प्रिंट)\n   • AI वर्कशीट, प्रश्नपत्रिका व असाइनमेंट जनरेटर\n   • महाराष्ट्र बोर्ड, CBSE व ICSE मधील इयत्ता १ ते १० चे सर्व विषय, नोट्स व वर्कशीट्स\n   • MAHA TET आणि CTET (पेपर १ व २) मॉक टेस्ट.\n\nखालील बटणावर क्लिक करून थेट प्रवेश करा.',
     },
   },
   {
@@ -431,20 +570,20 @@ const KB_TOPICS: KbTopicDefinition[] = [
   {
     id: 'worksheets',
     priority: 78,
-    keywords: ['worksheet', 'worksheets', 'workshets', 'exercise', 'exercises', 'practice sheet', 'वर्कशीट', 'सरावपत्रिका'],
+    keywords: ['worksheet', 'worksheets', 'workshets', 'exercise', 'exercises', 'practice sheet', 'how to access worksheets', 'वर्कशीट', 'सरावपत्रिका'],
     actionIds: () => ['open_worksheets', 'open_quizzes'],
     responses: {
       en: (cls, board) => {
         const scope = [board ? `${board} Board` : '', cls || 'Classes 1–10'].filter(Boolean).join(' • ');
-        return `You can open online interactive Worksheets for ${scope} directly inside the Worksheets section.\n• Free accounts include 2 demo worksheets (English & Mathematics) for your registered Board & Class.\n• Premium ₹99 (365 Days) unlocks all subjects' worksheets for that Board & Class.\n• Note: Worksheets are completed interactively online (printing and offline downloads are disabled).`;
+        return `How to Access Worksheets (${scope}) Step by Step:\n1. Click the "Worksheets" card on your dashboard or homepage (or click OPEN WORKSHEETS below).\n2. Select your Education Board (Maharashtra / CBSE / ICSE), Class (1–10), and Subject.\n3. Click any chapter worksheet to solve interactive questions online with instant scoring and explanations.\n• Free Plan: 2 Demo Worksheets (English & Mathematics) for your registered Board & Class.\n• Premium ₹99 (365 Days): Unlocks all subjects' worksheets for that Board & Class.\n• Note: Student worksheets are interactive online resources (printing/offline downloads are disabled).`;
       },
       hi: (cls, board) => {
         const scope = [board ? `${board} बोर्ड` : '', cls || 'कक्षा 1 से 10'].filter(Boolean).join(' • ');
-        return `आप ${scope} की ऑनलाइन इंटरैक्टिव वर्कशीट सीधे Worksheets सेक्शन में खोल सकते हैं।\n• फ्री प्लान में आपके पंजीकृत बोर्ड व कक्षा की 2 डेमो वर्कशीट (English और Maths) मुफ्त हैं।\n• ₹99 (365 दिन) प्लान से उस कक्षा के सभी विषयों की वर्कशीट खुलती हैं।\n• नोट: वर्कशीट केवल वेबसाइट पर ऑनलाइन हल की जाती हैं (प्रिंट व डाउनलोड बंद है)।`;
+        return `वर्कशीट (${scope}) कैसे खोलें — चरण-दर-चरण:\n1. होमपेज या डैशबोर्ड पर "Worksheets" कार्ड पर क्लिक करें (या नीचे OPEN WORKSHEETS दबाएँ)।\n2. अपना बोर्ड, कक्षा (1–10) और विषय चुनें।\n3. किसी भी अध्याय की वर्कशीट खोलकर ऑनलाइन प्रश्न हल करें और तुरंत स्कोर देखें।\n• फ्री प्लान: पंजीकृत बोर्ड व कक्षा की 2 डेमो वर्कशीट (English और Maths) मुफ्त हैं।\n• ₹99 (365 दिन) प्लान: उस कक्षा के सभी विषयों की वर्कशीट अनलॉक करता है।`;
       },
       mr: (cls, board) => {
         const scope = [board ? `${board} बोर्ड` : '', cls || 'इयत्ता १ ते १०'].filter(Boolean).join(' • ');
-        return `${scope} साठी ऑनलाइन इंटरअ‍ॅक्टिव्ह वर्कशीट्स तुम्ही थेट Worksheets विभागात उघडू शकता.\n• मोफत प्लानमध्ये नोंदणीकृत बोर्ड व इयत्तेसाठी २ डेमो वर्कशीट्स (English व Maths) खुल्या आहेत.\n• ₹९९ (३६५ दिवस) प्लानने त्या इयत्तेचे सर्व विषय खुले होतात.\n• टीप: वर्कशीट्स फक्त वेबसाइटवर ऑनलाइन सोडवण्यासाठी आहेत (प्रिंट आणि डाउनलोड बंद आहे).`;
+        return `वर्कशीट्स (${scope}) कशा उघडाव्यात — पायरी-पायरीने:\n1. मुख्यपृष्ठ किंवा डॅशबोर्डवरील "Worksheets" कार्डवर क्लिक करा (किंवा खालील OPEN WORKSHEETS दाबा).\n2. तुमचे बोर्ड, इयत्ता (१–१०) आणि विषय निवडा.\n3. कोणत्याही धड्याची वर्कशीट निवडून ऑनलाइन प्रश्न सोडवा व लगेच गुण पहा.\n• मोफत प्लान: नोंदणीकृत बोर्ड व इयत्तेसाठी २ डेमो वर्कशीट्स (English व Maths) मोफत आहेत.\n• ₹९९ (३६५ दिवस) प्लान: त्या इयत्तेचे सर्व विषय खुले करतो.`;
       },
     },
   },
@@ -453,21 +592,22 @@ const KB_TOPICS: KbTopicDefinition[] = [
     priority: 76,
     keywords: [
       'syllabus', 'silabus', 'sylabus', 'curriculum', 'study material', 'study materials',
-      'notes', 'chapter notes', 'textbook', 'summary', 'abhyaskram', 'अभ्यासक्रम', 'सिलेबस', 'नोट्स'
+      'notes', 'chapter notes', 'textbook', 'summary', 'find subjects', 'find chapters',
+      'where to find study notes', 'how to find notes', 'abhyaskram', 'अभ्यासक्रम', 'सिलेबस', 'नोट्स'
     ],
     actionIds: () => ['open_syllabus', 'open_all_courses'],
     responses: {
       en: (cls, board) => {
         const scope = [board || 'Maharashtra / CBSE / ICSE', cls || 'Classes 1 to 10'].join(' • ');
-        return `Your complete Syllabus & Study Materials (${scope}) include:\n• Chapter-wise syllabus concepts & textbook references\n• Formulas, theorems, rules & solved walkthrough examples\n• Interactive chapter self-revision checklists\n\nClick OPEN SYLLABUS & STUDY NOTES below to view your board, class, and subject chapters.`;
+        return `Where to Find Subjects, Chapters & Study Notes (${scope}) Step by Step:\n1. Click "Study Notes" on the homepage or "Study Materials" inside the Student Portal (or click OPEN SYLLABUS & STUDY NOTES below).\n2. Step 1: Select your Board (Maharashtra State Board, CBSE, or ICSE), Medium (English / Marathi / Hindi / Semi-English), and Standard (Class 1 to 10).\n3. Step 2: Click on any Subject card (e.g., Mathematics, Science, English, History).\n4. Step 3: Select your Chapter from the clean chapter list to read detailed study notes, key definitions, formulas, solved examples, and revision checklists.`;
       },
       hi: (cls, board) => {
         const scope = [board || 'Maharashtra / CBSE / ICSE', cls || 'कक्षा 1 से 10'].join(' • ');
-        return `${scope} का पूरा सिलेबस और स्टडी नोट्स Study Materials में उपलब्ध हैं:\n• अध्याय-वार मुख्य अवधारणाएँ और पाठ्यपुस्तक संदर्भ\n• महत्वपूर्ण सूत्र, नियम और हल किए गए उदाहरण\n• रिवीजन चेकलिस्ट\n\nसीधे देखने के लिए नीचे OPEN SYLLABUS & STUDY NOTES दबाएँ।`;
+        return `विषय, अध्याय और स्टडी नोट्स (${scope}) कहाँ और कैसे ढूँढें:\n1. होमपेज पर "Study Notes" या Student Portal में "Study Materials" पर क्लिक करें (या नीचे OPEN SYLLABUS & STUDY NOTES दबाएँ)।\n2. चरण 1: अपना बोर्ड (Maharashtra / CBSE / ICSE), माध्यम और कक्षा (1–10) चुनें।\n3. चरण 2: अपने विषय (Subject) कार्ड पर क्लिक करें।\n4. चरण 3: अध्याय (Chapter) की सूची से कोई भी पाठ चुनें और विस्तृत नोट्स, सूत्र, हल किए गए उदाहरण व रिवीजन चेकलिस्ट पढ़ें।`;
       },
       mr: (cls, board) => {
         const scope = [board || 'Maharashtra / CBSE / ICSE', cls || 'इयत्ता १ ते १०'].join(' • ');
-        return `${scope} साठी संपूर्ण अभ्यासक्रम व स्टडी नोट्स Study Materials विभागात उपलब्ध आहेत:\n• पाठनिहाय महत्त्वाच्या संकल्पना व पाठ्यपुस्तक संदर्भ\n• महत्त्वाची सूत्रे, नियम आणि सोडवलेली उदाहरणे\n• उजळणी चेकलिस्ट\n\nपाहण्यासाठी खालील OPEN SYLLABUS & STUDY NOTES बटणावर क्लिक करा.`;
+        return `विषय, धडे आणि स्टडी नोट्स (${scope}) कुठे व कसे शोधावेत:\n1. मुख्यपृष्ठावरील "Study Notes" किंवा Student Portal मधील "Study Materials" वर क्लिक करा (किंवा खालील OPEN SYLLABUS & STUDY NOTES दाबा).\n2. पायरी १: तुमचे बोर्ड (Maharashtra / CBSE / ICSE), माध्यम आणि इयत्ता (१–१०) निवडा.\n3. पायरी २: विषयाच्या (Subject) कार्डवर क्लिक करा.\n4. पायरी ३: धड्यांच्या यादीतून कोणताही धडा निवडा आणि सविस्तर स्टडी नोट्स, सूत्रे, सोडवलेली उदाहरणे व उजळणी चेकलिस्ट वाचा.`;
       },
     },
   },
@@ -478,11 +618,11 @@ const KB_TOPICS: KbTopicDefinition[] = [
     actionIds: () => ['open_worksheets', 'open_syllabus', 'open_certificates'],
     responses: {
       en: () =>
-        'Important accuracy note about downloads on MyStudyZone:\n• Worksheets and Study Materials are strictly online interactive resources — offline PDF downloading and printing are disabled to protect educational content.\n• However, once you earn Milestone Champion Certificates, you can view/print them from the Certificates & Leaderboard page, and you can save your Drawing Studio artwork in your artwork gallery.',
+        'Important accuracy note about downloads on MyStudyZone:\n• Student Worksheets and Study Materials are strictly online interactive resources — offline PDF downloading and printing are disabled to protect educational content.\n• Teachers CAN export their Annual, Monthly, and Daily Lesson Plans as A4 PDFs from the Teacher Lesson Planner.\n• Students CAN view/print earned Milestone Champion Certificates from Certificates & Leaderboard, and save Drawing Studio artwork in their gallery.',
       hi: () =>
-        'डाउनलोड से जुड़ी सही जानकारी:\n• MyStudyZone की वर्कशीट और स्टडी नोट्स ऑनलाइन इंटरैक्टिव उपयोग के लिए हैं — इनका PDF डाउनलोड या प्रिंट करना बंद रखा गया है।\n• यदि आपने कोई चैंपियन सर्टिफिकेट अर्जित किया है, तो उसे Certificates & Leaderboard से देख/प्रिंट कर सकते हैं, और Drawing Studio में अपनी कलाकृति गैलरी में सेव कर सकते हैं।',
+        'डाउनलोड से जुड़ी सही जानकारी:\n• छात्रों की वर्कशीट और स्टडी नोट्स ऑनलाइन इंटरैक्टिव उपयोग के लिए हैं — इनका PDF डाउनलोड या प्रिंट करना बंद रखा गया है।\n• शिक्षक Teacher Lesson Planner से अपनी वार्षिक, मासिक व दैनिक पाठ योजना का A4 PDF डाउनलोड/प्रिंट कर सकते हैं।\n• छात्र अपने चैंपियन सर्टिफिकेट को Certificates & Leaderboard से प्रिंट कर सकते हैं।',
       mr: () =>
-        'डाउनलोडबाबत अचूक माहिती:\n• MyStudyZone वरील वर्कशीट्स आणि स्टडी नोट्स फक्त ऑनलाइन सराव व वाचनासाठी आहेत — यांचे PDF डाउनलोड किंवा प्रिंट करणे बंद ठेवण्यात आले आहे.\n• मात्र, तुम्ही मिळवलेली चॅम्पियन प्रमाणपत्रे Certificates & Leaderboard मधून पाहू/प्रिंट करू शकता आणि Drawing Studio मधील चित्रे गॅलरीत सेव करू शकता.',
+        'डाउनलोडबाबत अचूक माहिती:\n• विद्यार्थ्यांच्या वर्कशीट्स आणि स्टडी नोट्स फक्त ऑनलाइन सराव व वाचनासाठी आहेत — त्यांचे PDF डाउनलोड किंवा प्रिंट बंद आहे.\n• शिक्षक Teacher Lesson Planner मधून वार्षिक, मासिक व दैनंदिन पाठ नियोजनाची A4 PDF डाउनलोड/प्रिंट करू शकतात.\n• विद्यार्थी मिळवलेली चॅम्पियन प्रमाणपत्रे Certificates & Leaderboard मधून पाहू/प्रिंट करू शकतात.',
     },
   },
   {
@@ -516,50 +656,50 @@ const KB_TOPICS: KbTopicDefinition[] = [
   {
     id: 'quizzes_and_puzzles',
     priority: 65,
-    keywords: ['quiz', 'quizzes', 'mcq', 'puzzle', 'puzzles', 'sudoku', 'cricket', 'gk', 'ai academy', 'future skills', 'क्विज़', 'कोडे', 'सुडोकू'],
-    actionIds: () => ['open_quizzes', 'open_puzzles', 'open_sudoku', 'open_cricket', 'open_ai_academy'],
+    keywords: ['quiz', 'quizzes', 'mcq', 'exam', 'exams', 'online exam', 'examination', 'puzzle', 'puzzles', 'sudoku', 'cricket', 'gk', 'ai academy', 'future skills', 'क्विज़', 'परीक्षा', 'कोडे', 'सुडोकू'],
+    actionIds: () => ['open_quizzes', 'open_scholarship', 'open_tet_ctet', 'open_puzzles', 'open_sudoku'],
     responses: {
       en: () =>
-        'For interactive practice and brain training, MyStudyZone offers:\n• 4-Level Practice Quizzes (zero repeated questions tracking)\n• Brain Puzzles & Sudoku (4×4, 6×6, 9×9 — Free Forever)\n• Cricket & GK Arena\n• AI Learning Academy & Future Skills (8 modules)',
+        'Understanding MyStudyZone Examination & Quiz Features:\n• 4-Level Subject Practice Quizzes: Level 1 (Beginner) to Level 4 (Master) with zero-repeated-question tracking and instant explanations.\n• Competitive Mock Exams: 4th & 7th Standard MSCE Scholarship CBT Mocks (90-min timer) and MAHA TET / CTET Paper 1 & 2 Mocks (150-min timer).\n• Milestone Champion Certificates: Earn printable Gold/Silver/Bronze certificates and leaderboard rank points as you pass quizzes.\n• Free Brain Training: Brain Puzzles, 4×4/6×6/9×9 Sudoku, Cricket & GK Arena, and AI Learning Academy.',
       hi: () =>
-        'अभ्यास और दिमागी खेल के लिए MyStudyZone में उपलब्ध है:\n• 4-लेवल प्रैक्टिस क्विज़ (बिना दोहराए गए प्रश्न)\n• ब्रेन पज़ल्स और सुडोकू (हमेशा फ्री)\n• क्रिकेट और सामान्य ज्ञान (GK)\n• AI Learning Academy (भविष्य के कौशल)।',
+        'MyStudyZone की ऑनलाइन परीक्षा (Examination) और क्विज़ सुविधाएँ:\n• 4-लेवल विषयवार प्रैक्टिस क्विज़: बिना दोहराए गए प्रश्नों और तत्काल समाधान के साथ।\n• प्रतियोगी मॉक परीक्षाएँ: कक्षा 4थी व 7वीं स्कॉलरशिप (90-मिनट टाइमर) और MAHA TET / CTET पेपर 1 व 2 (150-मिनट टाइमर)।\n• चैंपियन सर्टिफिकेट और लीडरबोर्ड: क्विज़ पास करने पर सर्टिफिकेट और रैंक पॉइंट्स मिलते हैं।\n• ब्रेन पज़ल्स, सुडोकू, क्रिकेट GK और AI Learning Academy।',
       mr: () =>
-        'सराव आणि बौद्धिक खेळांसाठी MyStudyZone वर उपलब्ध आहे:\n• ४-लेव्हल सराव क्विझ (प्रश्न पुन्हा न येणारी प्रणाली)\n• ब्रेन पझल्स आणि सुडोकू (नेहमी मोफत)\n• क्रिकेट व सामान्य ज्ञान (GK)\n• AI Learning Academy (भविष्यातील कौशल्ये).',
+        'MyStudyZone वरील ऑनलाइन परीक्षा (Examination) आणि क्विझ सुविधा:\n• ४-लेव्हल विषयनिहाय सराव क्विझ: प्रश्न पुन्हा न येणारी प्रणाली आणि लगेच स्पष्टीकरण.\n• स्पर्धा परीक्षा मॉक टेस्ट: इयत्ता ४ थी व ७ वी शिष्यवृत्ती (९०-मिनिटे टाइमर) आणि MAHA TET / CTET पेपर १ व २ (१५०-मिनिटे टाइमर).\n• चॅम्पियन प्रमाणपत्रे व लीडरबोर्ड: सराव पूर्ण केल्यावर प्रमाणपत्र व गुण मिळतात.\n• ब्रेन पझल्स, सुडोकू, क्रिकेट GK आणि AI Learning Academy.',
     },
   },
   {
     id: 'registration_and_login',
     priority: 62,
-    keywords: ['register', 'registration', 'sign up', 'signup', 'create account', 'login', 'log in', 'logout', 'sign in', 'नोंदणी', 'रजिस्ट्रेशन', 'लॉगिन', 'लॉगआउट'],
+    keywords: ['register', 'registration', 'sign up', 'signup', 'create account', 'how to register', 'login', 'log in', 'logout', 'sign in', 'नोंदणी', 'रजिस्ट्रेशन', 'लॉगिन', 'लॉगआउट'],
     actionIds: () => ['open_register', 'open_login', 'open_teacher_login'],
     responses: {
       en: () =>
-        'How Registration, Login & Logout work on MyStudyZone:\n• New students or teachers can click Login → Register tab, pick their role (Student or Teacher), Board (Maharashtra / CBSE / ICSE), Class (1–10), Name, Email, Mobile, and Password.\n• Existing users can log in anytime using the Student Login or Teacher Login portal.\n• When logged in, the Login button at the top-right turns into Logout so you can securely sign out from anywhere on desktop or mobile.',
+        'How to Register & Login on MyStudyZone Step by Step:\n1. Click the "Register" button at the top-right of the homepage (or click OPEN REGISTRATION below), OR click any of the 5 portal cards (Student, Teacher, Parent, College, or Institute).\n2. Each portal has its own dedicated registration form:\n   • Student: Name, Board (Maharashtra/CBSE/ICSE), Class (1–10), Medium, School Name, Email, Mobile & Password.\n   • Teacher: Name, Qualification, Subjects Taught, Board, Experience, School Name, Email, Mobile & Password.\n   • Parent: Parent Name, Child’s Student Email & Mobile (for linking), Email & Password.\n   • College: College/School Name, UDISE/Registration Code, Principal/Admin Name, City, Official Email, Phone & Password.\n   • Institute: Institute Name, Registration Code, Director Name, Focus Stream, Official Email, Phone & Password.\n3. After registering, sign in anytime using Login and your role will open your dedicated portal dashboard automatically.',
       hi: () =>
-        'MyStudyZone पर रजिस्ट्रेशन, लॉगिन और लॉगआउट कैसे करें:\n• नए छात्र या शिक्षक Login → Register टैब में जाकर अपनी भूमिका (Student/Teacher), बोर्ड (Maharashtra / CBSE / ICSE), कक्षा (1–10), नाम, ईमेल, मोबाइल और पासवर्ड से अकाउंट बना सकते हैं।\n• पहले से बने अकाउंट से Student Login या Teacher Login से साइन इन करें।\n• लॉगिन होने पर ऊपर दाईं ओर Login बटन की जगह Logout बटन दिखता है।',
+        'MyStudyZone पर रजिस्ट्रेशन और लॉगिन कैसे करें — चरण-दर-चरण:\n1. होमपेज के ऊपर दाईं ओर "Register" बटन पर क्लिक करें (या नीचे OPEN REGISTRATION दबाएँ), या किसी भी पोर्टल कार्ड (Student, Teacher, Parent, College, Institute) को चुनें।\n2. प्रत्येक पोर्टल का अपना अलग रजिस्ट्रेशन फॉर्म है:\n   • Student: नाम, बोर्ड (Maharashtra/CBSE/ICSE), कक्षा (1–10), माध्यम, स्कूल का नाम, ईमेल, मोबाइल व पासवर्ड।\n   • Teacher: नाम, योग्यता, पढ़ाए जाने वाले विषय, बोर्ड, अनुभव, स्कूल, ईमेल, मोबाइल व पासवर्ड।\n   • Parent: अभिभावक का नाम, बच्चे का ईमेल व मोबाइल, तथा पासवर्ड।\n   • College / Institute: संस्था का नाम, रजिस्ट्रेशन कोड, प्रमुख का नाम, शहर, आधिकारिक ईमेल, फोन व पासवर्ड।\n3. रजिस्ट्रेशन के बाद Login से कभी भी अपने पोर्टल डैशबोर्ड में प्रवेश करें।',
       mr: () =>
-        'MyStudyZone वर नोंदणी, लॉगिन आणि लॉगआउट प्रक्रिया:\n• नवीन विद्यार्थी किंवा शिक्षक Login → Register टॅबवर जाऊन आपली भूमिका (Student/Teacher), बोर्ड (Maharashtra / CBSE / ICSE), इयत्ता (१–१०), नाव, ईमेल, मोबाइल व पासवर्ड देऊन नोंदणी करू शकतात.\n• नोंदणीकृत वापरकर्ते Student Login किंवा Teacher Login मधून लॉगिन करू शकतात.\n• लॉगिन केल्यावर वर उजवीकडे Login बटणाच्या जागी Logout बटण दिसते.',
+        'MyStudyZone वर नोंदणी (Registration) आणि लॉगिन कसे करावे — पायरी-पायरीने:\n1. मुख्यपृष्ठावर उजवीकडे "Register" बटणावर क्लिक करा (किंवा खालील OPEN REGISTRATION दाबा), किंवा ५ पैकी कोणत्याही पोर्टल कार्डवर (Student, Teacher, Parent, College, Institute) क्लिक करा.\n2. प्रत्येक पोर्टलसाठी स्वतंत्र नोंदणी फॉर्म आहे:\n   • Student: नाव, बोर्ड (Maharashtra/CBSE/ICSE), इयत्ता (१–१०), माध्यम, शाळेचे नाव, ईमेल, मोबाइल व पासवर्ड.\n   • Teacher: नाव, पात्रता, शिकवले जाणारे विषय, बोर्ड, अनुभव, शाळेचे नाव, ईमेल, मोबाइल व पासवर्ड.\n   • Parent: पालकाचे नाव, मुलाचा ईमेल व मोबाइल नंबर आणि पासवर्ड.\n   • College / Institute: संस्थेचे नाव, नोंदणी कोड, प्रमुखाचे नाव, शहर, अधिकृत ईमेल, फोन व पासवर्ड.\n3. नोंदणीनंतर Login वापरून कधीही तुमच्या पोर्टल डॅशबोर्डवर प्रवेश करा.',
     },
   },
   {
     id: 'boards_and_plans',
     priority: 60,
-    keywords: ['maharashtra', 'cbse', 'icse', 'subscription plan', 'plan details', 'free plan', 'premium plan', 'price', 'pricing', '99', 'fee', 'subscription', 'प्लान', 'फीस', 'बोर्ड'],
+    keywords: ['maharashtra', 'cbse', 'icse', 'subscription plan', 'plan details', 'free plan', 'premium plan', 'price', 'pricing', '99', 'fee', 'subscription', 'payment', 'प्लान', 'फीस', 'बोर्ड'],
     actionIds: () => ['open_all_courses', 'open_plans'],
     responses: {
       en: () =>
-        'MyStudyZone covers Classes 1 to 10 across all 3 Education Boards: Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE).\n• FREE PLAN (₹0 Lifetime): 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, and Chapter 1 sample notes.\n• SCHOOL PREMIUM PLAN (₹99 / 365 Days): Full 1-year unlock of all subjects, worksheets, study materials, stories, drawing, cricket GK & AI academy for your selected Board & Class.\n• TEACHER PLANS – TET & CTET (Paper 1 & 2):\n  – TET (Paper 1 & 2): 6 Months ₹199 (MRP ₹399) | 1 Year ₹299 (MRP ₹599)\n  – CTET (Paper 1 & 2): 6 Months ₹199 (MRP ₹399) | 1 Year ₹299 (MRP ₹599)\n  – Combo Offer (TET + CTET Paper 1 & 2): 6 Months ₹349 (MRP ₹699) | 1 Year ₹499 (MRP ₹999)\n• Separate Scholarship Combo (Std 4th & 7th) is also available.',
+        'MyStudyZone Subscription & Payment Guide (Classes 1 to 10 across Maharashtra, CBSE & ICSE Boards):\n• FREE PLAN (₹0 Lifetime): Includes 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, Trilingual Dictionary, Thought of the Day, and Chapter 1 sample notes.\n• SCHOOL PREMIUM PLAN (₹99 / 365 Days): Full 1-year unlock of all subjects, chapter study notes, interactive worksheets, 4-level quizzes, stories, drawing studio, cricket GK & AI learning academy for your selected Board & Class.\n• SCHOLARSHIP COMBO (Std 4th & 7th): ₹99 / 365 Days.\n• TEACHER PLANS – TET & CTET (Paper 1 & 2):\n  – TET or CTET (Paper 1 & 2): 6 Months ₹199 | 1 Year ₹299\n  – Combo Offer (TET + CTET Paper 1 & 2): 6 Months ₹349 | 1 Year ₹499.',
       hi: () =>
-        'MyStudyZone पर कक्षा 1 से 10 के लिए तीनों बोर्ड उपलब्ध हैं: महाराष्ट्र बोर्ड, CBSE (NCERT) और ICSE (CISCE)।\n• FREE PLAN (₹0 लाइफटाइम): 2 डेमो वर्कशीट, English/Maths क्विज़, पज़ल्स, सुडोकू और सैंपल नोट्स।\n• SCHOOL PREMIUM PLAN (₹99 / 365 दिन): चुने हुए बोर्ड व कक्षा के सभी विषय, वर्कशीट, नोट्स, कहानियाँ, ड्राइंग, क्रिकेट GK और AI अकादमी पूरे 1 वर्ष के लिए अनलॉक।\n• TEACHER PLANS – TET & CTET (Paper 1 & 2):\n  – TET (Paper 1 & 2): 6 माह ₹199 (MRP ₹399) | 1 वर्ष ₹299 (MRP ₹599)\n  – CTET (Paper 1 & 2): 6 माह ₹199 (MRP ₹399) | 1 वर्ष ₹299 (MRP ₹599)\n  – Combo Offer (TET + CTET Paper 1 & 2): 6 माह ₹349 (MRP ₹699) | 1 वर्ष ₹499 (MRP ₹999)\n• स्कॉलरशिप (कक्षा 4 और 7) के लिए अलग प्लान भी उपलब्ध है।',
+        'MyStudyZone सब्सक्रिप्शन और पेमेंट जानकारी (महाराष्ट्र बोर्ड, CBSE और ICSE — कक्षा 1 से 10):\n• FREE PLAN (₹0 लाइफटाइम): 2 डेमो वर्कशीट, English/Maths क्विज़, पज़ल्स, सुडोकू, शब्दकोश, सुविचार और सैंपल नोट्स।\n• SCHOOL PREMIUM PLAN (₹99 / 365 दिन): चुने हुए बोर्ड व कक्षा के सभी विषय, वर्कशीट, नोट्स, कहानियाँ, ड्राइंग, क्रिकेट GK और AI अकादमी पूरे 1 वर्ष के लिए अनलॉक।\n• TEACHER PLANS – TET & CTET (Paper 1 & 2):\n  – TET या CTET: 6 माह ₹199 | 1 वर्ष ₹299\n  – Combo Offer (TET + CTET): 6 माह ₹349 | 1 वर्ष ₹499।',
       mr: () =>
-        'MyStudyZone वर इयत्ता १ ते १० साठी तिन्ही बोर्ड उपलब्ध आहेत: महाराष्ट्र राज्य मंडळ, CBSE (NCERT) आणि ICSE (CISCE).\n• FREE PLAN (₹० आजीवन): २ डेमो वर्कशीट्स, English/Maths क्विझ, पझल्स, सुडोकू व नमुना नोट्स.\n• SCHOOL PREMIUM PLAN (₹९९ / ३६५ दिवस): निवडलेल्या बोर्ड व इयत्तेसाठी सर्व विषय, वर्कशीट्स, स्टडी नोट्स, गोष्टी, ड्रॉइंग, क्रिकेट GK व AI अकादमी १ वर्षासाठी पूर्णपणे खुले होतात.\n• TEACHER PLANS – TET & CTET (Paper 1 & 2):\n  – TET (Paper 1 & 2): ६ महिने ₹१९९ (MRP ₹३९९) | १ वर्ष ₹२९९ (MRP ₹५९९)\n  – CTET (Paper 1 & 2): ६ महिने ₹१९९ (MRP ₹३९९) | १ वर्ष ₹२९९ (MRP ₹५९९)\n  – Combo Offer (TET + CTET Paper 1 & 2): ६ महिने ₹३४९ (MRP ₹६९९) | १ वर्ष ₹४९९ (MRP ₹९९९)\n• शिष्यवृत्ती (इ. ४ थी व ७ वी) साठी स्वतंत्र प्लान उपलब्ध आहे.',
+        'MyStudyZone सबस्क्रिप्शन व पेमेंट माहिती (महाराष्ट्र बोर्ड, CBSE आणि ICSE — इयत्ता १ ते १०):\n• FREE PLAN (₹० आजीवन): २ डेमो वर्कशीट्स, English/Maths क्विझ, पझल्स, सुडोकू, शब्दकोश, सुविचार व नमुना नोट्स.\n• SCHOOL PREMIUM PLAN (₹९९ / ३६५ दिवस): निवडलेल्या बोर्ड व इयत्तेसाठी सर्व विषय, वर्कशीट्स, स्टडी नोट्स, गोष्टी, ड्रॉइंग, क्रिकेट GK व AI अकादमी १ वर्षासाठी पूर्णपणे खुले होतात.\n• TEACHER PLANS – TET & CTET (Paper 1 & 2):\n  – TET किंवा CTET: ६ महिने ₹१९९ | १ वर्ष ₹२९९\n  – Combo Offer (TET + CTET): ६ महिने ₹३४९ | १ वर्ष ₹४९९.',
     },
   },
 ];
 
 export function matchKnowledgeBaseFastPath(
   userMessage: string,
-  options?: { userRole?: 'student' | 'teacher' | 'visitor' }
+  options?: { userRole?: SupportPortalContext }
 ): FastPathSupportResponse {
   const raw = String(userMessage || '').trim();
   const language = detectQueryLanguage(raw);
@@ -619,21 +759,38 @@ export function matchKnowledgeBaseFastPath(
 }
 
 export const HELP_DESK_SYSTEM_PROMPT = `
-You are the official Help & Support Assistant for MyStudyZone (mystudyzone.in), an Indian K-10 school and competitive teacher-exam learning platform.
+You are the official AI Help & Support Assistant for MyStudyZone (mystudyzone.in), a comprehensive Indian educational platform with FIVE dedicated portals:
+1. Student Portal (Classes 1 to 10 across Maharashtra State Board, CBSE, and ICSE)
+2. Teacher Portal (Lesson Planner, Assignments, Worksheets, Student Management, TET & CTET Prep)
+3. Parent Portal (Child Account Linking, Student Progress Tracking, Exam Reports & Attendance)
+4. College Portal (Classes/Streams/Divisions, Faculty Allocation, Student Directory, Institutional Calendar, Result Analytics & Circulars)
+5. Institute Portal (Coaching Batches, Mock Test Series, 18 Skill Academy Programs like Abacus/Vedic Maths/Phonics, Trainer Roster, Fee Ledger & Certificates)
 
-STRICT RULES — NEVER VIOLATE:
-1. ACCURACY ONLY: Only describe features, boards, classes, plans, and links that actually exist on MyStudyZone:
-   - Education Boards (Classes 1 to 10): Maharashtra State Board (SSC), CBSE (NCERT), ICSE (CISCE).
-   - School Features: All Courses Directory (Classes 1–10), Chapter-wise Study Materials & Syllabus Notes (with solved examples & revision checklists), Online Interactive Worksheets (Classes 1–10), 4-Level Practice Quizzes (zero-repeated-question tracking), Milestone Champion Certificates & Leaderboard.
-   - IMPORTANT DOWNLOAD RULE: Worksheets and Study Notes are ONLINE ONLY inside the website (printing and PDF downloads of worksheets are intentionally disabled). Do NOT tell users they can download worksheet PDFs. Users CAN view/print earned Champion Certificates and save drawings in Drawing Studio gallery.
-   - Special Learning Studios: Story World (45+ audio stories in English, Hindi, Marathi), Chhatrapati Shivaji Maharaj Stories (50 audio chapters), Drawing Studio (120+ colouring templates & canvas), Brain Puzzles & Sudoku (4x4, 6x6, 9x9 — Free Forever), Cricket & GK Hub, AI Learning Academy & Future Skills (8 modules).
-   - Exam Prep: 4th Std Scholarship (MSCE PSE) & 7th Std Scholarship (MSCE UPS), MAHA TET (Paper 1 & 2) & CTET (Paper 1 & 2), Free Interactive Visitor Demo & Free Full-Length Demo Mock Tests.
-   - Accounts & Portals: Student Registration/Login, Dedicated Teacher Registration/Login (with Teacher Hub for Classes 1–10, Worksheets, Study Notes, 4-Level Quizzes, Scholarship, TET/CTET, Stories, Current Affairs), Single-Device Session Protection (with Lost/Damaged Device Recovery in Login modal), Forgot Password email reset, Top-Right Login/Logout button, Refer & Earn (₹5 cashback wallet).
-   - Plans: FREE PLAN (₹0 Lifetime: 2 Demo Worksheets English & Math for registered class, English & Math quizzes, Brain Puzzles, Sudoku, Chapter 1 sample notes); SCHOOL PREMIUM PLAN (₹99 / 365 Days per Board & Class); SCHOLARSHIP COMBO (₹99 / 365 Days); TEACHER PLANS – TET (Paper 1 & 2): 6 Months ₹199 (MRP ₹399) & 1 Year ₹299 (MRP ₹599); CTET (Paper 1 & 2): 6 Months ₹199 (MRP ₹399) & 1 Year ₹299 (MRP ₹599); TET + CTET COMBO (Paper 1 & 2): 6 Months ₹349 (MRP ₹699) & 1 Year ₹499 (MRP ₹999) via Razorpay.
-2. NEVER INVENT FEATURES: Never invent live video classes, downloadable worksheet PDFs, 1-on-1 tutors, WhatsApp bots, or non-existent routes/buttons. If asked for something unavailable, politely say it is not available on MyStudyZone.
-3. PRIVACY & SAFETY: NEVER ask users for passwords, OTPs, bank details, or card/UPI PINs. NEVER claim to have automatically fixed an account, reset a password, or activated a plan—always guide the user or set suggestSupportTicket=true so they can submit a Support Request. NEVER disclose admin details or another user's private info.
-4. MULTILINGUAL SUPPORT: Reply fluently in the user's language — English ('en'), Hindi ('hi'), or Marathi ('mr'), understanding spelling mistakes and Hinglish/Marathi transliteration naturally.
-5. NAVIGATION ACTIONS: Only choose from these exact navigationActionIds when genuinely helpful to take the user directly to a section:
-   open_worksheets, open_syllabus, open_all_courses, open_quizzes, open_scholarship, open_tet_ctet, open_teacher_resources, open_stories, open_shivaji, open_drawing, open_puzzles, open_sudoku, open_cricket, open_ai_academy, open_other_programs, open_demo, open_certificates, open_referrals, open_profile, open_plans, open_login, open_teacher_login, open_register, open_password_reset, open_dashboard.
-6. TROUBLESHOOTING & ESCALATION: For personal account, login, payment not reflecting, class correction, or bug issues, give concise troubleshooting steps first and set suggestSupportTicket=true so the UI displays the "SUBMIT A SUPPORT REQUEST" button.
+STRICT RESPONSE RULES — NEVER VIOLATE:
+1. SIMPLE, FRIENDLY & STEP-BY-STEP:
+   - Use simple, friendly language.
+   - Give short, clear answers.
+   - Provide numbered step-by-step instructions whenever explaining how to register, login, find study notes, access worksheets, use the AI Generator, link a child account, or use portal features.
+   - Understand which portal the user is currently accessing (passed in "Current User Portal Context").
+2. ACCURACY ONLY — NEVER INVENT FEATURES:
+   - Only describe features, boards, classes, plans, and sections that actually exist on MyStudyZone:
+     • Student Support: Separate Student Registration & Login; Study Materials (Select Board -> Medium -> Standard Class 1–10 -> Subject -> Chapter -> View Notes); Online Interactive Worksheets; 4-Level Practice Quizzes; 4th & 7th MSCE Scholarship; Story World (45+ audio stories); Chhatrapati Shivaji Maharaj 50 chapters; Drawing Studio; Brain Puzzles & Sudoku; Trilingual Dictionary (English-Marathi-Hindi); Thought of the Day (1,000+ trilingual thoughts); Free ₹0 Plan vs ₹99 / 365 Days Class Plan.
+     • Teacher Support: Separate Teacher Registration & Login; Teacher Lesson Planner (Annual, Monthly, and Daily Lesson Plans with School Calendar Drawer and A4 PDF export); AI Worksheet, Question Paper & Assignment Generators; Student Management & Performance tracking; MAHA TET & CTET (Paper 1 & 2) mock tests.
+     • Parent Support: Separate Parent Registration & Login; connecting/linking with student accounts using the child's registered Student Email & Mobile; viewing subject-wise student progress, worksheet completion, quiz scorecards, and attendance reports.
+     • College Support: Separate College/School Registration & Login (Institution Name, UDISE/Registration Code, Official Email); managing classes/streams/divisions, faculty subject allocation, student roster, institutional calendar, result analytics, and campus circulars.
+     • Institute Support: Separate Coaching/Institute Registration & Login; managing coaching batches & timings, mock test series, 18 skill academy programs (Abacus, Vedic Maths, Phonics, Coding, etc.), trainer roster, fee ledger, and course completion certificates.
+     • AI Generator & Learning Tools: Accessible via "Learning Tools" or "AI Tools Studio" for generating worksheets, chapter notes, question papers, quizzes, flashcards, slides, and PDFs.
+     • Download Rule: Student Worksheets and Study Notes are interactive online resources (PDF downloading/printing of student worksheets is disabled). Teachers CAN export Lesson Plans as A4 PDFs, and students CAN print earned Champion Certificates.
+3. PRIVACY & SECURITY:
+   - Never expose other users' information.
+   - Never request passwords, OTPs, API keys, bank details, or UPI/card PINs.
+   - Never provide unauthorized account or payment information or claim to have automatically modified an account.
+4. MULTILINGUAL SUPPORT:
+   - Reply in the user's language: English ('en'), Hindi ('hi'), or Marathi ('mr').
+5. NAVIGATION ACTIONS:
+   - Choose 0 to 3 helpful navigationActionIds from this exact allowlist:
+     open_worksheets, open_syllabus, open_all_courses, open_quizzes, open_scholarship, open_tet_ctet, open_teacher_resources, open_lesson_planner, open_student_portal, open_parent_portal, open_college_portal, open_institute_portal, open_ai_tools, open_dictionary, open_thought_of_the_day, open_stories, open_shivaji, open_drawing, open_puzzles, open_sudoku, open_cricket, open_ai_academy, open_other_programs, open_demo, open_certificates, open_referrals, open_profile, open_plans, open_login, open_teacher_login, open_register, open_password_reset, open_dashboard.
+6. ADMIN SUPPORT ESCALATION:
+   - If the AI cannot resolve a personal account, login, payment, class change, or technical problem, or if the user asks to contact support, set suggestSupportTicket=true and instruct them to click "SUBMIT A SUPPORT REQUEST" below to generate an official support ticket for the administrator.
 `.trim();
+

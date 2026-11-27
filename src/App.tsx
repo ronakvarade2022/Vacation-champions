@@ -762,15 +762,50 @@ const AppContent: React.FC = () => {
         return;
       }
       case 'open_teacher_resources': {
-        if (currentStudent && (currentStudent.accountRole === 'teacher' || isTeacherPortal)) {
-          switchRole('teacher');
-          setCurrentTab('dashboard');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else if (currentStudent) {
-          handleNavigateTab('all-courses');
-        } else {
-          openAuthModalWithTab('teacher', 'teacher');
-        }
+        setActiveLandingPortal('teacher');
+        switchRole('teacher');
+        setCurrentTab('dashboard');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      case 'open_lesson_planner': {
+        setActiveLandingPortal('teacher');
+        switchRole('teacher');
+        handleNavigateTab('lesson-planner');
+        return;
+      }
+      case 'open_student_portal': {
+        setActiveLandingPortal('student');
+        switchRole('student');
+        setCurrentTab('dashboard');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      case 'open_parent_portal': {
+        setActiveLandingPortal('parent');
+        handleNavigateTab('parent-zone');
+        return;
+      }
+      case 'open_college_portal': {
+        setActiveLandingPortal('school_admin');
+        handleNavigateTab('school-college-zone');
+        return;
+      }
+      case 'open_institute_portal': {
+        setActiveLandingPortal('institute_admin');
+        handleNavigateTab('coaching-zone');
+        return;
+      }
+      case 'open_ai_tools': {
+        handleNavigateTab('ai-tools-studio');
+        return;
+      }
+      case 'open_dictionary': {
+        handleNavigateTab('dictionary');
+        return;
+      }
+      case 'open_thought_of_the_day': {
+        handleNavigateTab('thought-of-the-day');
         return;
       }
       case 'open_stories': {
@@ -2452,15 +2487,32 @@ const AppContent: React.FC = () => {
         )}
       </Suspense>
 
-      {/* Unified AI-Powered Help & Support Assistant (Visible inside portals, hidden on the clean public homepage banner) */}
-      {!isPublicHomepageView && (
-        <HelpSupportAssistant
-          isOpen={isHelpDrawerOpen}
-          onOpenChange={setIsHelpDrawerOpen}
-          onNavigateAction={handleHelpSupportNavigation}
-          activeTab={currentTab}
-        />
-      )}
+      {/* Unified AI-Powered Help & Support Assistant (Accessible from Homepage and all 5 Portals) */}
+      <HelpSupportAssistant
+        isOpen={isHelpDrawerOpen}
+        onOpenChange={setIsHelpDrawerOpen}
+        onNavigateAction={handleHelpSupportNavigation}
+        activeTab={currentTab}
+        activePortalContext={
+          currentTab === 'public-home'
+            ? 'homepage'
+            : currentTab === 'parent-zone'
+            ? 'parent'
+            : currentTab === 'school-college-zone'
+            ? 'college'
+            : currentTab === 'coaching-zone'
+            ? 'institute'
+            : isTeacherPortal || activeLandingPortal === 'teacher'
+            ? 'teacher'
+            : activeLandingPortal === 'parent'
+            ? 'parent'
+            : activeLandingPortal === 'school_admin'
+            ? 'college'
+            : activeLandingPortal === 'institute_admin'
+            ? 'institute'
+            : 'student'
+        }
+      />
 
       {/* Non-intrusive PWA Offline Connectivity Banner */}
       <PWAOfflineIndicator />

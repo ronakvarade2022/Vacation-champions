@@ -1,6 +1,8 @@
 import {
   SupportTicket,
   SupportCategory,
+  SupportUserCategory,
+  normalizeSupportUserCategory,
   GrievanceRecord,
   GrievanceCategory,
   GrievanceStatus,
@@ -119,17 +121,73 @@ function saveLocalData<T>(key: string, data: T[]): void {
   }
 }
 
+export function cacheSavedSupportTicketLocally(ticket: SupportTicket): void {
+  const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
+  const filtered = localList.filter(
+    (t) => t.id !== ticket.id && t.ticketNumber !== ticket.ticketNumber
+  );
+  filtered.unshift(ticket);
+  saveLocalData(STORAGE_KEYS.TICKETS, filtered);
+  updateCachedAdminValue<SupportTicket[]>('admin:support_tickets', (prev) => [
+    ticket,
+    ...prev.filter((t) => t.id !== ticket.id && t.ticketNumber !== ticket.ticketNumber),
+  ]);
+}
+
 // 1. Support Ticket Operations
 export async function createSupportTicket(data: {
   studentId: string;
   studentName: string;
   email: string;
   mobile?: string;
+  userCategory?: SupportUserCategory;
   category: SupportCategory;
   subject: string;
   description: string;
   screenshotUrl?: string;
 }): Promise<SupportTicket> {
+  const userCategory = normalizeSupportUserCategory(data.userCategory);
+
+  // Try server endpoint first so ticket is persisted centrally
+  try {
+    const res = await fetch('/api/support/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userCategory,
+        requesterRole: userCategory,
+        name: data.studentName || 'Student',
+        email: data.email,
+        mobile: data.mobile || '',
+        category: data.category,
+        subject: data.subject.trim(),
+        description: data.description.trim(),
+        studentId: data.studentId || 'guest',
+      }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (res.ok && payload?.success && payload?.persisted && payload?.ticket) {
+      const serverTicket: SupportTicket = {
+        ...payload.ticket,
+        userCategory: normalizeSupportUserCategory(
+          payload.ticket.userCategory || payload.ticket.requesterRole || userCategory
+        ),
+        screenshotUrl: data.screenshotUrl || payload.ticket.screenshotUrl || '',
+      };
+      cacheSavedSupportTicketLocally(serverTicket);
+      try {
+        if (db) {
+          await setDoc(doc(db, 'support_tickets', serverTicket.id), serverTicket);
+        }
+      } catch {
+        // Already persisted on server
+      }
+      return serverTicket;
+    }
+  } catch {
+    // Fall back to Firestore + local cache if server endpoint unreachable
+  }
+
   const ticketNumber = generateTicketNumber();
   const id = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
@@ -141,6 +199,8 @@ export async function createSupportTicket(data: {
     studentName: data.studentName || 'Student',
     email: data.email,
     mobile: data.mobile || '',
+    userCategory,
+    requesterRole: userCategory,
     category: data.category,
     subject: data.subject.trim(),
     description: data.description.trim(),
@@ -151,13 +211,8 @@ export async function createSupportTicket(data: {
     updatedAt: now
   };
 
-  // 1. Save to Local Cache & memory TTL cache
-  const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
-  localList.unshift(newTicket);
-  saveLocalData(STORAGE_KEYS.TICKETS, localList);
-  updateCachedAdminValue<SupportTicket[]>('admin:support_tickets', (prev) => [newTicket, ...prev]);
+  cacheSavedSupportTicketLocally(newTicket);
 
-  // 2. Persist to Firestore if available
   try {
     if (db) {
       await setDoc(doc(db, 'support_tickets', newTicket.id), newTicket);
@@ -175,33 +230,67 @@ export async function getSupportTickets(
 ): Promise<SupportTicket[]> {
   if (studentId) {
     const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
+    const map = new Map<string, SupportTicket>();
+
+    try {
+      const res = await fetch(
+        `/api/support/tickets?studentId=${encodeURIComponent(studentId)}`
+      );
+      const data = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(data?.tickets)) {
+        for (const t of data.tickets as SupportTicket[]) {
+          if (t && t.id) map.set(t.id, t);
+        }
+      }
+    } catch {
+      // Continue with Firestore + local cache
+    }
+
     try {
       if (db) {
         const snap = await getDocs(
           query(collection(db, 'support_tickets'), where('studentId', '==', studentId), limit(100))
         );
         if (!snap.empty) {
-          const firestoreList = snap.docs.map(d => d.data() as SupportTicket);
-          const map = new Map<string, SupportTicket>();
-          firestoreList.forEach(t => map.set(t.id, t));
-          localList.filter(t => t.studentId === studentId).forEach(t => {
-            if (!map.has(t.id)) map.set(t.id, t);
+          snap.docs.forEach((d) => {
+            const t = d.data() as SupportTicket;
+            if (t && t.id) map.set(t.id, t);
           });
-          return Array.from(map.values()).sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
         }
       }
     } catch {
       // Fallback to local cache
     }
-    return localList.filter(t => t.studentId === studentId);
+
+    localList
+      .filter((t) => t.studentId === studentId)
+      .forEach((t) => {
+        if (!map.has(t.id)) map.set(t.id, t);
+      });
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }
 
   return cachedAdminFetch(
     'admin:support_tickets',
     async () => {
       const localList = getLocalData<SupportTicket>(STORAGE_KEYS.TICKETS, []);
+      const map = new Map<string, SupportTicket>();
+
+      try {
+        const res = await fetch('/api/support/tickets');
+        const data = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(data?.tickets)) {
+          for (const t of data.tickets as SupportTicket[]) {
+            if (t && t.id) map.set(t.id, t);
+          }
+        }
+      } catch {
+        // Continue with Firestore + local cache
+      }
+
       try {
         if (db) {
           let snap;
@@ -213,26 +302,27 @@ export async function getSupportTickets(
             snap = await getDocs(query(collection(db, 'support_tickets'), limit(250)));
           }
           if (!snap.empty) {
-            const firestoreList: SupportTicket[] = [];
-            snap.forEach(d => {
-              firestoreList.push(d.data() as SupportTicket);
+            snap.forEach((d) => {
+              const t = d.data() as SupportTicket;
+              if (t && t.id) map.set(t.id, t);
             });
-            const map = new Map<string, SupportTicket>();
-            firestoreList.forEach(t => map.set(t.id, t));
-            localList.forEach(t => {
-              if (!map.has(t.id)) map.set(t.id, t);
-            });
-            const merged = Array.from(map.values()).sort(
-              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-            saveLocalData(STORAGE_KEYS.TICKETS, merged);
-            return merged;
           }
         }
       } catch (err) {
-        console.warn('[SupportService] Firestore read failed, using cached tickets:', err);
+        console.warn('[SupportService] Firestore read failed, using server & cached tickets:', err);
       }
-      return localList;
+
+      localList.forEach((t) => {
+        if (t && t.id && !map.has(t.id)) {
+          map.set(t.id, t);
+        }
+      });
+
+      const merged = Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      saveLocalData(STORAGE_KEYS.TICKETS, merged);
+      return merged;
     },
     { ttlMs: ADMIN_CACHE_DEFAULT_TTL_MS, forceRefresh }
   );
@@ -240,7 +330,7 @@ export async function getSupportTickets(
 
 export async function getSupportTicketByNumber(ticketNumber: string): Promise<SupportTicket | null> {
   const trimmed = ticketNumber.trim().toUpperCase();
-  const all = await getSupportTickets();
+  const all = await getSupportTickets(undefined, true);
   const found = all.find(t => t.ticketNumber.toUpperCase() === trimmed || t.id === trimmed);
   return found || null;
 }
@@ -276,6 +366,21 @@ export async function updateSupportTicketStatus(
     )
   );
 
+  let serverUpdated = false;
+  try {
+    const res = await fetch(`/api/support/tickets/${encodeURIComponent(ticketId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status,
+        ...(adminResponse !== undefined ? { adminResponse } : {}),
+      }),
+    });
+    serverUpdated = res.ok;
+  } catch {
+    serverUpdated = false;
+  }
+
   try {
     if (db) {
       const tRef = doc(db, 'support_tickets', ticketId);
@@ -286,7 +391,7 @@ export async function updateSupportTicketStatus(
     return true;
   } catch (err) {
     console.warn('[SupportService] Failed to update ticket in Firestore:', err);
-    return idx !== -1;
+    return serverUpdated || idx !== -1;
   }
 }
 

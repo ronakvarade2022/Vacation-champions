@@ -1,39 +1,67 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Headphones,
-  X,
-  Send,
-  ArrowRight,
-  ArrowLeft,
-  LifeBuoy,
-  CheckCircle2,
   AlertCircle,
-  RotateCcw,
-  ShieldCheck,
-  Loader2,
-  Sparkles,
+  ArrowRight,
+  Bot,
+  Building2,
+  CheckCircle2,
+  ChevronRight,
   GraduationCap,
+  HeartHandshake,
+  HelpCircle,
+  LifeBuoy,
+  Loader2,
+  MessageSquare,
+  RotateCcw,
+  School,
+  Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
   HELP_DESK_WELCOME_MESSAGE,
+  SupportLanguage,
   SupportNavigationAction,
+  SupportPortalContext,
+  buildNavigationAction,
 } from '../data/helpSupportKnowledgeBase';
 import {
+  ChatTurnPayload,
+  HELP_SUPPORT_OPEN_EVENT,
   sendHelpChatMessage,
   submitHelpSupportRequest,
-  HELP_SUPPORT_OPEN_EVENT,
 } from '../services/helpAssistantService';
-import type { SupportCategory, SupportTicket } from '../types/support';
+import { getSupportTicketByNumber } from '../services/supportService';
+import {
+  SUPPORT_USER_CATEGORY_LABELS,
+  SupportCategory,
+  SupportTicket,
+  SupportUserCategory,
+  formatSupportTicketStatusLabel,
+  normalizeSupportUserCategory,
+} from '../types/support';
 
-interface ChatMessageItem {
+export interface HelpMessageItem {
   id: string;
-  role: 'user' | 'assistant';
+  sender: 'user' | 'assistant';
   text: string;
+  timestamp: string;
+  source?: 'welcome' | 'knowledge_base' | 'gemini_ai' | 'kb_fallback';
   navigationActions?: SupportNavigationAction[];
   suggestSupportTicket?: boolean;
   notice?: string;
-  timestamp: string;
+}
+
+interface HelpSupportAssistantProps {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onNavigateAction: (action: SupportNavigationAction) => void;
+  activeTab: string;
+  activePortalContext?: SupportPortalContext;
 }
 
 const SUPPORT_CATEGORIES: SupportCategory[] = [
@@ -48,193 +76,329 @@ const SUPPORT_CATEGORIES: SupportCategory[] = [
   'General Queries',
 ];
 
-interface HelpSupportAssistantProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  onNavigateAction: (action: SupportNavigationAction) => void;
-  activeTab: string;
-  isFullscreenExam?: boolean;
-}
+const PORTAL_TABS: Array<{
+  id: SupportUserCategory;
+  label: string;
+  shortLabel: string;
+  badgeClass: string;
+}> = [
+  {
+    id: 'student',
+    label: 'Student Support',
+    shortLabel: 'Students',
+    badgeClass: 'bg-sky-600 text-white border-sky-500',
+  },
+  {
+    id: 'teacher',
+    label: 'Teacher Support',
+    shortLabel: 'Teachers',
+    badgeClass: 'bg-emerald-600 text-white border-emerald-500',
+  },
+  {
+    id: 'parent',
+    label: 'Parent Support',
+    shortLabel: 'Parents',
+    badgeClass: 'bg-fuchsia-600 text-white border-fuchsia-500',
+  },
+  {
+    id: 'college',
+    label: 'College Support',
+    shortLabel: 'Colleges',
+    badgeClass: 'bg-amber-600 text-white border-amber-500',
+  },
+  {
+    id: 'institute',
+    label: 'Institute Support',
+    shortLabel: 'Institutes',
+    badgeClass: 'bg-teal-600 text-white border-teal-500',
+  },
+];
 
-function buildInitialMessages(): ChatMessageItem[] {
-  return [
+const QUICK_TOPICS_BY_PORTAL: Record<
+  SupportUserCategory,
+  Array<{ label: string; prompt: string }>
+> = {
+  student: [
     {
-      id: 'welcome-msg',
-      role: 'assistant',
-      text: HELP_DESK_WELCOME_MESSAGE,
-      navigationActions: [],
-      suggestSupportTicket: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      label: 'How to Register as Student',
+      prompt: 'How do I register and login as a student on MyStudyZone step by step?',
     },
-  ];
+    {
+      label: 'Where to Find Study Notes',
+      prompt: 'Where do I find subjects, chapters, and study notes step by step?',
+    },
+    {
+      label: 'How to Access Worksheets',
+      prompt: 'How do I access interactive worksheets for my board and class?',
+    },
+    {
+      label: 'Online Exams & Quizzes',
+      prompt: 'Explain the online examination, 4-level quizzes, and Scholarship features.',
+    },
+    {
+      label: 'How to Use AI Generator',
+      prompt: 'How do I use the AI Generator, Trilingual Dictionary, and Thought of the Day?',
+    },
+    {
+      label: '₹99 Plan & Subscription',
+      prompt: 'Explain the Free ₹0 plan vs ₹99 / 365 Days Class subscription and payment.',
+    },
+  ],
+  teacher: [
+    {
+      label: 'How to Access Teacher Portal',
+      prompt: 'How do I register and login to the Teacher Portal on MyStudyZone?',
+    },
+    {
+      label: 'Lesson Planner Guide',
+      prompt: 'How do I use the Teacher Lesson Planner for Annual, Monthly, and Daily plans?',
+    },
+    {
+      label: 'Create Assignments & Worksheets',
+      prompt: 'How can teachers create assignments, worksheets, and question papers with the AI Generator?',
+    },
+    {
+      label: 'Student Management',
+      prompt: 'How does student management and performance tracking work in the Teacher Portal?',
+    },
+    {
+      label: 'MAHA TET & CTET Prep',
+      prompt: 'Tell me about MAHA TET and CTET Paper 1 and Paper 2 mock tests for teachers.',
+    },
+  ],
+  parent: [
+    {
+      label: 'Parent Registration & Login',
+      prompt: 'How do I register and sign in to the Parent Portal step by step?',
+    },
+    {
+      label: 'Connect Student Account',
+      prompt: 'How do parents connect or link with their child’s student account?',
+    },
+    {
+      label: 'Track Student Progress',
+      prompt: 'How can parents understand student progress, exam reports, and attendance?',
+    },
+  ],
+  college: [
+    {
+      label: 'College Registration & Login',
+      prompt: 'How does a college or school register and login to the College Portal?',
+    },
+    {
+      label: 'College Portal Features',
+      prompt: 'What features are available in the College Portal (divisions, faculty, calendar, results)?',
+    },
+    {
+      label: 'College Dashboard Navigation',
+      prompt: 'Explain how to navigate the College Portal dashboard step by step.',
+    },
+  ],
+  institute: [
+    {
+      label: 'Institute Registration & Login',
+      prompt: 'How does a coaching or skill institute register and login to the Institute Portal?',
+    },
+    {
+      label: 'Batches & Mock Test Series',
+      prompt: 'How do coaching batches, mock test series, and 18 skill programs work in the Institute Portal?',
+    },
+    {
+      label: 'Fee Ledger & Certificates',
+      prompt: 'How do trainer roster, fee ledger, and course completion certificates work in the Institute Portal?',
+    },
+  ],
+};
+
+function makeInitialWelcomeMessage(): HelpMessageItem {
+  return {
+    id: 'welcome-msz-helpdesk',
+    sender: 'assistant',
+    text: HELP_DESK_WELCOME_MESSAGE,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    source: 'welcome',
+    navigationActions: [
+      buildNavigationAction('open_syllabus'),
+      buildNavigationAction('open_worksheets'),
+      buildNavigationAction('open_ai_tools'),
+    ],
+    suggestSupportTicket: false,
+  };
 }
 
 export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
   isOpen,
   onOpenChange,
   onNavigateAction,
-  isFullscreenExam = false,
+  activeTab,
+  activePortalContext,
 }) => {
-  const { currentStudent, activeRole, activeBoard } = useApp();
+  const { currentStudent, activeRole } = useApp();
 
-  const effectiveRoleContext: 'student' | 'teacher' | 'guest' =
-    currentStudent?.accountRole === 'teacher' || activeRole === 'teacher'
-      ? 'teacher'
-      : currentStudent
-      ? 'student'
-      : 'guest';
+  // Determine active portal category from context, tab, or signed-in role
+  const detectedUserCategory = useMemo<SupportUserCategory>(() => {
+    if (
+      activePortalContext &&
+      activePortalContext !== 'visitor' &&
+      activePortalContext !== 'homepage'
+    ) {
+      return activePortalContext;
+    }
+    if (activeTab === 'parent-zone') return 'parent';
+    if (activeTab === 'school-college-zone') return 'college';
+    if (activeTab === 'coaching-zone') return 'institute';
+    if (activeRole === 'teacher' || currentStudent?.accountRole === 'teacher') {
+      return 'teacher';
+    }
+    if (activeRole === 'parent') return 'parent';
+    if (activeRole === 'school_admin') return 'college';
+    if (activeRole === 'institute_admin') return 'institute';
+    return 'student';
+  }, [activePortalContext, activeTab, activeRole, currentStudent?.accountRole]);
 
-  const [viewMode, setViewMode] = useState<'chat' | 'ticket'>('chat');
-  const [messages, setMessages] = useState<ChatMessageItem[]>(buildInitialMessages);
-  const [inputValue, setInputValue] = useState('');
+  const [selectedPortalGuide, setSelectedPortalGuide] = useState<SupportUserCategory>(
+    detectedUserCategory
+  );
+
+  useEffect(() => {
+    setSelectedPortalGuide(detectedUserCategory);
+  }, [detectedUserCategory]);
+
+  const [activeView, setActiveView] = useState<'chat' | 'support_request' | 'track_ticket'>('chat');
+  const [messages, setMessages] = useState<HelpMessageItem[]>(() => [makeInitialWelcomeMessage()]);
+  const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   // Support Request Form State
-  const [reqRole, setReqRole] = useState<'student' | 'teacher'>(
-    effectiveRoleContext === 'teacher' ? 'teacher' : 'student'
-  );
-  const [reqName, setReqName] = useState(currentStudent?.name || '');
-  const [reqEmail, setReqEmail] = useState(currentStudent?.email || '');
-  const [reqMobile, setReqMobile] = useState(currentStudent?.mobile || '');
-  const [reqCategory, setReqCategory] = useState<SupportCategory>('Registration & Login');
+  const [reqRole, setReqRole] = useState<SupportUserCategory>(detectedUserCategory);
+  const [reqName, setReqName] = useState('');
+  const [reqEmail, setReqEmail] = useState('');
+  const [reqMobile, setReqMobile] = useState('');
+  const [reqCategory, setReqCategory] = useState<SupportCategory>('General Queries');
   const [reqDescription, setReqDescription] = useState('');
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
   const [submittedTicket, setSubmittedTicket] = useState<SupportTicket | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const [inDocFullscreen, setInDocFullscreen] = useState<boolean>(false);
+  // Ticket Tracking State
+  const [lookupNumber, setLookupNumber] = useState('');
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [lookedUpTicket, setLookedUpTicket] = useState<SupportTicket | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const syncFs = () => {
-      setInDocFullscreen(Boolean(document.fullscreenElement));
-    };
-    syncFs();
-    document.addEventListener('fullscreenchange', syncFs);
-    return () => document.removeEventListener('fullscreenchange', syncFs);
-  }, []);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Listen for global open triggers so all "Help & Support" buttons open the single unified window
+  // Sync user profile fields when user logs in or switches portal
   useEffect(() => {
-    const handler = () => {
-      onOpenChange(true);
-    };
+    setReqRole(detectedUserCategory);
+    if (currentStudent) {
+      if (!reqName) setReqName(currentStudent.name || '');
+      if (!reqEmail) setReqEmail(currentStudent.email || currentStudent.parentEmail || '');
+      if (!reqMobile) setReqMobile(currentStudent.mobile || '');
+    }
+  }, [currentStudent, detectedUserCategory, reqName, reqEmail, reqMobile]);
+
+  // Listen for global open event (e.g. from footer or Help buttons)
+  useEffect(() => {
+    const handler = () => onOpenChange(true);
     window.addEventListener(HELP_SUPPORT_OPEN_EVENT, handler);
     return () => window.removeEventListener(HELP_SUPPORT_OPEN_EVENT, handler);
   }, [onOpenChange]);
 
-  // Sync user defaults when logged-in account changes
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    setReqRole(effectiveRoleContext === 'teacher' ? 'teacher' : 'student');
-    if (currentStudent?.name) setReqName(currentStudent.name);
-    if (currentStudent?.email) setReqEmail(currentStudent.email);
-    if (currentStudent?.mobile) setReqMobile(currentStudent.mobile);
-  }, [
-    currentStudent?.id,
-    currentStudent?.name,
-    currentStudent?.email,
-    currentStudent?.mobile,
-    effectiveRoleContext,
-  ]);
-
-  useEffect(() => {
-    if (isOpen && viewMode === 'chat') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isOpen && activeView === 'chat') {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [isOpen, viewMode, messages, isSending]);
+  }, [messages, isOpen, activeView, isSending]);
 
-  useEffect(() => {
-    if (isOpen && viewMode === 'chat') {
-      const timer = window.setTimeout(() => {
-        inputRef.current?.focus();
-      }, 150);
-      return () => window.clearTimeout(timer);
-    }
-  }, [isOpen, viewMode]);
+  const historyForApi = useMemo<ChatTurnPayload[]>(() => {
+    return messages
+      .filter((m) => m.id !== 'welcome-msz-helpdesk')
+      .slice(-6)
+      .map((m) => ({
+        role: m.sender,
+        text: m.text,
+      }));
+  }, [messages]);
 
-  const handleResetChat = () => {
-    setMessages(buildInitialMessages());
-    setStatusNotice(null);
-    setViewMode('chat');
-    setSubmittedTicket(null);
-    setTicketError(null);
-  };
+  const handleSendQuestion = useCallback(
+    async (questionText?: string) => {
+      const textToSend = String(questionText ?? inputText).trim();
+      if (!textToSend || isSending) return;
 
-  const handleOpenSupportForm = (prefillCategory?: SupportCategory) => {
-    if (prefillCategory) {
-      setReqCategory(prefillCategory);
-    }
-    setTicketError(null);
-    setSubmittedTicket(null);
-    // Pre-populate description with the user's latest question if description is blank
-    if (!reqDescription.trim()) {
-      const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-      if (lastUserMsg) {
-        setReqDescription(lastUserMsg.text.slice(0, 500));
-      }
-    }
-    setViewMode('ticket');
-  };
-
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const trimmed = inputValue.trim();
-    if (!trimmed || isSending) return;
-
-    const userMsg: ChatMessageItem = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      text: trimmed,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    const nextHistory = messages
-      .filter((m) => m.id !== 'welcome-msg')
-      .map((m) => ({ role: m.role, text: m.text }));
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue('');
-    setIsSending(true);
-
-    try {
-      const result = await sendHelpChatMessage({
-        message: trimmed,
-        roleContext: effectiveRoleContext,
-        history: nextHistory,
-        activeBoard,
-        activeClass: currentStudent?.classLevel,
-      });
-
-      if (result.notice) {
-        setStatusNotice(result.notice);
+      if (questionText === undefined) {
+        setInputText('');
       }
 
-      const assistantMsg: ChatMessageItem = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        text: result.reply,
-        navigationActions: result.navigationActions,
-        suggestSupportTicket: result.suggestSupportTicket,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const userMsg: HelpMessageItem = {
+        id: `usr_${Date.now()}`,
+        sender: 'user',
+        text: textToSend,
+        timestamp: nowStr,
       };
 
-      setMessages((prev) => [...prev, assistantMsg]);
-    } finally {
-      setIsSending(false);
-    }
+      setMessages((prev) => [...prev, userMsg]);
+      setIsSending(true);
+
+      try {
+        const res = await sendHelpChatMessage({
+          message: textToSend,
+          roleContext: selectedPortalGuide,
+          history: historyForApi,
+          activeBoard: currentStudent?.board,
+          activeClass: currentStudent?.classLevel,
+        });
+
+        const botMsg: HelpMessageItem = {
+          id: `bot_${Date.now()}`,
+          sender: 'assistant',
+          text: res.reply,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          source: res.source,
+          navigationActions: res.navigationActions,
+          suggestSupportTicket: res.suggestSupportTicket,
+          notice: res.notice,
+        };
+
+        setMessages((prev) => [...prev, botMsg]);
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [inputText, isSending, selectedPortalGuide, historyForApi, currentStudent]
+  );
+
+  const handleResetConversation = () => {
+    setMessages([makeInitialWelcomeMessage()]);
+    setInputText('');
   };
 
-  const handleSubmitTicket = async (e: React.FormEvent) => {
+  const handleOpenSupportRequestForm = (prefillFromChat: boolean = true) => {
+    setSubmittedTicket(null);
+    setTicketError(null);
+    setReqRole(selectedPortalGuide);
+    if (prefillFromChat && !reqDescription.trim()) {
+      const lastUserMessage = [...messages].reverse().find((m) => m.sender === 'user');
+      if (lastUserMessage) {
+        setReqDescription(lastUserMessage.text);
+      }
+    }
+    setActiveView('support_request');
+  };
+
+  const handleSubmitSupportTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingTicket) return;
+
     setTicketError(null);
     setIsSubmittingTicket(true);
 
     try {
-      const res = await submitHelpSupportRequest({
+      const result = await submitHelpSupportRequest({
         requesterRole: reqRole,
+        portalContext: activeTab === 'public-home' ? 'homepage' : selectedPortalGuide,
         name: reqName,
         email: reqEmail,
         mobile: reqMobile,
@@ -243,387 +407,544 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
         studentId: currentStudent?.id,
       });
 
-      if (!res.success || !res.ticket) {
+      if (!result.success || !result.ticket) {
         setTicketError(
-          res.error || 'Unable to save your support request right now. Please try again.'
+          result.error || 'Could not save your support request. Please check your details and try again.'
         );
         return;
       }
 
-      setSubmittedTicket(res.ticket);
+      setSubmittedTicket(result.ticket);
       setReqDescription('');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ticket-confirm-${Date.now()}`,
-          role: 'assistant',
-          text: `Your support request has been recorded with Ticket Number ${res.ticket!.ticketNumber}.\nOur team will review it and reply to ${res.ticket!.email}.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
     } finally {
       setIsSubmittingTicket(false);
     }
   };
 
-  const handleActionClick = (action: SupportNavigationAction) => {
-    onOpenChange(false);
-    onNavigateAction(action);
+  const handleTrackTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = lookupNumber.trim();
+    if (!code) return;
+    setIsLookingUp(true);
+    setLookupError(null);
+    setLookedUpTicket(null);
+    try {
+      const ticket = await getSupportTicketByNumber(code);
+      if (!ticket) {
+        setLookupError(`No support request found with ticket number "${code.toUpperCase()}".`);
+      } else {
+        setLookedUpTicket(ticket);
+      }
+    } catch {
+      setLookupError('Unable to check ticket status right now. Please try again.');
+    } finally {
+      setIsLookingUp(false);
+    }
   };
 
-  if ((isFullscreenExam || inDocFullscreen) && !isOpen) {
-    return null;
-  }
+  const handleNavigationClick = (action: SupportNavigationAction) => {
+    onNavigateAction(action);
+    onOpenChange(false);
+  };
+
+  const activePortalLabel =
+    activeTab === 'public-home'
+      ? 'Homepage'
+      : `${SUPPORT_USER_CATEGORY_LABELS[detectedUserCategory]} Portal`;
 
   return (
     <>
-      {/* Non-overlapping Docked HELP & SUPPORT Bar (Never floats over main content) */}
-      {!isOpen && (
-        <div className="w-full no-print bg-[#fefce8] border-t border-amber-200/80 py-3 px-4 sm:px-6 lg:px-8">
-          <div className="msz-container flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#0f2952]">
-              <LifeBuoy className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Need assistance with classes, notes, subscriptions, or login?</span>
+      {/* Floating Help & Support Launcher Pill (Visible on Homepage & All 5 Portals) */}
+      <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2">
+        {!isOpen && (
+          <button
+            type="button"
+            onClick={() => onOpenChange(true)}
+            className="group flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-900 via-blue-800 to-indigo-900 hover:from-indigo-800 hover:to-blue-700 text-white shadow-xl border-2 border-amber-400/90 transition-all cursor-pointer hover:scale-[1.02]"
+            aria-label="Open MyStudyZone AI Help & Support Assistant"
+          >
+            <span className="w-7 h-7 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow-xs">
+              <Bot className="w-4 h-4" />
+            </span>
+            <div className="text-left leading-tight">
+              <div className="text-xs font-extrabold tracking-wide flex items-center gap-1.5">
+                <span>AI Help &amp; Support</span>
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </div>
+              <div className="text-[10px] text-amber-200 font-semibold hidden sm:block">
+                {activePortalLabel} • EN / HI / MR
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => onOpenChange(true)}
-              aria-label="HELP & SUPPORT"
-              data-testid="help-support-launcher"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#0f2952] via-[#133870] to-[#1d4ed8] hover:from-[#133870] hover:to-[#1e40af] text-white font-display font-black text-xs sm:text-sm tracking-wide shadow-md border-2 border-amber-300/80 cursor-pointer transition-all"
-            >
-              <span className="w-6 h-6 rounded-xl bg-amber-400 text-[#0f2952] flex items-center justify-center shrink-0 shadow-xs">
-                <Headphones className="w-3.5 h-3.5" />
-              </span>
-              <span>HELP &amp; SUPPORT</span>
-            </button>
-          </div>
-        </div>
-      )}
+          </button>
+        )}
+      </div>
 
-      {/* Single Modern Chat Drawer / Modal */}
+      {/* Slide-Over Help & Support Assistant Drawer */}
       {isOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-end sm:justify-end p-0 sm:p-5 bg-slate-950/40 backdrop-blur-[2px]"
-          role="dialog"
-          aria-modal="true"
-          aria-label="MyStudyZone Help Desk"
-        >
-          <div className="w-full sm:w-[440px] max-w-full h-[92dvh] sm:h-[640px] sm:max-h-[86dvh] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-[#0f2952] via-[#133870] to-[#1e3a8a] text-white px-4 py-3.5 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-[#0f2952] flex items-center justify-center shrink-0 shadow-sm">
-                  {effectiveRoleContext === 'teacher' ? (
-                    <GraduationCap className="w-5 h-5" />
-                  ) : (
-                    <Headphones className="w-5 h-5" />
-                  )}
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/60 backdrop-blur-xs">
+          <div
+            className="w-full max-w-lg bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-label="MyStudyZone AI Help & Support Assistant"
+          >
+            {/* Top Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-3.5 border-b border-indigo-800 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-sm shrink-0">
+                    <LifeBuoy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h2 className="font-display font-extrabold text-sm sm:text-base text-white">
+                        MyStudyZone AI Help &amp; Support
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        {activePortalLabel}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Students • Teachers • Parents • Colleges • Institutes
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-display font-black text-sm sm:text-base truncate">
-                      MyStudyZone Help Desk
-                    </h2>
-                    <span className="px-2 py-0.5 rounded-lg bg-white/15 text-amber-200 text-[10px] font-extrabold uppercase tracking-wider shrink-0">
-                      {effectiveRoleContext === 'teacher'
-                        ? 'Teacher'
-                        : effectiveRoleContext === 'student'
-                        ? 'Student'
-                        : 'Support'}
+
+                <div className="flex items-center gap-1">
+                  {activeView === 'chat' && messages.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleResetConversation}
+                      title="Clear Chat"
+                      className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    aria-label="Close Help Desk"
+                    className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* View Switcher Tabs */}
+              <div className="mt-3 grid grid-cols-3 gap-1.5 bg-slate-950/60 p-1 rounded-xl border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('chat')}
+                  className={`py-1.5 px-2 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    activeView === 'chat'
+                      ? 'bg-amber-400 text-slate-950 shadow-xs'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>AI Assistant</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenSupportRequestForm(true)}
+                  className={`py-1.5 px-2 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    activeView === 'support_request'
+                      ? 'bg-amber-400 text-slate-950 shadow-xs'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>Contact Support</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('track_ticket')}
+                  className={`py-1.5 px-2 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    activeView === 'track_ticket'
+                      ? 'bg-amber-400 text-slate-950 shadow-xs'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>Track Ticket</span>
+                </button>
+              </div>
+            </div>
+
+            {/* BODY 1: AI ASSISTANT CHAT VIEW */}
+            {activeView === 'chat' && (
+              <>
+                {/* 5-Portal Selector Bar + Quick Topic Chips */}
+                <div className="bg-slate-50 border-b border-slate-200 px-3.5 py-2.5 shrink-0 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      Select Portal Help Guide:
+                    </span>
+                    <span className="text-[10px] font-bold text-indigo-700">
+                      Showing {SUPPORT_USER_CATEGORY_LABELS[selectedPortalGuide]} topics
                     </span>
                   </div>
-                  <p className="text-[11px] text-sky-100 font-medium truncate flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
-                    <span>English &bull; हिंदी &bull; मराठी</span>
-                  </p>
+                  <div className="grid grid-cols-5 gap-1">
+                    {PORTAL_TABS.map((portal) => {
+                      const isSelected = selectedPortalGuide === portal.id;
+                      return (
+                        <button
+                          key={portal.id}
+                          type="button"
+                          onClick={() => setSelectedPortalGuide(portal.id)}
+                          className={`py-1.5 px-1.5 rounded-lg text-[10px] font-extrabold border text-center transition-all cursor-pointer truncate ${
+                            isSelected
+                              ? portal.badgeClass
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                          }`}
+                        >
+                          {portal.shortLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Quick Step-by-Step Topic Prompts for Selected Portal */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+                    {QUICK_TOPICS_BY_PORTAL[selectedPortalGuide].map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        disabled={isSending}
+                        onClick={() => handleSendQuestion(chip.prompt)}
+                        className="shrink-0 px-2.5 py-1 rounded-lg bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-900 border border-slate-200 hover:border-indigo-300 text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleResetChat}
-                  title="New conversation"
-                  aria-label="Start new conversation"
-                  className="p-2 rounded-xl text-sky-100 hover:text-white hover:bg-white/15 cursor-pointer transition-colors"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  aria-label="Close Help and Support"
-                  className="p-2 rounded-xl text-sky-100 hover:text-white hover:bg-white/15 cursor-pointer transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Non-intrusive Status / Quota / Fallback Banner */}
-            {statusNotice && viewMode === 'chat' && (
-              <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-2 text-[11px] text-amber-900 font-semibold flex items-start justify-between gap-2 shrink-0">
-                <span>{statusNotice}</span>
-                <button
-                  type="button"
-                  onClick={() => setStatusNotice(null)}
-                  aria-label="Dismiss notice"
-                  className="text-amber-700 hover:text-amber-950 shrink-0 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Main View: Chat OR Support Request Form */}
-            {viewMode === 'chat' ? (
-              <>
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-slate-50/80">
+                {/* Chat Messages Scroll Container */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/60">
                   {messages.map((msg) => (
                     <div
                       key={msg.id}
                       className={`flex flex-col ${
-                        msg.role === 'user' ? 'items-end' : 'items-start'
+                        msg.sender === 'user' ? 'items-end' : 'items-start'
                       }`}
                     >
                       <div
-                        className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed shadow-xs whitespace-pre-line ${
-                          msg.role === 'user'
-                            ? 'bg-[#0f2952] text-white rounded-br-sm font-medium'
-                            : 'bg-white text-slate-800 border border-slate-200/90 rounded-bl-sm font-medium'
+                        className={`max-w-[92%] rounded-2xl px-4 py-3 text-xs leading-relaxed shadow-xs ${
+                          msg.sender === 'user'
+                            ? 'bg-indigo-700 text-white rounded-br-xs'
+                            : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
                         }`}
                       >
-                        {msg.text}
-                      </div>
+                        {msg.sender === 'assistant' && (
+                          <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-slate-100">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-indigo-900">
+                              <Sparkles className="w-3 h-3 text-amber-500" />
+                              <span>MyStudyZone Help Assistant</span>
+                            </span>
+                            {msg.source === 'gemini_ai' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
+                                Free-Tier AI
+                              </span>
+                            )}
+                            {msg.source === 'knowledge_base' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                                Verified Guide
+                              </span>
+                            )}
+                          </div>
+                        )}
 
-                      {/* Direct Website Navigation Buttons */}
-                      {msg.role === 'assistant' &&
-                        msg.navigationActions &&
-                        msg.navigationActions.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5 max-w-[92%]">
-                            {msg.navigationActions.map((act, idx) => (
+                        <div className="whitespace-pre-line">{msg.text}</div>
+
+                        {msg.notice && (
+                          <div className="mt-2.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium">
+                            {msg.notice}
+                          </div>
+                        )}
+
+                        {/* Direct Navigation Action Buttons */}
+                        {msg.navigationActions && msg.navigationActions.length > 0 && (
+                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1.5">
+                            {msg.navigationActions.map((act) => (
                               <button
-                                key={`${act.id}_${act.targetClass || ''}_${idx}`}
+                                key={`${msg.id}_${act.id}_${act.targetClass || ''}_${act.targetBoard || ''}`}
                                 type="button"
-                                onClick={() => handleActionClick(act)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[11px] tracking-wide shadow-xs cursor-pointer transition-colors"
+                                onClick={() => handleNavigationClick(act)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-[11px] font-extrabold transition-colors cursor-pointer"
                               >
                                 <span>{act.label}</span>
-                                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                                <ArrowRight className="w-3 h-3" />
                               </button>
                             ))}
                           </div>
                         )}
 
-                      {/* Support Escalation CTA when relevant */}
-                      {msg.role === 'assistant' && msg.suggestSupportTicket && (
-                        <div className="mt-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenSupportForm()}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] tracking-wide shadow-xs cursor-pointer transition-colors"
-                          >
-                            <LifeBuoy className="w-3.5 h-3.5 shrink-0" />
-                            <span>SUBMIT A SUPPORT REQUEST</span>
-                          </button>
-                        </div>
-                      )}
-
-                      <span className="mt-1 px-1 text-[10px] text-slate-400 font-medium">
-                        {msg.timestamp}
-                      </span>
+                        {/* Escalation CTA when AI suggests a Support Request */}
+                        {msg.suggestSupportTicket && (
+                          <div className="mt-3 pt-2.5 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSupportRequestForm(true)}
+                              className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                            >
+                              <LifeBuoy className="w-3.5 h-3.5" />
+                              <span>SUBMIT A SUPPORT REQUEST</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-1 px-1">{msg.timestamp}</span>
                     </div>
                   ))}
 
                   {isSending && (
                     <div className="flex items-start">
-                      <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-xs flex items-center gap-2 text-xs text-slate-600 font-semibold">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                        <span>Finding the best answer...</span>
+                      <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-xs px-4 py-3 text-xs text-slate-600 flex items-center gap-2 shadow-xs">
+                        <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                        <span>Finding the best step-by-step guidance for you...</span>
                       </div>
                     </div>
                   )}
 
-                  <div ref={messagesEndRef} />
+                  <div ref={chatEndRef} />
                 </div>
 
-                {/* Free-Text Input Area */}
-                <div className="bg-white border-t border-slate-200 p-3 space-y-2 shrink-0">
-                  <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-                    <textarea
-                      ref={inputRef}
-                      rows={1}
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          void handleSendMessage();
-                        }
-                      }}
-                      placeholder="Ask anything in English, हिंदी, or मराठी..."
-                      maxLength={600}
-                      disabled={isSending}
-                      className="flex-1 resize-none rounded-xl border border-slate-300 focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none max-h-28"
+                {/* Persistent Bottom Input & Escalation Bar */}
+                <div className="p-3 bg-white border-t border-slate-200 space-y-2 shrink-0">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSendQuestion();
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder={`Ask about ${SUPPORT_USER_CATEGORY_LABELS[selectedPortalGuide]} Portal, notes, worksheets, AI tools...`}
+                      maxLength={500}
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-600 focus:outline-none text-xs text-slate-900"
                     />
                     <button
                       type="submit"
-                      disabled={!inputValue.trim() || isSending}
-                      aria-label="Send message"
-                      className="h-10 px-4 rounded-xl bg-[#0f2952] hover:bg-[#133870] disabled:bg-slate-300 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed transition-colors shrink-0"
+                      disabled={!inputText.trim() || isSending}
+                      className="px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <Send className="w-4 h-4" />
-                      <span className="hidden sm:inline">Send</span>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Ask</span>
                     </button>
                   </form>
 
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 px-0.5">
-                    <span>Type any question naturally</span>
+                  <div className="flex items-center justify-between gap-2 pt-0.5 text-[11px]">
+                    <span className="text-slate-500">
+                      Issue not resolved? Escalate to Admin Support:
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleOpenSupportForm()}
-                      className="font-bold text-sky-700 hover:text-sky-900 hover:underline cursor-pointer flex items-center gap-1"
+                      onClick={() => handleOpenSupportRequestForm(true)}
+                      className="font-extrabold text-indigo-700 hover:text-indigo-900 inline-flex items-center gap-1 cursor-pointer"
                     >
-                      <LifeBuoy className="w-3 h-3" />
-                      <span>Submit a Support Request</span>
+                      <span>Contact Support</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               </>
-            ) : (
-              /* Support Request Form View */
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-slate-50/70 space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('chat')}
-                    className="inline-flex items-center gap-1 text-xs font-extrabold text-sky-700 hover:text-sky-900 cursor-pointer"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Back to Help Chat</span>
-                  </button>
-                  <span className="text-[11px] font-bold text-slate-500">
-                    Direct Support Desk
-                  </span>
-                </div>
+            )}
 
+            {/* BODY 2: ADMIN SUPPORT ESCALATION / CONTACT SUPPORT FORM */}
+            {activeView === 'support_request' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-slate-50 space-y-4">
                 {submittedTicket ? (
-                  <div className="bg-white rounded-2xl border-2 border-emerald-300 p-5 text-center space-y-3 shadow-sm">
-                    <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                      <CheckCircle2 className="w-7 h-7" />
+                  <div className="bg-white rounded-2xl border-2 border-emerald-400 p-5 shadow-md space-y-4 text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                          Support Request Saved
+                        </span>
+                        <h3 className="font-display font-extrabold text-base text-slate-900">
+                          Ticket Number: {submittedTicket.ticketNumber}
+                        </h3>
+                      </div>
                     </div>
-                    <h3 className="font-display font-black text-base text-slate-900">
-                      Support Request Submitted
-                    </h3>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Your request has been saved securely. Please keep your ticket number for reference:
+
+                    <p className="text-slate-600 leading-relaxed">
+                      Your support request has been securely recorded for the MyStudyZone Administrator. Please save your ticket number for reference.
                     </p>
-                    <div className="py-2 px-4 rounded-xl bg-emerald-50 border border-emerald-200 inline-block font-mono font-black text-sm text-emerald-900">
-                      {submittedTicket.ticketNumber}
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Ticket Number:</span>
+                        <span className="font-mono font-black text-indigo-900">
+                          {submittedTicket.ticketNumber}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">User Category:</span>
+                        <span className="font-bold text-slate-800">
+                          {SUPPORT_USER_CATEGORY_LABELS[
+                            normalizeSupportUserCategory(
+                              submittedTicket.userCategory || submittedTicket.requesterRole
+                            )
+                          ]}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Issue Category:</span>
+                        <span className="font-bold text-slate-800">{submittedTicket.category}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Current Status:</span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black text-[10px]">
+                          {formatSupportTicketStatusLabel(submittedTicket.status)}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Updates will be sent to <span className="font-bold text-slate-700">{submittedTicket.email}</span>.
-                    </p>
-                    <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
+
+                    <div className="flex flex-wrap gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => setViewMode('chat')}
-                        className="px-4 py-2 rounded-xl bg-[#0f2952] text-white font-bold text-xs cursor-pointer"
+                        onClick={() => {
+                          setLookupNumber(submittedTicket.ticketNumber);
+                          setLookedUpTicket(submittedTicket);
+                          setActiveView('track_ticket');
+                        }}
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs cursor-pointer"
                       >
-                        Return to Chat
+                        Track Ticket Status
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSubmittedTicket(null)}
-                        className="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 font-bold text-xs cursor-pointer"
+                        onClick={() => {
+                          setSubmittedTicket(null);
+                          setActiveView('chat');
+                        }}
+                        className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer"
                       >
-                        Submit Another
+                        Back to AI Chat
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <form onSubmit={handleSubmitTicket} className="space-y-3.5">
-                    <div className="rounded-xl bg-sky-50 border border-sky-200 px-3 py-2 text-[11px] text-sky-900 font-medium flex items-start gap-2">
-                      <ShieldCheck className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
-                      <span>
-                        For your security, never enter your password, OTP, UPI PIN, or card details here.
+                  <form
+                    onSubmit={handleSubmitSupportTicket}
+                    className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4 text-xs"
+                  >
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                        Admin Support Escalation
                       </span>
+                      <h3 className="font-display font-extrabold text-base text-slate-900 mt-0.5">
+                        Submit a Support Request
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        If the AI assistant could not resolve your issue, fill in the details below to generate an official support ticket for the administrator.
+                      </p>
                     </div>
 
                     {ticketError && (
-                      <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-xs text-rose-800 font-semibold flex items-start gap-2">
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-semibold flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                         <span>{ticketError}</span>
                       </div>
                     )}
 
-                    {/* Role Selection */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-extrabold text-slate-700">
-                        I am a:
+                    {/* 1. User Category (All 5 Portals) */}
+                    <div className="space-y-1.5">
+                      <label className="block font-extrabold text-slate-800">
+                        1. Select Your User Category *
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {(['student', 'teacher'] as const).map((r) => (
-                          <button
-                            key={r}
-                            type="button"
-                            onClick={() => setReqRole(r)}
-                            className={`py-2 px-3 rounded-xl border text-xs font-extrabold capitalize cursor-pointer transition-colors ${
-                              reqRole === r
-                                ? 'bg-[#0f2952] text-white border-[#0f2952]'
-                                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            {r}
-                          </button>
-                        ))}
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {(
+                          [
+                            { id: 'student', label: 'Student', icon: GraduationCap },
+                            { id: 'teacher', label: 'Teacher', icon: UserCheck },
+                            { id: 'parent', label: 'Parent', icon: HeartHandshake },
+                            { id: 'college', label: 'College', icon: School },
+                            { id: 'institute', label: 'Institute', icon: Building2 },
+                          ] as const
+                        ).map((item) => {
+                          const Icon = item.icon;
+                          const active = reqRole === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setReqRole(item.id)}
+                              className={`p-2 rounded-xl border text-center flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                                active
+                                  ? 'bg-indigo-700 text-white border-indigo-700 shadow-xs'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4" />
+                              <span className="text-[10px] font-extrabold">{item.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
+                    {/* 2. Name */}
                     <div className="space-y-1">
-                      <label htmlFor="msz-sup-name" className="block text-xs font-extrabold text-slate-700">
-                        Full Name *
+                      <label className="block font-extrabold text-slate-800">
+                        2. Full Name / Institution Name *
                       </label>
                       <input
-                        id="msz-sup-name"
                         type="text"
                         required
-                        minLength={2}
-                        maxLength={100}
                         value={reqName}
                         onChange={(e) => setReqName(e.target.value)}
                         placeholder="Enter your full name"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-600 focus:outline-none"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:border-indigo-600 focus:outline-none"
                       />
                     </div>
 
-                    <div className="space-y-1">
-                      <label htmlFor="msz-sup-email" className="block text-xs font-extrabold text-slate-700">
-                        Registered Email Address *
-                      </label>
-                      <input
-                        id="msz-sup-email"
-                        type="email"
-                        required
-                        maxLength={150}
-                        value={reqEmail}
-                        onChange={(e) => setReqEmail(e.target.value)}
-                        placeholder="example@email.com"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-600 focus:outline-none"
-                      />
+                    {/* 3. Registered Email & Optional Mobile */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block font-extrabold text-slate-800">
+                          3. Registered Email *
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={reqEmail}
+                          onChange={(e) => setReqEmail(e.target.value)}
+                          placeholder="name@example.com"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:border-indigo-600 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block font-extrabold text-slate-800">
+                          Mobile Number (Optional)
+                        </label>
+                        <input
+                          type="tel"
+                          value={reqMobile}
+                          onChange={(e) => setReqMobile(e.target.value)}
+                          placeholder="10-digit mobile number"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:border-indigo-600 focus:outline-none"
+                        />
+                      </div>
                     </div>
 
+                    {/* 4. Issue Category */}
                     <div className="space-y-1">
-                      <label htmlFor="msz-sup-cat" className="block text-xs font-extrabold text-slate-700">
-                        Problem Category *
+                      <label className="block font-extrabold text-slate-800">
+                        4. Issue Category *
                       </label>
                       <select
-                        id="msz-sup-cat"
                         value={reqCategory}
                         onChange={(e) => setReqCategory(e.target.value as SupportCategory)}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-600 focus:outline-none"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 font-semibold focus:border-indigo-600 focus:outline-none"
                       >
                         {SUPPORT_CATEGORIES.map((cat) => (
                           <option key={cat} value={cat}>
@@ -633,57 +954,163 @@ export const HelpSupportAssistant: React.FC<HelpSupportAssistantProps> = ({
                       </select>
                     </div>
 
+                    {/* 5. Problem Description */}
                     <div className="space-y-1">
-                      <label htmlFor="msz-sup-mobile" className="block text-xs font-extrabold text-slate-700">
-                        Mobile Number (Optional)
-                      </label>
-                      <input
-                        id="msz-sup-mobile"
-                        type="tel"
-                        maxLength={20}
-                        value={reqMobile}
-                        onChange={(e) => setReqMobile(e.target.value)}
-                        placeholder="10-digit mobile number"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-600 focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label htmlFor="msz-sup-desc" className="block text-xs font-extrabold text-slate-700">
-                        Problem Description *
+                      <label className="block font-extrabold text-slate-800">
+                        5. Problem Description *
                       </label>
                       <textarea
-                        id="msz-sup-desc"
-                        required
-                        minLength={10}
-                        maxLength={1800}
                         rows={4}
+                        required
                         value={reqDescription}
                         onChange={(e) => setReqDescription(e.target.value)}
-                        placeholder="Please describe the issue, class/board selected, or payment/login error message (no passwords or OTPs)."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-600 focus:outline-none resize-y"
+                        placeholder="Describe your question or issue clearly (never include your password or OTP)..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:border-indigo-600 focus:outline-none"
                       />
                     </div>
 
-                    <button
-                      type="submit"
-                      disabled={isSubmittingTicket}
-                      className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-slate-950 font-black text-sm flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed transition-colors shadow-sm"
-                    >
-                      {isSubmittingTicket ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Submitting Request...</span>
-                        </>
-                      ) : (
-                        <>
-                          <LifeBuoy className="w-4 h-4" />
-                          <span>Submit Support Request</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Security Notice: Never share your password, OTP, or UPI/card PIN in support tickets.
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={isSubmittingTicket}
+                        className="flex-1 py-3 px-4 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                      >
+                        {isSubmittingTicket ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Saving Support Ticket...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Generate Support Ticket</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView('chat')}
+                        className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </form>
                 )}
+              </div>
+            )}
+
+            {/* BODY 3: TRACK TICKET STATUS VIEW */}
+            {activeView === 'track_ticket' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-slate-50 space-y-4 text-xs">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                      Support Ticket Status
+                    </span>
+                    <h3 className="font-display font-extrabold text-base text-slate-900 mt-0.5">
+                      Check Your Support Request
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Enter your Ticket Number (e.g., TKT-MSZ-12345) to inspect live status (New, In Progress, Resolved, Closed) and Admin Responses.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleTrackTicket} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={lookupNumber}
+                      onChange={(e) => setLookupNumber(e.target.value)}
+                      placeholder="Enter Ticket Number (e.g. TKT-MSZ-12345)"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-mono uppercase focus:border-indigo-600 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isLookingUp || !lookupNumber.trim()}
+                      className="px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold cursor-pointer"
+                    >
+                      {isLookingUp ? 'Checking...' : 'Check'}
+                    </button>
+                  </form>
+
+                  {lookupError && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-semibold">
+                      {lookupError}
+                    </div>
+                  )}
+
+                  {lookedUpTicket && (
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <span className="font-mono font-black text-sm text-indigo-900">
+                          {lookedUpTicket.ticketNumber}
+                        </span>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            lookedUpTicket.status === 'RESOLVED' ||
+                            lookedUpTicket.status === 'CLOSED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : lookedUpTicket.status === 'IN_PROGRESS'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          ● {formatSupportTicketStatusLabel(lookedUpTicket.status)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-slate-500 block">User Category:</span>
+                          <span className="font-bold text-slate-800">
+                            {
+                              SUPPORT_USER_CATEGORY_LABELS[
+                                normalizeSupportUserCategory(
+                                  lookedUpTicket.userCategory || lookedUpTicket.requesterRole
+                                )
+                              ]
+                            }
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Issue Category:</span>
+                          <span className="font-bold text-slate-800">
+                            {lookedUpTicket.category}
+                          </span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-slate-500 block">Submitted On:</span>
+                          <span className="font-bold text-slate-800">
+                            {new Date(lookedUpTicket.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-1">
+                        <span className="text-slate-500 block text-[11px]">Description:</span>
+                        <p className="mt-1 p-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 whitespace-pre-wrap">
+                          {lookedUpTicket.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-1">
+                        <span className="text-slate-500 block text-[11px]">Admin Response:</span>
+                        <div className="mt-1 p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200 text-indigo-950 font-medium">
+                          {lookedUpTicket.adminResponse
+                            ? lookedUpTicket.adminResponse
+                            : 'Your support request is in queue for administrator review.'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

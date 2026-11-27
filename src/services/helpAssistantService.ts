@@ -3,11 +3,19 @@ import { auth, db } from '../firebase';
 import {
   SupportLanguage,
   SupportNavigationAction,
+  SupportPortalContext,
   detectQueryLanguage,
   matchKnowledgeBaseFastPath,
 } from '../data/helpSupportKnowledgeBase';
-import type { SupportCategory, SupportTicket } from '../types/support';
+import {
+  SUPPORT_USER_CATEGORY_LABELS,
+  SupportCategory,
+  SupportTicket,
+  SupportUserCategory,
+  normalizeSupportUserCategory,
+} from '../types/support';
 import type { ClassLevel, EducationBoard } from '../types';
+import { cacheSavedSupportTicketLocally } from './supportService';
 
 export const HELP_SUPPORT_OPEN_EVENT = 'msz_open_help_support';
 
@@ -42,7 +50,7 @@ export interface HelpChatResult {
 
 export async function sendHelpChatMessage(params: {
   message: string;
-  roleContext: 'student' | 'teacher' | 'guest';
+  roleContext: SupportPortalContext | 'guest';
   history: ChatTurnPayload[];
   activeBoard?: EducationBoard;
   activeClass?: ClassLevel;
@@ -60,7 +68,7 @@ export async function sendHelpChatMessage(params: {
     };
   }
 
-  const mappedRole: 'student' | 'teacher' | 'visitor' =
+  const mappedPortalContext: SupportPortalContext =
     params.roleContext === 'guest' ? 'visitor' : params.roleContext;
 
   try {
@@ -71,7 +79,8 @@ export async function sendHelpChatMessage(params: {
       },
       body: JSON.stringify({
         message: cleanMessage,
-        userRole: mappedRole,
+        userRole: mappedPortalContext,
+        portalContext: mappedPortalContext,
         history: params.history.slice(-6),
         activeBoard: params.activeBoard,
         activeClass: params.activeClass,
@@ -96,7 +105,7 @@ export async function sendHelpChatMessage(params: {
   }
 
   const fastMatch = matchKnowledgeBaseFastPath(cleanMessage, {
-    userRole: mappedRole,
+    userRole: mappedPortalContext,
   });
   const lang = detectQueryLanguage(cleanMessage);
 
@@ -134,7 +143,8 @@ export async function sendHelpChatMessage(params: {
 }
 
 export interface SubmitHelpRequestPayload {
-  requesterRole: 'student' | 'teacher';
+  requesterRole: SupportUserCategory;
+  portalContext?: string;
   name: string;
   email: string;
   mobile?: string;
@@ -146,21 +156,23 @@ export interface SubmitHelpRequestPayload {
 
 export interface SubmitHelpRequestResult {
   success: boolean;
-  ticket?: SupportTicket & { requesterRole?: 'student' | 'teacher' };
-  storage?: 'firestore_admin' | 'firestore_client';
+  ticket?: SupportTicket;
+  storage?: 'firestore_admin' | 'firestore_client' | 'server_persistent_store';
   error?: string;
 }
 
 export async function submitHelpSupportRequest(
   payload: SubmitHelpRequestPayload
 ): Promise<SubmitHelpRequestResult> {
+  const userCategory = normalizeSupportUserCategory(payload.requesterRole);
+  const categoryLabel = SUPPORT_USER_CATEGORY_LABELS[userCategory];
   const cleanName = String(payload.name || '').trim().slice(0, 100);
   const cleanEmail = String(payload.email || '').trim().toLowerCase().slice(0, 150);
   const cleanMobile = String(payload.mobile || '').replace(/[^\d+\-\s]/g, '').trim().slice(0, 20);
   const cleanDescription = String(payload.description || '').trim().slice(0, 1800);
   const cleanSubject =
     String(payload.subject || '').trim().slice(0, 180) ||
-    `[${payload.requesterRole === 'teacher' ? 'Teacher' : 'Student'}] ${payload.category}`;
+    `[${categoryLabel}] ${payload.category}`;
 
   if (cleanName.length < 2) {
     return { success: false, error: 'Please enter your full name.' };
@@ -181,7 +193,6 @@ export async function submitHelpSupportRequest(
     bearerToken = '';
   }
 
-  let serverSaidNeedsClientFallback = false;
   let serverErrorMessage = '';
 
   try {
@@ -192,7 +203,9 @@ export async function submitHelpSupportRequest(
         ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
       },
       body: JSON.stringify({
-        requesterRole: payload.requesterRole,
+        userCategory,
+        requesterRole: userCategory,
+        portalContext: payload.portalContext || userCategory,
         name: cleanName,
         email: cleanEmail,
         mobile: cleanMobile,
@@ -205,21 +218,41 @@ export async function submitHelpSupportRequest(
 
     const data = await res.json().catch(() => null);
     if (res.ok && data?.success && data?.persisted && data?.ticket) {
+      const savedTicket: SupportTicket = {
+        ...data.ticket,
+        userCategory: normalizeSupportUserCategory(
+          data.ticket.userCategory || data.ticket.requesterRole || userCategory
+        ),
+        requesterRole: normalizeSupportUserCategory(
+          data.ticket.requesterRole || data.ticket.userCategory || userCategory
+        ),
+      };
+      cacheSavedSupportTicketLocally(savedTicket);
+
+      // Also write to client Firestore when user is authenticated in Firebase Auth
+      if (auth?.currentUser && db) {
+        try {
+          const clientDoc: SupportTicket = {
+            ...savedTicket,
+            studentId: auth.currentUser.uid,
+          };
+          await setDoc(doc(db, 'support_tickets', savedTicket.id), clientDoc);
+        } catch {
+          // Already persisted on the server
+        }
+      }
+
       return {
         success: true,
-        ticket: data.ticket,
-        storage: 'firestore_admin',
+        ticket: savedTicket,
+        storage: data.storage || 'server_persistent_store',
       };
     }
 
-    if (data?.requiresClientAuthFallback) {
-      serverSaidNeedsClientFallback = true;
-    }
     if (typeof data?.error === 'string' && data.error.trim()) {
       serverErrorMessage = data.error.trim();
     }
 
-    // If server rejected due to validation or rate-limit (400 / 429), return directly without fallback
     if (res.status === 400 || res.status === 429) {
       return {
         success: false,
@@ -227,23 +260,25 @@ export async function submitHelpSupportRequest(
       };
     }
   } catch {
-    serverSaidNeedsClientFallback = true;
+    // Fall through to authenticated client Firestore fallback if API is unreachable
   }
 
   // Authenticated client Firestore fallback (strictly honours firestore.rules isValidSupportSubmission)
-  if (serverSaidNeedsClientFallback && auth?.currentUser && db) {
+  if (auth?.currentUser && db) {
     try {
       const rand = Math.floor(10000 + Math.random() * 90000);
-      const ticketNumber = `TKT-VC-${rand}`;
+      const ticketNumber = `TKT-MSZ-${rand}`;
       const id = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const nowIso = new Date().toISOString();
 
-      const ticketRecord: SupportTicket & { requesterRole: 'student' | 'teacher'; source: string } = {
+      const ticketRecord: SupportTicket = {
         id,
         ticketNumber,
         studentId: auth.currentUser.uid,
         studentName: cleanName,
-        requesterRole: payload.requesterRole,
+        userCategory,
+        requesterRole: userCategory,
+        portalContext: payload.portalContext || userCategory,
         email: cleanEmail,
         mobile: cleanMobile,
         category: payload.category,
@@ -251,12 +286,12 @@ export async function submitHelpSupportRequest(
         description: cleanDescription.slice(0, 2000),
         status: 'OPEN',
         priority: payload.category.includes('Payment') ? 'HIGH' : 'MEDIUM',
-        source: 'ai_help_desk',
         createdAt: nowIso,
         updatedAt: nowIso,
       };
 
       await setDoc(doc(db, 'support_tickets', id), ticketRecord);
+      cacheSavedSupportTicketLocally(ticketRecord);
       return {
         success: true,
         ticket: ticketRecord,
@@ -276,6 +311,6 @@ export async function submitHelpSupportRequest(
     success: false,
     error:
       serverErrorMessage ||
-      'Unable to save unauthenticated guest tickets because server-side Firestore Admin credentials are not configured. Please sign in and retry, or contact support@mystudyzone.in.',
+      'Unable to save your support request right now. Please check your connection and try again.',
   };
 }
