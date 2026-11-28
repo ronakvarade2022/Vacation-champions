@@ -8,6 +8,17 @@ import {
   getConfiguredGeminiApiKey,
   mapGeminiHttpError,
 } from './geminiClient.ts';
+import {
+  assertModelAllowedByFreePolicy,
+  checkFreeTierPolicyQuota,
+  getGlobalBillingStatus,
+  getPaidFeatureProposals,
+  getPublicFreePolicySummary,
+  isPaidExecutionEnabledForFeature,
+  recordBlockedPaidAttempt,
+  type AiFeatureCategory,
+} from './aiPolicyManager.ts';
+import { verifyBearerIdToken } from '../firebase/admin.ts';
 
 export type AiToolId =
   | 'pdf_maker'
@@ -30,6 +41,13 @@ export interface AiServiceStatus {
   textModel: string;
   fallbackModel: string;
   imageModel: string;
+  billingStatus: 'FREE_ONLY' | 'PAID_APPROVED';
+  freeOnlyEnforced: boolean;
+  paidServicesEnabled: boolean;
+  billingActivated: boolean;
+  imageGenerationAllowed: boolean;
+  dailyQuotaUsedPct: number;
+  quotaResetAt: string;
   message: string;
 }
 
@@ -47,20 +65,31 @@ const VALID_TEXT_TOOLS = new Set<AiToolId>([
   'student_learning_tool',
 ]);
 
-const AI_WINDOW_MS = 10 * 60 * 1000;
-const MAX_AI_REQUESTS_PER_IP = 40;
-const ipAiRequestLog = new Map<string, number[]>();
-
-function checkIpRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const list = (ipAiRequestLog.get(ip) || []).filter((ts) => now - ts < AI_WINDOW_MS);
-  if (list.length >= MAX_AI_REQUESTS_PER_IP) {
-    ipAiRequestLog.set(ip, list);
-    return false;
+async function resolveUserKeyForQuota(
+  headers: Record<string, string | string[] | undefined> | undefined,
+  clientIp: string
+): Promise<string> {
+  const authHeader = headers?.authorization || headers?.Authorization;
+  if (authHeader) {
+    const verified = await verifyBearerIdToken(authHeader).catch(() => null);
+    if (verified?.valid && verified.uid) {
+      return `uid:${verified.uid}`;
+    }
   }
-  list.push(now);
-  ipAiRequestLog.set(ip, list);
-  return true;
+  return `ip:${String(clientIp || 'unknown').trim()}`;
+}
+
+function resolveTelemetryCategory(
+  toolId: AiToolId,
+  roleToolId: string
+): Exclude<AiFeatureCategory, 'image_generation'> {
+  const cleanRoleId = roleToolId.trim().toLowerCase();
+  if (cleanRoleId === 's_dictionary' || cleanRoleId === 's_translation') {
+    return 'dictionary_translation';
+  }
+  if (toolId === 'student_learning_tool') return 'student_ai';
+  if (toolId === 'teacher_productivity_tool') return 'teacher_ai';
+  return 'core_ai';
 }
 
 /**
@@ -72,34 +101,30 @@ export function getConfiguredGeminiKey(): string {
 
 export function getAiServiceStatus(): AiServiceStatus {
   const configured = Boolean(getConfiguredGeminiApiKey());
+  const policy = getPublicFreePolicySummary();
   return {
     configured,
     textModel: GEMINI_PRIMARY_MODEL,
     fallbackModel: GEMINI_FALLBACK_MODEL,
     imageModel: GEMINI_IMAGE_MODEL,
+    billingStatus: policy.billingStatus,
+    freeOnlyEnforced: policy.freeOnlyEnforced,
+    paidServicesEnabled: policy.paidServicesEnabled,
+    billingActivated: policy.billingActivated,
+    imageGenerationAllowed: policy.imageGenerationAllowed,
+    dailyQuotaUsedPct: policy.dailyQuotaUsedPct,
+    quotaResetAt: policy.quotaResetAt,
     message: configured
-      ? `Server Gemini AI runtime is configured and ready (${GEMINI_PRIMARY_MODEL} with free-tier ${GEMINI_FALLBACK_MODEL} fallback).`
-      : 'GEMINI_API_KEY is not configured in Settings -> Secrets on the server. Live AI generation is disabled (zero fake outputs).',
+      ? `FREE AI ONLY Mode Active (${GEMINI_PRIMARY_MODEL} + free-tier ${GEMINI_FALLBACK_MODEL} fallback). Paid models & automatic billing are blocked.`
+      : 'GEMINI_API_KEY is not configured on the server. Live AI generation is disabled (FREE AI ONLY policy enforced; zero fake outputs).',
   };
 }
 
 export async function handleAiTextGenerate(
   body: Record<string, unknown>,
-  clientIp: string
+  clientIp: string,
+  headers?: Record<string, string | string[] | undefined>
 ): Promise<{ statusCode: number; payload: Record<string, unknown> }> {
-  if (!checkIpRateLimit(clientIp)) {
-    return {
-      statusCode: 429,
-      payload: {
-        success: false,
-        errorCode: 'RATE_LIMITED',
-        retryable: true,
-        retryAfterSeconds: 60,
-        message: 'Too many AI requests from this connection. Please wait a few minutes and retry.',
-      },
-    };
-  }
-
   const apiKey = getConfiguredGeminiApiKey();
   if (!apiKey) {
     return {
@@ -108,8 +133,9 @@ export async function handleAiTextGenerate(
         success: false,
         errorCode: 'MISSING_GEMINI_API_KEY',
         retryable: false,
+        billingStatus: getGlobalBillingStatus(),
         message:
-          'GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in Settings -> Secrets to run real AI generation.',
+          'GEMINI_API_KEY is not configured on the server. Add a free-tier GEMINI_API_KEY in server environment variables to run live AI generation.',
       },
     };
   }
@@ -126,12 +152,42 @@ export async function handleAiTextGenerate(
     };
   }
 
-  const topic = String(body.topic || body.prompt || '').trim().slice(0, 1600);
+  const rawTopic = String(body.topic || body.prompt || '').trim();
+  const rawInstructions = String(body.instructions || '').trim();
+  const roleToolId = String(body.roleToolId || '').trim().slice(0, 80);
+  const category = resolveTelemetryCategory(toolId, roleToolId);
+  const userKey = await resolveUserKeyForQuota(headers, clientIp);
+
+  const quotaCheck = checkFreeTierPolicyQuota({
+    category,
+    userKey,
+    clientIp,
+    inputCharCount: rawTopic.length + rawInstructions.length,
+    requestedMaxOutputTokens: 6144,
+  });
+
+  if (!quotaCheck.allowed) {
+    return {
+      statusCode: quotaCheck.statusCode || 429,
+      payload: {
+        success: false,
+        errorCode: quotaCheck.errorCode || 'FREE_QUOTA_REACHED',
+        retryable: quotaCheck.statusCode === 429,
+        retryAfterSeconds: quotaCheck.retryAfterSeconds,
+        quotaResetAt: quotaCheck.quotaResetAt,
+        billingStatus: getGlobalBillingStatus(),
+        paidServicesEnabled: false,
+        message: quotaCheck.message || 'Free AI quota reached. Please retry after reset.',
+      },
+    };
+  }
+
+  const topic = rawTopic.slice(0, 1600);
   const board = String(body.board || 'Maharashtra').trim().slice(0, 40);
   const classLevel = String(body.classLevel || 'Class 5').trim().slice(0, 30);
   const subject = String(body.subject || 'Mathematics').trim().slice(0, 80);
   const language = String(body.language || 'English').trim().slice(0, 30);
-  const instructions = String(body.instructions || '').trim().slice(0, 1000);
+  const instructions = rawInstructions.slice(0, 1000);
   const count = Math.min(Math.max(Number(body.count) || 5, 1), 25);
 
   const roleToolName = String(body.toolName || '').trim().slice(0, 100);
@@ -148,6 +204,14 @@ export async function handleAiTextGenerate(
       },
     };
   }
+
+  const telemetryOpt = {
+    maxOutputTokensCap: quotaCheck.cappedMaxOutputTokens,
+    telemetry: {
+      category,
+      userKey,
+    },
+  };
 
   try {
     // 1. Interactive Quiz schema (either legacy quiz_generator or role-scoped quiz outputKind)
@@ -194,6 +258,7 @@ export async function handleAiTextGenerate(
           apiKey,
           requireValidJson: true,
           validateJson: (parsed) => Array.isArray(parsed.questions) && parsed.questions.length > 0,
+          ...telemetryOpt,
         }
       );
 
@@ -259,6 +324,7 @@ export async function handleAiTextGenerate(
           apiKey,
           requireValidJson: true,
           validateJson: (parsed) => Array.isArray(parsed.slides) && parsed.slides.length > 0,
+          ...telemetryOpt,
         }
       );
 
@@ -318,6 +384,7 @@ export async function handleAiTextGenerate(
           apiKey,
           requireValidJson: true,
           validateJson: (parsed) => Array.isArray(parsed.columns) && parsed.columns.length > 0,
+          ...telemetryOpt,
         }
       );
 
@@ -377,6 +444,7 @@ export async function handleAiTextGenerate(
           apiKey,
           requireValidJson: true,
           validateJson: (parsed) => Array.isArray(parsed.cards) && parsed.cards.length > 0,
+          ...telemetryOpt,
         }
       );
 
@@ -430,6 +498,7 @@ export async function handleAiTextGenerate(
           requireValidJson: true,
           validateJson: (parsed) =>
             Boolean(String(parsed.headline || '').trim() || String(parsed.summary || '').trim()),
+          ...telemetryOpt,
         }
       );
 
@@ -494,6 +563,7 @@ export async function handleAiTextGenerate(
         apiKey,
         requireValidJson: true,
         validateJson: (parsed) => Array.isArray(parsed.sections) && parsed.sections.length > 0,
+        ...telemetryOpt,
       }
     );
 
@@ -531,15 +601,73 @@ export async function handleAiImageGenerate(
   body: Record<string, unknown>,
   clientIp: string
 ): Promise<{ statusCode: number; payload: Record<string, unknown> }> {
-  if (!checkIpRateLimit(clientIp)) {
+  // PHASE 1 & PHASE 2 HARD BILLING PROTECTION:
+  // Google classifies gemini-3.1-flash-lite-image as a PAID API KEY ONLY model.
+  // Block BEFORE touching the SDK or making any network request when FREE_ONLY is enforced.
+  if (!isPaidExecutionEnabledForFeature('image_generation')) {
+    const proposal = getPaidFeatureProposals().find((p) => p.featureId === 'image_generation');
+    recordBlockedPaidAttempt(
+      'image_generation',
+      GEMINI_IMAGE_MODEL,
+      `Blocked outbound AI Image Generation request from ${clientIp || 'unknown'} under MyStudyZone FREE AI ONLY policy.`
+    );
     return {
-      statusCode: 429,
+      statusCode: 403,
       payload: {
         success: false,
-        errorCode: 'RATE_LIMITED',
+        errorCode: 'PAID_MODEL_BLOCKED_FREE_POLICY',
+        retryable: false,
+        paidApiCalled: false,
+        billingActivated: false,
+        globalBillingStatus: getGlobalBillingStatus(),
+        blockedModel: GEMINI_IMAGE_MODEL,
+        proposal: proposal || null,
+        freeAlternatives: proposal?.availableFreeAlternatives || [
+          'Teacher Tool #39: Diagram & Flowchart Outline Generator (Free)',
+          'Student Tool #6: Diagram Explainer & Label Guide (Free)',
+          'Built-in Drawing Studio & Document/Image Studio (Free)',
+        ],
+        message:
+          'AI Image Generation is currently paused under MyStudyZone’s FREE AI ONLY policy because Google restricts Gemini image-generation models to paid billing-enabled API keys. No paid API call was made. You can use Teacher Tool #39 (Diagram & Flowchart Outline), Student Tool #6 (Diagram Explainer), or our free built-in Drawing & Image Studio instead.',
+      },
+    };
+  }
+
+  // Secondary hard model gate even if future owner approval + server env lock are both enabled
+  try {
+    assertModelAllowedByFreePolicy(GEMINI_IMAGE_MODEL, 'image_generation');
+  } catch (gateErr: unknown) {
+    const mapped = mapGeminiHttpError(gateErr, 'MyStudyZone AI Image Generator');
+    return {
+      statusCode: 403,
+      payload: {
+        success: false,
+        errorCode: 'PAID_MODEL_BLOCKED_FREE_POLICY',
+        retryable: false,
+        paidApiCalled: false,
+        billingActivated: false,
+        globalBillingStatus: getGlobalBillingStatus(),
+        message: mapped.message,
+      },
+    };
+  }
+
+  const quotaCheck = checkFreeTierPolicyQuota({
+    category: 'core_ai',
+    userKey: `ip:${clientIp || 'unknown'}`,
+    clientIp,
+    inputCharCount: String(body.prompt || '').length,
+  });
+
+  if (!quotaCheck.allowed) {
+    return {
+      statusCode: quotaCheck.statusCode || 429,
+      payload: {
+        success: false,
+        errorCode: quotaCheck.errorCode || 'RATE_LIMITED',
         retryable: true,
-        retryAfterSeconds: 60,
-        message: 'Too many AI image requests. Please wait a few minutes and retry.',
+        retryAfterSeconds: quotaCheck.retryAfterSeconds || 60,
+        message: quotaCheck.message || 'Too many AI image requests. Please wait and retry.',
       },
     };
   }
@@ -552,8 +680,7 @@ export async function handleAiImageGenerate(
         success: false,
         errorCode: 'MISSING_GEMINI_API_KEY',
         retryable: false,
-        message:
-          'GEMINI_API_KEY is not configured on the server. AI Image Generator requires a configured billing-enabled GEMINI_API_KEY in Settings -> Secrets.',
+        message: 'GEMINI_API_KEY is not configured on the server.',
       },
     };
   }
@@ -631,27 +758,6 @@ export async function handleAiImageGenerate(
       },
     };
   } catch (err: unknown) {
-    const rawMsg = String((err as { message?: string })?.message || err || 'AI image generation failed');
-    const upper = rawMsg.toUpperCase();
-    const isPaidOrPerm =
-      upper.includes('BILLING') ||
-      upper.includes('PAID') ||
-      upper.includes('PERMISSION_DENIED') ||
-      upper.includes('403') ||
-      upper.includes('RESOURCE_EXHAUSTED');
-
-    if (isPaidOrPerm) {
-      return {
-        statusCode: 403,
-        payload: {
-          success: false,
-          errorCode: 'PAID_KEY_REQUIRED',
-          retryable: false,
-          message: `Image generation model (${GEMINI_IMAGE_MODEL}) requires a billing-enabled Gemini API key. MyStudyZone operates strictly on free-tier Gemini models unless billing is explicitly enabled.`,
-        },
-      };
-    }
-
     const mapped = mapGeminiHttpError(err, 'MyStudyZone AI Image Generator');
     return {
       statusCode: mapped.statusCode,

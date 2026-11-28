@@ -112,6 +112,12 @@ import {
   handleSnapSolveSolve,
   handleSnapSolveDeleteSession
 } from './server/snapSolveService.ts';
+import {
+  getOwnerAiPolicyReport,
+  recordOwnerBillingDecision,
+  updateOwnerFreeTierLimits
+} from './server/aiPolicyManager.ts';
+import { isGeminiConfigured } from './server/geminiClient.ts';
 
 dotenv.config();
 
@@ -3750,7 +3756,8 @@ app.post('/api/support/chat', async (req: Request, res: Response) => {
   try {
     const payload = await handleSupportChatRequest(
       (req.body || {}) as Record<string, unknown>,
-      resolveClientIp(req)
+      resolveClientIp(req),
+      req.headers as Record<string, string | string[] | undefined>
     );
     return res.status(payload.success ? 200 : 400).json(payload);
   } catch (err: any) {
@@ -3918,7 +3925,8 @@ app.post('/api/ai/generate', async (req: Request, res: Response) => {
   try {
     const result = await handleAiTextGenerate(
       (req.body || {}) as Record<string, unknown>,
-      resolveClientIp(req)
+      resolveClientIp(req),
+      req.headers as Record<string, string | string[] | undefined>
     );
     return res.status(result.statusCode).json(result.payload);
   } catch (err: any) {
@@ -3944,6 +3952,69 @@ app.post('/api/ai/image', async (req: Request, res: Response) => {
       success: false,
       errorCode: 'INTERNAL_ERROR',
       message: 'Unexpected AI image server error.',
+    });
+  }
+});
+
+// 11b-1. Owner-Only AI Usage & Billing Control Panel Endpoints (FREE AI ONLY Governance)
+app.get('/api/admin/ai-policy', async (req: Request, res: Response) => {
+  try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        error: adminCheck.error || 'Owner administrator authorization required.',
+      });
+    }
+    return res.json(getOwnerAiPolicyReport(isGeminiConfigured()));
+  } catch (err: any) {
+    console.error('[Admin AI Policy Read Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to load AI usage and billing protection telemetry.',
+    });
+  }
+});
+
+app.post('/api/admin/ai-policy/limits', async (req: Request, res: Response) => {
+  try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        error: adminCheck.error || 'Owner administrator authorization required.',
+      });
+    }
+    const result = updateOwnerFreeTierLimits((req.body || {}) as Record<string, unknown>);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Admin AI Policy Limits Update Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to update free-tier safety limits.',
+    });
+  }
+});
+
+app.post('/api/admin/ai-policy/billing-decision', async (req: Request, res: Response) => {
+  try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        error: adminCheck.error || 'Owner administrator authorization required.',
+      });
+    }
+    const result = recordOwnerBillingDecision(
+      (req.body || {}) as Record<string, unknown>,
+      adminCheck.email || 'ronakvarade2022@gmail.com'
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err: any) {
+    console.error('[Admin AI Billing Decision Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to record owner billing decision.',
     });
   }
 });

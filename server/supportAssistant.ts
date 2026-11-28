@@ -11,6 +11,11 @@ import {
   safeParseGeminiJson,
 } from './geminiClient.ts';
 import {
+  checkFreeTierPolicyQuota,
+  getPublicFreePolicySummary,
+  recordKnowledgeBaseZeroCostHit,
+} from './aiPolicyManager.ts';
+import {
   isFirebaseAdminConfigured,
   serverListCollection,
   serverQueryEqualsLimit1,
@@ -66,6 +71,10 @@ export interface SupportAiStatusPayload {
   reason: 'ok' | 'missing_key' | 'quota_exceeded' | 'api_key_invalid' | 'upstream_error';
   model: string;
   fallbackModel?: string;
+  billingStatus: 'FREE_ONLY' | 'PAID_APPROVED';
+  freeOnlyEnforced: boolean;
+  paidServicesEnabled: boolean;
+  billingActivated: boolean;
   message: string;
 }
 
@@ -380,6 +389,13 @@ function pruneAndCheckWindow(
 
 export function getSupportAiStatus(): SupportAiStatusPayload {
   const apiKey = getConfiguredGeminiApiKey();
+  const policy = getPublicFreePolicySummary();
+  const policyMeta = {
+    billingStatus: policy.billingStatus,
+    freeOnlyEnforced: policy.freeOnlyEnforced,
+    paidServicesEnabled: policy.paidServicesEnabled,
+    billingActivated: policy.billingActivated,
+  };
   const todayKey = new Date().toISOString().slice(0, 10);
   if (dailyAiTracker.dateKey !== todayKey) {
     dailyAiTracker = {
@@ -399,6 +415,7 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
       reason: 'missing_key',
       model: GEMINI_PRIMARY_MODEL,
       fallbackModel: GEMINI_FALLBACK_MODEL,
+      ...policyMeta,
       message:
         'Knowledge Base Mode (Server GEMINI_API_KEY not configured — free Knowledge Base & Support Tickets active)',
     };
@@ -412,8 +429,9 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
       reason: 'api_key_invalid',
       model: GEMINI_PRIMARY_MODEL,
       fallbackModel: GEMINI_FALLBACK_MODEL,
+      ...policyMeta,
       message:
-        'Knowledge Base Mode (Configured GEMINI_API_KEY rejected — check Settings > Secrets)',
+        'Knowledge Base Mode (Configured GEMINI_API_KEY rejected — check server environment variables)',
     };
   }
 
@@ -425,6 +443,7 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
       reason: 'quota_exceeded',
       model: GEMINI_PRIMARY_MODEL,
       fallbackModel: GEMINI_FALLBACK_MODEL,
+      ...policyMeta,
       message:
         'Knowledge Base Mode (Free-tier AI quota temporarily cooling down — paid billing is never auto-enabled)',
     };
@@ -441,6 +460,7 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
       reason: 'upstream_error',
       model: GEMINI_PRIMARY_MODEL,
       fallbackModel: GEMINI_FALLBACK_MODEL,
+      ...policyMeta,
       message:
         'Knowledge Base Mode (Gemini service temporarily busy — Knowledge Base & Support Tickets active)',
     };
@@ -453,7 +473,8 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
     reason: 'ok',
     model: GEMINI_PRIMARY_MODEL,
     fallbackModel: GEMINI_FALLBACK_MODEL,
-    message: `Live Free-Tier Gemini AI Connected (${GEMINI_PRIMARY_MODEL} + ${GEMINI_FALLBACK_MODEL} fallback)`,
+    ...policyMeta,
+    message: `Live Free-Tier Gemini AI Connected (${GEMINI_PRIMARY_MODEL} + ${GEMINI_FALLBACK_MODEL} fallback — FREE AI ONLY Mode)`,
   };
 }
 
@@ -549,7 +570,8 @@ function buildFallbackMessage(
 
 export async function handleSupportChatRequest(
   body: Record<string, unknown>,
-  clientIp: string
+  clientIp: string,
+  headers?: Record<string, string | string[] | undefined>
 ): Promise<SupportChatResponsePayload> {
   const rawMessage = String(body?.message || '').trim();
   if (!rawMessage) {
@@ -596,6 +618,7 @@ export async function handleSupportChatRequest(
   // 1. Knowledge Base & Typo-Tolerant Navigation Fast Path (Zero AI cost)
   const kbMatch = matchKnowledgeBaseFastPath(message, { userRole: portalContext });
   if (kbMatch.matched) {
+    recordKnowledgeBaseZeroCostHit();
     return {
       success: true,
       source: 'knowledge_base',
@@ -688,6 +711,32 @@ export async function handleSupportChatRequest(
     );
   }
 
+  // Resolve optional authenticated user key for accurate per-user daily limits
+  let supportUserKey = `ip:${clientIp || 'unknown'}`;
+  const authHeader = headers?.authorization || headers?.Authorization;
+  if (authHeader) {
+    const authRes = await verifyBearerIdToken(authHeader).catch(() => null);
+    if (authRes?.valid && authRes.uid) {
+      supportUserKey = `uid:${authRes.uid}`;
+    }
+  }
+
+  const policyQuota = checkFreeTierPolicyQuota({
+    category: 'help_support',
+    userKey: supportUserKey,
+    clientIp,
+    inputCharCount: message.length,
+    requestedMaxOutputTokens: 1536,
+  });
+  if (!policyQuota.allowed) {
+    return buildKbOrGenericFallback(
+      'quota_exceeded',
+      policyQuota.message ||
+        'Free AI quota reached for Help & Support. Continuing in free Knowledge Base mode — paid billing is never activated.',
+      true
+    );
+  }
+
   // 3. Call centralized server-side Gemini client (gemini-4-hydrogen primary + gemini-3.1-flash-lite free-tier fallback)
   try {
     dailyAiTracker.count += 1;
@@ -758,6 +807,11 @@ export async function handleSupportChatRequest(
       {
         apiKey,
         requireValidJson: true,
+        maxOutputTokensCap: policyQuota.cappedMaxOutputTokens,
+        telemetry: {
+          category: 'help_support',
+          userKey: supportUserKey,
+        },
         validateJson: (candidate) => Boolean(String(candidate.reply || '').trim()),
       }
     );

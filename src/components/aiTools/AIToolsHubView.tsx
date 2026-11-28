@@ -46,6 +46,7 @@ import {
 import { ALL_10_CLASSES, getSubjectsForClass } from '../../data/classCurriculumConfig';
 import { getRichChaptersForSubject } from '../../data/worksheets/builders/chapterCatalog';
 import { PrintPreviewStudio } from '../productivity/PrintPreviewStudio';
+import { auth } from '../../services/firebase';
 import type { ClassLevel, EducationBoard, SubjectName } from '../../types';
 
 export type AiHubToolId =
@@ -87,6 +88,8 @@ interface AiStatusState {
   configured: boolean;
   textModel: string;
   imageModel: string;
+  billingStatus: 'FREE_ONLY' | 'PAID_APPROVED';
+  imageGenerationAllowed: boolean;
   message: string;
 }
 
@@ -212,6 +215,8 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
     configured: false,
     textModel: 'gemini-4-hydrogen',
     imageModel: 'gemini-3.1-flash-lite-image',
+    billingStatus: 'FREE_ONLY',
+    imageGenerationAllowed: false,
     message: 'Checking server AI configuration...',
   });
 
@@ -305,6 +310,19 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
   const [editMode, setEditMode] = useState<boolean>(false);
   const [printPreviewPayload, setPrintPreviewPayload] = useState<PrintExportPayload | null>(null);
 
+  const buildAiRequestHeaders = async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {
+      // Guest / unauthenticated requests continue seamlessly under IP free-tier rate limits
+    }
+    return headers;
+  };
+
   const loadAiStatus = async () => {
     setAiStatus((prev) => ({ ...prev, loading: true }));
     try {
@@ -315,6 +333,8 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
         configured: Boolean(data?.configured),
         textModel: String(data?.textModel || 'gemini-4-hydrogen'),
         imageModel: String(data?.imageModel || 'gemini-3.1-flash-lite-image'),
+        billingStatus: data?.billingStatus === 'PAID_APPROVED' ? 'PAID_APPROVED' : 'FREE_ONLY',
+        imageGenerationAllowed: Boolean(data?.imageGenerationAllowed),
         message: String(data?.message || ''),
       });
     } catch {
@@ -323,6 +343,8 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
         configured: false,
         textModel: 'gemini-4-hydrogen',
         imageModel: 'gemini-3.1-flash-lite-image',
+        billingStatus: 'FREE_ONLY',
+        imageGenerationAllowed: false,
         message: 'Could not reach /api/ai/status on the backend server.',
       });
     }
@@ -383,9 +405,10 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
 
     setIsGenerating(true);
     try {
+      const reqHeaders = await buildAiRequestHeaders();
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: reqHeaders,
         body: JSON.stringify({
           toolId: studioTab === 'teacher_40' ? 'teacher_productivity_tool' : 'student_learning_tool',
           roleToolId: activeRoleTool.id,
@@ -494,9 +517,10 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
 
     setIsGenerating(true);
     try {
+      const reqHeaders = await buildAiRequestHeaders();
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: reqHeaders,
         body: JSON.stringify({
           toolId: selectedCoreTool,
           topic: effectiveTopic,
@@ -736,7 +760,9 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
           <div>
             <span className="font-semibold">
               {aiStatus.configured
-                ? `Gemini Ready (${aiStatus.textModel})`
+                ? `Gemini Free Tier Ready (${aiStatus.textModel} · ${
+                    aiStatus.billingStatus === 'FREE_ONLY' ? 'FREE AI ONLY' : 'PAID APPROVED'
+                  })`
                 : 'Gemini API Key Required on Server'}
             </span>
             <span className="text-slate-300 ml-2">{aiStatus.message}</span>
@@ -897,45 +923,114 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
 
             {/* CORE 10 SPECIAL CASES: IMAGE GENERATOR & RESUME MAKER */}
             {studioTab === 'core_10' && selectedCoreTool === 'image_generator' ? (
-              <form onSubmit={handleGenerateImage} className="space-y-4 text-sm">
-                <textarea
-                  rows={3}
-                  value={imagePrompt}
-                  onChange={(e) => setImagePrompt(e.target.value)}
-                  placeholder="Describe educational diagram or illustration..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300"
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <select value={imageStyle} onChange={(e) => setImageStyle(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-300 bg-white">
-                    <option>Clean Educational Textbook Diagram</option>
-                    <option>Classroom Infographic Chart</option>
-                    <option>Watercolor Children Story Illustration</option>
-                    <option>Minimalist Isometric Science Visual</option>
-                  </select>
-                  <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value as any)} className="px-3 py-2 rounded-xl border border-slate-300 bg-white">
-                    <option value="16:9">16:9 Widescreen</option>
-                    <option value="4:3">4:3 Textbook</option>
-                    <option value="1:1">1:1 Square</option>
-                    <option value="3:4">3:4 Poster</option>
-                  </select>
-                </div>
-                <button type="submit" disabled={isGenerating} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold cursor-pointer">
-                  {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                  <span>{isGenerating ? 'Generating...' : 'Generate Image with Gemini'}</span>
-                </button>
-                {imageResult && (
-                  <div className="pt-3 border-t border-slate-200 space-y-3">
-                    <img src={imageResult.dataUrl} alt={imageResult.caption} className="max-h-96 mx-auto rounded-xl border" />
-                    <button
-                      type="button"
-                      onClick={() => downloadBase64ImagePng(imageResult.dataUrl, 'mystudyzone_visual')}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Download PNG
-                    </button>
+              <div className="space-y-4 text-sm">
+                {!aiStatus.imageGenerationAllowed && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 space-y-3 text-xs text-amber-950">
+                    <div className="flex items-start gap-2.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-black text-sm text-slate-900">
+                          AI Image Generator Paused — FREE AI ONLY Policy Active
+                        </div>
+                        <p className="text-slate-700 leading-relaxed">
+                          Google restricts raster image-generation models ({aiStatus.imageModel}) to
+                          paid billing-enabled API keys. MyStudyZone is strictly locked to verified
+                          FREE AI services so zero paid API charges occur without owner permission.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (portalMode === 'student') {
+                            setStudioTab('student_30');
+                            setSelectedStudentToolId('s_diagram_explainer');
+                          } else {
+                            setStudioTab('teacher_40');
+                            setSelectedTeacherToolId('t_diagrams_flowcharts');
+                          }
+                          setErrorBanner(null);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>
+                          {portalMode === 'student'
+                            ? 'Use Free Diagram Explainer & Label Guide'
+                            : 'Use Free Diagram & Flowchart Outline Generator'}
+                        </span>
+                      </button>
+
+                      {onOpenDocumentStudio && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenDocumentStudio('images')}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 border border-amber-300 text-slate-900 font-bold cursor-pointer"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          <span>Open Free Image &amp; PDF Studio</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
-              </form>
+
+                <form onSubmit={handleGenerateImage} className="space-y-4">
+                  <textarea
+                    rows={3}
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    placeholder="Describe educational diagram or illustration..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <select value={imageStyle} onChange={(e) => setImageStyle(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-300 bg-white">
+                      <option>Clean Educational Textbook Diagram</option>
+                      <option>Classroom Infographic Chart</option>
+                      <option>Watercolor Children Story Illustration</option>
+                      <option>Minimalist Isometric Science Visual</option>
+                    </select>
+                    <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value as any)} className="px-3 py-2 rounded-xl border border-slate-300 bg-white">
+                      <option value="16:9">16:9 Widescreen</option>
+                      <option value="4:3">4:3 Textbook</option>
+                      <option value="1:1">1:1 Square</option>
+                      <option value="3:4">3:4 Poster</option>
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isGenerating || !aiStatus.imageGenerationAllowed}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold ${
+                      aiStatus.imageGenerationAllowed
+                        ? 'bg-indigo-600 text-white cursor-pointer'
+                        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                    <span>
+                      {!aiStatus.imageGenerationAllowed
+                        ? 'Blocked Under FREE AI ONLY Policy (Owner Approval Required)'
+                        : isGenerating
+                        ? 'Generating...'
+                        : 'Generate Image with Gemini'}
+                    </span>
+                  </button>
+                  {imageResult && (
+                    <div className="pt-3 border-t border-slate-200 space-y-3">
+                      <img src={imageResult.dataUrl} alt={imageResult.caption} className="max-h-96 mx-auto rounded-xl border" />
+                      <button
+                        type="button"
+                        onClick={() => downloadBase64ImagePng(imageResult.dataUrl, 'mystudyzone_visual')}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Download PNG
+                      </button>
+                    </div>
+                  )}
+                </form>
+              </div>
             ) : studioTab === 'core_10' && selectedCoreTool === 'resume_maker' ? (
               <form onSubmit={handleGenerateCoreTool} className="space-y-3.5 text-sm">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

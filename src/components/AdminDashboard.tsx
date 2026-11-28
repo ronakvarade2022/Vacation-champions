@@ -162,6 +162,11 @@ const AdminExtendedSubsections = lazyWithRetry(() =>
     default: m.AdminExtendedSubsections,
   }))
 );
+const AdminAiBillingControlSection = lazyWithRetry(() =>
+  import('./admin/AdminAiBillingControlSection').then((m) => ({
+    default: m.AdminAiBillingControlSection,
+  }))
+);
 
 type AdminViewLevel = 'home' | 'category' | 'subsection';
 
@@ -483,6 +488,7 @@ export const AdminDashboard: React.FC = () => {
       announcements: announcements.length,
       support: 1,
       'system-notifications': notifications.length,
+      'ai-usage-billing': 83,
       settings: learningPrograms.length,
       profile: 1,
       'system-health': 3,
@@ -575,6 +581,20 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Top Quick Actions */}
         <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={() =>
+              handleJumpToSection({
+                categoryId: 'website_system',
+                subsectionId: 'ai-usage-billing',
+              })
+            }
+            className="px-4 py-2.5 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>AI USAGE &amp; BILLING (FREE ONLY)</span>
+          </button>
+
           <button
             type="button"
             onClick={() =>
@@ -1001,6 +1021,8 @@ export const AdminDashboard: React.FC = () => {
             {activeSubsection === 'announcements' && <AdminAnnouncementsSection />}
 
             {activeSubsection === 'five-zones-cms' && <AdminFiveZonesCmsSection />}
+
+            {activeSubsection === 'ai-usage-billing' && <AdminAiBillingControlSection />}
 
             {activeSubsection === 'settings' && (
               <AdminSettingsSection

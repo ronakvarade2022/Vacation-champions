@@ -9,6 +9,11 @@ import {
   mapGeminiHttpError,
   safeParseGeminiJson,
 } from './geminiClient.ts';
+import {
+  checkFreeTierPolicyQuota,
+  getGlobalBillingStatus,
+  getPublicFreePolicySummary,
+} from './aiPolicyManager.ts';
 import { verifyBearerIdToken } from '../firebase/admin.ts';
 
 export type SnapSolvePortalRole = 'student' | 'teacher';
@@ -233,10 +238,17 @@ function verifySessionSecret(provided: string, expected: string): boolean {
 
 export function getSnapSolveStatus() {
   const configured = Boolean(getConfiguredGeminiApiKey());
+  const policy = getPublicFreePolicySummary();
   return {
     configured,
     model: SNAPSOLVE_MODEL,
     fallbackModel: SNAPSOLVE_FALLBACK_MODEL,
+    billingStatus: policy.billingStatus,
+    freeOnlyEnforced: policy.freeOnlyEnforced,
+    paidServicesEnabled: policy.paidServicesEnabled,
+    billingActivated: policy.billingActivated,
+    dailyQuotaUsedPct: policy.dailyQuotaUsedPct,
+    quotaResetAt: policy.quotaResetAt,
     limits: {
       maxPages: SNAPSOLVE_MAX_PAGES,
       maxPageBytes: SNAPSOLVE_MAX_PAGE_BYTES,
@@ -244,7 +256,7 @@ export function getSnapSolveStatus() {
     },
     privacyNotice: SNAPSOLVE_PRIVACY_NOTICE,
     message: configured
-      ? 'SnapSolve AI (Free-Tier Gemini Vision) is ready.'
+      ? 'SnapSolve AI (Verified Free-Tier Gemini Vision — FREE AI ONLY Mode) is ready.'
       : 'GEMINI_API_KEY is not configured on the server. Live SnapSolve scanning is disabled until configured.',
   };
 }
@@ -384,7 +396,31 @@ export async function handleSnapSolveRecognize(
       payload: {
         success: false,
         errorCode: 'MISSING_GEMINI_API_KEY',
+        billingStatus: getGlobalBillingStatus(),
         message: 'GEMINI_API_KEY is not configured on the server. Live question scanning is unavailable.',
+      },
+    };
+  }
+
+  const userKey = authCheck.uid ? `uid:${authCheck.uid}` : `ip:${clientIp || 'unknown'}`;
+  const quotaCheck = checkFreeTierPolicyQuota({
+    category: 'snapsolve',
+    userKey,
+    clientIp,
+    requestedMaxOutputTokens: 6144,
+  });
+  if (!quotaCheck.allowed) {
+    return {
+      statusCode: quotaCheck.statusCode || 429,
+      payload: {
+        success: false,
+        errorCode: quotaCheck.errorCode || 'FREE_QUOTA_REACHED',
+        retryable: quotaCheck.statusCode === 429,
+        retryAfterSeconds: quotaCheck.retryAfterSeconds,
+        quotaResetAt: quotaCheck.quotaResetAt,
+        billingStatus: getGlobalBillingStatus(),
+        paidServicesEnabled: false,
+        message: quotaCheck.message || 'Free SnapSolve daily quota reached. Please retry after reset.',
       },
     };
   }
@@ -497,6 +533,11 @@ export async function handleSnapSolveRecognize(
         {
           apiKey,
           requireValidJson: true,
+          maxOutputTokensCap: quotaCheck.cappedMaxOutputTokens,
+          telemetry: {
+            category: 'snapsolve',
+            userKey,
+          },
         }
       );
 
@@ -796,7 +837,33 @@ export async function handleSnapSolveSolve(
           success: false,
           errorCode: 'MISSING_GEMINI_API_KEY',
           retryable: false,
+          billingStatus: getGlobalBillingStatus(),
           message: 'GEMINI_API_KEY is not configured on the server.',
+        },
+      };
+    }
+
+    const solveUserKey = session.ownerUid ? `uid:${session.ownerUid}` : `ip:${clientIp || 'unknown'}`;
+    const solveInputChars = readableBatchQueue.reduce((sum, q) => sum + q.questionText.length, 0);
+    const solveQuota = checkFreeTierPolicyQuota({
+      category: 'snapsolve',
+      userKey: solveUserKey,
+      clientIp,
+      inputCharCount: solveInputChars,
+      requestedMaxOutputTokens: 6144,
+    });
+    if (!solveQuota.allowed) {
+      return {
+        statusCode: solveQuota.statusCode || 429,
+        payload: {
+          success: false,
+          errorCode: solveQuota.errorCode || 'FREE_QUOTA_REACHED',
+          retryable: solveQuota.statusCode === 429,
+          retryAfterSeconds: solveQuota.retryAfterSeconds,
+          quotaResetAt: solveQuota.quotaResetAt,
+          billingStatus: getGlobalBillingStatus(),
+          paidServicesEnabled: false,
+          message: solveQuota.message || 'Free SnapSolve daily quota reached. Please retry after reset.',
         },
       };
     }
@@ -909,6 +976,11 @@ export async function handleSnapSolveSolve(
           {
             apiKey,
             requireValidJson: true,
+            maxOutputTokensCap: solveQuota.cappedMaxOutputTokens,
+            telemetry: {
+              category: 'snapsolve',
+              userKey: solveUserKey,
+            },
             validateJson: (candidate) =>
               Array.isArray(candidate.solutions) && candidate.solutions.length > 0,
           }

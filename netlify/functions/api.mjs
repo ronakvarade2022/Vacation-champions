@@ -23,6 +23,12 @@ import {
   handleSnapSolveRecognize,
   handleSnapSolveSolve
 } from '../../server/snapSolveService.ts';
+import {
+  getOwnerAiPolicyReport,
+  recordOwnerBillingDecision,
+  updateOwnerFreeTierLimits
+} from '../../server/aiPolicyManager.ts';
+import { isGeminiConfigured } from '../../server/geminiClient.ts';
 
 dotenv.config();
 
@@ -2937,7 +2943,7 @@ export async function handler(event) {
       )
         .split(',')[0]
         .trim() || 'unknown';
-    const payload = await handleSupportChatRequest(body, clientIp);
+    const payload = await handleSupportChatRequest(body, clientIp, event.headers || {});
     return jsonResponse(payload.success ? 200 : 400, payload);
   }
 
@@ -2986,7 +2992,7 @@ export async function handler(event) {
       )
         .split(',')[0]
         .trim() || 'unknown';
-    const result = await handleAiTextGenerate(body, clientIp);
+    const result = await handleAiTextGenerate(body, clientIp, event.headers || {});
     return jsonResponse(result.statusCode, result.payload);
   }
 
@@ -3007,6 +3013,68 @@ export async function handler(event) {
         .trim() || 'unknown';
     const result = await handleAiImageGenerate(body, clientIp);
     return jsonResponse(result.statusCode, result.payload);
+  }
+
+  // Owner-Only AI Usage & Billing Control Panel Endpoints
+  if (
+    normalizedPath === '/admin/ai-policy' ||
+    normalizedPath === '/admin/ai-policy/limits' ||
+    normalizedPath === '/admin/ai-policy/billing-decision'
+  ) {
+    const authHeader = String(
+      event.headers?.authorization || event.headers?.Authorization || ''
+    ).trim();
+    if (!authHeader.startsWith('Bearer ')) {
+      return jsonResponse(401, {
+        success: false,
+        error: 'Owner administrator authentication required.'
+      });
+    }
+    const { auth: adminAuth } = getNetlifyFirebaseAdmin();
+    if (!adminAuth) {
+      return jsonResponse(503, {
+        success: false,
+        error: 'Firebase Admin authentication is not configured for this serverless instance.'
+      });
+    }
+    let decoded;
+    try {
+      decoded = await adminAuth.verifyIdToken(authHeader.slice(7).trim(), true);
+    } catch {
+      return jsonResponse(401, {
+        success: false,
+        error: 'Invalid or expired administrator token.'
+      });
+    }
+    if (
+      decoded.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL ||
+      !decoded.email_verified
+    ) {
+      return jsonResponse(403, {
+        success: false,
+        error: 'Owner administrator privileges required.'
+      });
+    }
+
+    if (method === 'GET' && normalizedPath === '/admin/ai-policy') {
+      return jsonResponse(200, getOwnerAiPolicyReport(isGeminiConfigured()));
+    }
+
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+
+    if (method === 'POST' && normalizedPath === '/admin/ai-policy/limits') {
+      return jsonResponse(200, updateOwnerFreeTierLimits(body));
+    }
+
+    if (method === 'POST' && normalizedPath === '/admin/ai-policy/billing-decision') {
+      const result = recordOwnerBillingDecision(body, decoded.email || AUTHORIZED_ADMIN_EMAIL);
+      return jsonResponse(result.statusCode, result.payload);
+    }
   }
 
   // Centralized SnapSolve AI routes (Student & Teacher Portals)

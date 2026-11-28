@@ -57,6 +57,7 @@ export type AdminSubsectionId =
   | 'support'
   | 'system-notifications'
   // 8. Website & System Management
+  | 'ai-usage-billing'
   | 'settings'
   | 'profile'
   | 'system-health';
@@ -513,6 +514,14 @@ export const ADMIN_SUBSECTIONS: AdminSubsectionMeta[] = [
   },
 
   // 8. Website & System Management
+  {
+    id: 'ai-usage-billing',
+    categoryId: 'website_system',
+    title: 'AI Usage & Billing Control (FREE ONLY)',
+    description: 'Monitor AI requests, verified free models, quota consumption, ₹0.00 spend & owner billing lock.',
+    iconName: 'ShieldCheck',
+    defaultStatus: 'GREEN',
+  },
   {
     id: 'settings',
     categoryId: 'website_system',

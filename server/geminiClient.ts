@@ -1,8 +1,17 @@
 import { GoogleGenAI } from '@google/genai';
+import {
+  GEMINI_FREE_FALLBACK_MODEL,
+  GEMINI_FREE_PRIMARY_MODEL,
+  GEMINI_PAID_IMAGE_MODEL,
+  assertModelAllowedByFreePolicy,
+  recordAiRequestUsage,
+  recordFreeTierUpstreamQuotaHit,
+  type AiFeatureCategory,
+} from './aiPolicyManager.ts';
 
-export const GEMINI_PRIMARY_MODEL = 'gemini-4-hydrogen';
-export const GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
-export const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-lite-image';
+export const GEMINI_PRIMARY_MODEL = GEMINI_FREE_PRIMARY_MODEL;
+export const GEMINI_FALLBACK_MODEL = GEMINI_FREE_FALLBACK_MODEL;
+export const GEMINI_IMAGE_MODEL = GEMINI_PAID_IMAGE_MODEL;
 export const GEMINI_MAX_PRIMARY_ATTEMPTS = 3;
 
 export interface GeminiGenerationResult {
@@ -13,6 +22,11 @@ export interface GeminiGenerationResult {
   fallbackModel: string;
   attemptsMade: number;
   usedFallback: boolean;
+  tokenUsage: {
+    promptTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface GeminiGenerationOptions {
@@ -20,6 +34,11 @@ export interface GeminiGenerationOptions {
   maxPrimaryAttempts?: number;
   requireValidJson?: boolean;
   validateJson?: (parsed: Record<string, unknown>) => boolean;
+  maxOutputTokensCap?: number;
+  telemetry?: {
+    category: Exclude<AiFeatureCategory, 'image_generation'>;
+    userKey: string;
+  };
 }
 
 export interface MappedGeminiHttpError {
@@ -182,22 +201,52 @@ function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function sanitizeFallbackRequestParams(
-  requestParams: Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>
+function sanitizeParamsForModel(
+  modelName: string,
+  requestParams: Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>,
+  maxOutputTokensCap?: number
 ): Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'> {
-  if (!requestParams.config || typeof requestParams.config !== 'object') {
-    return requestParams;
+  const configRecord: Record<string, unknown> =
+    requestParams.config && typeof requestParams.config === 'object'
+      ? { ...(requestParams.config as Record<string, unknown>) }
+      : {};
+
+  // Strip deprecated sampling params for Gemini 4 models per @google/genai guidelines
+  if (modelName.startsWith('gemini-4-')) {
+    delete configRecord.temperature;
+    delete configRecord.topP;
+    delete configRecord.topK;
+    delete configRecord.candidateCount;
   }
-  const configRecord = requestParams.config as Record<string, unknown>;
-  if (!('thinkingConfig' in configRecord)) {
-    return requestParams;
+
+  // Strip thinkingConfig for lightweight fallback models
+  if (modelName === GEMINI_FALLBACK_MODEL && 'thinkingConfig' in configRecord) {
+    delete configRecord.thinkingConfig;
   }
-  const nextConfig = { ...configRecord };
-  delete nextConfig.thinkingConfig;
+
+  // Enforce strict maximum output token ceiling from FREE AI ONLY policy
+  if (typeof maxOutputTokensCap === 'number' && maxOutputTokensCap > 0) {
+    const requestedMax = Number(configRecord.maxOutputTokens || maxOutputTokensCap);
+    configRecord.maxOutputTokens = Math.min(
+      Number.isFinite(requestedMax) && requestedMax > 0 ? Math.floor(requestedMax) : maxOutputTokensCap,
+      maxOutputTokensCap
+    );
+  }
+
   return {
     ...requestParams,
-    config: nextConfig as typeof requestParams.config,
+    config: configRecord as typeof requestParams.config,
   };
+}
+
+function extractTokenUsage(
+  response: Awaited<ReturnType<GoogleGenAI['models']['generateContent']>>
+): { promptTokens: number; outputTokens: number; totalTokens: number } {
+  const meta = (response as { usageMetadata?: Record<string, unknown> })?.usageMetadata;
+  const promptTokens = Math.max(0, Number(meta?.promptTokenCount || 0));
+  const outputTokens = Math.max(0, Number(meta?.candidatesTokenCount || 0));
+  const totalTokens = Math.max(promptTokens + outputTokens, Number(meta?.totalTokenCount || 0));
+  return { promptTokens, outputTokens, totalTokens };
 }
 
 function redactPotentialSecrets(raw: string): string {
@@ -206,16 +255,22 @@ function redactPotentialSecrets(raw: string): string {
 
 /**
  * Centralized Gemini content generator used across all MyStudyZone server services.
- * - Primary model: gemini-4-hydrogen (free-tier)
- * - Bounded exponential-backoff retries on transient 503/network failures (max 3 attempts)
- * - Bounded 1-shot free-tier fallback to gemini-3.1-flash-lite on 429 quota bursts,
- *   exhausted 503 retries, or invalid JSON responses (when requireValidJson is enabled).
+ * - Strictly enforces VERIFIED FREE-TIER ONLY model allowlist BEFORE any SDK call.
+ * - Primary model: gemini-4-hydrogen (officially free-tier eligible)
+ * - Bounded 1-shot free-tier fallback: gemini-3.1-flash-lite (officially free-tier eligible)
+ * - NEVER activates, retries, or falls back to any paid model.
  * - Never fabricates fake AI output on failure.
  */
 export async function generateGeminiContentWithFallback(
   requestParams: Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>,
   options: GeminiGenerationOptions = {}
 ): Promise<GeminiGenerationResult> {
+  const featureCategory = options.telemetry?.category || 'core_ai';
+
+  // HARD BILLING GATE: Verify both primary and fallback models are strictly free-tier allowed
+  assertModelAllowedByFreePolicy(GEMINI_PRIMARY_MODEL, featureCategory);
+  assertModelAllowedByFreePolicy(GEMINI_FALLBACK_MODEL, featureCategory);
+
   const ai = createGeminiServerClient(options.apiKey);
   const maxPrimaryAttempts = Math.min(
     Math.max(Number(options.maxPrimaryAttempts ?? GEMINI_MAX_PRIMARY_ATTEMPTS), 1),
@@ -223,6 +278,11 @@ export async function generateGeminiContentWithFallback(
   );
   const requireValidJson = Boolean(options.requireValidJson);
   const validateJson = options.validateJson;
+  const primaryParams = sanitizeParamsForModel(
+    GEMINI_PRIMARY_MODEL,
+    requestParams,
+    options.maxOutputTokensCap
+  );
 
   let attemptsMade = 0;
   let lastError: unknown;
@@ -233,7 +293,7 @@ export async function generateGeminiContentWithFallback(
     try {
       const response = await ai.models.generateContent({
         model: GEMINI_PRIMARY_MODEL,
-        ...requestParams,
+        ...primaryParams,
       });
 
       const parsedJson = requireValidJson ? safeParseGeminiJson(response.text || '') : null;
@@ -242,6 +302,16 @@ export async function generateGeminiContentWithFallback(
         (parsedJson !== null && (!validateJson || validateJson(parsedJson)));
 
       if (jsonOk) {
+        const tokenUsage = extractTokenUsage(response);
+        if (options.telemetry) {
+          recordAiRequestUsage({
+            category: options.telemetry.category,
+            userKey: options.telemetry.userKey,
+            modelUsed: GEMINI_PRIMARY_MODEL,
+            usedFallback: false,
+            ...tokenUsage,
+          });
+        }
         return {
           response,
           parsedJson,
@@ -250,6 +320,7 @@ export async function generateGeminiContentWithFallback(
           fallbackModel: GEMINI_FALLBACK_MODEL,
           attemptsMade,
           usedFallback: false,
+          tokenUsage,
         };
       }
 
@@ -262,7 +333,7 @@ export async function generateGeminiContentWithFallback(
     } catch (err) {
       lastError = err;
       if (isGeminiQuotaError(err)) {
-        // Immediate bounded fallback to separate free-tier lite model quota bucket
+        // Immediate bounded fallback to separate verified free-tier lite model quota bucket
         shouldTryFallback = true;
         break;
       }
@@ -289,10 +360,15 @@ export async function generateGeminiContentWithFallback(
     throw lastError;
   }
 
-  // Final bounded free-tier fallback attempt using gemini-3.1-flash-lite
+  // Final bounded verified free-tier fallback attempt using gemini-3.1-flash-lite (NEVER a paid model)
+  assertModelAllowedByFreePolicy(GEMINI_FALLBACK_MODEL, featureCategory);
   await sleepMs(450);
   attemptsMade += 1;
-  const fallbackParams = sanitizeFallbackRequestParams(requestParams);
+  const fallbackParams = sanitizeParamsForModel(
+    GEMINI_FALLBACK_MODEL,
+    requestParams,
+    options.maxOutputTokensCap
+  );
 
   try {
     const response = await ai.models.generateContent({
@@ -315,6 +391,17 @@ export async function generateGeminiContentWithFallback(
       throw invalidErr;
     }
 
+    const tokenUsage = extractTokenUsage(response);
+    if (options.telemetry) {
+      recordAiRequestUsage({
+        category: options.telemetry.category,
+        userKey: options.telemetry.userKey,
+        modelUsed: GEMINI_FALLBACK_MODEL,
+        usedFallback: true,
+        ...tokenUsage,
+      });
+    }
+
     return {
       response,
       parsedJson,
@@ -323,8 +410,13 @@ export async function generateGeminiContentWithFallback(
       fallbackModel: GEMINI_FALLBACK_MODEL,
       attemptsMade,
       usedFallback: true,
+      tokenUsage,
     };
   } catch (fallbackErr) {
+    if (isGeminiQuotaError(fallbackErr)) {
+      recordFreeTierUpstreamQuotaHit(45);
+    }
+
     const finalErr =
       isTransientGeminiError(fallbackErr) ||
       isGeminiQuotaError(fallbackErr) ||
@@ -348,6 +440,17 @@ export function mapGeminiHttpError(
   const code = String((err as { code?: string })?.code || '');
   const attemptsMade = Number((err as { attemptsMade?: number })?.attemptsMade || 0) || undefined;
 
+  if (code === 'PAID_MODEL_BLOCKED_FREE_POLICY') {
+    return {
+      statusCode: 403,
+      errorCode: 'PAID_MODEL_BLOCKED_FREE_POLICY',
+      retryable: false,
+      attemptsMade,
+      message:
+        'Blocked by MyStudyZone FREE AI ONLY policy. Paid AI models and Google Cloud billing are disabled unless explicitly approved in writing by the website owner.',
+    };
+  }
+
   if (code === 'MISSING_GEMINI_API_KEY' || rawMsg.includes('MISSING_GEMINI_API_KEY')) {
     return {
       statusCode: 503,
@@ -355,7 +458,7 @@ export function mapGeminiHttpError(
       retryable: false,
       attemptsMade,
       message:
-        'GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in Settings -> Secrets to enable live AI generation.',
+        'GEMINI_API_KEY is not configured on the server. Add a free-tier GEMINI_API_KEY in server environment variables to enable live AI generation.',
     };
   }
 
@@ -366,7 +469,7 @@ export function mapGeminiHttpError(
       retryable: false,
       attemptsMade,
       message:
-        'Server Gemini API key was rejected or lacks permission. Please verify GEMINI_API_KEY in Settings -> Secrets.',
+        'Server Gemini API key was rejected or lacks permission. Please verify GEMINI_API_KEY on the server.',
     };
   }
 
@@ -375,10 +478,10 @@ export function mapGeminiHttpError(
       statusCode: 429,
       errorCode: 'QUOTA_EXHAUSTED',
       retryable: true,
-      retryAfterSeconds: 30,
+      retryAfterSeconds: 45,
       attemptsMade,
       message:
-        'Free-tier Gemini AI usage limit was temporarily reached. Paid billing is never activated automatically — please wait a moment and retry.',
+        'The free-tier Gemini AI quota has been temporarily reached. MyStudyZone operates in strict FREE AI ONLY mode and never activates paid billing — please wait a moment and retry.',
     };
   }
 
@@ -390,7 +493,7 @@ export function mapGeminiHttpError(
       retryAfterSeconds: 10,
       attemptsMade,
       message:
-        'Free Gemini AI servers are temporarily busy (HTTP 503) even after automatic retries. Please click Retry in a few seconds.',
+        'Free Gemini AI servers are temporarily busy (HTTP 503) even after automatic retries. Paid models are never used as fallback — please click Retry in a few seconds.',
     };
   }
 
@@ -401,7 +504,7 @@ export function mapGeminiHttpError(
       retryable: true,
       retryAfterSeconds: 5,
       attemptsMade,
-      message: `${contextLabel} received an incomplete response from Gemini AI. Please click Retry.`,
+      message: `${contextLabel} received an incomplete response from free Gemini AI. Please click Retry.`,
     };
   }
 
@@ -411,6 +514,6 @@ export function mapGeminiHttpError(
     retryable: true,
     retryAfterSeconds: 5,
     attemptsMade,
-    message: `${contextLabel} could not complete AI processing right now. Please retry.`,
+    message: `${contextLabel} could not complete free AI processing right now. Please retry.`,
   };
 }
