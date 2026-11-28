@@ -28,8 +28,8 @@
   [headers.values]
     Access-Control-Allow-Origin = "https://mystudyzone.in"
     Access-Control-Allow-Credentials = "true"
-    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature"
+    Access-Control-Allow-Methods = "GET, POST, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature, x-snapsolve-secret"
     Vary = "Origin"
     Cache-Control = "no-store, no-cache, must-revalidate"
 

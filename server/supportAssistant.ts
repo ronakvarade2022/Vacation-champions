@@ -1,6 +1,15 @@
-import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { ThinkingLevel, Type } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
+import {
+  GEMINI_FALLBACK_MODEL,
+  GEMINI_PRIMARY_MODEL,
+  generateGeminiContentWithFallback,
+  getConfiguredGeminiApiKey,
+  isGeminiAuthError,
+  isGeminiQuotaError,
+  safeParseGeminiJson,
+} from './geminiClient.ts';
 import {
   isFirebaseAdminConfigured,
   serverListCollection,
@@ -45,6 +54,8 @@ export interface SupportChatResponsePayload {
   navigationActions: SupportNavigationAction[];
   suggestSupportTicket: boolean;
   portalContext?: SupportPortalContext;
+  modelUsed?: string;
+  usedFallback?: boolean;
   notice?: string;
 }
 
@@ -54,6 +65,7 @@ export interface SupportAiStatusPayload {
   mode: 'live_ai' | 'knowledge_base';
   reason: 'ok' | 'missing_key' | 'quota_exceeded' | 'api_key_invalid' | 'upstream_error';
   model: string;
+  fallbackModel?: string;
   message: string;
 }
 
@@ -107,7 +119,7 @@ const ipTicketTimestamps = new Map<string, number[]>();
 let dailyAiTracker = {
   dateKey: new Date().toISOString().slice(0, 10),
   count: 0,
-  quotaExhaustedUntilDate: '',
+  quotaCooldownUntilMs: 0,
   lastKeyErrorReason: '' as '' | 'api_key_invalid' | 'upstream_error',
   lastUpstreamErrorAt: 0,
 };
@@ -366,29 +378,14 @@ function pruneAndCheckWindow(
   return true;
 }
 
-function getConfiguredGeminiKey(): string {
-  const raw = String(process.env.GEMINI_API_KEY || '').trim().replace(/^["']+|["']+$/g, '');
-  if (!raw) return '';
-  const upper = raw.toUpperCase();
-  if (
-    upper.includes('MY_GEMINI_API_KEY') ||
-    upper.includes('YOUR_') ||
-    upper.includes('REPLACE_') ||
-    upper.includes('EXAMPLE_')
-  ) {
-    return '';
-  }
-  return raw;
-}
-
 export function getSupportAiStatus(): SupportAiStatusPayload {
-  const apiKey = getConfiguredGeminiKey();
+  const apiKey = getConfiguredGeminiApiKey();
   const todayKey = new Date().toISOString().slice(0, 10);
   if (dailyAiTracker.dateKey !== todayKey) {
     dailyAiTracker = {
       dateKey: todayKey,
       count: 0,
-      quotaExhaustedUntilDate: '',
+      quotaCooldownUntilMs: 0,
       lastKeyErrorReason: '',
       lastUpstreamErrorAt: 0,
     };
@@ -400,7 +397,8 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
       configured: false,
       mode: 'knowledge_base',
       reason: 'missing_key',
-      model: 'gemini-4-hydrogen',
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
       message:
         'Knowledge Base Mode (Server GEMINI_API_KEY not configured — free Knowledge Base & Support Tickets active)',
     };
@@ -412,34 +410,37 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
       configured: false,
       mode: 'knowledge_base',
       reason: 'api_key_invalid',
-      model: 'gemini-4-hydrogen',
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
       message:
         'Knowledge Base Mode (Configured GEMINI_API_KEY rejected — check Settings > Secrets)',
     };
   }
 
-  if (dailyAiTracker.quotaExhaustedUntilDate === todayKey || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
+  if (dailyAiTracker.count >= MAX_DAILY_AI_CALLS || Date.now() < dailyAiTracker.quotaCooldownUntilMs) {
     return {
       aiConnected: false,
       configured: true,
       mode: 'knowledge_base',
       reason: 'quota_exceeded',
-      model: 'gemini-4-hydrogen',
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
       message:
-        'Knowledge Base Mode (Free-tier daily AI quota reached — paid billing is never auto-enabled)',
+        'Knowledge Base Mode (Free-tier AI quota temporarily cooling down — paid billing is never auto-enabled)',
     };
   }
 
   if (
     dailyAiTracker.lastUpstreamErrorAt &&
-    Date.now() - dailyAiTracker.lastUpstreamErrorAt < 2 * 60 * 1000
+    Date.now() - dailyAiTracker.lastUpstreamErrorAt < 60 * 1000
   ) {
     return {
       aiConnected: false,
       configured: true,
       mode: 'knowledge_base',
       reason: 'upstream_error',
-      model: 'gemini-4-hydrogen',
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
       message:
         'Knowledge Base Mode (Gemini service temporarily busy — Knowledge Base & Support Tickets active)',
     };
@@ -450,8 +451,9 @@ export function getSupportAiStatus(): SupportAiStatusPayload {
     configured: true,
     mode: 'live_ai',
     reason: 'ok',
-    model: 'gemini-4-hydrogen',
-    message: 'Live Free-Tier Gemini AI Connected (gemini-4-hydrogen)',
+    model: GEMINI_PRIMARY_MODEL,
+    fallbackModel: GEMINI_FALLBACK_MODEL,
+    message: `Live Free-Tier Gemini AI Connected (${GEMINI_PRIMARY_MODEL} + ${GEMINI_FALLBACK_MODEL} fallback)`,
   };
 }
 
@@ -607,13 +609,13 @@ export async function handleSupportChatRequest(
   }
 
   // 2. Check AI key & strict free-tier quota guardrails before calling Gemini
-  const apiKey = getConfiguredGeminiKey();
+  const apiKey = getConfiguredGeminiApiKey();
   const todayKey = new Date().toISOString().slice(0, 10);
   if (dailyAiTracker.dateKey !== todayKey) {
     dailyAiTracker = {
       dateKey: todayKey,
       count: 0,
-      quotaExhaustedUntilDate: '',
+      quotaCooldownUntilMs: 0,
       lastKeyErrorReason: '',
       lastUpstreamErrorAt: 0,
     };
@@ -663,11 +665,11 @@ export async function handleSupportChatRequest(
     );
   }
 
-  // Strict Free API Policy: If free quota was already exhausted today, stop AI calls immediately
-  if (dailyAiTracker.quotaExhaustedUntilDate === todayKey || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
+  // Strict Free API Policy: honor daily safety cap and brief transient cooldown without paid billing
+  if (dailyAiTracker.count >= MAX_DAILY_AI_CALLS || Date.now() < dailyAiTracker.quotaCooldownUntilMs) {
     return buildKbOrGenericFallback(
       'quota_exceeded',
-      'Free-tier AI quota is temporarily exhausted for today. Paid models are never activated automatically. Knowledge Base guidance and Admin Support Tickets remain fully active.',
+      'Free-tier AI quota is temporarily cooling down. Paid models are never activated automatically. Knowledge Base guidance and Admin Support Tickets remain fully active.',
       true
     );
   }
@@ -686,13 +688,9 @@ export async function handleSupportChatRequest(
     );
   }
 
-  // 3. Call server-side @google/genai using ONLY free-tier eligible model gemini-4-hydrogen
+  // 3. Call centralized server-side Gemini client (gemini-4-hydrogen primary + gemini-3.1-flash-lite free-tier fallback)
   try {
     dailyAiTracker.count += 1;
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-    });
 
     const rawHistory = Array.isArray(body?.history) ? body.history : [];
     const safeHistory: SupportChatHistoryTurn[] = rawHistory
@@ -715,66 +713,62 @@ export async function handleSupportChatRequest(
       .filter(Boolean)
       .join('\n\n');
 
-    const generateParams = {
-      model: 'gemini-4-hydrogen',
-      contents: promptText,
-      config: {
-        systemInstruction: HELP_DESK_SYSTEM_PROMPT,
-        responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            reply: {
-              type: Type.STRING,
-              description:
-                'Simple, friendly, short, step-by-step answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features.',
+    const generationResult = await generateGeminiContentWithFallback(
+      {
+        contents: promptText,
+        config: {
+          systemInstruction: HELP_DESK_SYSTEM_PROMPT,
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              reply: {
+                type: Type.STRING,
+                description:
+                  'Simple, friendly, short, step-by-step answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features.',
+              },
+              language: {
+                type: Type.STRING,
+                description: 'Language code: en, hi, or mr',
+              },
+              navigationActionIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: '0 to 3 exact allowlisted action IDs from system instructions',
+              },
+              detectedClass: {
+                type: Type.STRING,
+                description: 'Optional Class 1 through Class 10 if specifically requested',
+              },
+              detectedBoard: {
+                type: Type.STRING,
+                description: 'Optional Maharashtra, CBSE, or ICSE if specifically requested',
+              },
+              suggestSupportTicket: {
+                type: Type.BOOLEAN,
+                description:
+                  'True if the user has a personal account, login, payment, class correction, or unresolved technical problem.',
+              },
             },
-            language: {
-              type: Type.STRING,
-              description: 'Language code: en, hi, or mr',
-            },
-            navigationActionIds: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: '0 to 3 exact allowlisted action IDs from system instructions',
-            },
-            detectedClass: {
-              type: Type.STRING,
-              description: 'Optional Class 1 through Class 10 if specifically requested',
-            },
-            detectedBoard: {
-              type: Type.STRING,
-              description: 'Optional Maharashtra, CBSE, or ICSE if specifically requested',
-            },
-            suggestSupportTicket: {
-              type: Type.BOOLEAN,
-              description:
-                'True if the user has a personal account, login, payment, class correction, or unresolved technical problem.',
-            },
+            required: ['reply', 'language', 'navigationActionIds', 'suggestSupportTicket'],
           },
-          required: ['reply', 'language', 'navigationActionIds', 'suggestSupportTicket'],
         },
       },
-    };
-
-    let response;
-    try {
-      response = await ai.models.generateContent(generateParams);
-    } catch (firstErr: any) {
-      const firstMsg = String(firstErr?.message || '');
-      if (firstErr?.status === 503 || firstMsg.includes('503') || firstMsg.includes('UNAVAILABLE')) {
-        await new Promise((r) => setTimeout(r, 450));
-        response = await ai.models.generateContent(generateParams);
-      } else {
-        throw firstErr;
+      {
+        apiKey,
+        requireValidJson: true,
+        validateJson: (candidate) => Boolean(String(candidate.reply || '').trim()),
       }
-    }
+    );
 
     dailyAiTracker.lastKeyErrorReason = '';
     dailyAiTracker.lastUpstreamErrorAt = 0;
-    const rawJson = response.text || '{}';
-    const parsed = JSON.parse(rawJson) as {
+    dailyAiTracker.quotaCooldownUntilMs = 0;
+
+    const parsed = (generationResult.parsedJson ||
+      safeParseGeminiJson(generationResult.response.text || '') ||
+      {}) as {
       reply?: string;
       language?: string;
       navigationActionIds?: string[];
@@ -847,25 +841,17 @@ export async function handleSupportChatRequest(
       navigationActions: validActions,
       suggestSupportTicket: Boolean(parsed.suggestSupportTicket),
       portalContext,
+      modelUsed: generationResult.modelUsed,
+      usedFallback: generationResult.usedFallback,
     };
-  } catch (err: any) {
-    const errMsg = String(err?.message || err || '');
-    const upperMsg = errMsg.toUpperCase();
-    const isQuota =
-      err?.status === 429 ||
-      errMsg.includes('429') ||
-      upperMsg.includes('RESOURCE_EXHAUSTED') ||
-      errMsg.toLowerCase().includes('quota');
-    const isInvalidKey =
-      err?.status === 400 ||
-      err?.status === 401 ||
-      err?.status === 403 ||
-      upperMsg.includes('API_KEY_INVALID') ||
-      upperMsg.includes('PERMISSION_DENIED');
-    console.warn('[Support Assistant AI Fallback]:', errMsg);
+  } catch (err: unknown) {
+    const errMsg = String((err as { message?: string })?.message || err || '');
+    const isQuota = isGeminiQuotaError(err);
+    const isInvalidKey = isGeminiAuthError(err);
+    console.warn('[Support Assistant AI Fallback]:', errMsg.replace(/AIza[0-9A-Za-z\-_]{20,}/g, '[REDACTED_KEY]'));
 
     if (isQuota) {
-      dailyAiTracker.quotaExhaustedUntilDate = todayKey;
+      dailyAiTracker.quotaCooldownUntilMs = Date.now() + 60 * 1000;
     } else if (isInvalidKey) {
       dailyAiTracker.lastKeyErrorReason = 'api_key_invalid';
     } else {
@@ -875,7 +861,7 @@ export async function handleSupportChatRequest(
     return buildKbOrGenericFallback(
       isQuota ? 'quota_exceeded' : 'upstream_error',
       isQuota
-        ? 'Free-tier AI quota is currently exhausted. Paid models are never activated automatically. Showing Knowledge Base guidance and Support Request option.'
+        ? 'Free-tier AI quota is temporarily cooling down. Paid models are never activated automatically. Showing Knowledge Base guidance and Support Request option.'
         : isInvalidKey
         ? 'Configured GEMINI_API_KEY could not be authenticated by Gemini. Running in Knowledge Base mode.'
         : 'AI assistant is temporarily unavailable. Showing Knowledge Base guidance and Support Request option.',

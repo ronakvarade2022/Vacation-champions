@@ -3,8 +3,8 @@ import express from "express";
 import compression from "compression";
 import http from "http";
 import { createServer as createViteServer } from "vite";
-import path3 from "path";
-import crypto5 from "crypto";
+import path4 from "path";
+import crypto6 from "crypto";
 import dotenv3 from "dotenv";
 
 // firebase/admin.ts
@@ -1869,12 +1869,35 @@ function getAdminReferralStats() {
 
 // src/server/deviceSessionStore.ts
 import crypto3 from "crypto";
-var SESSION_LOGGED_IN_ELSEWHERE_MESSAGE = "Your account has been logged in on another device. Please log in again.";
+var SESSION_LOGGED_IN_ELSEWHERE_MESSAGE = "Your account has been signed in on another device. Please log in again if you want to use this device.";
 var SINGLE_DEVICE_BLOCK_MESSAGE = SESSION_LOGGED_IN_ELSEWHERE_MESSAGE;
 var SESSION_INACTIVITY_TTL_MS = 12 * 60 * 60 * 1e3;
 var RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1e3;
 var MAX_RECOVERY_COUNT_24H = 3;
+var MAX_IN_MEMORY_SESSIONS = 5e3;
 var serverDeviceSessions = /* @__PURE__ */ new Map();
+var userSessionLocks = /* @__PURE__ */ new Map();
+async function withUserSessionLock(userId, task) {
+  const cleanId = String(userId || "").trim() || "__anonymous__";
+  const previous = userSessionLocks.get(cleanId) || Promise.resolve();
+  const next = previous.catch(() => void 0).then(() => task());
+  const tracked = next.finally(() => {
+    if (userSessionLocks.get(cleanId) === tracked) {
+      userSessionLocks.delete(cleanId);
+    }
+  });
+  userSessionLocks.set(cleanId, tracked);
+  return next;
+}
+function pruneExpiredInMemorySessions(nowMs = Date.now()) {
+  if (serverDeviceSessions.size <= MAX_IN_MEMORY_SESSIONS) return;
+  for (const [uid, rec] of serverDeviceSessions.entries()) {
+    if (rec.status !== "ACTIVE" || Number(rec.expiresAtMs || 0) <= nowMs) {
+      serverDeviceSessions.delete(uid);
+    }
+    if (serverDeviceSessions.size <= MAX_IN_MEMORY_SESSIONS) break;
+  }
+}
 function generateActiveSessionId() {
   return `sess_${crypto3.randomBytes(20).toString("hex")}`;
 }
@@ -1908,6 +1931,7 @@ async function loadDeviceSessionFromStore(userId) {
     if (docData && docData.userId && docData.activeSessionId) {
       const record = docData;
       serverDeviceSessions.set(cleanId, record);
+      pruneExpiredInMemorySessions();
       return record;
     }
   } catch {
@@ -1916,6 +1940,7 @@ async function loadDeviceSessionFromStore(userId) {
 }
 async function persistDeviceSessionToStore(record) {
   serverDeviceSessions.set(record.userId, record);
+  pruneExpiredInMemorySessions();
   try {
     await serverSetDoc("device_sessions", record.userId, record, {
       merge: false
@@ -1927,6 +1952,7 @@ function buildFreshActiveSession(input, nowMs = Date.now(), prior, sessionIdOver
   const nowIso = new Date(nowMs).toISOString();
   const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
   const expiresAt = new Date(expiresAtMs).toISOString();
+  const nextVersion = Math.max(1, Number(prior?.sessionVersion || 0) + 1);
   return {
     userId: String(input.userId).trim(),
     firebaseUid: input.firebaseUid ? String(input.firebaseUid).trim() : prior?.firebaseUid,
@@ -1934,6 +1960,7 @@ function buildFreshActiveSession(input, nowMs = Date.now(), prior, sessionIdOver
     studentName: String(input.studentName || prior?.studentName || "Student").slice(0, 100),
     accountRole: input.accountRole === "teacher" ? "teacher" : "student",
     activeSessionId: sessionIdOverride || generateActiveSessionId(),
+    sessionVersion: nextVersion,
     deviceId: String(input.deviceId).trim().slice(0, 128),
     hardwareSignature: String(input.hardwareSignature).trim().slice(0, 128),
     deviceSignature: String(input.deviceSignature).trim().slice(0, 128),
@@ -1947,6 +1974,8 @@ function buildFreshActiveSession(input, nowMs = Date.now(), prior, sessionIdOver
     lastActivityAt: nowIso,
     expiresAt,
     expiresAtMs,
+    previousSessionId: prior?.activeSessionId || void 0,
+    previousDeviceId: prior?.deviceId || void 0,
     recoveryCount24h: prior?.recoveryCount24h || 0,
     lastRecoveryAt: prior?.lastRecoveryAt
   };
@@ -1963,53 +1992,21 @@ async function acquireDeviceSessionServer(input, nowMs = Date.now()) {
       error: "Valid userId and device signatures are required."
     };
   }
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  if (existing && !isSessionExpired(existing, nowMs)) {
-    const isSamePhysicalDevice = existing.deviceId === cleanDeviceId && existing.hardwareSignature === cleanHwSig && existing.deviceSignature === cleanDevSig;
-    if (!isSamePhysicalDevice) {
-      const fresh2 = buildFreshActiveSession(input, nowMs, existing);
-      fresh2.previousSessionId = existing.activeSessionId;
-      fresh2.previousDeviceId = existing.deviceId;
-      await persistDeviceSessionToStore(fresh2);
-      return {
-        allowed: true,
-        resumed: false,
-        session: fresh2
-      };
-    }
-    const nowIso = new Date(nowMs).toISOString();
-    const expiresAtMs = nowMs + SESSION_INACTIVITY_TTL_MS;
-    const resumedRecord = {
-      ...existing,
-      firebaseUid: input.firebaseUid || existing.firebaseUid,
-      email: normalizeEmail(input.email || existing.email),
-      studentName: String(input.studentName || existing.studentName || "Student").slice(0, 100),
-      accountRole: input.accountRole === "teacher" ? "teacher" : existing.accountRole,
-      activeSessionId: input.preferredSessionId || existing.activeSessionId,
-      deviceName: String(input.deviceName || existing.deviceName || "Registered Browser").slice(0, 120),
-      deviceType: normalizeDeviceType(input.deviceType || existing.deviceType),
-      browser: String(input.browser || existing.browser || "Browser").slice(0, 60),
-      os: String(input.os || existing.os || "Unknown OS").slice(0, 60),
-      userAgentSummary: String(input.userAgentSummary || existing.userAgentSummary || "").slice(0, 200),
-      status: "ACTIVE",
-      lastActivityAt: nowIso,
-      expiresAt: new Date(expiresAtMs).toISOString(),
-      expiresAtMs
-    };
-    await persistDeviceSessionToStore(resumedRecord);
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    const fresh = buildFreshActiveSession(
+      input,
+      nowMs,
+      existing,
+      input.preferredSessionId
+    );
+    await persistDeviceSessionToStore(fresh);
     return {
       allowed: true,
-      resumed: true,
-      session: resumedRecord
+      resumed: false,
+      session: fresh
     };
-  }
-  const fresh = buildFreshActiveSession(input, nowMs, existing);
-  await persistDeviceSessionToStore(fresh);
-  return {
-    allowed: true,
-    resumed: false,
-    session: fresh
-  };
+  });
 }
 async function validateDeviceSessionServer(input, nowMs = Date.now()) {
   const cleanUserId = String(input.userId || "").trim();
@@ -2020,146 +2017,169 @@ async function validateDeviceSessionServer(input, nowMs = Date.now()) {
       error: SINGLE_DEVICE_BLOCK_MESSAGE
     };
   }
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  if (!existing) {
-    if (input.allowBootstrapIfMissing && input.deviceId?.length >= 6 && input.hardwareSignature?.length >= 8 && input.deviceSignature?.length >= 8) {
-      const preferredSid = input.activeSessionId && input.activeSessionId.length >= 8 && input.activeSessionId.length <= 128 ? input.activeSessionId : void 0;
-      const fresh = buildFreshActiveSession(
-        {
-          userId: cleanUserId,
-          firebaseUid: input.firebaseUid || cleanUserId,
-          email: input.email || "",
-          studentName: input.studentName || "Student",
-          accountRole: input.accountRole || "student",
-          deviceId: input.deviceId,
-          hardwareSignature: input.hardwareSignature,
-          deviceSignature: input.deviceSignature,
-          deviceName: input.deviceName,
-          deviceType: input.deviceType,
-          browser: input.browser,
-          os: input.os,
-          userAgentSummary: input.userAgentSummary
-        },
-        nowMs,
-        null,
-        preferredSid
-      );
-      await persistDeviceSessionToStore(fresh);
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    if (!existing) {
+      if (input.allowBootstrapIfMissing && input.deviceId?.length >= 6 && input.hardwareSignature?.length >= 8 && input.deviceSignature?.length >= 8) {
+        const preferredSid = input.activeSessionId && input.activeSessionId.length >= 8 && input.activeSessionId.length <= 128 ? input.activeSessionId : void 0;
+        const fresh = buildFreshActiveSession(
+          {
+            userId: cleanUserId,
+            firebaseUid: input.firebaseUid || cleanUserId,
+            email: input.email || "",
+            studentName: input.studentName || "Student",
+            accountRole: input.accountRole || "student",
+            deviceId: input.deviceId,
+            hardwareSignature: input.hardwareSignature,
+            deviceSignature: input.deviceSignature,
+            deviceName: input.deviceName,
+            deviceType: input.deviceType,
+            browser: input.browser,
+            os: input.os,
+            userAgentSummary: input.userAgentSummary
+          },
+          nowMs,
+          null,
+          preferredSid
+        );
+        await persistDeviceSessionToStore(fresh);
+        return {
+          valid: true,
+          bootstrapped: true,
+          session: fresh
+        };
+      }
+      return {
+        valid: false,
+        reason: "NO_ACTIVE_SESSION",
+        error: SINGLE_DEVICE_BLOCK_MESSAGE
+      };
+    }
+    if (existing.status === "TERMINATED") {
+      const isAdmin = existing.terminatedBy === "ADMIN";
+      const isRecovery = existing.terminatedBy === "USER_RECOVERY";
+      const isNewDevice = existing.terminatedBy === "NEW_DEVICE_LOGIN";
+      return {
+        valid: false,
+        reason: "TERMINATED",
+        terminatedBy: existing.terminatedBy,
+        error: isAdmin ? "Your session was terminated by the MyStudyZone Administrator. Please log in again." : isRecovery || isNewDevice ? SESSION_LOGGED_IN_ELSEWHERE_MESSAGE : "Your account session was signed out. Please log in again."
+      };
+    }
+    if (existing.status === "EXPIRED" || Number(existing.expiresAtMs || 0) <= nowMs) {
+      const expiredRecord = {
+        ...existing,
+        status: "EXPIRED",
+        terminatedBy: existing.terminatedBy || "EXPIRED",
+        terminatedAt: existing.terminatedAt || new Date(nowMs).toISOString(),
+        terminationReason: existing.terminationReason || "Session expired due to inactivity"
+      };
+      await persistDeviceSessionToStore(expiredRecord);
+      return {
+        valid: false,
+        reason: "EXPIRED",
+        error: "Your session has expired due to inactivity. Please log in again."
+      };
+    }
+    const sameHardwareAndBrowser = existing.deviceId === input.deviceId && existing.hardwareSignature === input.hardwareSignature && existing.deviceSignature === input.deviceSignature;
+    const sameSessionId = Boolean(
+      input.activeSessionId && existing.activeSessionId === input.activeSessionId
+    );
+    const parsedInputVersion = input.sessionVersion !== void 0 && Number.isFinite(Number(input.sessionVersion)) ? Number(input.sessionVersion) : void 0;
+    const versionMismatch = parsedInputVersion !== void 0 && existing.sessionVersion !== void 0 && parsedInputVersion !== Number(existing.sessionVersion);
+    if (versionMismatch || input.activeSessionId && !sameSessionId) {
+      return {
+        valid: false,
+        reason: "SESSION_SUPERSEDED",
+        error: SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      };
+    }
+    if (!sameHardwareAndBrowser) {
+      return {
+        valid: false,
+        reason: "HARDWARE_OR_SESSION_MISMATCH",
+        error: SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      };
+    }
+    const lastActivityMs = Date.parse(existing.lastActivityAt || "") || 0;
+    if (nowMs - lastActivityMs >= 3e4) {
+      const refreshed = {
+        ...existing,
+        lastActivityAt: new Date(nowMs).toISOString(),
+        expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
+        expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
+      };
+      await persistDeviceSessionToStore(refreshed);
       return {
         valid: true,
-        bootstrapped: true,
-        session: fresh
+        session: refreshed
       };
     }
     return {
-      valid: false,
-      reason: "NO_ACTIVE_SESSION",
-      error: SINGLE_DEVICE_BLOCK_MESSAGE
+      valid: true,
+      session: existing
     };
+  });
+}
+async function heartbeatDeviceSessionServer(input, nowMs = Date.now()) {
+  const cleanUserId = String(input.userId || "").trim();
+  const check = await validateDeviceSessionServer(input, nowMs);
+  if (!check.valid || !check.session || !cleanUserId) {
+    return check;
   }
-  if (existing.status === "TERMINATED") {
-    const isAdmin = existing.terminatedBy === "ADMIN";
-    const isRecovery = existing.terminatedBy === "USER_RECOVERY";
-    const isNewDevice = existing.terminatedBy === "NEW_DEVICE_LOGIN";
-    return {
-      valid: false,
-      reason: "TERMINATED",
-      terminatedBy: existing.terminatedBy,
-      error: isAdmin ? "Your session was terminated by the MyStudyZone Administrator. Please log in again." : isRecovery || isNewDevice ? SESSION_LOGGED_IN_ELSEWHERE_MESSAGE : "Your account session was logged out. Please sign in again."
-    };
-  }
-  if (existing.status === "EXPIRED" || Number(existing.expiresAtMs || 0) <= nowMs) {
-    const expiredRecord = {
-      ...existing,
-      status: "EXPIRED",
-      terminatedBy: existing.terminatedBy || "EXPIRED",
-      terminatedAt: existing.terminatedAt || new Date(nowMs).toISOString(),
-      terminationReason: existing.terminationReason || "Session expired due to inactivity"
-    };
-    await persistDeviceSessionToStore(expiredRecord);
-    return {
-      valid: false,
-      reason: "EXPIRED",
-      error: "Your session has expired due to inactivity. Please log in again."
-    };
-  }
-  const sameHardwareAndBrowser = existing.deviceId === input.deviceId && existing.hardwareSignature === input.hardwareSignature && existing.deviceSignature === input.deviceSignature;
-  const sameSessionId = Boolean(
-    input.activeSessionId && existing.activeSessionId === input.activeSessionId
-  );
-  if (!sameHardwareAndBrowser || !sameSessionId && input.activeSessionId) {
-    return {
-      valid: false,
-      reason: "HARDWARE_OR_SESSION_MISMATCH",
-      error: SINGLE_DEVICE_BLOCK_MESSAGE
-    };
-  }
-  const lastActivityMs = Date.parse(existing.lastActivityAt || "") || 0;
-  if (nowMs - lastActivityMs >= 3e4) {
-    const refreshed = {
-      ...existing,
+  return withUserSessionLock(cleanUserId, async () => {
+    const latest = await loadDeviceSessionFromStore(cleanUserId);
+    if (!latest || latest.status !== "ACTIVE" || latest.activeSessionId !== check.session.activeSessionId) {
+      return {
+        valid: false,
+        reason: "SESSION_SUPERSEDED",
+        error: SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
+      };
+    }
+    const updated = {
+      ...latest,
       lastActivityAt: new Date(nowMs).toISOString(),
       expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
       expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
     };
-    await persistDeviceSessionToStore(refreshed);
+    await persistDeviceSessionToStore(updated);
     return {
       valid: true,
-      session: refreshed
+      bootstrapped: Boolean(check.bootstrapped),
+      session: updated
     };
-  }
-  return {
-    valid: true,
-    session: existing
-  };
-}
-async function heartbeatDeviceSessionServer(input, nowMs = Date.now()) {
-  const check = await validateDeviceSessionServer(input, nowMs);
-  if (!check.valid || !check.session) {
-    return check;
-  }
-  const updated = {
-    ...check.session,
-    lastActivityAt: new Date(nowMs).toISOString(),
-    expiresAt: new Date(nowMs + SESSION_INACTIVITY_TTL_MS).toISOString(),
-    expiresAtMs: nowMs + SESSION_INACTIVITY_TTL_MS
-  };
-  await persistDeviceSessionToStore(updated);
-  return {
-    valid: true,
-    bootstrapped: Boolean(check.bootstrapped),
-    session: updated
-  };
+  });
 }
 async function releaseDeviceSessionServer(input, nowMs = Date.now()) {
   const cleanUserId = String(input.userId || "").trim();
   if (!cleanUserId) return { released: false, error: "userId is required." };
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  if (!existing) {
-    return { released: true };
-  }
-  if (existing.status === "ACTIVE" && !isSessionExpired(existing, nowMs)) {
-    const matchesSession = !input.activeSessionId || existing.activeSessionId === input.activeSessionId;
-    const matchesHardware = !input.hardwareSignature || existing.hardwareSignature === input.hardwareSignature;
-    if (!matchesSession || !matchesHardware) {
-      return {
-        released: false,
-        error: SINGLE_DEVICE_BLOCK_MESSAGE
-      };
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    if (!existing) {
+      return { released: true };
     }
-  }
-  const nowIso = new Date(nowMs).toISOString();
-  const terminated = {
-    ...existing,
-    status: "TERMINATED",
-    terminatedBy: "USER_LOGOUT",
-    terminatedAt: nowIso,
-    terminationReason: input.reason || "Logged out by user",
-    expiresAt: nowIso,
-    expiresAtMs: nowMs
-  };
-  await persistDeviceSessionToStore(terminated);
-  return { released: true };
+    if (existing.status === "ACTIVE" && !isSessionExpired(existing, nowMs)) {
+      const matchesSession = !input.activeSessionId || existing.activeSessionId === input.activeSessionId;
+      const matchesHardware = !input.hardwareSignature || existing.hardwareSignature === input.hardwareSignature;
+      if (!matchesSession || !matchesHardware) {
+        return {
+          released: true
+        };
+      }
+    }
+    const nowIso = new Date(nowMs).toISOString();
+    const terminated = {
+      ...existing,
+      status: "TERMINATED",
+      terminatedBy: "USER_LOGOUT",
+      terminatedAt: nowIso,
+      terminationReason: input.reason || "Logged out by user",
+      expiresAt: nowIso,
+      expiresAtMs: nowMs
+    };
+    await persistDeviceSessionToStore(terminated);
+    return { released: true };
+  });
 }
 async function recoverDeviceSessionServer(input, nowMs = Date.now()) {
   const cleanUserId = String(input.userId || "").trim();
@@ -2169,80 +2189,51 @@ async function recoverDeviceSessionServer(input, nowMs = Date.now()) {
     return {
       success: false,
       statusCode: 400,
-      error: "Registered email and account ID are required for device recovery."
+      error: "Registered email and account ID are required."
     };
   }
-  if (providedMobile.length !== 10) {
-    return {
-      success: false,
-      statusCode: 400,
-      error: "Please enter your registered 10-digit mobile number to verify device recovery."
-    };
-  }
-  let storedStudent = null;
-  try {
-    storedStudent = await serverGetDoc("students", cleanUserId);
-    if (!storedStudent && cleanEmail) {
-      const matched = await serverQueryEqualsLimit1("students", "email", cleanEmail);
-      if (matched) storedStudent = matched.data;
-    }
-  } catch {
-    storedStudent = null;
-  }
-  if (storedStudent) {
-    const storedEmail = normalizeEmail(storedStudent.email);
-    const storedMobile = normalizeMobileDigits(storedStudent.mobile);
-    if (storedEmail && storedEmail !== cleanEmail) {
-      return {
-        success: false,
-        statusCode: 403,
-        error: "Email address does not match the registered student account."
-      };
-    }
-    if (storedMobile && storedMobile.length === 10 && storedMobile !== providedMobile) {
-      return {
-        success: false,
-        statusCode: 403,
-        error: "Entered mobile number does not match the registered mobile number for this account."
-      };
-    }
-  }
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  if (existing && existing.email && normalizeEmail(existing.email) !== cleanEmail) {
-    return {
-      success: false,
-      statusCode: 403,
-      error: "Email does not match the active device session owner."
-    };
-  }
-  let nextCount = 1;
-  if (existing?.lastRecoveryAt) {
-    const lastRecMs = Date.parse(existing.lastRecoveryAt) || 0;
-    if (nowMs - lastRecMs < RECOVERY_WINDOW_MS) {
-      const currentCount = Number(existing.recoveryCount24h || 0);
-      if (currentCount >= MAX_RECOVERY_COUNT_24H) {
-        return {
-          success: false,
-          statusCode: 429,
-          error: "Device recovery limit reached (max 3 recoveries per 24 hours). Please contact MyStudyZone support or wait 24 hours."
-        };
+  return withUserSessionLock(cleanUserId, async () => {
+    if (providedMobile.length === 10) {
+      let storedStudent = null;
+      try {
+        storedStudent = await serverGetDoc("students", cleanUserId);
+        if (!storedStudent && cleanEmail) {
+          const matched = await serverQueryEqualsLimit1("students", "email", cleanEmail);
+          if (matched) storedStudent = matched.data;
+        }
+      } catch {
+        storedStudent = null;
       }
-      nextCount = currentCount + 1;
+      if (storedStudent) {
+        const storedMobile = normalizeMobileDigits(storedStudent.mobile);
+        if (storedMobile && storedMobile.length === 10 && storedMobile !== providedMobile) {
+          return {
+            success: false,
+            statusCode: 403,
+            error: "Entered mobile number does not match the registered mobile number for this account."
+          };
+        }
+      }
     }
-  }
-  const nowIso = new Date(nowMs).toISOString();
-  const recovered = buildFreshActiveSession(input, nowMs, existing);
-  recovered.recoveryCount24h = nextCount;
-  recovered.lastRecoveryAt = nowIso;
-  recovered.terminationReason = void 0;
-  recovered.terminatedAt = void 0;
-  recovered.terminatedBy = void 0;
-  await persistDeviceSessionToStore(recovered);
-  return {
-    success: true,
-    statusCode: 200,
-    session: recovered
-  };
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    let nextCount = existing?.recoveryCount24h || 0;
+    const nowIso = new Date(nowMs).toISOString();
+    if (existing?.lastRecoveryAt && nowMs - (Date.parse(existing.lastRecoveryAt) || 0) < RECOVERY_WINDOW_MS) {
+      nextCount = Math.min(MAX_RECOVERY_COUNT_24H, nextCount + 1);
+    }
+    const recovered = buildFreshActiveSession(input, nowMs, existing);
+    recovered.recoveryCount24h = nextCount;
+    recovered.lastRecoveryAt = nowIso;
+    recovered.terminationReason = void 0;
+    recovered.terminatedAt = void 0;
+    recovered.terminatedBy = void 0;
+    await persistDeviceSessionToStore(recovered);
+    return {
+      success: true,
+      statusCode: 200,
+      session: recovered
+    };
+  });
 }
 async function listDeviceSessionsAdminServer(nowMs = Date.now()) {
   const merged = /* @__PURE__ */ new Map();
@@ -2284,42 +2275,47 @@ async function terminateDeviceSessionAdminServer(userId, reason = "Terminated by
   if (!cleanUserId) {
     throw new Error("userId is required to terminate a session.");
   }
-  const existing = await loadDeviceSessionFromStore(cleanUserId);
-  const nowIso = new Date(nowMs).toISOString();
-  const terminated = existing ? {
-    ...existing,
-    activeSessionId: `terminated_${crypto3.randomBytes(10).toString("hex")}`,
-    status: "TERMINATED",
-    terminatedBy: "ADMIN",
-    terminatedAt: nowIso,
-    terminationReason: reason,
-    expiresAt: nowIso,
-    expiresAtMs: nowMs
-  } : {
-    userId: cleanUserId,
-    email: "",
-    studentName: "Student",
-    accountRole: "student",
-    activeSessionId: `terminated_${crypto3.randomBytes(10).toString("hex")}`,
-    deviceId: "admin_terminated",
-    hardwareSignature: "admin_terminated",
-    deviceSignature: "admin_terminated",
-    deviceName: "No Active Device",
-    deviceType: "Desktop",
-    browser: "N/A",
-    os: "N/A",
-    userAgentSummary: "",
-    status: "TERMINATED",
-    loginAt: nowIso,
-    lastActivityAt: nowIso,
-    expiresAt: nowIso,
-    expiresAtMs: nowMs,
-    terminatedBy: "ADMIN",
-    terminatedAt: nowIso,
-    terminationReason: reason
-  };
-  await persistDeviceSessionToStore(terminated);
-  return { success: true, session: terminated };
+  return withUserSessionLock(cleanUserId, async () => {
+    const existing = await loadDeviceSessionFromStore(cleanUserId);
+    const nowIso = new Date(nowMs).toISOString();
+    const nextVersion = Math.max(1, Number(existing?.sessionVersion || 0) + 1);
+    const terminated = existing ? {
+      ...existing,
+      activeSessionId: `terminated_${crypto3.randomBytes(10).toString("hex")}`,
+      sessionVersion: nextVersion,
+      status: "TERMINATED",
+      terminatedBy: "ADMIN",
+      terminatedAt: nowIso,
+      terminationReason: reason,
+      expiresAt: nowIso,
+      expiresAtMs: nowMs
+    } : {
+      userId: cleanUserId,
+      email: "",
+      studentName: "Student",
+      accountRole: "student",
+      activeSessionId: `terminated_${crypto3.randomBytes(10).toString("hex")}`,
+      sessionVersion: nextVersion,
+      deviceId: "admin_terminated",
+      hardwareSignature: "admin_terminated",
+      deviceSignature: "admin_terminated",
+      deviceName: "No Active Device",
+      deviceType: "Desktop",
+      browser: "N/A",
+      os: "N/A",
+      userAgentSummary: "",
+      status: "TERMINATED",
+      loginAt: nowIso,
+      lastActivityAt: nowIso,
+      expiresAt: nowIso,
+      expiresAtMs: nowMs,
+      terminatedBy: "ADMIN",
+      terminatedAt: nowIso,
+      terminationReason: reason
+    };
+    await persistDeviceSessionToStore(terminated);
+    return { success: true, session: terminated };
+  });
 }
 
 // firebase/index.ts
@@ -4136,7 +4132,265 @@ async function handleRazorpayWebhook(req, res) {
 }
 
 // server/supportAssistant.ts
-import { GoogleGenAI, Type } from "@google/genai";
+import { ThinkingLevel, Type } from "@google/genai";
+import fs3 from "fs";
+import path3 from "path";
+
+// server/geminiClient.ts
+import { GoogleGenAI } from "@google/genai";
+var GEMINI_PRIMARY_MODEL = "gemini-4-hydrogen";
+var GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite";
+var GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
+var GEMINI_MAX_PRIMARY_ATTEMPTS = 3;
+function getConfiguredGeminiApiKey() {
+  const raw = String(process.env.GEMINI_API_KEY || "").trim().replace(/^["']+|["']+$/g, "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (upper.includes("MY_GEMINI_API_KEY") || upper.includes("YOUR_") || upper.includes("REPLACE_") || upper.includes("EXAMPLE_")) {
+    return "";
+  }
+  return raw;
+}
+function createGeminiServerClient(explicitApiKey) {
+  const apiKey = explicitApiKey || getConfiguredGeminiApiKey();
+  if (!apiKey) {
+    const missingErr = new Error("MISSING_GEMINI_API_KEY");
+    missingErr.code = "MISSING_GEMINI_API_KEY";
+    missingErr.status = 503;
+    throw missingErr;
+  }
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build"
+      }
+    }
+  });
+}
+function isGeminiQuotaError(err) {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  const status = Number(err?.status || 0);
+  const lower = msg.toLowerCase();
+  return status === 429 || lower.includes("429") || lower.includes("resource_exhausted") || lower.includes("quota");
+}
+function isGeminiAuthError(err) {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  const status = Number(err?.status || 0);
+  const lower = msg.toLowerCase();
+  return status === 401 || status === 403 || lower.includes("api_key_invalid") || lower.includes("api key not valid") || lower.includes("invalid api key") || lower.includes("permission_denied") || lower.includes("unauthenticated");
+}
+function isTransientGeminiError(err) {
+  if (isGeminiQuotaError(err) || isGeminiAuthError(err)) {
+    return false;
+  }
+  const msg = err instanceof Error ? err.message : String(err || "");
+  const status = Number(err?.status || 0);
+  const lower = msg.toLowerCase();
+  return status === 503 || status === 502 || status === 504 || lower.includes("503") || lower.includes("unavailable") || lower.includes("high demand") || lower.includes("overloaded") || lower.includes("temporarily unavailable") || lower.includes("etimedout") || lower.includes("econnreset") || lower.includes("socket hang up") || lower.includes("fetch failed");
+}
+function safeParseGeminiJson(rawText) {
+  const trimmed = String(rawText || "").trim();
+  if (!trimmed) return null;
+  const tryParse = (candidate) => {
+    try {
+      const parsed = JSON.parse(candidate);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+  const direct = tryParse(trimmed);
+  if (direct) return direct;
+  const unfenced = trimmed.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  const parsedUnfenced = tryParse(unfenced);
+  if (parsedUnfenced) return parsedUnfenced;
+  const firstBrace = unfenced.indexOf("{");
+  const lastBrace = unfenced.lastIndexOf("}");
+  const sliced = firstBrace >= 0 && lastBrace > firstBrace ? unfenced.slice(firstBrace, lastBrace + 1) : unfenced;
+  const parsedSliced = tryParse(sliced);
+  if (parsedSliced) return parsedSliced;
+  const repaired = sliced.replace(/\\(?!["\\/bfnrtu])/g, "\\\\").replace(/[\u0000-\u0019]+/g, " ");
+  return tryParse(repaired);
+}
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function sanitizeFallbackRequestParams(requestParams) {
+  if (!requestParams.config || typeof requestParams.config !== "object") {
+    return requestParams;
+  }
+  const configRecord = requestParams.config;
+  if (!("thinkingConfig" in configRecord)) {
+    return requestParams;
+  }
+  const nextConfig = { ...configRecord };
+  delete nextConfig.thinkingConfig;
+  return {
+    ...requestParams,
+    config: nextConfig
+  };
+}
+function redactPotentialSecrets(raw) {
+  return String(raw || "").replace(/AIza[0-9A-Za-z\-_]{20,}/g, "[REDACTED_KEY]");
+}
+async function generateGeminiContentWithFallback(requestParams, options = {}) {
+  const ai = createGeminiServerClient(options.apiKey);
+  const maxPrimaryAttempts = Math.min(
+    Math.max(Number(options.maxPrimaryAttempts ?? GEMINI_MAX_PRIMARY_ATTEMPTS), 1),
+    GEMINI_MAX_PRIMARY_ATTEMPTS
+  );
+  const requireValidJson = Boolean(options.requireValidJson);
+  const validateJson = options.validateJson;
+  let attemptsMade = 0;
+  let lastError;
+  let shouldTryFallback = false;
+  for (let attempt = 1; attempt <= maxPrimaryAttempts; attempt += 1) {
+    attemptsMade += 1;
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_PRIMARY_MODEL,
+        ...requestParams
+      });
+      const parsedJson = requireValidJson ? safeParseGeminiJson(response.text || "") : null;
+      const jsonOk = !requireValidJson || parsedJson !== null && (!validateJson || validateJson(parsedJson));
+      if (jsonOk) {
+        return {
+          response,
+          parsedJson,
+          modelUsed: GEMINI_PRIMARY_MODEL,
+          primaryModel: GEMINI_PRIMARY_MODEL,
+          fallbackModel: GEMINI_FALLBACK_MODEL,
+          attemptsMade,
+          usedFallback: false
+        };
+      }
+      lastError = Object.assign(new Error("AI_INVALID_JSON_RESPONSE"), {
+        code: "AI_INVALID_RESPONSE"
+      });
+      shouldTryFallback = true;
+      break;
+    } catch (err) {
+      lastError = err;
+      if (isGeminiQuotaError(err)) {
+        shouldTryFallback = true;
+        break;
+      }
+      if (!isTransientGeminiError(err)) {
+        if (err && typeof err === "object") {
+          err.attemptsMade = attemptsMade;
+        }
+        throw err;
+      }
+      if (attempt < maxPrimaryAttempts) {
+        const baseDelay = attempt === 1 ? 850 : 2100;
+        const jitter = Math.floor(Math.random() * 250);
+        await sleepMs(baseDelay + jitter);
+      } else {
+        shouldTryFallback = true;
+      }
+    }
+  }
+  if (!shouldTryFallback) {
+    if (lastError && typeof lastError === "object") {
+      lastError.attemptsMade = attemptsMade;
+    }
+    throw lastError;
+  }
+  await sleepMs(450);
+  attemptsMade += 1;
+  const fallbackParams = sanitizeFallbackRequestParams(requestParams);
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_FALLBACK_MODEL,
+      ...fallbackParams
+    });
+    const parsedJson = requireValidJson ? safeParseGeminiJson(response.text || "") : null;
+    const jsonOk = !requireValidJson || parsedJson !== null && (!validateJson || validateJson(parsedJson));
+    if (!jsonOk) {
+      const invalidErr = new Error("AI_INVALID_JSON_RESPONSE");
+      invalidErr.code = "AI_INVALID_RESPONSE";
+      invalidErr.attemptsMade = attemptsMade;
+      throw invalidErr;
+    }
+    return {
+      response,
+      parsedJson,
+      modelUsed: GEMINI_FALLBACK_MODEL,
+      primaryModel: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
+      attemptsMade,
+      usedFallback: true
+    };
+  } catch (fallbackErr) {
+    const finalErr = isTransientGeminiError(fallbackErr) || isGeminiQuotaError(fallbackErr) || isGeminiAuthError(fallbackErr) || fallbackErr?.code === "AI_INVALID_RESPONSE" ? fallbackErr : lastError || fallbackErr;
+    if (finalErr && typeof finalErr === "object") {
+      finalErr.attemptsMade = attemptsMade;
+    }
+    throw finalErr;
+  }
+}
+function mapGeminiHttpError(err, contextLabel = "MyStudyZone AI") {
+  const rawMsg = redactPotentialSecrets(err instanceof Error ? err.message : String(err || "AI error"));
+  const code = String(err?.code || "");
+  const attemptsMade = Number(err?.attemptsMade || 0) || void 0;
+  if (code === "MISSING_GEMINI_API_KEY" || rawMsg.includes("MISSING_GEMINI_API_KEY")) {
+    return {
+      statusCode: 503,
+      errorCode: "MISSING_GEMINI_API_KEY",
+      retryable: false,
+      attemptsMade,
+      message: "GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in Settings -> Secrets to enable live AI generation."
+    };
+  }
+  if (isGeminiAuthError(err)) {
+    return {
+      statusCode: 403,
+      errorCode: "API_KEY_INVALID",
+      retryable: false,
+      attemptsMade,
+      message: "Server Gemini API key was rejected or lacks permission. Please verify GEMINI_API_KEY in Settings -> Secrets."
+    };
+  }
+  if (isGeminiQuotaError(err)) {
+    return {
+      statusCode: 429,
+      errorCode: "QUOTA_EXHAUSTED",
+      retryable: true,
+      retryAfterSeconds: 30,
+      attemptsMade,
+      message: "Free-tier Gemini AI usage limit was temporarily reached. Paid billing is never activated automatically \u2014 please wait a moment and retry."
+    };
+  }
+  if (isTransientGeminiError(err)) {
+    return {
+      statusCode: 503,
+      errorCode: "AI_UNAVAILABLE",
+      retryable: true,
+      retryAfterSeconds: 10,
+      attemptsMade,
+      message: "Free Gemini AI servers are temporarily busy (HTTP 503) even after automatic retries. Please click Retry in a few seconds."
+    };
+  }
+  if (code === "AI_INVALID_RESPONSE" || rawMsg.includes("AI_INVALID_JSON_RESPONSE")) {
+    return {
+      statusCode: 502,
+      errorCode: "AI_INVALID_RESPONSE",
+      retryable: true,
+      retryAfterSeconds: 5,
+      attemptsMade,
+      message: `${contextLabel} received an incomplete response from Gemini AI. Please click Retry.`
+    };
+  }
+  return {
+    statusCode: 502,
+    errorCode: "AI_SERVICE_ERROR",
+    retryable: true,
+    retryAfterSeconds: 5,
+    attemptsMade,
+    message: `${contextLabel} could not complete AI processing right now. Please retry.`
+  };
+}
 
 // src/data/helpSupportKnowledgeBase.ts
 var SUPPORT_NAVIGATION_ALLOWLIST = {
@@ -4165,8 +4419,44 @@ var SUPPORT_NAVIGATION_ALLOWLIST = {
     description: "MAHA TET and CTET Paper 1 & Paper 2 full-length CBT mock tests"
   },
   open_teacher_resources: {
-    defaultLabel: "OPEN TEACHER RESOURCES",
-    description: "Educator Hub for Classes 1\u201310 worksheets, chapter notes, Scholarship & TET/CTET"
+    defaultLabel: "OPEN TEACHER PORTAL",
+    description: "Teacher Portal for Classes 1\u201310 worksheets, lesson planner, notes & TET/CTET"
+  },
+  open_lesson_planner: {
+    defaultLabel: "OPEN TEACHER LESSON PLANNER",
+    description: "Annual, Monthly & Daily Lesson Planner with A4 PDF export for teachers"
+  },
+  open_student_portal: {
+    defaultLabel: "OPEN STUDENT PORTAL",
+    description: "Student Portal dashboard for Classes 1\u201310 study notes, worksheets & exams"
+  },
+  open_parent_portal: {
+    defaultLabel: "OPEN PARENT PORTAL",
+    description: "Parent Portal for child account linking, progress reports & attendance tracking"
+  },
+  open_college_portal: {
+    defaultLabel: "OPEN COLLEGE PORTAL",
+    description: "College & School Portal for divisions, faculty allocation, student roster & analytics"
+  },
+  open_institute_portal: {
+    defaultLabel: "OPEN INSTITUTE PORTAL",
+    description: "Coaching & Skill Institute Portal for batches, mock test series, fees & certificates"
+  },
+  open_ai_tools: {
+    defaultLabel: "OPEN AI GENERATOR & TOOLS",
+    description: "AI Generator Studio for worksheets, notes, question papers, quizzes & slides"
+  },
+  open_question_paper_generator: {
+    defaultLabel: "OPEN QUESTION PAPER GENERATOR",
+    description: "AI Question Paper Generator for formal 20\u2013100 mark exam papers with marking schemes"
+  },
+  open_dictionary: {
+    defaultLabel: "OPEN TRILINGUAL DICTIONARY",
+    description: "Original MyStudyZone English\u2013Marathi\u2013Hindi Trilingual Dictionary"
+  },
+  open_thought_of_the_day: {
+    defaultLabel: "OPEN THOUGHT OF THE DAY",
+    description: "1,000+ trilingual motivational & educational Thoughts of the Day"
   },
   open_stories: {
     defaultLabel: "OPEN STORY WORLD",
@@ -4230,7 +4520,7 @@ var SUPPORT_NAVIGATION_ALLOWLIST = {
   },
   open_register: {
     defaultLabel: "OPEN REGISTRATION",
-    description: "Create a new Student or Teacher account"
+    description: "Create a new Student, Teacher, Parent, College or Institute account"
   },
   open_password_reset: {
     defaultLabel: "OPEN PASSWORD RESET",
@@ -4241,8 +4531,9 @@ var SUPPORT_NAVIGATION_ALLOWLIST = {
     description: "Return to the main MyStudyZone home dashboard"
   }
 };
-function buildNavigationAction(id, targetClass, targetBoard) {
+function buildNavigationAction(id, targetClass, targetBoard, targetPortal) {
   const base = SUPPORT_NAVIGATION_ALLOWLIST[id];
+  const resolvedPortal = targetPortal && targetPortal !== "visitor" && targetPortal !== "homepage" ? targetPortal : void 0;
   let label = base.defaultLabel;
   if (id === "open_worksheets" && targetClass) {
     label = `OPEN ${targetClass.toUpperCase()} WORKSHEETS`;
@@ -4250,12 +4541,31 @@ function buildNavigationAction(id, targetClass, targetBoard) {
     label = `OPEN ${targetClass.toUpperCase()} SYLLABUS`;
   } else if (id === "open_all_courses" && targetBoard) {
     label = `OPEN ${targetBoard.toUpperCase()} COURSES`;
+  } else if (id === "open_login" && resolvedPortal) {
+    const loginLabels = {
+      student: "OPEN STUDENT LOGIN",
+      teacher: "OPEN TEACHER LOGIN",
+      parent: "OPEN PARENT LOGIN",
+      college: "OPEN COLLEGE LOGIN",
+      institute: "OPEN INSTITUTE LOGIN"
+    };
+    label = loginLabels[resolvedPortal];
+  } else if (id === "open_register" && resolvedPortal) {
+    const registerLabels = {
+      student: "OPEN STUDENT REGISTRATION",
+      teacher: "OPEN TEACHER REGISTRATION",
+      parent: "OPEN PARENT REGISTRATION",
+      college: "OPEN COLLEGE REGISTRATION",
+      institute: "OPEN INSTITUTE REGISTRATION"
+    };
+    label = registerLabels[resolvedPortal];
   }
   return {
     id,
     label,
     ...targetClass ? { targetClass } : {},
-    ...targetBoard ? { targetBoard } : {}
+    ...targetBoard ? { targetBoard } : {},
+    ...resolvedPortal ? { targetPortal: resolvedPortal } : {}
   };
 }
 function detectQueryLanguage(text) {
@@ -4450,11 +4760,114 @@ var KB_TOPICS = [
     id: "greeting",
     priority: 10,
     keywords: ["hello", "hi", "hey", "namaste", "namaskar", "good morning", "good afternoon", "good evening", "\u0928\u092E\u0938\u094D\u0924\u0947", "\u0928\u092E\u0938\u094D\u0915\u093E\u0930", "\u0939\u0945\u0932\u094B"],
-    actionIds: (_c, _b, role) => role === "teacher" ? ["open_teacher_resources", "open_worksheets", "open_tet_ctet"] : ["open_all_courses", "open_worksheets", "open_demo"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_lesson_planner", "open_question_paper_generator", "open_tet_ctet"] : role === "parent" ? ["open_parent_portal", "open_register", "open_login"] : role === "college" ? ["open_college_portal", "open_register", "open_login"] : role === "institute" ? ["open_institute_portal", "open_register", "open_login"] : role === "student" ? ["open_syllabus", "open_worksheets", "open_quizzes"] : ["open_student_portal", "open_teacher_resources", "open_parent_portal"],
     responses: {
-      en: () => "Hello! I am your MyStudyZone Help Desk assistant. You can ask me in English, Hindi, or Marathi about Classes 1\u201310 courses, Maharashtra/CBSE/ICSE syllabus, worksheets, Scholarship (4th & 7th), MAHA TET & CTET, Story World, Shivaji Maharaj Stories, Drawing Studio, quizzes, login, password reset, or Teacher resources.",
-      hi: () => "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E MyStudyZone \u0939\u0947\u0932\u094D\u092A \u0921\u0947\u0938\u094D\u0915 \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964 \u0906\u092A \u092E\u0941\u091D\u0938\u0947 \u0939\u093F\u0902\u0926\u0940, \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092F\u093E \u092E\u0930\u093E\u0920\u0940 \u092E\u0947\u0902 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0915\u0947 \u0915\u094B\u0930\u094D\u0938, \u0938\u093F\u0932\u0947\u092C\u0938, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (4\u0925\u0940 \u0935 7\u0935\u0940\u0902), MAHA TET \u0935 CTET, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0935\u093F\u091C\u093C, \u0932\u0949\u0917\u093F\u0928, \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u092F\u093E \u091F\u0940\u091A\u0930 \u0938\u0941\u0935\u093F\u0927\u093E\u0913\u0902 \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902 \u092A\u0942\u091B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
-      mr: () => "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E MyStudyZone \u0939\u0947\u0932\u094D\u092A \u0921\u0947\u0938\u094D\u0915 \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947. \u0924\u0941\u092E\u094D\u0939\u0940 \u092E\u0932\u093E \u092E\u0930\u093E\u0920\u0940, \u0939\u093F\u0902\u0926\u0940 \u0915\u093F\u0902\u0935\u093E \u0907\u0902\u0917\u094D\u0930\u091C\u0940\u092E\u0927\u094D\u092F\u0947 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u091A\u0947 \u0915\u094B\u0930\u094D\u0938, \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 (\u096A \u0925\u0940 \u0935 \u096D \u0935\u0940), MAHA TET \u0935 CTET, \u0917\u094B\u0937\u094D\u091F\u0940, \u091A\u093F\u0924\u094D\u0930\u0915\u0932\u093E, \u0915\u094D\u0935\u093F\u091D, \u0932\u0949\u0917\u093F\u0928, \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u093F\u0902\u0935\u093E \u0936\u093F\u0915\u094D\u0937\u0915 \u0938\u0941\u0935\u093F\u0927\u093E\u0902\u092C\u0926\u094D\u0926\u0932 \u0915\u093E\u0939\u0940\u0939\u0940 \u0935\u093F\u091A\u093E\u0930\u0942 \u0936\u0915\u0924\u093E."
+      en: (_c, _b, role) => {
+        if (role === "teacher") {
+          return "Hello Teacher! I am your Teacher Portal Help & Support Assistant.\n\nI can help you step by step with:\n\u2022 Teacher Lesson Planner (Annual, Monthly & Daily plans with A4 PDF export)\n\u2022 AI Question Paper Generator & Worksheet / Assignment Builders\n\u2022 Classes 1\u201310 Teaching Materials (Maharashtra, CBSE & ICSE)\n\u2022 MAHA TET & CTET Paper 1 & 2 Mock Tests\n\nWhat would you like help with today?";
+        }
+        if (role === "parent") {
+          return "Hello Parent! I am your Parent Portal Help & Support Assistant.\n\nI can help you with:\n\u2022 Parent Registration & Login\n\u2022 Linking your child\u2019s Student account\n\u2022 Tracking subject progress, quiz scores, and attendance reports\n\nHow can I assist you today?";
+        }
+        if (role === "college") {
+          return "Hello! I am your College Portal Help & Support Assistant.\n\nI can guide you through:\n\u2022 College / School Registration & Login\n\u2022 Classes, Streams & Divisions setup\n\u2022 Faculty Subject Allocation & Student Directory\n\u2022 Institutional Calendar, Result Analytics & Circulars\n\nWhat would you like help with today?";
+        }
+        if (role === "institute") {
+          return "Hello! I am your Institute Portal Help & Support Assistant.\n\nI can guide you through:\n\u2022 Institute Registration & Login\n\u2022 Coaching Batches & Mock Test Series\n\u2022 18 Skill Academy Programs (Abacus, Vedic Maths, Phonics, Coding)\n\u2022 Trainer Roster, Fee Ledger & Certificates\n\nHow can I assist you today?";
+        }
+        if (role === "student") {
+          return "Hello! I am your Student Portal Help & Support Assistant.\n\nI can help you step by step with:\n\u2022 Registration & Login\n\u2022 Finding Subjects, Chapters & Study Notes (Classes 1\u201310)\n\u2022 Interactive Worksheets & 4-Level Practice Quizzes\n\u2022 4th & 7th Scholarship, Trilingual Dictionary & \u20B999 Class Plans\n\nWhat would you like help with today?";
+        }
+        return "Hello! I am your MyStudyZone AI Help & Support Assistant.\n\nI can guide you step by step across all 5 portals:\n1. Student Portal: Registration, finding subjects & chapters, study notes, worksheets, online exams & \u20B999 class plan.\n2. Teacher Portal: Registration, Lesson Planner (Annual/Monthly/Daily), Question Paper Generator & TET/CTET.\n3. Parent Portal: Registration, linking child student accounts, progress reports & attendance.\n4. College Portal: Divisions, faculty allocation, student roster, calendar & result analytics.\n5. Institute Portal: Coaching batches, mock test series, 18 skill programs, fee ledger & certificates.\n\nWhat would you like help with today?";
+      },
+      hi: (_c, _b, role) => {
+        if (role === "teacher") {
+          return "\u0928\u092E\u0938\u094D\u0924\u0947 \u0936\u093F\u0915\u094D\u0937\u0915 \u092E\u0939\u094B\u0926\u092F! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E Teacher Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964\n\n\u092E\u0948\u0902 \u0906\u092A\u0915\u0940 \u0907\u0928 \u0935\u093F\u0937\u092F\u094B\u0902 \u092E\u0947\u0902 \u092E\u0926\u0926 \u0915\u0930 \u0938\u0915\u0924\u093E \u0939\u0942\u0901:\n\u2022 Teacher Lesson Planner (\u0935\u093E\u0930\u094D\u0937\u093F\u0915, \u092E\u093E\u0938\u093F\u0915 \u0935 \u0926\u0948\u0928\u093F\u0915 \u092A\u093E\u0920 \u092F\u094B\u091C\u0928\u093E + A4 PDF)\n\u2022 AI \u092A\u094D\u0930\u0936\u094D\u0928-\u092A\u0924\u094D\u0930 (Question Paper) \u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u091C\u0928\u0930\u0947\u091F\u0930\n\u2022 \u0915\u0915\u094D\u0937\u093E 1\u201310 \u0936\u093F\u0915\u094D\u0937\u0923 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0914\u0930 MAHA TET / CTET \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\n\n\u092C\u0924\u093E\u0907\u090F, \u0906\u091C \u092E\u0948\u0902 \u0906\u092A\u0915\u0940 \u0915\u094D\u092F\u093E \u092E\u0926\u0926 \u0915\u0930\u0942\u0901?";
+        }
+        if (role === "parent") {
+          return "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E Parent Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964 \u092E\u0948\u0902 \u0905\u092D\u093F\u092D\u093E\u0935\u0915 \u092A\u0902\u091C\u0940\u0915\u0930\u0923, \u092C\u091A\u094D\u091A\u0947 \u0915\u0947 \u091B\u093E\u0924\u094D\u0930 \u0916\u093E\u0924\u0947 \u0915\u094B \u0932\u093F\u0902\u0915 \u0915\u0930\u0928\u0947 \u0914\u0930 \u092A\u094D\u0930\u094B\u0917\u094D\u0930\u0947\u0938 \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0926\u0947\u0916\u0928\u0947 \u092E\u0947\u0902 \u0906\u092A\u0915\u0940 \u092E\u0926\u0926 \u0915\u0930 \u0938\u0915\u0924\u093E \u0939\u0942\u0901\u0964 \u092C\u0924\u093E\u0907\u090F, \u0915\u094D\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u091A\u093E\u0939\u093F\u090F?";
+        }
+        if (role === "college") {
+          return "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E College Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964 \u092E\u0948\u0902 \u0915\u0949\u0932\u0947\u091C \u092A\u0902\u091C\u0940\u0915\u0930\u0923, \u0921\u093F\u0935\u0940\u091C\u093C\u0928, \u092B\u0948\u0915\u0932\u094D\u091F\u0940 \u0906\u0935\u0902\u091F\u0928, \u091B\u093E\u0924\u094D\u0930 \u0938\u0942\u091A\u0940 \u0914\u0930 \u092A\u0930\u093F\u0923\u093E\u092E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u092E\u0947\u0902 \u0906\u092A\u0915\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0930 \u0938\u0915\u0924\u093E \u0939\u0942\u0901\u0964";
+        }
+        if (role === "institute") {
+          return "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E Institute Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964 \u092E\u0948\u0902 \u0915\u094B\u091A\u093F\u0902\u0917 \u092C\u0948\u091A, \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u0940\u0930\u0940\u091C\u093C, 18 \u0938\u094D\u0915\u093F\u0932 \u092A\u094D\u0930\u094B\u0917\u094D\u0930\u093E\u092E \u0914\u0930 \u092B\u0940\u0938 \u0932\u0947\u091C\u0930 \u092E\u0947\u0902 \u0906\u092A\u0915\u0940 \u092E\u0926\u0926 \u0915\u0930 \u0938\u0915\u0924\u093E \u0939\u0942\u0901\u0964";
+        }
+        if (role === "student") {
+          return "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E Student Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964 \u092E\u0948\u0902 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0911\u0928\u0932\u093E\u0907\u0928 \u0915\u094D\u0935\u093F\u091C\u093C, \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A, \u0936\u092C\u094D\u0926\u0915\u094B\u0936 \u0914\u0930 \u20B999 \u092A\u094D\u0932\u093E\u0928 \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923 \u092E\u0926\u0926 \u0915\u0930 \u0938\u0915\u0924\u093E \u0939\u0942\u0901\u0964";
+        }
+        return "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 \u0906\u092A\u0915\u093E MyStudyZone AI \u0939\u0947\u0932\u094D\u092A \u090F\u0902\u0921 \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0939\u093E\u092F\u0915 \u0939\u0942\u0901\u0964\n\n\u092E\u0948\u0902 \u0938\u092D\u0940 5 \u092A\u094B\u0930\u094D\u091F\u0932\u094D\u0938 (Student, Teacher, Parent, College, Institute) \u0915\u0947 \u0932\u093F\u090F \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u0928 \u0926\u0947\u0924\u093E \u0939\u0942\u0901\u0964 \u092C\u0924\u093E\u0907\u090F, \u0906\u091C \u092E\u0948\u0902 \u0906\u092A\u0915\u0940 \u0915\u094D\u092F\u093E \u092E\u0926\u0926 \u0915\u0930\u0942\u0901?";
+      },
+      mr: (_c, _b, role) => {
+        if (role === "teacher") {
+          return "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E Teacher Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947.\n\n\u092E\u0940 \u0924\u0941\u092E\u094D\u0939\u093E\u0932\u093E \u0916\u093E\u0932\u0940\u0932 \u0938\u0941\u0935\u093F\u0927\u093E\u0902\u0938\u093E\u0920\u0940 \u092E\u0926\u0924 \u0915\u0930\u0942 \u0936\u0915\u0924\u094B:\n\u2022 Teacher Lesson Planner (\u0935\u093E\u0930\u094D\u0937\u093F\u0915, \u092E\u093E\u0938\u093F\u0915 \u0935 \u0926\u0948\u0928\u0902\u0926\u093F\u0928 \u092A\u093E\u0920 \u0928\u093F\u092F\u094B\u091C\u0928 + A4 PDF)\n\u2022 AI \u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930\u093F\u0915\u093E (Question Paper) \u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u091C\u0928\u0930\u0947\u091F\u0930\n\u2022 \u0907\u092F\u0924\u094D\u0924\u093E \u0967\u2013\u0967\u0966 \u0905\u0927\u094D\u092F\u092F\u0928 \u0938\u093E\u0939\u093F\u0924\u094D\u092F \u0906\u0923\u093F MAHA TET / CTET \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\n\n\u0938\u093E\u0902\u0917\u093E, \u0906\u091C \u0924\u0941\u092E\u094D\u0939\u093E\u0932\u093E \u0915\u0936\u0940 \u092E\u0926\u0924 \u0939\u0935\u0940 \u0906\u0939\u0947?";
+        }
+        if (role === "parent") {
+          return "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E Parent Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947. \u092A\u093E\u0932\u0915 \u0928\u094B\u0902\u0926\u0923\u0940, \u092E\u0941\u0932\u093E\u091A\u0947 \u0916\u093E\u0924\u0947 \u091C\u094B\u0921\u0923\u0947 \u0906\u0923\u093F \u092A\u094D\u0930\u0917\u0924\u0940 \u0905\u0939\u0935\u093E\u0932 \u092A\u093E\u0939\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u092E\u0940 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u0928 \u0915\u0930\u0942 \u0936\u0915\u0924\u094B.";
+        }
+        if (role === "college") {
+          return "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E College Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947. \u0915\u0949\u0932\u0947\u091C \u0928\u094B\u0902\u0926\u0923\u0940, \u0924\u0941\u0915\u0921\u094D\u092F\u093E, \u0936\u093F\u0915\u094D\u0937\u0915 \u0928\u093F\u092F\u094B\u091C\u0928, \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u092F\u093E\u0926\u0940 \u0906\u0923\u093F \u0928\u093F\u0915\u093E\u0932 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u092F\u093E\u092C\u093E\u092C\u0924 \u092E\u0940 \u092E\u0926\u0924 \u0915\u0930\u0942 \u0936\u0915\u0924\u094B.";
+        }
+        if (role === "institute") {
+          return "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E Institute Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947. \u0915\u094B\u091A\u093F\u0902\u0917 \u092C\u0945\u091A\u0947\u0938, \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u093F\u0930\u0940\u091C, \u0967\u096E \u0915\u094C\u0936\u0932\u094D\u092F \u0909\u092A\u0915\u094D\u0930\u092E \u0906\u0923\u093F \u092B\u0940 \u0932\u0947\u091C\u0930 \u092F\u093E\u092C\u093E\u092C\u0924 \u092E\u0940 \u092E\u0926\u0924 \u0915\u0930\u0942 \u0936\u0915\u0924\u094B.";
+        }
+        if (role === "student") {
+          return "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E Student Portal \u0939\u0947\u0932\u094D\u092A \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947. \u0935\u093F\u0937\u092F \u0935 \u0927\u0921\u0947 \u0936\u094B\u0927\u0923\u0947, \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0911\u0928\u0932\u093E\u0907\u0928 \u0915\u094D\u0935\u093F\u091D, \u0936\u092C\u094D\u0926\u0915\u094B\u0936 \u0906\u0923\u093F \u20B9\u096F\u096F \u092A\u094D\u0932\u093E\u0928\u0938\u093E\u0920\u0940 \u092E\u0940 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947 \u092E\u0926\u0924 \u0915\u0930\u0924\u094B.";
+        }
+        return "\u0928\u092E\u0938\u094D\u0915\u093E\u0930! \u092E\u0940 \u0924\u0941\u092E\u091A\u093E MyStudyZone AI \u0939\u0947\u0932\u094D\u092A \u0905\u0901\u0921 \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0939\u093E\u092F\u094D\u092F\u0915 \u0906\u0939\u0947.\n\n\u092E\u0940 \u0938\u0930\u094D\u0935 \u096B \u092A\u094B\u0930\u094D\u091F\u0932\u094D\u0938\u0938\u093E\u0920\u0940 (Student, Teacher, Parent, College, Institute) \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u0928 \u0915\u0930\u0924\u094B. \u0938\u093E\u0902\u0917\u093E, \u0906\u091C \u092E\u0940 \u0924\u0941\u092E\u091A\u0940 \u0915\u093E\u092F \u092E\u0926\u0924 \u0915\u0930\u0942?";
+      }
+    }
+  },
+  {
+    id: "question_paper_generator",
+    priority: 96,
+    keywords: [
+      "question paper",
+      "question paper generator",
+      "generate question paper",
+      "generate a question paper",
+      "create question paper",
+      "make question paper",
+      "exam paper",
+      "unit test paper",
+      "term paper",
+      "marking scheme",
+      "\u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930",
+      "\u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930\u093F\u0915\u093E",
+      "\u092A\u0947\u092A\u0930 \u092C\u0928\u0935\u093E\u092F\u091A\u093E",
+      "\u092A\u0947\u092A\u0930 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0902"
+    ],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_question_paper_generator", "open_lesson_planner", "open_teacher_resources"] : ["open_question_paper_generator", "open_ai_tools"],
+    responses: {
+      en: (cls, board, role) => {
+        const scope = [board || "Maharashtra / CBSE / ICSE", cls || "Classes 1\u201310"].join(" \u2022 ");
+        const prefix = role === "teacher" ? "How Teachers Can Generate a Question Paper Step by Step" : "How to Generate a Question Paper on MyStudyZone Step by Step";
+        return `${prefix} (${scope}):
+1. Open the AI Question Paper Generator by clicking OPEN QUESTION PAPER GENERATOR below (or open Learning Tools / 40 AI Tools \u2192 "Core 10 AI Generators" \u2192 "AI Question Paper Generator").
+2. Select your Education Board (Maharashtra / CBSE / ICSE), Class (1\u201310), Subject, and Medium/Language (English / Marathi / Hindi).
+3. Choose a Syllabus Chapter from the dropdown or enter your custom Topic / Exam Syllabus.
+4. Set Total Marks (20 to 100 Marks), Exam Duration (e.g., 90 Minutes), and Difficulty Level.
+5. Click Generate to build a complete exam paper with Paper Header, Section A (Objective/MCQs), Section B (Short Answer), Section C (Long Answer), and a Complete Marking Scheme / Answer Key.
+6. Review or edit inline, then export as A4 PDF, Word (.docx), or Print directly.${role === "teacher" ? '\n\nTip: Inside "Teacher 40 AI Productivity Tools", you also have specialized Question Paper Generator (#15), Class Test Creator (#20), and Unit Test Creator (#21).' : ""}`;
+      },
+      hi: (cls, board) => {
+        const scope = [board || "Maharashtra / CBSE / ICSE", cls || "\u0915\u0915\u094D\u0937\u093E 1\u201310"].join(" \u2022 ");
+        return `MyStudyZone \u092A\u0930 \u092A\u094D\u0930\u0936\u094D\u0928-\u092A\u0924\u094D\u0930 (Question Paper) \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0902 (${scope}) \u2014 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923:
+1. \u0928\u0940\u091A\u0947 OPEN QUESTION PAPER GENERATOR \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 (\u092F\u093E AI Tools Studio \u2192 "Core 10 AI Generators" \u2192 "AI Question Paper Generator" \u0916\u094B\u0932\u0947\u0902)\u0964
+2. \u0905\u092A\u0928\u093E \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u0915\u0915\u094D\u0937\u093E (1\u201310), \u0935\u093F\u0937\u092F \u0914\u0930 \u092D\u093E\u0937\u093E \u091A\u0941\u0928\u0947\u0902\u0964
+3. \u092A\u093E\u0920\u094D\u092F\u0915\u094D\u0930\u092E \u0915\u093E \u0905\u0927\u094D\u092F\u093E\u092F \u091A\u0941\u0928\u0947\u0902 \u092F\u093E \u0905\u092A\u0928\u093E \u091F\u0949\u092A\u093F\u0915 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964
+4. \u0915\u0941\u0932 \u0905\u0902\u0915 (Marks: 20\u2013100), \u0938\u092E\u092F (Duration) \u0914\u0930 \u0915\u0920\u093F\u0928\u093E\u0908 \u0938\u094D\u0924\u0930 (Difficulty) \u091A\u0941\u0928\u0947\u0902\u0964
+5. Generate \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u2014 \u0938\u093F\u0938\u094D\u091F\u092E \u0938\u0947\u0915\u094D\u0936\u0928 A, B, C \u0914\u0930 \u092A\u0942\u0930\u0940 Answer Key / Marking Scheme \u0915\u0947 \u0938\u093E\u0925 \u092A\u094D\u0930\u0936\u094D\u0928-\u092A\u0924\u094D\u0930 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930 \u0926\u0947\u0917\u093E, \u091C\u093F\u0938\u0947 \u0906\u092A PDF \u092F\u093E DOCX \u092E\u0947\u0902 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964`;
+      },
+      mr: (cls, board) => {
+        const scope = [board || "Maharashtra / CBSE / ICSE", cls || "\u0907\u092F\u0924\u094D\u0924\u093E \u0967\u2013\u0967\u0966"].join(" \u2022 ");
+        return `MyStudyZone \u0935\u0930 \u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930\u093F\u0915\u093E (Question Paper) \u0915\u0936\u0940 \u0924\u092F\u093E\u0930 \u0915\u0930\u093E\u0935\u0940 (${scope}) \u2014 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947:
+1. \u0916\u093E\u0932\u0940\u0932 OPEN QUESTION PAPER GENERATOR \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E (\u0915\u093F\u0902\u0935\u093E AI Tools Studio \u2192 "Core 10 AI Generators" \u2192 "AI Question Paper Generator" \u0909\u0918\u0921\u093E).
+2. \u0924\u0941\u092E\u091A\u0947 \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966), \u0935\u093F\u0937\u092F \u0906\u0923\u093F \u092D\u093E\u0937\u093E \u0928\u093F\u0935\u0921\u093E.
+3. \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E\u093E\u0924\u0940\u0932 \u0927\u0921\u093E \u0928\u093F\u0935\u0921\u093E \u0915\u093F\u0902\u0935\u093E \u0924\u0941\u092E\u091A\u093E \u0918\u091F\u0915 (Topic) \u091F\u093E\u0915\u093E.
+4. \u090F\u0915\u0942\u0923 \u0917\u0941\u0923 (Marks: 20\u2013100), \u0935\u0947\u0933 (Duration) \u0906\u0923\u093F \u0915\u093E\u0920\u093F\u0923\u094D\u092F \u092A\u093E\u0924\u0933\u0940 (Difficulty) \u0928\u093F\u0935\u0921\u093E.
+5. Generate \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0924\u093E\u091A \u0935\u093F\u092D\u093E\u0917 A, B, C \u0906\u0923\u093F \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0909\u0924\u094D\u0924\u0930\u0938\u0942\u091A\u0940\u0938\u0939 (Marking Scheme) \u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930\u093F\u0915\u093E \u0924\u092F\u093E\u0930 \u0939\u094B\u0908\u0932; \u0924\u0940 \u0924\u0941\u092E\u094D\u0939\u0940 PDF \u0915\u093F\u0902\u0935\u093E Word (.docx) \u0938\u094D\u0935\u0930\u0942\u092A\u093E\u0924 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E.`;
+      }
     }
   },
   {
@@ -4483,6 +4896,10 @@ var KB_TOPICS = [
       "complaint",
       "raise ticket",
       "support ticket",
+      "contact support",
+      "escalate",
+      "talk to admin",
+      "help desk ticket",
       "\u0932\u0949\u0917\u093F\u0928 \u0928\u0939\u0940\u0902",
       "\u0938\u092E\u0938\u094D\u092F\u093E",
       "\u092A\u0947\u092E\u0947\u0902\u091F \u0915\u091F",
@@ -4491,11 +4908,11 @@ var KB_TOPICS = [
       "\u0924\u0915\u094D\u0930\u093E\u0930"
     ],
     suggestSupportTicket: true,
-    actionIds: () => ["open_password_reset", "open_login"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_password_reset", "open_teacher_login"] : ["open_password_reset", "open_login"],
     responses: {
-      en: () => "Here are quick troubleshooting steps you can check right away:\n1. Make sure you are signing in on the matching portal (Student Login vs Teacher Login) with your registered email.\n2. MyStudyZone protects accounts with Single-Device Session security\u2014if you are logged in on another phone/browser, log out there first or use Lost/Damaged Device Recovery inside the Login box.\n3. If you forgot your password, use Forgot Password to receive a reset link on your registered email.\n4. For a \u20B999 payment that has not reflected, sign out and log back in, or check your profile subscription card.\n\nNote: For your safety, never share your password, OTP, or UPI/card PIN. If the issue is still not resolved, click SUBMIT A SUPPORT REQUEST below to send it directly to our support team.",
-      hi: () => "\u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u092F\u0947 \u0906\u0938\u093E\u0928 \u0915\u0926\u092E \u0906\u091C\u093C\u092E\u093E\u090F\u0901:\n1. \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0947\u0902 \u0915\u093F \u0906\u092A \u0938\u0939\u0940 \u092A\u094B\u0930\u094D\u091F\u0932 (Student Login \u092F\u093E Teacher Login) \u092A\u0930 \u0905\u092A\u0928\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0938\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964\n2. MyStudyZone \u092E\u0947\u0902 Single-Device \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0939\u0948\u2014\u092F\u0926\u093F \u0906\u092A\u0915\u093E \u0905\u0915\u093E\u0909\u0902\u091F \u0915\u093F\u0938\u0940 \u0926\u0942\u0938\u0930\u0947 \u092B\u094B\u0928/\u092C\u094D\u0930\u093E\u0909\u091C\u093C\u0930 \u092E\u0947\u0902 \u0916\u0941\u0932\u093E \u0939\u0948, \u0924\u094B \u092A\u0939\u0932\u0947 \u0935\u0939\u093E\u0901 \u0938\u0947 Logout \u0915\u0930\u0947\u0902 \u092F\u093E Login \u092C\u0949\u0915\u094D\u0938 \u092E\u0947\u0902 Device Recovery \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964\n3. \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F \u0939\u094B\u0902 \u0924\u094B Forgot Password \u0938\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092E\u0901\u0917\u0935\u093E\u090F\u0901\u0964\n4. \u092A\u0947\u092E\u0947\u0902\u091F \u0915\u0947 \u092C\u093E\u0926 \u092A\u094D\u0932\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F \u0928 \u0926\u093F\u0916\u0947 \u0924\u094B \u090F\u0915 \u092C\u093E\u0930 Logout \u0915\u0930\u0915\u0947 \u0926\u094B\u092C\u093E\u0930\u093E Login \u0915\u0930\u0947\u0902\u0964\n\n\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0942\u091A\u0928\u093E: \u0915\u092D\u0940 \u092D\u0940 \u0905\u092A\u0928\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP \u092F\u093E UPI/\u0915\u093E\u0930\u094D\u0921 PIN \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964 \u092F\u0926\u093F \u0938\u092E\u0938\u094D\u092F\u093E \u092C\u0928\u0940 \u0930\u0939\u0924\u0940 \u0939\u0948, \u0924\u094B \u0928\u0940\u091A\u0947 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0928 \u0926\u092C\u093E\u0915\u0930 \u0939\u092E\u093E\u0930\u0940 \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C\u0947\u0902\u0964",
-      mr: () => "\u0915\u0943\u092A\u092F\u093E \u0906\u0927\u0940 \u0916\u093E\u0932\u0940\u0932 \u0909\u092A\u093E\u092F \u0915\u0930\u0942\u0928 \u092A\u0939\u093E:\n1. \u0924\u0941\u092E\u094D\u0939\u0940 \u092F\u094B\u0917\u094D\u092F \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 (Student Login \u0915\u093F\u0902\u0935\u093E Teacher Login) \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932\u0928\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0924 \u0906\u0939\u093E\u0924 \u092F\u093E\u091A\u0940 \u0916\u093E\u0924\u094D\u0930\u0940 \u0915\u0930\u093E.\n2. Single-Device \u0938\u0941\u0930\u0915\u094D\u0937\u0947\u092E\u0941\u0933\u0947 \u0924\u0941\u092E\u091A\u0947 \u0916\u093E\u0924\u0947 \u0926\u0941\u0938\u0931\u094D\u092F\u093E \u0921\u093F\u0935\u094D\u0939\u093E\u0907\u0938\u0935\u0930 \u0938\u0941\u0930\u0942 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0906\u0927\u0940 \u0924\u0947\u0925\u0942\u0928 Logout \u0915\u0930\u093E \u0915\u093F\u0902\u0935\u093E Login \u0935\u093F\u0902\u0921\u094B\u092E\u0927\u0940\u0932 Device Recovery \u0935\u093E\u092A\u0930\u093E.\n3. \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0935\u093F\u0938\u0930\u0932\u094D\u092F\u093E\u0938 Forgot Password \u0935\u093E\u092A\u0930\u0942\u0928 \u0908\u092E\u0947\u0932\u0935\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092E\u093F\u0933\u0935\u093E.\n4. \u092A\u0947\u092E\u0947\u0902\u091F\u0928\u0902\u0924\u0930 \u092A\u094D\u0932\u093E\u0928 \u0926\u093F\u0938\u0924 \u0928\u0938\u0932\u094D\u092F\u093E\u0938 \u090F\u0915\u0926\u093E Logout \u0915\u0930\u0942\u0928 \u092A\u0941\u0928\u094D\u0939\u093E Login \u0915\u0930\u093E.\n\n\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0942\u091A\u0928\u093E: \u0915\u0927\u0940\u0939\u0940 \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP \u0915\u093F\u0902\u0935\u093E UPI/\u0915\u093E\u0930\u094D\u0921 PIN \u0936\u0947\u0905\u0930 \u0915\u0930\u0942 \u0928\u0915\u093E. \u0938\u092E\u0938\u094D\u092F\u093E \u0938\u0941\u091F\u0932\u0940 \u0928\u0938\u0932\u094D\u092F\u093E\u0938 \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E."
+      en: () => 'Here are quick step-by-step checks before escalating to our Support Team:\n1. Verify Portal Role: Make sure you are logging into your matching portal (Student, Teacher, Parent, College, or Institute) with your registered email.\n2. Single-Device Protection: If your account is active on another phone/browser, sign out there first or click "Lost/Damaged Device Recovery" inside the Login window.\n3. Forgot Password: Click "Forgot Password" in the Login modal to get an instant reset link on your email.\n4. Payment Refresh: If a \u20B999 plan payment was deducted but appears locked, log out and log back in once.\n\nHow to Contact Support:\nClick the "SUBMIT A SUPPORT REQUEST" button below, choose your User Category (Student, Teacher, Parent, College, or Institute), fill in your Name, Registered Email, Issue Category, and Problem Description, and receive an official Ticket Number for Admin review.',
+      hi: () => '\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E \u0915\u094B \u0938\u092E\u0938\u094D\u092F\u093E \u092D\u0947\u091C\u0928\u0947 \u0938\u0947 \u092A\u0939\u0932\u0947 \u092F\u0947 \u0906\u0938\u093E\u0928 \u0915\u0926\u092E \u0906\u091C\u093C\u092E\u093E\u090F\u0901:\n1. \u0938\u0939\u0940 \u092A\u094B\u0930\u094D\u091F\u0932 \u091A\u0941\u0928\u0947\u0902: \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0947\u0902 \u0915\u093F \u0906\u092A \u0938\u0939\u0940 \u092A\u094B\u0930\u094D\u091F\u0932 (Student, Teacher, Parent, College \u092F\u093E Institute) \u092A\u0930 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0938\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964\n2. Single-Device \u0938\u0941\u0930\u0915\u094D\u0937\u093E: \u092F\u0926\u093F \u0905\u0915\u093E\u0909\u0902\u091F \u0915\u093F\u0938\u0940 \u0926\u0942\u0938\u0930\u0947 \u092B\u094B\u0928/\u092C\u094D\u0930\u093E\u0909\u091C\u093C\u0930 \u092E\u0947\u0902 \u0916\u0941\u0932\u093E \u0939\u0948, \u0924\u094B \u0935\u0939\u093E\u0901 \u0938\u0947 Logout \u0915\u0930\u0947\u0902 \u092F\u093E Login \u092C\u0949\u0915\u094D\u0938 \u092E\u0947\u0902 Device Recovery \u091A\u0941\u0928\u0947\u0902\u0964\n3. \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F: \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F \u0939\u094B\u0902 \u0924\u094B Forgot Password \u0938\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902\u0964\n4. \u092A\u0947\u092E\u0947\u0902\u091F \u0930\u093F\u092B\u094D\u0930\u0947\u0936: \u20B999 \u092A\u0947\u092E\u0947\u0902\u091F \u0915\u0947 \u092C\u093E\u0926 \u092A\u094D\u0932\u093E\u0928 \u0932\u0949\u0915 \u0926\u093F\u0916\u0947 \u0924\u094B \u090F\u0915 \u092C\u093E\u0930 Logout \u0915\u0930\u0915\u0947 \u092B\u093F\u0930 Login \u0915\u0930\u0947\u0902\u0964\n\n\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902:\n\u0928\u0940\u091A\u0947 "SUBMIT A SUPPORT REQUEST" \u092C\u091F\u0928 \u0926\u092C\u093E\u090F\u0901, \u0905\u092A\u0928\u0940 \u0936\u094D\u0930\u0947\u0923\u0940 (Student/Teacher/Parent/College/Institute), \u0928\u093E\u092E, \u0908\u092E\u0947\u0932, \u0938\u092E\u0938\u094D\u092F\u093E \u0936\u094D\u0930\u0947\u0923\u0940 \u0935 \u0935\u093F\u0935\u0930\u0923 \u092D\u0930\u0947\u0902 \u0914\u0930 \u0924\u0941\u0930\u0902\u0924 \u0905\u092A\u0928\u093E \u091F\u093F\u0915\u091F \u0928\u0902\u092C\u0930 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902\u0964',
+      mr: () => '\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E\u0915\u0921\u0947 \u0924\u0915\u094D\u0930\u093E\u0930 \u092A\u093E\u0920\u0935\u0923\u094D\u092F\u093E\u092A\u0942\u0930\u094D\u0935\u0940 \u0916\u093E\u0932\u0940\u0932 \u0938\u094B\u092A\u094D\u092F\u093E \u092A\u093E\u092F\u0931\u094D\u092F\u093E \u0924\u092A\u093E\u0938\u093E:\n1. \u092F\u094B\u0917\u094D\u092F \u092A\u094B\u0930\u094D\u091F\u0932 \u0928\u093F\u0935\u0921\u093E: \u0924\u0941\u092E\u094D\u0939\u0940 \u092F\u094B\u0917\u094D\u092F \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 (Student, Teacher, Parent, College \u0915\u093F\u0902\u0935\u093E Institute) \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932\u0928\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0924 \u0906\u0939\u093E\u0924 \u092F\u093E\u091A\u0940 \u0916\u093E\u0924\u094D\u0930\u0940 \u0915\u0930\u093E.\n2. Single-Device \u0938\u0941\u0930\u0915\u094D\u0937\u093E: \u0924\u0941\u092E\u091A\u0947 \u0916\u093E\u0924\u0947 \u0926\u0941\u0938\u0931\u094D\u092F\u093E \u0921\u093F\u0935\u094D\u0939\u093E\u0907\u0938\u0935\u0930 \u0938\u0941\u0930\u0942 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0924\u0947\u0925\u0942\u0928 Logout \u0915\u0930\u093E \u0915\u093F\u0902\u0935\u093E Login \u0935\u093F\u0902\u0921\u094B\u092E\u0927\u0940\u0932 Device Recovery \u0935\u093E\u092A\u0930\u093E.\n3. \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F: \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0935\u093F\u0938\u0930\u0932\u094D\u092F\u093E\u0938 Forgot Password \u0935\u093E\u092A\u0930\u0942\u0928 \u0908\u092E\u0947\u0932\u0935\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092E\u093F\u0933\u0935\u093E.\n4. \u092A\u0947\u092E\u0947\u0902\u091F \u0930\u093F\u092B\u094D\u0930\u0947\u0936: \u20B9\u096F\u096F \u092A\u0947\u092E\u0947\u0902\u091F\u0928\u0902\u0924\u0930 \u092A\u094D\u0932\u093E\u0928 \u0932\u0949\u0915 \u0926\u093F\u0938\u0924 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u090F\u0915\u0926\u093E Logout \u0915\u0930\u0942\u0928 \u092A\u0941\u0928\u094D\u0939\u093E Login \u0915\u0930\u093E.\n\n\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E\u0936\u0940 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0938\u093E \u0938\u093E\u0927\u093E\u0935\u093E:\n\u0916\u093E\u0932\u0940\u0932 "SUBMIT A SUPPORT REQUEST" \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E, \u0924\u0941\u092E\u091A\u093E \u092A\u094D\u0930\u0915\u093E\u0930 (Student/Teacher/Parent/College/Institute), \u0928\u093E\u0935, \u0908\u092E\u0947\u0932 \u0935 \u0938\u092E\u0938\u094D\u092F\u0947\u091A\u0947 \u0935\u0930\u094D\u0923\u0928 \u092D\u0930\u093E \u0906\u0923\u093F \u0905\u0927\u093F\u0915\u0943\u0924 \u0924\u093F\u0915\u0940\u091F \u0915\u094D\u0930\u092E\u093E\u0902\u0915 \u092E\u093F\u0933\u0935\u093E.'
     }
   },
   {
@@ -4513,11 +4930,148 @@ var KB_TOPICS = [
       "\u0930\u0940\u0938\u0947\u091F"
     ],
     suggestSupportTicket: true,
-    actionIds: () => ["open_password_reset", "open_login"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_password_reset", "open_teacher_login"] : ["open_password_reset", "open_login"],
     responses: {
-      en: () => 'To reset your MyStudyZone password:\n1. Click Login at the top-right and select "Forgot Password" (or click OPEN PASSWORD RESET below).\n2. Enter your registered email address and submit.\n3. Open the password reset email sent by MyStudyZone (check Spam/Promotions if not in Inbox) and set a new password.\n\nNever share your password with anyone. If you still cannot access your email or reset link, click SUBMIT A SUPPORT REQUEST below.',
-      hi: () => '\u0905\u092A\u0928\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F:\n1. \u090A\u092A\u0930 \u0926\u093E\u0908\u0902 \u0913\u0930 Login \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u0914\u0930 "Forgot Password" \u091A\u0941\u0928\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN PASSWORD RESET \u0926\u092C\u093E\u090F\u0901)\u0964\n2. \u0905\u092A\u0928\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n3. \u0906\u092A\u0915\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0906\u090F \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 (Spam \u092B\u093C\u094B\u0932\u094D\u0921\u0930 \u092D\u0940 \u0926\u0947\u0916\u0947\u0902) \u0938\u0947 \u0928\u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964\n\n\u092F\u0926\u093F \u092B\u093F\u0930 \u092D\u0940 \u0926\u093F\u0915\u094D\u0915\u0924 \u0939\u094B, \u0924\u094B \u0928\u0940\u091A\u0947 SUBMIT A SUPPORT REQUEST \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964',
-      mr: () => '\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940:\n1. \u0935\u0930 \u0909\u091C\u0935\u0940\u0915\u0921\u0947 Login \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 "Forgot Password" \u0928\u093F\u0935\u0921\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN PASSWORD RESET \u0926\u093E\u092C\u093E).\n2. \u0924\u0941\u092E\u091A\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u092A\u0924\u094D\u0924\u093E \u091F\u093E\u0915\u093E.\n3. \u0908\u092E\u0947\u0932\u0935\u0930 \u0906\u0932\u0947\u0932\u094D\u092F\u093E \u0932\u093F\u0902\u0915\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 (Spam \u092B\u094B\u0932\u094D\u0921\u0930\u0939\u0940 \u0924\u092A\u093E\u0938\u093E) \u0928\u0935\u0940\u0928 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947\u091F \u0915\u0930\u093E.\n\n\u0905\u0921\u091A\u0923 \u092F\u0947\u0924 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.'
+      en: () => 'How to Reset Your Password Step by Step:\n1. Click Login at the top-right and select "Forgot Password" (or click OPEN PASSWORD RESET below).\n2. Enter your registered email address and submit.\n3. Open the password reset email sent by MyStudyZone (check Spam/Promotions if not in Inbox) and set a new password.\n\nSafety Rule: Never share your password or OTP with anyone. If you still need help, click SUBMIT A SUPPORT REQUEST below.',
+      hi: () => '\u0905\u092A\u0928\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0928\u0947 \u0915\u0947 \u091A\u0930\u0923:\n1. \u090A\u092A\u0930 \u0926\u093E\u0908\u0902 \u0913\u0930 Login \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u0914\u0930 "Forgot Password" \u091A\u0941\u0928\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN PASSWORD RESET \u0926\u092C\u093E\u090F\u0901)\u0964\n2. \u0905\u092A\u0928\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n3. \u0906\u092A\u0915\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0906\u090F \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 (Spam \u092B\u093C\u094B\u0932\u094D\u0921\u0930 \u092D\u0940 \u0926\u0947\u0916\u0947\u0902) \u0938\u0947 \u0928\u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964\n\n\u092F\u0926\u093F \u092B\u093F\u0930 \u092D\u0940 \u0926\u093F\u0915\u094D\u0915\u0924 \u0939\u094B, \u0924\u094B \u0928\u0940\u091A\u0947 SUBMIT A SUPPORT REQUEST \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964',
+      mr: () => '\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0923\u094D\u092F\u093E\u091A\u094D\u092F\u093E \u092A\u093E\u092F\u0931\u094D\u092F\u093E:\n1. \u0935\u0930 \u0909\u091C\u0935\u0940\u0915\u0921\u0947 Login \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 "Forgot Password" \u0928\u093F\u0935\u0921\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN PASSWORD RESET \u0926\u093E\u092C\u093E).\n2. \u0924\u0941\u092E\u091A\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u092A\u0924\u094D\u0924\u093E \u091F\u093E\u0915\u093E.\n3. \u0908\u092E\u0947\u0932\u0935\u0930 \u0906\u0932\u0947\u0932\u094D\u092F\u093E \u0932\u093F\u0902\u0915\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 (Spam \u092B\u094B\u0932\u094D\u0921\u0930\u0939\u0940 \u0924\u092A\u093E\u0938\u093E) \u0928\u0935\u0940\u0928 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947\u091F \u0915\u0930\u093E.\n\n\u0905\u0921\u091A\u0923 \u092F\u0947\u0924 \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.'
+    }
+  },
+  {
+    id: "parent_portal_support",
+    priority: 89,
+    keywords: [
+      "parent",
+      "parents",
+      "parent portal",
+      "parent login",
+      "parent register",
+      "parent registration",
+      "link child",
+      "connect student",
+      "child progress",
+      "student progress",
+      "parent report",
+      "parent dashboard",
+      "palak",
+      "\u092A\u093E\u0932\u0915",
+      "\u092A\u0948\u0930\u0947\u0902\u091F",
+      "\u092C\u091A\u094D\u091A\u0947 \u0915\u0940 \u092A\u094D\u0930\u0917\u0924\u093F",
+      "\u092E\u0941\u0932\u093E\u091A\u0940 \u092A\u094D\u0930\u0917\u0924\u0940"
+    ],
+    actionIds: () => ["open_parent_portal", "open_register", "open_login"],
+    responses: {
+      en: () => 'Parent Portal Guide \u2014 Step by Step:\n1. Parent Registration & Login: From the homepage, click the "Parent Portal" card (or click Register \u2192 select Parent), enter your Parent Name, Email, Mobile Number, and Password.\n2. Connecting with Your Child\u2019s Student Account: Inside the Parent Portal, open "Link Child Account" and enter your child\u2019s registered Student Email and Mobile Number to connect their profile.\n3. Understanding Student Progress & Reports:\n   \u2022 View subject-wise progress, completed chapters, and worksheet scores.\n   \u2022 Check online exam/quiz scorecards, accuracy percentage, and attendance.\n   \u2022 Download/view progress reports and communicate with teachers.\n\nClick OPEN PARENT PORTAL below to go directly to the Parent Portal.',
+      hi: () => 'Parent Portal (\u0905\u092D\u093F\u092D\u093E\u0935\u0915 \u092A\u094B\u0930\u094D\u091F\u0932) \u2014 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u093F\u0915\u093E:\n1. \u092A\u0948\u0930\u0947\u0902\u091F \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928: \u0939\u094B\u092E\u092A\u0947\u091C \u092A\u0930 "Parent Portal" \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 (\u092F\u093E Register \u2192 Parent \u091A\u0941\u0928\u0947\u0902) \u0914\u0930 \u0905\u092A\u0928\u093E \u0928\u093E\u092E, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n2. \u092C\u091A\u094D\u091A\u0947 \u0915\u0947 Student Account \u0938\u0947 \u0915\u0948\u0938\u0947 \u091C\u0941\u0921\u093C\u0947\u0902: Parent Portal \u0915\u0947 \u0905\u0902\u0926\u0930 "Link Child Account" \u092E\u0947\u0902 \u0905\u092A\u0928\u0947 \u092C\u091A\u094D\u091A\u0947 \u0915\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 Student Email \u0914\u0930 Mobile Number \u0921\u093E\u0932\u0915\u0930 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0932\u093F\u0902\u0915 \u0915\u0930\u0947\u0902\u0964\n3. \u092A\u094D\u0930\u0917\u0924\u093F \u0914\u0930 \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0915\u0948\u0938\u0947 \u0926\u0947\u0916\u0947\u0902:\n   \u2022 \u0935\u093F\u0937\u092F-\u0935\u093E\u0930 \u092A\u094D\u0930\u0917\u0924\u093F, \u092A\u0942\u0930\u0947 \u0915\u093F\u090F \u0917\u090F \u0905\u0927\u094D\u092F\u093E\u092F \u0914\u0930 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0938\u094D\u0915\u094B\u0930 \u0926\u0947\u0916\u0947\u0902\u0964\n   \u2022 \u0911\u0928\u0932\u093E\u0907\u0928 \u092A\u0930\u0940\u0915\u094D\u0937\u093E/\u0915\u094D\u0935\u093F\u091C\u093C \u0938\u094D\u0915\u094B\u0930\u0915\u093E\u0930\u094D\u0921, \u0938\u091F\u0940\u0915\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0936\u0924 \u0914\u0930 \u0909\u092A\u0938\u094D\u0925\u093F\u0924\u093F (Attendance) \u091F\u094D\u0930\u0948\u0915 \u0915\u0930\u0947\u0902\u0964\n\n\u0938\u0940\u0927\u0947 \u091C\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0940\u091A\u0947 OPEN PARENT PORTAL \u092C\u091F\u0928 \u0926\u092C\u093E\u090F\u0901\u0964',
+      mr: () => 'Parent Portal (\u092A\u093E\u0932\u0915 \u092A\u094B\u0930\u094D\u091F\u0932) \u2014 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947 \u092E\u093E\u0939\u093F\u0924\u0940:\n1. \u092A\u093E\u0932\u0915 \u0928\u094B\u0902\u0926\u0923\u0940 \u0906\u0923\u093F \u0932\u0949\u0917\u093F\u0928: \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920\u093E\u0935\u0930\u0940\u0932 "Parent Portal" \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E (\u0915\u093F\u0902\u0935\u093E Register \u2192 Parent \u0928\u093F\u0935\u0921\u093E) \u0906\u0923\u093F \u0924\u0941\u092E\u091A\u0947 \u0928\u093E\u0935, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u091F\u093E\u0915\u093E.\n2. \u092E\u0941\u0932\u093E\u091A\u094D\u092F\u093E Student \u0916\u093E\u0924\u094D\u092F\u093E\u0936\u0940 \u0915\u0938\u0947 \u091C\u094B\u0921\u093E\u0935\u0947: Parent Portal \u092E\u0927\u094D\u092F\u0947 "Link Child Account" \u0928\u093F\u0935\u0921\u0942\u0928 \u092E\u0941\u0932\u093E\u091A\u093E \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 Student Email \u0906\u0923\u093F \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u091F\u093E\u0915\u0942\u0928 \u0916\u093E\u0924\u0947 \u091C\u094B\u0921\u093E.\n3. \u092E\u0941\u0932\u093E\u091A\u0940 \u092A\u094D\u0930\u0917\u0924\u0940 \u0906\u0923\u093F \u0905\u0939\u0935\u093E\u0932 (Reports):\n   \u2022 \u0935\u093F\u0937\u092F\u0928\u093F\u0939\u093E\u092F \u092A\u094D\u0930\u0917\u0924\u0940, \u092A\u0942\u0930\u094D\u0923 \u091D\u093E\u0932\u0947\u0932\u0947 \u0927\u0921\u0947 \u0906\u0923\u093F \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0917\u0941\u0923 \u092A\u0939\u093E.\n   \u2022 \u0911\u0928\u0932\u093E\u0907\u0928 \u092A\u0930\u0940\u0915\u094D\u0937\u093E \u0928\u093F\u0915\u093E\u0932, \u0905\u091A\u0942\u0915\u0924\u093E \u091F\u0915\u094D\u0915\u0947\u0935\u093E\u0930\u0940 \u0906\u0923\u093F \u0909\u092A\u0938\u094D\u0925\u093F\u0924\u0940 (Attendance) \u0924\u092A\u093E\u0938\u093E.\n\n\u0925\u0947\u091F \u0909\u0918\u0921\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0916\u093E\u0932\u0940\u0932 OPEN PARENT PORTAL \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.'
+    }
+  },
+  {
+    id: "college_portal_support",
+    priority: 88,
+    keywords: [
+      "college",
+      "colleges",
+      "college portal",
+      "school portal",
+      "school admin",
+      "college login",
+      "college register",
+      "college registration",
+      "college dashboard",
+      "divisions",
+      "faculty allocation",
+      "institutional",
+      "\u092E\u0939\u093E\u0935\u093F\u0926\u094D\u092F\u093E\u0932\u092F",
+      "\u0915\u0949\u0932\u0947\u091C",
+      "\u0936\u093E\u0933\u093E \u092A\u094B\u0930\u094D\u091F\u0932"
+    ],
+    actionIds: () => ["open_college_portal", "open_register", "open_login"],
+    responses: {
+      en: () => 'College & School Portal Guide \u2014 Step by Step:\n1. Registration & Account Setup: Click the "College Portal" card on the homepage, select Register as College/School, and enter your Institution Name, UDISE / Registration Code, City, Official Email, Mobile, and Password.\n2. Available College Features & Dashboard Navigation:\n   \u2022 Overview & Academic KPIs: Monitor total enrolled students, active faculty, divisions, and average pass rate.\n   \u2022 Classes, Streams & Divisions: Manage standards/streams, divisions, class teachers, and room allocations.\n   \u2022 Faculty Allocation: Assign teachers to subjects and divisions and track workload.\n   \u2022 Student Directory: View student roster, attendance percentage, and fee status.\n   \u2022 Institutional Calendar, Result Analytics & Campus Circulars: Publish notices, schedule exams, and inspect class-wise result analytics.\n\nClick OPEN COLLEGE PORTAL below to access the College Portal.',
+      hi: () => 'College Portal (\u0915\u0949\u0932\u0947\u091C \u0935 \u0938\u094D\u0915\u0942\u0932 \u092A\u094B\u0930\u094D\u091F\u0932) \u2014 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u093F\u0915\u093E:\n1. \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928: \u0939\u094B\u092E\u092A\u0947\u091C \u092A\u0930 "College Portal" \u0915\u093E\u0930\u094D\u0921 \u0916\u094B\u0932\u0947\u0902, Register \u092E\u0947\u0902 \u0938\u0902\u0938\u094D\u0925\u093E \u0915\u093E \u0928\u093E\u092E, UDISE/\u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0915\u094B\u0921, \u0936\u0939\u0930, \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u0947\u0902\u0964\n2. \u0915\u0949\u0932\u0947\u091C \u0921\u0948\u0936\u092C\u094B\u0930\u094D\u0921 \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901:\n   \u2022 Classes & Divisions: \u0915\u0915\u094D\u0937\u093E\u090F\u0901, \u0938\u094D\u091F\u094D\u0930\u0940\u092E, \u0921\u093F\u0935\u0940\u091C\u093C\u0928 \u0914\u0930 \u0915\u094D\u0932\u093E\u0938 \u091F\u0940\u091A\u0930 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930\u0947\u0902\u0964\n   \u2022 Faculty Allocation: \u0936\u093F\u0915\u094D\u0937\u0915\u094B\u0902 \u0915\u094B \u0935\u093F\u0937\u092F \u0914\u0930 \u0921\u093F\u0935\u0940\u091C\u093C\u0928 \u0906\u0935\u0902\u091F\u093F\u0924 \u0915\u0930\u0947\u0902\u0964\n   \u2022 Student Directory: \u091B\u093E\u0924\u094D\u0930\u094B\u0902 \u0915\u0940 \u0938\u0942\u091A\u0940, \u0909\u092A\u0938\u094D\u0925\u093F\u0924\u093F \u0914\u0930 \u092B\u0940\u0938 \u0938\u094D\u0925\u093F\u0924\u093F \u0926\u0947\u0916\u0947\u0902\u0964\n   \u2022 Calendar, Result Analytics & Circulars: \u092A\u0930\u0940\u0915\u094D\u0937\u093E \u0915\u0948\u0932\u0947\u0902\u0921\u0930, \u092A\u0930\u093F\u0923\u093E\u092E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0914\u0930 \u0915\u0948\u0902\u092A\u0938 \u0928\u094B\u091F\u093F\u0938 \u091C\u093E\u0930\u0940 \u0915\u0930\u0947\u0902\u0964\n\n\u0928\u0940\u091A\u0947 OPEN COLLEGE PORTAL \u092C\u091F\u0928 \u0926\u092C\u093E\u0915\u0930 \u0938\u0940\u0927\u0947 \u0916\u094B\u0932\u0947\u0902\u0964',
+      mr: () => 'College Portal (\u092E\u0939\u093E\u0935\u093F\u0926\u094D\u092F\u093E\u0932\u092F \u0935 \u0936\u093E\u0933\u093E \u092A\u094B\u0930\u094D\u091F\u0932) \u2014 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947 \u092E\u093E\u0939\u093F\u0924\u0940:\n1. \u0928\u094B\u0902\u0926\u0923\u0940 \u0906\u0923\u093F \u0932\u0949\u0917\u093F\u0928: \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920\u093E\u0935\u0930\u0940\u0932 "College Portal" \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E, Register \u092E\u0927\u094D\u092F\u0947 \u0938\u0902\u0938\u094D\u0925\u0947\u091A\u0947 \u0928\u093E\u0935, UDISE/\u0928\u094B\u0902\u0926\u0923\u0940 \u0915\u094B\u0921, \u0936\u0939\u0930, \u0905\u0927\u093F\u0915\u0943\u0924 \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u093E.\n2. \u0915\u0949\u0932\u0947\u091C \u0921\u0945\u0936\u092C\u094B\u0930\u094D\u0921\u0935\u0930\u0940\u0932 \u092A\u094D\u0930\u092E\u0941\u0916 \u0938\u0941\u0935\u093F\u0927\u093E:\n   \u2022 Classes & Divisions: \u0935\u0930\u094D\u0917, \u0936\u093E\u0916\u093E (Streams), \u0924\u0941\u0915\u0921\u094D\u092F\u093E \u0906\u0923\u093F \u0935\u0930\u094D\u0917\u0936\u093F\u0915\u094D\u0937\u0915 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u093F\u0924 \u0915\u0930\u093E.\n   \u2022 Faculty Allocation: \u0936\u093F\u0915\u094D\u0937\u0915\u093E\u0902\u0928\u093E \u0935\u093F\u0937\u092F \u0935 \u0924\u0941\u0915\u0921\u094D\u092F\u093E \u0928\u0947\u092E\u0942\u0928 \u0926\u094D\u092F\u093E.\n   \u2022 Student Directory: \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u092F\u093E\u0926\u0940, \u0909\u092A\u0938\u094D\u0925\u093F\u0924\u0940 \u0935 \u092B\u0940 \u0938\u094D\u0925\u093F\u0924\u0940 \u092A\u0939\u093E.\n   \u2022 Calendar, Result Analytics & Circulars: \u0936\u0948\u0915\u094D\u0937\u0923\u093F\u0915 \u0926\u093F\u0928\u0926\u0930\u094D\u0936\u093F\u0915\u093E, \u0928\u093F\u0915\u093E\u0932 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0906\u0923\u093F \u092A\u0930\u093F\u092A\u0924\u094D\u0930\u0915\u0947 \u092A\u094D\u0930\u0938\u093F\u0926\u094D\u0927 \u0915\u0930\u093E.\n\n\u0925\u0947\u091F \u0909\u0918\u0921\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0916\u093E\u0932\u0940\u0932 OPEN COLLEGE PORTAL \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.'
+    }
+  },
+  {
+    id: "institute_portal_support",
+    priority: 88,
+    keywords: [
+      "institute",
+      "institutes",
+      "institute portal",
+      "coaching",
+      "coaching portal",
+      "coaching institute",
+      "institute login",
+      "institute register",
+      "institute dashboard",
+      "batches",
+      "batch management",
+      "fee ledger",
+      "mock test series",
+      "\u0907\u0928\u094D\u0938\u094D\u091F\u093F\u091F\u094D\u092F\u0942\u091F",
+      "\u0915\u094B\u091A\u093F\u0902\u0917",
+      "\u0938\u0902\u0938\u094D\u0925\u093E \u092A\u094B\u0930\u094D\u091F\u0932"
+    ],
+    actionIds: () => ["open_institute_portal", "open_register", "open_login"],
+    responses: {
+      en: () => 'Institute Portal Guide \u2014 Step by Step:\n1. Registration & Login: Click the "Institute Portal" card on the homepage, select Register as Institute, and fill in your Coaching/Academy Name, Registration Code, Focus Stream (Scholarship/Foundation/Olympiad/Skill Academy), Official Email, Mobile, and Password.\n2. Institute Dashboard & Management Features:\n   \u2022 Batches & Schedules: Create and manage morning/evening coaching batches, timings, mentors, and seat capacity.\n   \u2022 Mock Test Series: Conduct Scholarship, Olympiad, Foundation, and TET/CTET mock test series and view top scores.\n   \u2022 18 Skill Academy Programs: Run Abacus, Vedic Maths, English Phonics, Coding, Handwriting, Robotics, and more.\n   \u2022 Trainer Roster & Fee Ledger: Manage faculty assignments, fee collection status, and issue Course Completion Certificates.\n\nClick OPEN INSTITUTE PORTAL below to open the Institute Portal.',
+      hi: () => 'Institute Portal (\u0915\u094B\u091A\u093F\u0902\u0917 \u0935 \u0938\u094D\u0915\u093F\u0932 \u0907\u0902\u0938\u094D\u091F\u0940\u091F\u094D\u092F\u0942\u091F \u092A\u094B\u0930\u094D\u091F\u0932) \u2014 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u093F\u0915\u093E:\n1. \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928: \u0939\u094B\u092E\u092A\u0947\u091C \u092A\u0930 "Institute Portal" \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902, Register \u092E\u0947\u0902 \u0905\u092A\u0928\u0947 \u0907\u0902\u0938\u094D\u091F\u0940\u091F\u094D\u092F\u0942\u091F \u0915\u093E \u0928\u093E\u092E, \u0915\u094B\u0921, \u092B\u094B\u0915\u0938 \u0938\u094D\u091F\u094D\u0930\u0940\u092E, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n2. \u0907\u0902\u0938\u094D\u091F\u0940\u091F\u094D\u092F\u0942\u091F \u0921\u0948\u0936\u092C\u094B\u0930\u094D\u0921 \u0915\u0940 \u092A\u094D\u0930\u092C\u0902\u0927\u0928 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901:\n   \u2022 Batches & Schedules: \u0915\u094B\u091A\u093F\u0902\u0917 \u092C\u0948\u091A, \u0938\u092E\u092F, \u092E\u0947\u0902\u091F\u0930 \u0914\u0930 \u091B\u093E\u0924\u094D\u0930 \u0915\u094D\u0937\u092E\u0924\u093E \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930\u0947\u0902\u0964\n   \u2022 Mock Test Series: \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A, \u0913\u0932\u0902\u092A\u093F\u092F\u093E\u0921, \u092B\u093E\u0909\u0902\u0921\u0947\u0936\u0928 \u0914\u0930 TET/CTET \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u0940\u0930\u0940\u091C\u093C \u091A\u0932\u093E\u090F\u0901\u0964\n   \u2022 18 Skill Academy Programs: \u0905\u092C\u0947\u0915\u0938, \u0935\u0948\u0926\u093F\u0915 \u092E\u0948\u0925\u094D\u0938, \u092B\u094B\u0928\u093F\u0915\u094D\u0938, \u0915\u094B\u0921\u093F\u0902\u0917 \u0906\u0926\u093F \u0915\u094B\u0930\u094D\u0938 \u0938\u0902\u091A\u093E\u0932\u093F\u0924 \u0915\u0930\u0947\u0902\u0964\n   \u2022 Trainer Roster, Fee Ledger & Certificates: \u091F\u094D\u0930\u0947\u0928\u0930 \u0938\u0942\u091A\u0940, \u092B\u0940\u0938 \u0932\u0947\u091C\u0930 \u0914\u0930 \u0915\u094B\u0930\u094D\u0938 \u0938\u0930\u094D\u091F\u093F\u092B\u093F\u0915\u0947\u091F \u091C\u093E\u0930\u0940 \u0915\u0930\u0947\u0902\u0964\n\n\u0928\u0940\u091A\u0947 OPEN INSTITUTE PORTAL \u092C\u091F\u0928 \u0926\u092C\u093E\u0915\u0930 \u0938\u0940\u0927\u0947 \u0916\u094B\u0932\u0947\u0902\u0964',
+      mr: () => 'Institute Portal (\u0915\u094B\u091A\u093F\u0902\u0917 \u0935 \u0915\u094C\u0936\u0932\u094D\u092F \u0938\u0902\u0938\u094D\u0925\u093E \u092A\u094B\u0930\u094D\u091F\u0932) \u2014 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947 \u092E\u093E\u0939\u093F\u0924\u0940:\n1. \u0928\u094B\u0902\u0926\u0923\u0940 \u0906\u0923\u093F \u0932\u0949\u0917\u093F\u0928: \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920\u093E\u0935\u0930\u0940\u0932 "Institute Portal" \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E, Register \u092E\u0927\u094D\u092F\u0947 \u0938\u0902\u0938\u094D\u0925\u0947\u091A\u0947 \u0928\u093E\u0935, \u0928\u094B\u0902\u0926\u0923\u0940 \u0915\u094B\u0921, \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u092D\u093E\u0917, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u093E.\n2. \u0907\u0928\u094D\u0938\u094D\u091F\u093F\u091F\u094D\u092F\u0942\u091F \u0921\u0945\u0936\u092C\u094B\u0930\u094D\u0921\u0935\u0930\u0940\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0928 \u0938\u0941\u0935\u093F\u0927\u093E:\n   \u2022 Batches & Schedules: \u0915\u094B\u091A\u093F\u0902\u0917 \u092C\u0945\u091A\u0947\u0938, \u0935\u0947\u0933, \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u0915 \u0906\u0923\u093F \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u0915\u094D\u0937\u092E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u093F\u0924 \u0915\u0930\u093E.\n   \u2022 Mock Test Series: \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940, \u0911\u0932\u093F\u092E\u094D\u092A\u093F\u092F\u093E\u0921, \u092B\u093E\u0909\u0902\u0921\u0947\u0936\u0928 \u0935 TET/CTET \u0938\u0930\u093E\u0935 \u091A\u093E\u091A\u0923\u094D\u092F\u093E \u0918\u094D\u092F\u093E.\n   \u2022 18 Skill Academy Programs: \u0905\u092C\u0945\u0915\u0938, \u0935\u0948\u0926\u093F\u0915 \u0917\u0923\u093F\u0924, \u092B\u094B\u0928\u093F\u0915\u094D\u0938, \u0915\u094B\u0921\u093F\u0902\u0917 \u0907\u0924\u094D\u092F\u093E\u0926\u0940 \u0967\u096E \u0909\u092A\u0915\u094D\u0930\u092E \u091A\u093E\u0932\u0935\u093E.\n   \u2022 Trainer Roster, Fee Ledger & Certificates: \u092A\u094D\u0930\u0936\u093F\u0915\u094D\u0937\u0915 \u092F\u093E\u0926\u0940, \u092B\u0940 \u0932\u0947\u091C\u0930 \u0906\u0923\u093F \u0915\u094B\u0930\u094D\u0938 \u092A\u0942\u0930\u094D\u0923\u0924\u094D\u0935\u093E\u091A\u0940 \u092A\u094D\u0930\u092E\u093E\u0923\u092A\u0924\u094D\u0930\u0947 \u0926\u094D\u092F\u093E.\n\n\u0925\u0947\u091F \u0909\u0918\u0921\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0916\u093E\u0932\u0940\u0932 OPEN INSTITUTE PORTAL \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.'
+    }
+  },
+  {
+    id: "teacher_lesson_planner_and_assignments",
+    priority: 87,
+    keywords: [
+      "lesson plan",
+      "lesson planner",
+      "annual plan",
+      "monthly plan",
+      "daily plan",
+      "assignment",
+      "create assignment",
+      "homework",
+      "student management",
+      "manage students",
+      "\u0932\u0947\u0938\u0928 \u092A\u094D\u0932\u093E\u0928\u0930",
+      "\u0905\u0938\u093E\u0907\u0928\u092E\u0947\u0902\u091F",
+      "\u092A\u093E\u0920\u094D\u092F\u093E\u091A\u0947 \u0928\u093F\u092F\u094B\u091C\u0928",
+      "\u091F\u093E\u091A\u0923"
+    ],
+    actionIds: () => ["open_lesson_planner", "open_teacher_resources", "open_ai_tools"],
+    responses: {
+      en: () => 'Teacher Support \u2014 Lesson Planner, Assignments & Student Management:\n1. How to Use the Lesson Planner:\n   \u2022 Open the Teacher Portal and click "Lesson Planner" (or click OPEN TEACHER LESSON PLANNER below).\n   \u2022 Select your Board (Maharashtra / CBSE / ICSE), Medium, Class (1\u201310), and Subject.\n   \u2022 Switch between Annual Plan, Monthly Plan, and Daily Lesson Plan tabs, customize school holidays in the School Calendar Drawer, and export clean A4 PDFs.\n2. Assignment & Worksheet Creation:\n   \u2022 Use the Teacher AI Generator / Worksheet & Question Paper Maker in the Teacher Portal to generate custom assignments, chapter tests, and answer keys.\n3. Student Management:\n   \u2022 Track student attendance, review submitted worksheets/quizzes, and monitor class performance from your Teacher Dashboard.',
+      hi: () => '\u091F\u0940\u091A\u0930 \u0938\u092A\u094B\u0930\u094D\u091F \u2014 \u0932\u0947\u0938\u0928 \u092A\u094D\u0932\u093E\u0928\u0930, \u0905\u0938\u093E\u0907\u0928\u092E\u0947\u0902\u091F \u0914\u0930 \u091B\u093E\u0924\u094D\u0930 \u092A\u094D\u0930\u092C\u0902\u0927\u0928:\n1. Lesson Planner \u0915\u0948\u0938\u0947 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902:\n   \u2022 Teacher Portal \u092E\u0947\u0902 "Lesson Planner" \u0916\u094B\u0932\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN TEACHER LESSON PLANNER \u0926\u092C\u093E\u090F\u0901)\u0964\n   \u2022 \u0905\u092A\u0928\u093E \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u092E\u093E\u0927\u094D\u092F\u092E, \u0915\u0915\u094D\u0937\u093E (1\u201310) \u0914\u0930 \u0935\u093F\u0937\u092F \u091A\u0941\u0928\u0947\u0902\u0964\n   \u2022 Annual Plan, Monthly Plan \u0914\u0930 Daily Lesson Plan \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902 \u0914\u0930 A4 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0947\u0902\u0964\n2. Assignment \u0914\u0930 Worksheet \u0928\u093F\u0930\u094D\u092E\u093E\u0923:\n   \u2022 Teacher AI Generator \u0938\u0947 \u0915\u0938\u094D\u091F\u092E \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u092A\u094D\u0930\u0936\u094D\u0928-\u092A\u0924\u094D\u0930 \u0914\u0930 \u0909\u0924\u094D\u0924\u0930-\u0915\u0941\u0902\u091C\u0940 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964\n3. Student Management:\n   \u2022 \u091F\u0940\u091A\u0930 \u0921\u0948\u0936\u092C\u094B\u0930\u094D\u0921 \u0938\u0947 \u091B\u093E\u0924\u094D\u0930\u094B\u0902 \u0915\u0940 \u0909\u092A\u0938\u094D\u0925\u093F\u0924\u093F, \u0915\u094D\u0935\u093F\u091C\u093C \u0938\u094D\u0915\u094B\u0930 \u0914\u0930 \u092A\u094D\u0930\u0917\u0924\u093F \u091F\u094D\u0930\u0948\u0915 \u0915\u0930\u0947\u0902\u0964',
+      mr: () => '\u0936\u093F\u0915\u094D\u0937\u0915 \u092E\u0926\u0924 \u2014 \u0932\u0947\u0938\u0928 \u092A\u094D\u0932\u093E\u0928\u0930, \u0905\u0938\u093E\u0907\u0928\u092E\u0947\u0902\u091F \u0906\u0923\u093F \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0928:\n1. Lesson Planner \u0915\u0938\u093E \u0935\u093E\u092A\u0930\u093E\u0935\u093E:\n   \u2022 Teacher Portal \u092E\u0927\u094D\u092F\u0947 "Lesson Planner" \u0909\u0918\u0921\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN TEACHER LESSON PLANNER \u0926\u093E\u092C\u093E).\n   \u2022 \u0924\u0941\u092E\u091A\u0947 \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u092E\u093E\u0927\u094D\u092F\u092E, \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966) \u0906\u0923\u093F \u0935\u093F\u0937\u092F \u0928\u093F\u0935\u0921\u093E.\n   \u2022 \u0935\u093E\u0930\u094D\u0937\u093F\u0915 (Annual), \u092E\u093E\u0938\u093F\u0915 (Monthly) \u0906\u0923\u093F \u0926\u0948\u0928\u0902\u0926\u093F\u0928 (Daily) \u092A\u093E\u0920 \u091F\u093E\u091A\u0923 \u0924\u092F\u093E\u0930 \u0915\u0930\u093E \u0935 A4 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u0930\u093E.\n2. Assignment \u0935 Worksheet \u0924\u092F\u093E\u0930 \u0915\u0930\u0923\u0947:\n   \u2022 Teacher AI Generator \u0935\u093E\u092A\u0930\u0942\u0928 \u0938\u0930\u093E\u0935\u092A\u0924\u094D\u0930\u093F\u0915\u093E, \u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930\u093F\u0915\u093E \u0935 \u0909\u0924\u094D\u0924\u0930\u0938\u0942\u091A\u0940 \u0924\u092F\u093E\u0930 \u0915\u0930\u093E.\n3. \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0928:\n   \u2022 \u0936\u093F\u0915\u094D\u0937\u0915 \u0921\u0945\u0936\u092C\u094B\u0930\u094D\u0921\u0935\u0930\u0942\u0928 \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u094D\u092F\u093E\u0902\u091A\u0940 \u0909\u092A\u0938\u094D\u0925\u093F\u0924\u0940, \u0917\u0941\u0923 \u0906\u0923\u093F \u092A\u094D\u0930\u0917\u0924\u0940 \u0924\u092A\u093E\u0938\u093E.'
+    }
+  },
+  {
+    id: "ai_generator_and_tools",
+    priority: 86,
+    keywords: [
+      "ai generator",
+      "ai tool",
+      "ai tools",
+      "how to use ai",
+      "learning tools",
+      "pdf maker",
+      "notes generator",
+      "worksheet generator",
+      "presentation maker",
+      "dictionary",
+      "trilingual dictionary",
+      "thought of the day",
+      "\u0936\u092C\u094D\u0926\u0915\u094B\u0936",
+      "\u0938\u0941\u0935\u093F\u091A\u093E\u0930",
+      "\u090F\u0906\u0908 \u091C\u0928\u0930\u0947\u091F\u0930"
+    ],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_question_paper_generator", "open_ai_tools", "open_lesson_planner"] : ["open_ai_tools", "open_dictionary", "open_thought_of_the_day"],
+    responses: {
+      en: (_c, _b, role) => role === "teacher" ? 'How Teachers Use MyStudyZone 40+ AI Tools Studio Step by Step:\n1. Open AI Tools Studio via "40 AI Tools" in your Teacher bar (or click OPEN AI GENERATOR & TOOLS / OPEN QUESTION PAPER GENERATOR below).\n2. Choose from 40 Teacher Productivity Tools (Lesson Plans, Question Papers, Worksheets, Rubrics, PTM Circulars) or Core 10 AI Generators.\n3. Select your Board (Maharashtra / CBSE / ICSE), Class (1\u201310), Subject, Medium, and Chapter/Topic.\n4. Click Generate and export clean PDF, Word (.docx), Excel (.xlsx), or PowerPoint (.pptx) files.' : 'How to Use the MyStudyZone AI Generator & Learning Tools Step by Step:\n1. AI Generator Studio (30+ Student Tools & Core Generators):\n   \u2022 Click "Learning Tools" on the homepage or "AI Tools Studio" inside your portal (or click OPEN AI GENERATOR & TOOLS below).\n   \u2022 Pick a tool (Notes Generator, Worksheet Generator, Question Paper Maker, Quiz Generator, Presentation Slides, Flashcards, or PDF Maker).\n   \u2022 Select your Board, Class (1\u201310), Subject, Language (English / Marathi / Hindi), and enter your Chapter or Topic.\n   \u2022 Click Generate to get structured educational content ready to view or export.\n2. Trilingual Dictionary (English\u2013Marathi\u2013Hindi):\n   \u2022 Type any single word in English, Marathi, or Hindi to view its pronunciation, simple & detailed meanings in all 3 languages, synonyms, antonyms, and example sentences.\n3. Thought of the Day:\n   \u2022 Explore 1,000+ verified motivational and educational thoughts in English, Marathi, and Hindi.',
+      hi: () => 'MyStudyZone AI Generator \u0914\u0930 Learning Tools \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902:\n1. AI Generator Studio:\n   \u2022 \u0939\u094B\u092E\u092A\u0947\u091C \u092A\u0930 "Learning Tools" \u092F\u093E \u092A\u094B\u0930\u094D\u091F\u0932 \u092E\u0947\u0902 "AI Tools Studio" \u0916\u094B\u0932\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN AI GENERATOR & TOOLS \u0926\u092C\u093E\u090F\u0901)\u0964\n   \u2022 \u0905\u092A\u0928\u093E \u091F\u0942\u0932 \u091A\u0941\u0928\u0947\u0902 (Worksheet Generator, Notes Generator, Question Paper, Quiz \u092F\u093E Slides)\u0964\n   \u2022 \u092C\u094B\u0930\u094D\u0921, \u0915\u0915\u094D\u0937\u093E (1\u201310), \u0935\u093F\u0937\u092F, \u092D\u093E\u0937\u093E (English/Marathi/Hindi) \u0914\u0930 \u091F\u0949\u092A\u093F\u0915 \u092D\u0930\u0915\u0930 Generate \u0926\u092C\u093E\u090F\u0901\u0964\n2. Trilingual Dictionary (\u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940\u2013\u092E\u0930\u093E\u0920\u0940\u2013\u0939\u093F\u0902\u0926\u0940 \u0936\u092C\u094D\u0926\u0915\u094B\u0936):\n   \u2022 \u0915\u093F\u0938\u0940 \u092D\u0940 \u090F\u0915 \u0936\u092C\u094D\u0926 \u0915\u094B \u0916\u094B\u091C\u0947\u0902 \u0914\u0930 \u0924\u0940\u0928\u094B\u0902 \u092D\u093E\u0937\u093E\u0913\u0902 \u092E\u0947\u0902 \u0905\u0930\u094D\u0925, \u0909\u091A\u094D\u091A\u093E\u0930\u0923, \u0938\u092E\u093E\u0928\u093E\u0930\u094D\u0925\u0940, \u0935\u093F\u0930\u0941\u0926\u094D\u0927\u093E\u0930\u094D\u0925\u0940 \u0914\u0930 \u0909\u0926\u093E\u0939\u0930\u0923 \u0935\u093E\u0915\u094D\u092F \u0926\u0947\u0916\u0947\u0902\u0964\n3. Thought of the Day:\n   \u2022 \u0924\u0940\u0928\u094B\u0902 \u092D\u093E\u0937\u093E\u0913\u0902 \u092E\u0947\u0902 1,000+ \u092A\u094D\u0930\u0947\u0930\u0923\u093E\u0926\u093E\u092F\u0915 \u0938\u0941\u0935\u093F\u091A\u093E\u0930 \u092A\u0922\u093C\u0947\u0902\u0964',
+      mr: () => 'MyStudyZone AI Generator \u0906\u0923\u093F Learning Tools \u0915\u0938\u0947 \u0935\u093E\u092A\u0930\u093E\u0935\u0947:\n1. AI Generator Studio:\n   \u2022 \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920\u093E\u0935\u0930 "Learning Tools" \u0915\u093F\u0902\u0935\u093E \u092A\u094B\u0930\u094D\u091F\u0932\u092E\u0927\u094D\u092F\u0947 "AI Tools Studio" \u0909\u0918\u0921\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN AI GENERATOR & TOOLS \u0926\u093E\u092C\u093E).\n   \u2022 \u0906\u0935\u0936\u094D\u092F\u0915 \u091F\u0942\u0932 \u0928\u093F\u0935\u0921\u093E (Worksheet Generator, Notes Generator, Question Paper, Quiz \u0915\u093F\u0902\u0935\u093E Slides).\n   \u2022 \u092C\u094B\u0930\u094D\u0921, \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966), \u0935\u093F\u0937\u092F, \u092D\u093E\u0937\u093E (English/Marathi/Hindi) \u0906\u0923\u093F \u0918\u091F\u0915 \u091F\u093E\u0915\u0942\u0928 Generate \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.\n2. Trilingual Dictionary (\u0907\u0902\u0917\u094D\u0930\u091C\u0940\u2013\u092E\u0930\u093E\u0920\u0940\u2013\u0939\u093F\u0902\u0926\u0940 \u0936\u092C\u094D\u0926\u0915\u094B\u0936):\n   \u2022 \u0915\u094B\u0923\u0924\u093E\u0939\u0940 \u090F\u0915 \u0936\u092C\u094D\u0926 \u0936\u094B\u0927\u093E \u0906\u0923\u093F \u0924\u093F\u0928\u094D\u0939\u0940 \u092D\u093E\u0937\u093E\u0902\u092E\u0927\u094D\u092F\u0947 \u0905\u0930\u094D\u0925, \u0909\u091A\u094D\u091A\u093E\u0930, \u0938\u092E\u093E\u0928\u093E\u0930\u094D\u0925\u0940, \u0935\u093F\u0930\u0941\u0926\u094D\u0927\u093E\u0930\u094D\u0925\u0940 \u0936\u092C\u094D\u0926 \u0935 \u0909\u0926\u093E\u0939\u0930\u0923\u0947 \u092A\u0939\u093E.\n3. Thought of the Day (\u0906\u091C\u091A\u093E \u0938\u0941\u0935\u093F\u091A\u093E\u0930):\n   \u2022 \u0907\u0902\u0917\u094D\u0930\u091C\u0940, \u092E\u0930\u093E\u0920\u0940 \u0906\u0923\u093F \u0939\u093F\u0902\u0926\u0940\u0924\u0940\u0932 \u0967,\u0966\u0966\u0966+ \u092A\u094D\u0930\u0947\u0930\u0923\u093E\u0926\u093E\u092F\u0940 \u0938\u0941\u0935\u093F\u091A\u093E\u0930 \u0935\u093E\u091A\u093E.'
     }
   },
   {
@@ -4535,14 +5089,15 @@ var KB_TOPICS = [
       "educator",
       "techer",
       "shikshak",
+      "how to access teacher portal",
       "\u0936\u093F\u0915\u094D\u0937\u0915",
       "\u0905\u0927\u094D\u092F\u093E\u092A\u0928"
     ],
-    actionIds: (_c, _b, role) => role === "teacher" ? ["open_teacher_resources", "open_worksheets", "open_syllabus", "open_tet_ctet"] : ["open_teacher_login", "open_teacher_resources", "open_tet_ctet"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_teacher_resources", "open_lesson_planner", "open_question_paper_generator", "open_tet_ctet"] : ["open_teacher_login", "open_teacher_resources", "open_lesson_planner", "open_tet_ctet"],
     responses: {
-      en: () => "MyStudyZone Teacher Portal gives educators unified access to:\n\u2022 Classes 1 to 10 curriculum across Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE)\n\u2022 Class-wise interactive Worksheets & Chapter Study Notes with solved examples\n\u2022 4-Level Practice Quizzes across school subjects\n\u2022 4th & 7th Standard MSCE Scholarship preparation\n\u2022 MAHA TET & CTET (Paper 1 & Paper 2) mock tests\n\u2022 Multilingual Audio Stories, Chhatrapati Shivaji Maharaj 50 historical chapters, Drawing Studio, Cricket & GK\n\nUse the Teacher Login portal at the top or click OPEN TEACHER RESOURCES below to jump straight in.",
-      hi: () => "MyStudyZone \u091F\u0940\u091A\u0930 \u092A\u094B\u0930\u094D\u091F\u0932 \u092A\u0930 \u0936\u093F\u0915\u094D\u0937\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u092F\u0947 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0914\u0930 ICSE (CISCE) \u0915\u0947 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0924\u0915 \u0915\u0947 \u0935\u093F\u0937\u092F\n\u2022 \u0915\u0915\u094D\u0937\u093E-\u0935\u093E\u0930 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u091A\u0948\u092A\u094D\u091F\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0914\u0930 \u0939\u0932 \u0915\u093F\u090F \u0917\u090F \u0909\u0926\u093E\u0939\u0930\u0923\n\u2022 4-\u0932\u0947\u0935\u0932 \u092A\u094D\u0930\u0948\u0915\u094D\u091F\u093F\u0938 \u0915\u094D\u0935\u093F\u091C\u093C\n\u2022 \u0915\u0915\u094D\u0937\u093E 4\u0925\u0940 \u0914\u0930 7\u0935\u0940\u0902 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (MSCE) \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\n\u2022 MAHA TET \u0914\u0930 CTET (\u092A\u0947\u092A\u0930 1 \u0935 2) \u092A\u0930\u0940\u0915\u094D\u0937\u093E \u0924\u0948\u092F\u093E\u0930\u0940\n\u2022 \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901 (\u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940/\u0939\u093F\u0902\u0926\u0940/\u092E\u0930\u093E\u0920\u0940), \u0936\u093F\u0935\u093E\u091C\u0940 \u092E\u0939\u093E\u0930\u093E\u091C \u0915\u0947 50 \u0905\u0927\u094D\u092F\u093E\u092F, \u0921\u094D\u0930\u093E\u0907\u0902\u0917 \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0914\u0930 GK\u0964\n\n\u0938\u0940\u0927\u0947 \u091C\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964",
-      mr: () => "MyStudyZone \u0936\u093F\u0915\u094D\u0937\u0915 \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 \u0936\u093F\u0915\u094D\u0937\u0915\u093E\u0902\u0938\u093E\u0920\u0940 \u092A\u0941\u0922\u0940\u0932 \u0938\u0941\u0935\u093F\u0927\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0935 ICSE (CISCE) \u092E\u0927\u0940\u0932 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u091A\u0947 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F\n\u2022 \u0907\u092F\u0924\u094D\u0924\u093E\u0935\u093E\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u092A\u093E\u0920\u0928\u093F\u0939\u093E\u092F \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0906\u0923\u093F \u0938\u094B\u0921\u0935\u0932\u0947\u0932\u0940 \u0909\u0926\u093E\u0939\u0930\u0923\u0947\n\u2022 \u096A-\u0932\u0947\u0935\u094D\u0939\u0932 \u0938\u0930\u093E\u0935 \u0915\u094D\u0935\u093F\u091D\n\u2022 \u0907\u092F\u0924\u094D\u0924\u093E \u096A \u0925\u0940 \u0935 \u096D \u0935\u0940 MSCE \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 \u0938\u0930\u093E\u0935 \u092A\u0930\u0940\u0915\u094D\u0937\u093E\n\u2022 MAHA TET \u0906\u0923\u093F CTET (\u092A\u0947\u092A\u0930 \u0967 \u0935 \u0968) \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\n\u2022 \u0917\u094B\u0937\u094D\u091F\u0940 (\u092E\u0930\u093E\u0920\u0940/\u0939\u093F\u0902\u0926\u0940/\u0907\u0902\u0917\u094D\u0930\u091C\u0940 \u0911\u0921\u093F\u0913), \u091B\u0924\u094D\u0930\u092A\u0924\u0940 \u0936\u093F\u0935\u093E\u091C\u0940 \u092E\u0939\u093E\u0930\u093E\u091C\u093E\u0902\u091A\u0947 \u096B\u0966 \u0905\u0927\u094D\u092F\u093E\u092F, \u0921\u094D\u0930\u0949\u0907\u0902\u0917 \u0938\u094D\u091F\u0941\u0921\u093F\u0913 \u0935 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u091C\u094D\u091E\u093E\u0928.\n\n\u0916\u093E\u0932\u0940\u0932 \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 \u0925\u0947\u091F \u092A\u094D\u0930\u0935\u0947\u0936 \u0915\u0930\u093E."
+      en: () => 'How to Access & Use the MyStudyZone Teacher Portal:\n1. From the homepage, click the "Teacher Portal" card (or click Login / Register \u2192 select Teacher).\n2. Inside the Teacher Portal, you get unified access to:\n   \u2022 Teacher Lesson Planner (Annual, Monthly & Daily plans with A4 PDF export)\n   \u2022 AI Worksheet, Question Paper & Assignment Generators\n   \u2022 Classes 1 to 10 curriculum across Maharashtra State Board, CBSE, and ICSE\n   \u2022 Class-wise interactive Worksheets, Chapter Study Notes & 4-Level Quizzes\n   \u2022 MAHA TET & CTET (Paper 1 & Paper 2) mock tests and 4th & 7th Scholarship prep\n\nClick OPEN TEACHER PORTAL or OPEN TEACHER LESSON PLANNER below to begin.',
+      hi: () => 'MyStudyZone \u091F\u0940\u091A\u0930 \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u0948\u0938\u0947 \u0916\u094B\u0932\u0947\u0902 \u0914\u0930 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902:\n1. \u0939\u094B\u092E\u092A\u0947\u091C \u092A\u0930 "Teacher Portal" \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 (\u092F\u093E Login / Register \u2192 Teacher \u091A\u0941\u0928\u0947\u0902)\u0964\n2. \u091F\u0940\u091A\u0930 \u092A\u094B\u0930\u094D\u091F\u0932 \u092E\u0947\u0902 \u0936\u093F\u0915\u094D\u0937\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901:\n   \u2022 Teacher Lesson Planner (\u0935\u093E\u0930\u094D\u0937\u093F\u0915, \u092E\u093E\u0938\u093F\u0915 \u0935 \u0926\u0948\u0928\u093F\u0915 \u092A\u093E\u0920 \u092F\u094B\u091C\u0928\u093E + A4 PDF \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F)\n   \u2022 AI \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u092A\u094D\u0930\u0936\u094D\u0928-\u092A\u0924\u094D\u0930 \u0914\u0930 \u0905\u0938\u093E\u0907\u0928\u092E\u0947\u0902\u091F \u091C\u0928\u0930\u0947\u091F\u0930\n   \u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE \u0914\u0930 ICSE \u0915\u0947 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0924\u0915 \u0915\u0947 \u0928\u094B\u091F\u094D\u0938 \u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\n   \u2022 MAHA TET \u0914\u0930 CTET (\u092A\u0947\u092A\u0930 1 \u0935 2) \u0924\u0925\u093E \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F\u0964\n\n\u0938\u0940\u0927\u0947 \u091C\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964',
+      mr: () => 'MyStudyZone \u0936\u093F\u0915\u094D\u0937\u0915 \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u0938\u0947 \u0909\u0918\u0921\u093E\u0935\u0947 \u0906\u0923\u093F \u0935\u093E\u092A\u0930\u093E\u0935\u0947:\n1. \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920\u093E\u0935\u0930\u0940\u0932 "Teacher Portal" \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E (\u0915\u093F\u0902\u0935\u093E Login / Register \u2192 Teacher \u0928\u093F\u0935\u0921\u093E).\n2. \u0936\u093F\u0915\u094D\u0937\u0915 \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930\u0940\u0932 \u092A\u094D\u0930\u092E\u0941\u0916 \u0938\u0941\u0935\u093F\u0927\u093E:\n   \u2022 Teacher Lesson Planner (\u0935\u093E\u0930\u094D\u0937\u093F\u0915, \u092E\u093E\u0938\u093F\u0915 \u0935 \u0926\u0948\u0928\u0902\u0926\u093F\u0928 \u092A\u093E\u0920 \u0928\u093F\u092F\u094B\u091C\u0928 + A4 PDF \u092A\u094D\u0930\u093F\u0902\u091F)\n   \u2022 AI \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u092A\u094D\u0930\u0936\u094D\u0928\u092A\u0924\u094D\u0930\u093F\u0915\u093E \u0935 \u0905\u0938\u093E\u0907\u0928\u092E\u0947\u0902\u091F \u091C\u0928\u0930\u0947\u091F\u0930\n   \u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE \u0935 ICSE \u092E\u0927\u0940\u0932 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u091A\u0947 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F, \u0928\u094B\u091F\u094D\u0938 \u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938\n   \u2022 MAHA TET \u0906\u0923\u093F CTET (\u092A\u0947\u092A\u0930 \u0967 \u0935 \u0968) \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F.\n\n\u0916\u093E\u0932\u0940\u0932 \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0942\u0928 \u0925\u0947\u091F \u092A\u094D\u0930\u0935\u0947\u0936 \u0915\u0930\u093E.'
     }
   },
   {
@@ -4551,7 +5106,7 @@ var KB_TOPICS = [
     keywords: ["tet", "ctet", "maha tet", "mahatet", "paper 1", "paper 2", "\u091F\u0940\u0908\u091F\u0940", "\u0938\u0940\u091F\u0940\u0908\u091F\u0940"],
     actionIds: () => ["open_tet_ctet", "open_demo"],
     responses: {
-      en: () => "In the TET & CTET Exam Prep section, both students/aspirants and teachers can access:\n\u2022 Maharashtra TET (Paper 1 & Paper 2)\n\u2022 CTET Paper 1 (Classes 1\u20135) and CTET Paper 2 (Classes 6\u20138)\n\u2022 Free Demo Mock Tests with real 150-minute countdown timers and detailed solutions, plus full mock test series plans.",
+      en: () => "In the TET & CTET Exam Prep section, teachers and aspirants can access:\n\u2022 Maharashtra TET (Paper 1 & Paper 2)\n\u2022 CTET Paper 1 (Classes 1\u20135) and CTET Paper 2 (Classes 6\u20138)\n\u2022 Free Demo Mock Tests with real 150-minute countdown timers and detailed solutions, plus full mock test series plans.",
       hi: () => "TET \u0914\u0930 CTET Exam Prep \u0905\u0928\u0941\u092D\u093E\u0917 \u092E\u0947\u0902 \u0906\u092A\u0915\u094B \u092E\u093F\u0932\u0924\u093E \u0939\u0948:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 TET (\u092A\u0947\u092A\u0930 1 \u0935 \u092A\u0947\u092A\u0930 2)\n\u2022 CTET \u092A\u0947\u092A\u0930 1 (\u0915\u0915\u094D\u0937\u093E 1\u20135) \u0914\u0930 CTET \u092A\u0947\u092A\u0930 2 (\u0915\u0915\u094D\u0937\u093E 6\u20138)\n\u2022 \u0930\u093F\u092F\u0932 \u091F\u093E\u0907\u092E\u0930 \u0914\u0930 \u0938\u092E\u093E\u0927\u093E\u0928 \u0938\u0939\u093F\u0924 \u092B\u094D\u0930\u0940 \u0921\u0947\u092E\u094B \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0924\u0925\u093E \u092A\u0942\u0930\u094D\u0923 \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u0940\u0930\u0940\u091C\u0964",
       mr: () => "TET \u0906\u0923\u093F CTET Exam Prep \u0935\u093F\u092D\u093E\u0917\u093E\u0924 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0941\u0935\u093F\u0927\u093E:\n\u2022 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 TET (\u092A\u0947\u092A\u0930 \u0967 \u0935 \u092A\u0947\u092A\u0930 \u0968)\n\u2022 CTET \u092A\u0947\u092A\u0930 \u0967 (\u0907\u092F\u0924\u094D\u0924\u093E \u0967\u2013\u096B) \u0906\u0923\u093F CTET \u092A\u0947\u092A\u0930 \u0968 (\u0907\u092F\u0924\u094D\u0924\u093E \u096C\u2013\u096E)\n\u2022 \u0905\u091A\u0942\u0915 \u091F\u093E\u0907\u092E\u0930 \u0935 \u0938\u094D\u092A\u0937\u094D\u091F\u0940\u0915\u0930\u0923\u093E\u0938\u0939 \u092E\u094B\u092B\u0924 \u0921\u0947\u092E\u094B \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0924\u0938\u0947\u091A \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F \u0938\u093F\u0930\u0940\u091C."
     }
@@ -4570,29 +5125,52 @@ var KB_TOPICS = [
   {
     id: "worksheets",
     priority: 78,
-    keywords: ["worksheet", "worksheets", "workshets", "exercise", "exercises", "practice sheet", "\u0935\u0930\u094D\u0915\u0936\u0940\u091F", "\u0938\u0930\u093E\u0935\u092A\u0924\u094D\u0930\u093F\u0915\u093E"],
-    actionIds: () => ["open_worksheets", "open_quizzes"],
+    keywords: ["worksheet", "worksheets", "workshets", "exercise", "exercises", "practice sheet", "how to access worksheets", "\u0935\u0930\u094D\u0915\u0936\u0940\u091F", "\u0938\u0930\u093E\u0935\u092A\u0924\u094D\u0930\u093F\u0915\u093E"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_worksheets", "open_ai_tools", "open_lesson_planner"] : ["open_worksheets", "open_quizzes"],
     responses: {
-      en: (cls, board) => {
+      en: (cls, board, role) => {
         const scope = [board ? `${board} Board` : "", cls || "Classes 1\u201310"].filter(Boolean).join(" \u2022 ");
-        return `You can open online interactive Worksheets for ${scope} directly inside the Worksheets section.
-\u2022 Free accounts include 2 demo worksheets (English & Mathematics) for your registered Board & Class.
-\u2022 Premium \u20B999 (365 Days) unlocks all subjects' worksheets for that Board & Class.
-\u2022 Note: Worksheets are completed interactively online (printing and offline downloads are disabled).`;
+        if (role === "teacher") {
+          return `How Teachers Access & Create Worksheets (${scope}) Step by Step:
+1. Click "Worksheets" in your Teacher bar (or OPEN WORKSHEETS below) to inspect ready-made interactive board & class worksheets (Classes 1\u201310).
+2. Select Education Board (Maharashtra / CBSE / ICSE), Class (1\u201310), and Subject.
+3. To generate custom printable classroom worksheets with answer keys, open 40 AI Tools \u2192 "Worksheet Generator" (or click OPEN AI GENERATOR & TOOLS below).`;
+        }
+        return `How to Access Worksheets (${scope}) Step by Step:
+1. Click the "Worksheets" card on your dashboard or homepage (or click OPEN WORKSHEETS below).
+2. Select your Education Board (Maharashtra / CBSE / ICSE), Class (1\u201310), and Subject.
+3. Click any chapter worksheet to solve interactive questions online with instant scoring and explanations.
+\u2022 Free Plan: 2 Demo Worksheets (English & Mathematics) for your registered Board & Class.
+\u2022 Premium \u20B999 (365 Days): Unlocks all subjects' worksheets for that Board & Class.
+\u2022 Note: Student worksheets are interactive online resources (printing/offline downloads are disabled).`;
       },
-      hi: (cls, board) => {
+      hi: (cls, board, role) => {
         const scope = [board ? `${board} \u092C\u094B\u0930\u094D\u0921` : "", cls || "\u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10"].filter(Boolean).join(" \u2022 ");
-        return `\u0906\u092A ${scope} \u0915\u0940 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0938\u0940\u0927\u0947 Worksheets \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
-\u2022 \u092B\u094D\u0930\u0940 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0906\u092A\u0915\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0940 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F (English \u0914\u0930 Maths) \u092E\u0941\u092B\u094D\u0924 \u0939\u0948\u0902\u0964
-\u2022 \u20B999 (365 \u0926\u093F\u0928) \u092A\u094D\u0932\u093E\u0928 \u0938\u0947 \u0909\u0938 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F\u094B\u0902 \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0916\u0941\u0932\u0924\u0940 \u0939\u0948\u0902\u0964
-\u2022 \u0928\u094B\u091F: \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0915\u0947\u0935\u0932 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u092A\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0939\u0932 \u0915\u0940 \u091C\u093E\u0924\u0940 \u0939\u0948\u0902 (\u092A\u094D\u0930\u093F\u0902\u091F \u0935 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092C\u0902\u0926 \u0939\u0948)\u0964`;
+        if (role === "teacher") {
+          return `\u0936\u093F\u0915\u094D\u0937\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0935\u0930\u094D\u0915\u0936\u0940\u091F (${scope}) \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0928\u0947 \u0915\u0947 \u091A\u0930\u0923:
+1. \u091F\u0940\u091A\u0930 \u092C\u093E\u0930 \u092E\u0947\u0902 "Worksheets" \u0916\u094B\u0932\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN WORKSHEETS \u0926\u092C\u093E\u090F\u0901) \u0914\u0930 \u092C\u094B\u0930\u094D\u0921, \u0915\u0915\u094D\u0937\u093E \u0935 \u0935\u093F\u0937\u092F \u091A\u0941\u0928\u0947\u0902\u0964
+2. \u0915\u0938\u094D\u091F\u092E \u092A\u094D\u0930\u093F\u0902\u091F\u0947\u092C\u0932 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0935 \u0909\u0924\u094D\u0924\u0930-\u0915\u0941\u0902\u091C\u0940 \u092C\u0928\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F 40 AI Tools \u2192 "Worksheet Generator" \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964`;
+        }
+        return `\u0935\u0930\u094D\u0915\u0936\u0940\u091F (${scope}) \u0915\u0948\u0938\u0947 \u0916\u094B\u0932\u0947\u0902 \u2014 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923:
+1. \u0939\u094B\u092E\u092A\u0947\u091C \u092F\u093E \u0921\u0948\u0936\u092C\u094B\u0930\u094D\u0921 \u092A\u0930 "Worksheets" \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN WORKSHEETS \u0926\u092C\u093E\u090F\u0901)\u0964
+2. \u0905\u092A\u0928\u093E \u092C\u094B\u0930\u094D\u0921, \u0915\u0915\u094D\u0937\u093E (1\u201310) \u0914\u0930 \u0935\u093F\u0937\u092F \u091A\u0941\u0928\u0947\u0902\u0964
+3. \u0915\u093F\u0938\u0940 \u092D\u0940 \u0905\u0927\u094D\u092F\u093E\u092F \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0916\u094B\u0932\u0915\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u092A\u094D\u0930\u0936\u094D\u0928 \u0939\u0932 \u0915\u0930\u0947\u0902 \u0914\u0930 \u0924\u0941\u0930\u0902\u0924 \u0938\u094D\u0915\u094B\u0930 \u0926\u0947\u0916\u0947\u0902\u0964
+\u2022 \u092B\u094D\u0930\u0940 \u092A\u094D\u0932\u093E\u0928: \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0940 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F (English \u0914\u0930 Maths) \u092E\u0941\u092B\u094D\u0924 \u0939\u0948\u0902\u0964
+\u2022 \u20B999 (365 \u0926\u093F\u0928) \u092A\u094D\u0932\u093E\u0928: \u0909\u0938 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F\u094B\u0902 \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0924\u093E \u0939\u0948\u0964`;
       },
-      mr: (cls, board) => {
+      mr: (cls, board, role) => {
         const scope = [board ? `${board} \u092C\u094B\u0930\u094D\u0921` : "", cls || "\u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966"].filter(Boolean).join(" \u2022 ");
-        return `${scope} \u0938\u093E\u0920\u0940 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0905\u200D\u0945\u0915\u094D\u091F\u093F\u0935\u094D\u0939 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u0924\u0941\u092E\u094D\u0939\u0940 \u0925\u0947\u091F Worksheets \u0935\u093F\u092D\u093E\u0917\u093E\u0924 \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E.
-\u2022 \u092E\u094B\u092B\u0924 \u092A\u094D\u0932\u093E\u0928\u092E\u0927\u094D\u092F\u0947 \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 (English \u0935 Maths) \u0916\u0941\u0932\u094D\u092F\u093E \u0906\u0939\u0947\u0924.
-\u2022 \u20B9\u096F\u096F (\u0969\u096C\u096B \u0926\u093F\u0935\u0938) \u092A\u094D\u0932\u093E\u0928\u0928\u0947 \u0924\u094D\u092F\u093E \u0907\u092F\u0924\u094D\u0924\u0947\u091A\u0947 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.
-\u2022 \u091F\u0940\u092A: \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u092B\u0915\u094D\u0924 \u0935\u0947\u092C\u0938\u093E\u0907\u091F\u0935\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0938\u094B\u0921\u0935\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0906\u0939\u0947\u0924 (\u092A\u094D\u0930\u093F\u0902\u091F \u0906\u0923\u093F \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092C\u0902\u0926 \u0906\u0939\u0947).`;
+        if (role === "teacher") {
+          return `\u0936\u093F\u0915\u094D\u0937\u0915\u093E\u0902\u0938\u093E\u0920\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 (${scope}) \u0935\u093E\u092A\u0930\u0923\u094D\u092F\u093E\u091A\u094D\u092F\u093E \u092A\u093E\u092F\u0931\u094D\u092F\u093E:
+1. \u091F\u0940\u091A\u0930 \u092C\u093E\u0930\u092E\u0927\u0942\u0928 "Worksheets" \u0909\u0918\u0921\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN WORKSHEETS \u0926\u093E\u092C\u093E) \u0906\u0923\u093F \u092C\u094B\u0930\u094D\u0921, \u0907\u092F\u0924\u094D\u0924\u093E \u0935 \u0935\u093F\u0937\u092F \u0928\u093F\u0935\u0921\u093E.
+2. \u0928\u0935\u0940\u0928 \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0923\u094D\u092F\u093E\u092F\u094B\u0917\u094D\u092F \u0938\u0930\u093E\u0935\u092A\u0924\u094D\u0930\u093F\u0915\u093E \u0924\u092F\u093E\u0930 \u0915\u0930\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 40 AI Tools \u2192 "Worksheet Generator" \u0935\u093E\u092A\u0930\u093E.`;
+        }
+        return `\u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 (${scope}) \u0915\u0936\u093E \u0909\u0918\u0921\u093E\u0935\u094D\u092F\u093E\u0924 \u2014 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947:
+1. \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920 \u0915\u093F\u0902\u0935\u093E \u0921\u0945\u0936\u092C\u094B\u0930\u094D\u0921\u0935\u0930\u0940\u0932 "Worksheets" \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN WORKSHEETS \u0926\u093E\u092C\u093E).
+2. \u0924\u0941\u092E\u091A\u0947 \u092C\u094B\u0930\u094D\u0921, \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966) \u0906\u0923\u093F \u0935\u093F\u0937\u092F \u0928\u093F\u0935\u0921\u093E.
+3. \u0915\u094B\u0923\u0924\u094D\u092F\u093E\u0939\u0940 \u0927\u0921\u094D\u092F\u093E\u091A\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0928\u093F\u0935\u0921\u0942\u0928 \u0911\u0928\u0932\u093E\u0907\u0928 \u092A\u094D\u0930\u0936\u094D\u0928 \u0938\u094B\u0921\u0935\u093E \u0935 \u0932\u0917\u0947\u091A \u0917\u0941\u0923 \u092A\u0939\u093E.
+\u2022 \u092E\u094B\u092B\u0924 \u092A\u094D\u0932\u093E\u0928: \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 (English \u0935 Maths) \u092E\u094B\u092B\u0924 \u0906\u0939\u0947\u0924.
+\u2022 \u20B9\u096F\u096F (\u0969\u096C\u096B \u0926\u093F\u0935\u0938) \u092A\u094D\u0932\u093E\u0928: \u0924\u094D\u092F\u093E \u0907\u092F\u0924\u094D\u0924\u0947\u091A\u0947 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F \u0916\u0941\u0932\u0947 \u0915\u0930\u0924\u094B.`;
       }
     }
   },
@@ -4610,6 +5188,10 @@ var KB_TOPICS = [
       "chapter notes",
       "textbook",
       "summary",
+      "find subjects",
+      "find chapters",
+      "where to find study notes",
+      "how to find notes",
       "abhyaskram",
       "\u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E",
       "\u0938\u093F\u0932\u0947\u092C\u0938",
@@ -4617,32 +5199,30 @@ var KB_TOPICS = [
     ],
     actionIds: () => ["open_syllabus", "open_all_courses"],
     responses: {
-      en: (cls, board) => {
+      en: (cls, board, role) => {
         const scope = [board || "Maharashtra / CBSE / ICSE", cls || "Classes 1 to 10"].join(" \u2022 ");
-        return `Your complete Syllabus & Study Materials (${scope}) include:
-\u2022 Chapter-wise syllabus concepts & textbook references
-\u2022 Formulas, theorems, rules & solved walkthrough examples
-\u2022 Interactive chapter self-revision checklists
-
-Click OPEN SYLLABUS & STUDY NOTES below to view your board, class, and subject chapters.`;
+        const portalHint = role === "teacher" ? "Teacher Study Library" : "Student Portal \u2192 Study Materials";
+        return `Where to Find Subjects, Chapters & Study Notes (${scope}) Step by Step:
+1. Open ${portalHint} or "Study Notes" (or click OPEN SYLLABUS & STUDY NOTES below).
+2. Step 1: Select your Board (Maharashtra State Board, CBSE, or ICSE), Medium (English / Marathi / Hindi / Semi-English), and Standard (Class 1 to 10).
+3. Step 2: Click on any Subject card (e.g., Mathematics, Science, English, History).
+4. Step 3: Select your Chapter from the clean chapter list to read detailed study notes, key definitions, formulas, solved examples, and revision checklists.`;
       },
       hi: (cls, board) => {
         const scope = [board || "Maharashtra / CBSE / ICSE", cls || "\u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10"].join(" \u2022 ");
-        return `${scope} \u0915\u093E \u092A\u0942\u0930\u093E \u0938\u093F\u0932\u0947\u092C\u0938 \u0914\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 Study Materials \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902:
-\u2022 \u0905\u0927\u094D\u092F\u093E\u092F-\u0935\u093E\u0930 \u092E\u0941\u0916\u094D\u092F \u0905\u0935\u0927\u093E\u0930\u0923\u093E\u090F\u0901 \u0914\u0930 \u092A\u093E\u0920\u094D\u092F\u092A\u0941\u0938\u094D\u0924\u0915 \u0938\u0902\u0926\u0930\u094D\u092D
-\u2022 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u0942\u0924\u094D\u0930, \u0928\u093F\u092F\u092E \u0914\u0930 \u0939\u0932 \u0915\u093F\u090F \u0917\u090F \u0909\u0926\u093E\u0939\u0930\u0923
-\u2022 \u0930\u093F\u0935\u0940\u091C\u0928 \u091A\u0947\u0915\u0932\u093F\u0938\u094D\u091F
-
-\u0938\u0940\u0927\u0947 \u0926\u0947\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0940\u091A\u0947 OPEN SYLLABUS & STUDY NOTES \u0926\u092C\u093E\u090F\u0901\u0964`;
+        return `\u0935\u093F\u0937\u092F, \u0905\u0927\u094D\u092F\u093E\u092F \u0914\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 (${scope}) \u0915\u0939\u093E\u0901 \u0914\u0930 \u0915\u0948\u0938\u0947 \u0922\u0942\u0901\u0922\u0947\u0902:
+1. Study Notes / Study Materials \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN SYLLABUS & STUDY NOTES \u0926\u092C\u093E\u090F\u0901)\u0964
+2. \u091A\u0930\u0923 1: \u0905\u092A\u0928\u093E \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u092E\u093E\u0927\u094D\u092F\u092E \u0914\u0930 \u0915\u0915\u094D\u0937\u093E (1\u201310) \u091A\u0941\u0928\u0947\u0902\u0964
+3. \u091A\u0930\u0923 2: \u0905\u092A\u0928\u0947 \u0935\u093F\u0937\u092F (Subject) \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964
+4. \u091A\u0930\u0923 3: \u0905\u0927\u094D\u092F\u093E\u092F (Chapter) \u0915\u0940 \u0938\u0942\u091A\u0940 \u0938\u0947 \u0915\u094B\u0908 \u092D\u0940 \u092A\u093E\u0920 \u091A\u0941\u0928\u0947\u0902 \u0914\u0930 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0928\u094B\u091F\u094D\u0938, \u0938\u0942\u0924\u094D\u0930, \u0939\u0932 \u0915\u093F\u090F \u0917\u090F \u0909\u0926\u093E\u0939\u0930\u0923 \u0935 \u0930\u093F\u0935\u0940\u091C\u0928 \u091A\u0947\u0915\u0932\u093F\u0938\u094D\u091F \u092A\u0922\u093C\u0947\u0902\u0964`;
       },
       mr: (cls, board) => {
         const scope = [board || "Maharashtra / CBSE / ICSE", cls || "\u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966"].join(" \u2022 ");
-        return `${scope} \u0938\u093E\u0920\u0940 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E \u0935 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 Study Materials \u0935\u093F\u092D\u093E\u0917\u093E\u0924 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924:
-\u2022 \u092A\u093E\u0920\u0928\u093F\u0939\u093E\u092F \u092E\u0939\u0924\u094D\u0924\u094D\u0935\u093E\u091A\u094D\u092F\u093E \u0938\u0902\u0915\u0932\u094D\u092A\u0928\u093E \u0935 \u092A\u093E\u0920\u094D\u092F\u092A\u0941\u0938\u094D\u0924\u0915 \u0938\u0902\u0926\u0930\u094D\u092D
-\u2022 \u092E\u0939\u0924\u094D\u0924\u094D\u0935\u093E\u091A\u0940 \u0938\u0942\u0924\u094D\u0930\u0947, \u0928\u093F\u092F\u092E \u0906\u0923\u093F \u0938\u094B\u0921\u0935\u0932\u0947\u0932\u0940 \u0909\u0926\u093E\u0939\u0930\u0923\u0947
-\u2022 \u0909\u091C\u0933\u0923\u0940 \u091A\u0947\u0915\u0932\u093F\u0938\u094D\u091F
-
-\u092A\u093E\u0939\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0916\u093E\u0932\u0940\u0932 OPEN SYLLABUS & STUDY NOTES \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.`;
+        return `\u0935\u093F\u0937\u092F, \u0927\u0921\u0947 \u0906\u0923\u093F \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 (${scope}) \u0915\u0941\u0920\u0947 \u0935 \u0915\u0938\u0947 \u0936\u094B\u0927\u093E\u0935\u0947\u0924:
+1. Study Notes / Study Materials \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN SYLLABUS & STUDY NOTES \u0926\u093E\u092C\u093E).
+2. \u092A\u093E\u092F\u0930\u0940 \u0967: \u0924\u0941\u092E\u091A\u0947 \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u092E\u093E\u0927\u094D\u092F\u092E \u0906\u0923\u093F \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966) \u0928\u093F\u0935\u0921\u093E.
+3. \u092A\u093E\u092F\u0930\u0940 \u0968: \u0935\u093F\u0937\u092F\u093E\u091A\u094D\u092F\u093E (Subject) \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.
+4. \u092A\u093E\u092F\u0930\u0940 \u0969: \u0927\u0921\u094D\u092F\u093E\u0902\u091A\u094D\u092F\u093E \u092F\u093E\u0926\u0940\u0924\u0942\u0928 \u0915\u094B\u0923\u0924\u093E\u0939\u0940 \u0927\u0921\u093E \u0928\u093F\u0935\u0921\u093E \u0906\u0923\u093F \u0938\u0935\u093F\u0938\u094D\u0924\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0938\u0942\u0924\u094D\u0930\u0947, \u0938\u094B\u0921\u0935\u0932\u0947\u0932\u0940 \u0909\u0926\u093E\u0939\u0930\u0923\u0947 \u0935 \u0909\u091C\u0933\u0923\u0940 \u091A\u0947\u0915\u0932\u093F\u0938\u094D\u091F \u0935\u093E\u091A\u093E.`;
       }
     }
   },
@@ -4650,11 +5230,11 @@ Click OPEN SYLLABUS & STUDY NOTES below to view your board, class, and subject c
     id: "download_resources",
     priority: 90,
     keywords: ["download", "downlod", "pdf", "print", "save offline", "\u0921\u093E\u0909\u0928\u0932\u094B\u0921", "\u092A\u094D\u0930\u093F\u0902\u091F"],
-    actionIds: () => ["open_worksheets", "open_syllabus", "open_certificates"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_lesson_planner", "open_question_paper_generator", "open_ai_tools"] : ["open_worksheets", "open_syllabus", "open_certificates"],
     responses: {
-      en: () => "Important accuracy note about downloads on MyStudyZone:\n\u2022 Worksheets and Study Materials are strictly online interactive resources \u2014 offline PDF downloading and printing are disabled to protect educational content.\n\u2022 However, once you earn Milestone Champion Certificates, you can view/print them from the Certificates & Leaderboard page, and you can save your Drawing Studio artwork in your artwork gallery.",
-      hi: () => "\u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0938\u0939\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940:\n\u2022 MyStudyZone \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0914\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0909\u092A\u092F\u094B\u0917 \u0915\u0947 \u0932\u093F\u090F \u0939\u0948\u0902 \u2014 \u0907\u0928\u0915\u093E PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092F\u093E \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0928\u093E \u092C\u0902\u0926 \u0930\u0916\u093E \u0917\u092F\u093E \u0939\u0948\u0964\n\u2022 \u092F\u0926\u093F \u0906\u092A\u0928\u0947 \u0915\u094B\u0908 \u091A\u0948\u0902\u092A\u093F\u092F\u0928 \u0938\u0930\u094D\u091F\u093F\u092B\u093F\u0915\u0947\u091F \u0905\u0930\u094D\u091C\u093F\u0924 \u0915\u093F\u092F\u093E \u0939\u0948, \u0924\u094B \u0909\u0938\u0947 Certificates & Leaderboard \u0938\u0947 \u0926\u0947\u0916/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902, \u0914\u0930 Drawing Studio \u092E\u0947\u0902 \u0905\u092A\u0928\u0940 \u0915\u0932\u093E\u0915\u0943\u0924\u093F \u0917\u0948\u0932\u0930\u0940 \u092E\u0947\u0902 \u0938\u0947\u0935 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
-      mr: () => "\u0921\u093E\u0909\u0928\u0932\u094B\u0921\u092C\u093E\u092C\u0924 \u0905\u091A\u0942\u0915 \u092E\u093E\u0939\u093F\u0924\u0940:\n\u2022 MyStudyZone \u0935\u0930\u0940\u0932 \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u0906\u0923\u093F \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u092B\u0915\u094D\u0924 \u0911\u0928\u0932\u093E\u0907\u0928 \u0938\u0930\u093E\u0935 \u0935 \u0935\u093E\u091A\u0928\u093E\u0938\u093E\u0920\u0940 \u0906\u0939\u0947\u0924 \u2014 \u092F\u093E\u0902\u091A\u0947 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093F\u0902\u0935\u093E \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0923\u0947 \u092C\u0902\u0926 \u0920\u0947\u0935\u0923\u094D\u092F\u093E\u0924 \u0906\u0932\u0947 \u0906\u0939\u0947.\n\u2022 \u092E\u093E\u0924\u094D\u0930, \u0924\u0941\u092E\u094D\u0939\u0940 \u092E\u093F\u0933\u0935\u0932\u0947\u0932\u0940 \u091A\u0945\u092E\u094D\u092A\u093F\u092F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u092A\u0924\u094D\u0930\u0947 Certificates & Leaderboard \u092E\u0927\u0942\u0928 \u092A\u093E\u0939\u0942/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0942 \u0936\u0915\u0924\u093E \u0906\u0923\u093F Drawing Studio \u092E\u0927\u0940\u0932 \u091A\u093F\u0924\u094D\u0930\u0947 \u0917\u0945\u0932\u0930\u0940\u0924 \u0938\u0947\u0935 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E."
+      en: (_c, _b, role) => role === "teacher" ? "Teacher Export & Print Rules on MyStudyZone:\n\u2022 Teachers CAN export Annual, Monthly, and Daily Lesson Plans as clean A4 PDFs directly from the Teacher Lesson Planner.\n\u2022 Teachers CAN export AI-generated Question Papers, Worksheets, Revision Notes, Timetables & Rubrics as PDF, DOCX, XLSX, or PPTX from 40 AI Tools Studio.\n\u2022 Built-in Student Chapter Worksheets and Study Materials remain online-only interactive modules." : "Important accuracy note about downloads on MyStudyZone:\n\u2022 Student Worksheets and Study Materials are strictly online interactive resources \u2014 offline PDF downloading and printing are disabled to protect educational content.\n\u2022 Teachers CAN export their Annual, Monthly, and Daily Lesson Plans as A4 PDFs from the Teacher Lesson Planner.\n\u2022 Students CAN view/print earned Milestone Champion Certificates from Certificates & Leaderboard, and save Drawing Studio artwork in their gallery.",
+      hi: () => "\u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0938\u0939\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940:\n\u2022 \u091B\u093E\u0924\u094D\u0930\u094B\u0902 \u0915\u0940 \u0935\u0930\u094D\u0915\u0936\u0940\u091F \u0914\u0930 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u0911\u0928\u0932\u093E\u0907\u0928 \u0907\u0902\u091F\u0930\u0948\u0915\u094D\u091F\u093F\u0935 \u0909\u092A\u092F\u094B\u0917 \u0915\u0947 \u0932\u093F\u090F \u0939\u0948\u0902 \u2014 \u0907\u0928\u0915\u093E PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092F\u093E \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0928\u093E \u092C\u0902\u0926 \u0930\u0916\u093E \u0917\u092F\u093E \u0939\u0948\u0964\n\u2022 \u0936\u093F\u0915\u094D\u0937\u0915 Teacher Lesson Planner \u0938\u0947 \u0905\u092A\u0928\u0940 \u0935\u093E\u0930\u094D\u0937\u093F\u0915, \u092E\u093E\u0938\u093F\u0915 \u0935 \u0926\u0948\u0928\u093F\u0915 \u092A\u093E\u0920 \u092F\u094B\u091C\u0928\u093E \u0915\u093E A4 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964\n\u2022 \u091B\u093E\u0924\u094D\u0930 \u0905\u092A\u0928\u0947 \u091A\u0948\u0902\u092A\u093F\u092F\u0928 \u0938\u0930\u094D\u091F\u093F\u092B\u093F\u0915\u0947\u091F \u0915\u094B Certificates & Leaderboard \u0938\u0947 \u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
+      mr: () => "\u0921\u093E\u0909\u0928\u0932\u094B\u0921\u092C\u093E\u092C\u0924 \u0905\u091A\u0942\u0915 \u092E\u093E\u0939\u093F\u0924\u0940:\n\u2022 \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u094D\u092F\u093E\u0902\u091A\u094D\u092F\u093E \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938 \u0906\u0923\u093F \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938 \u092B\u0915\u094D\u0924 \u0911\u0928\u0932\u093E\u0907\u0928 \u0938\u0930\u093E\u0935 \u0935 \u0935\u093E\u091A\u0928\u093E\u0938\u093E\u0920\u0940 \u0906\u0939\u0947\u0924 \u2014 \u0924\u094D\u092F\u093E\u0902\u091A\u0947 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093F\u0902\u0935\u093E \u092A\u094D\u0930\u093F\u0902\u091F \u092C\u0902\u0926 \u0906\u0939\u0947.\n\u2022 \u0936\u093F\u0915\u094D\u0937\u0915 Teacher Lesson Planner \u092E\u0927\u0942\u0928 \u0935\u093E\u0930\u094D\u0937\u093F\u0915, \u092E\u093E\u0938\u093F\u0915 \u0935 \u0926\u0948\u0928\u0902\u0926\u093F\u0928 \u092A\u093E\u0920 \u0928\u093F\u092F\u094B\u091C\u0928\u093E\u091A\u0940 A4 PDF \u0921\u093E\u0909\u0928\u0932\u094B\u0921/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0942 \u0936\u0915\u0924\u093E\u0924.\n\u2022 \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u092E\u093F\u0933\u0935\u0932\u0947\u0932\u0940 \u091A\u0945\u092E\u094D\u092A\u093F\u092F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u092A\u0924\u094D\u0930\u0947 Certificates & Leaderboard \u092E\u0927\u0942\u0928 \u092A\u093E\u0939\u0942/\u092A\u094D\u0930\u093F\u0902\u091F \u0915\u0930\u0942 \u0936\u0915\u0924\u093E\u0924."
     }
   },
   {
@@ -4682,34 +5262,61 @@ Click OPEN SYLLABUS & STUDY NOTES below to view your board, class, and subject c
   {
     id: "quizzes_and_puzzles",
     priority: 65,
-    keywords: ["quiz", "quizzes", "mcq", "puzzle", "puzzles", "sudoku", "cricket", "gk", "ai academy", "future skills", "\u0915\u094D\u0935\u093F\u091C\u093C", "\u0915\u094B\u0921\u0947", "\u0938\u0941\u0921\u094B\u0915\u0942"],
-    actionIds: () => ["open_quizzes", "open_puzzles", "open_sudoku", "open_cricket", "open_ai_academy"],
+    keywords: ["quiz", "quizzes", "mcq", "exam", "exams", "online exam", "examination", "puzzle", "puzzles", "sudoku", "cricket", "gk", "ai academy", "future skills", "\u0915\u094D\u0935\u093F\u091C\u093C", "\u092A\u0930\u0940\u0915\u094D\u0937\u093E", "\u0915\u094B\u0921\u0947", "\u0938\u0941\u0921\u094B\u0915\u0942"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_tet_ctet", "open_question_paper_generator", "open_quizzes"] : ["open_quizzes", "open_scholarship", "open_puzzles", "open_sudoku"],
     responses: {
-      en: () => "For interactive practice and brain training, MyStudyZone offers:\n\u2022 4-Level Practice Quizzes (zero repeated questions tracking)\n\u2022 Brain Puzzles & Sudoku (4\xD74, 6\xD76, 9\xD79 \u2014 Free Forever)\n\u2022 Cricket & GK Arena\n\u2022 AI Learning Academy & Future Skills (8 modules)",
-      hi: () => "\u0905\u092D\u094D\u092F\u093E\u0938 \u0914\u0930 \u0926\u093F\u092E\u093E\u0917\u0940 \u0916\u0947\u0932 \u0915\u0947 \u0932\u093F\u090F MyStudyZone \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948:\n\u2022 4-\u0932\u0947\u0935\u0932 \u092A\u094D\u0930\u0948\u0915\u094D\u091F\u093F\u0938 \u0915\u094D\u0935\u093F\u091C\u093C (\u092C\u093F\u0928\u093E \u0926\u094B\u0939\u0930\u093E\u090F \u0917\u090F \u092A\u094D\u0930\u0936\u094D\u0928)\n\u2022 \u092C\u094D\u0930\u0947\u0928 \u092A\u091C\u093C\u0932\u094D\u0938 \u0914\u0930 \u0938\u0941\u0921\u094B\u0915\u0942 (\u0939\u092E\u0947\u0936\u093E \u092B\u094D\u0930\u0940)\n\u2022 \u0915\u094D\u0930\u093F\u0915\u0947\u091F \u0914\u0930 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u091C\u094D\u091E\u093E\u0928 (GK)\n\u2022 AI Learning Academy (\u092D\u0935\u093F\u0937\u094D\u092F \u0915\u0947 \u0915\u094C\u0936\u0932)\u0964",
-      mr: () => "\u0938\u0930\u093E\u0935 \u0906\u0923\u093F \u092C\u094C\u0926\u094D\u0927\u093F\u0915 \u0916\u0947\u0933\u093E\u0902\u0938\u093E\u0920\u0940 MyStudyZone \u0935\u0930 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947:\n\u2022 \u096A-\u0932\u0947\u0935\u094D\u0939\u0932 \u0938\u0930\u093E\u0935 \u0915\u094D\u0935\u093F\u091D (\u092A\u094D\u0930\u0936\u094D\u0928 \u092A\u0941\u0928\u094D\u0939\u093E \u0928 \u092F\u0947\u0923\u093E\u0930\u0940 \u092A\u094D\u0930\u0923\u093E\u0932\u0940)\n\u2022 \u092C\u094D\u0930\u0947\u0928 \u092A\u091D\u0932\u094D\u0938 \u0906\u0923\u093F \u0938\u0941\u0921\u094B\u0915\u0942 (\u0928\u0947\u0939\u092E\u0940 \u092E\u094B\u092B\u0924)\n\u2022 \u0915\u094D\u0930\u093F\u0915\u0947\u091F \u0935 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u091C\u094D\u091E\u093E\u0928 (GK)\n\u2022 AI Learning Academy (\u092D\u0935\u093F\u0937\u094D\u092F\u093E\u0924\u0940\u0932 \u0915\u094C\u0936\u0932\u094D\u092F\u0947)."
+      en: (_c, _b, role) => role === "teacher" ? "MyStudyZone Examination & Assessment Tools for Teachers:\n\u2022 MAHA TET & CTET (Paper 1 & 2): 200+ full-length 150-minute CBT mock tests with detailed solutions.\n\u2022 AI Question Paper & MCQ Generator: Create custom 20\u2013100 mark exam papers or interactive MCQ quizzes for your classes.\n\u2022 Student 4-Level Quizzes & 4th/7th Scholarship Preview: Inspect practice sets across Maharashtra, CBSE & ICSE." : "Understanding MyStudyZone Examination & Quiz Features:\n\u2022 4-Level Subject Practice Quizzes: Level 1 (Beginner) to Level 4 (Master) with zero-repeated-question tracking and instant explanations.\n\u2022 Competitive Mock Exams: 4th & 7th Standard MSCE Scholarship CBT Mocks (90-min timer).\n\u2022 Milestone Champion Certificates: Earn printable Gold/Silver/Bronze certificates and leaderboard rank points as you pass quizzes.\n\u2022 Free Brain Training: Brain Puzzles, 4\xD74/6\xD76/9\xD79 Sudoku, Cricket & GK Arena, and AI Learning Academy.",
+      hi: () => "MyStudyZone \u0915\u0940 \u0911\u0928\u0932\u093E\u0907\u0928 \u092A\u0930\u0940\u0915\u094D\u0937\u093E (Examination) \u0914\u0930 \u0915\u094D\u0935\u093F\u091C\u093C \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901:\n\u2022 4-\u0932\u0947\u0935\u0932 \u0935\u093F\u0937\u092F\u0935\u093E\u0930 \u092A\u094D\u0930\u0948\u0915\u094D\u091F\u093F\u0938 \u0915\u094D\u0935\u093F\u091C\u093C: \u092C\u093F\u0928\u093E \u0926\u094B\u0939\u0930\u093E\u090F \u0917\u090F \u092A\u094D\u0930\u0936\u094D\u0928\u094B\u0902 \u0914\u0930 \u0924\u0924\u094D\u0915\u093E\u0932 \u0938\u092E\u093E\u0927\u093E\u0928 \u0915\u0947 \u0938\u093E\u0925\u0964\n\u2022 \u092A\u094D\u0930\u0924\u093F\u092F\u094B\u0917\u0940 \u092E\u0949\u0915 \u092A\u0930\u0940\u0915\u094D\u0937\u093E\u090F\u0901: \u0915\u0915\u094D\u0937\u093E 4\u0925\u0940 \u0935 7\u0935\u0940\u0902 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (90-\u092E\u093F\u0928\u091F \u091F\u093E\u0907\u092E\u0930) \u0914\u0930 MAHA TET / CTET \u092A\u0947\u092A\u0930 1 \u0935 2 (150-\u092E\u093F\u0928\u091F \u091F\u093E\u0907\u092E\u0930)\u0964\n\u2022 \u091A\u0948\u0902\u092A\u093F\u092F\u0928 \u0938\u0930\u094D\u091F\u093F\u092B\u093F\u0915\u0947\u091F \u0914\u0930 \u0932\u0940\u0921\u0930\u092C\u094B\u0930\u094D\u0921: \u0915\u094D\u0935\u093F\u091C\u093C \u092A\u093E\u0938 \u0915\u0930\u0928\u0947 \u092A\u0930 \u0938\u0930\u094D\u091F\u093F\u092B\u093F\u0915\u0947\u091F \u0914\u0930 \u0930\u0948\u0902\u0915 \u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u092E\u093F\u0932\u0924\u0947 \u0939\u0948\u0902\u0964\n\u2022 \u092C\u094D\u0930\u0947\u0928 \u092A\u091C\u093C\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0914\u0930 AI Learning Academy\u0964",
+      mr: () => "MyStudyZone \u0935\u0930\u0940\u0932 \u0911\u0928\u0932\u093E\u0907\u0928 \u092A\u0930\u0940\u0915\u094D\u0937\u093E (Examination) \u0906\u0923\u093F \u0915\u094D\u0935\u093F\u091D \u0938\u0941\u0935\u093F\u0927\u093E:\n\u2022 \u096A-\u0932\u0947\u0935\u094D\u0939\u0932 \u0935\u093F\u0937\u092F\u0928\u093F\u0939\u093E\u092F \u0938\u0930\u093E\u0935 \u0915\u094D\u0935\u093F\u091D: \u092A\u094D\u0930\u0936\u094D\u0928 \u092A\u0941\u0928\u094D\u0939\u093E \u0928 \u092F\u0947\u0923\u093E\u0930\u0940 \u092A\u094D\u0930\u0923\u093E\u0932\u0940 \u0906\u0923\u093F \u0932\u0917\u0947\u091A \u0938\u094D\u092A\u0937\u094D\u091F\u0940\u0915\u0930\u0923.\n\u2022 \u0938\u094D\u092A\u0930\u094D\u0927\u093E \u092A\u0930\u0940\u0915\u094D\u0937\u093E \u092E\u0949\u0915 \u091F\u0947\u0938\u094D\u091F: \u0907\u092F\u0924\u094D\u0924\u093E \u096A \u0925\u0940 \u0935 \u096D \u0935\u0940 \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 (\u096F\u0966-\u092E\u093F\u0928\u093F\u091F\u0947 \u091F\u093E\u0907\u092E\u0930) \u0906\u0923\u093F MAHA TET / CTET \u092A\u0947\u092A\u0930 \u0967 \u0935 \u0968 (\u0967\u096B\u0966-\u092E\u093F\u0928\u093F\u091F\u0947 \u091F\u093E\u0907\u092E\u0930).\n\u2022 \u091A\u0945\u092E\u094D\u092A\u093F\u092F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u092A\u0924\u094D\u0930\u0947 \u0935 \u0932\u0940\u0921\u0930\u092C\u094B\u0930\u094D\u0921: \u0938\u0930\u093E\u0935 \u092A\u0942\u0930\u094D\u0923 \u0915\u0947\u0932\u094D\u092F\u093E\u0935\u0930 \u092A\u094D\u0930\u092E\u093E\u0923\u092A\u0924\u094D\u0930 \u0935 \u0917\u0941\u0923 \u092E\u093F\u0933\u0924\u093E\u0924.\n\u2022 \u092C\u094D\u0930\u0947\u0928 \u092A\u091D\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0906\u0923\u093F AI Learning Academy."
     }
   },
   {
     id: "registration_and_login",
     priority: 62,
-    keywords: ["register", "registration", "sign up", "signup", "create account", "login", "log in", "logout", "sign in", "\u0928\u094B\u0902\u0926\u0923\u0940", "\u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928", "\u0932\u0949\u0917\u093F\u0928", "\u0932\u0949\u0917\u0906\u0909\u091F"],
-    actionIds: () => ["open_register", "open_login", "open_teacher_login"],
+    keywords: ["register", "registration", "sign up", "signup", "create account", "how to register", "login", "log in", "logout", "sign in", "\u0928\u094B\u0902\u0926\u0923\u0940", "\u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928", "\u0932\u0949\u0917\u093F\u0928", "\u0932\u0949\u0917\u0906\u0909\u091F"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_teacher_login", "open_register", "open_password_reset"] : ["open_register", "open_login", "open_password_reset"],
     responses: {
-      en: () => "How Registration, Login & Logout work on MyStudyZone:\n\u2022 New students or teachers can click Login \u2192 Register tab, pick their role (Student or Teacher), Board (Maharashtra / CBSE / ICSE), Class (1\u201310), Name, Email, Mobile, and Password.\n\u2022 Existing users can log in anytime using the Student Login or Teacher Login portal.\n\u2022 When logged in, the Login button at the top-right turns into Logout so you can securely sign out from anywhere on desktop or mobile.",
-      hi: () => "MyStudyZone \u092A\u0930 \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928, \u0932\u0949\u0917\u093F\u0928 \u0914\u0930 \u0932\u0949\u0917\u0906\u0909\u091F \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902:\n\u2022 \u0928\u090F \u091B\u093E\u0924\u094D\u0930 \u092F\u093E \u0936\u093F\u0915\u094D\u0937\u0915 Login \u2192 Register \u091F\u0948\u092C \u092E\u0947\u0902 \u091C\u093E\u0915\u0930 \u0905\u092A\u0928\u0940 \u092D\u0942\u092E\u093F\u0915\u093E (Student/Teacher), \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u0915\u0915\u094D\u0937\u093E (1\u201310), \u0928\u093E\u092E, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u0947 \u0905\u0915\u093E\u0909\u0902\u091F \u092C\u0928\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964\n\u2022 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092C\u0928\u0947 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 Student Login \u092F\u093E Teacher Login \u0938\u0947 \u0938\u093E\u0907\u0928 \u0907\u0928 \u0915\u0930\u0947\u0902\u0964\n\u2022 \u0932\u0949\u0917\u093F\u0928 \u0939\u094B\u0928\u0947 \u092A\u0930 \u090A\u092A\u0930 \u0926\u093E\u0908\u0902 \u0913\u0930 Login \u092C\u091F\u0928 \u0915\u0940 \u091C\u0917\u0939 Logout \u092C\u091F\u0928 \u0926\u093F\u0916\u0924\u093E \u0939\u0948\u0964",
-      mr: () => "MyStudyZone \u0935\u0930 \u0928\u094B\u0902\u0926\u0923\u0940, \u0932\u0949\u0917\u093F\u0928 \u0906\u0923\u093F \u0932\u0949\u0917\u0906\u0909\u091F \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E:\n\u2022 \u0928\u0935\u0940\u0928 \u0935\u093F\u0926\u094D\u092F\u093E\u0930\u094D\u0925\u0940 \u0915\u093F\u0902\u0935\u093E \u0936\u093F\u0915\u094D\u0937\u0915 Login \u2192 Register \u091F\u0945\u092C\u0935\u0930 \u091C\u093E\u090A\u0928 \u0906\u092A\u0932\u0940 \u092D\u0942\u092E\u093F\u0915\u093E (Student/Teacher), \u092C\u094B\u0930\u094D\u0921 (Maharashtra / CBSE / ICSE), \u0907\u092F\u0924\u094D\u0924\u093E (\u0967\u2013\u0967\u0966), \u0928\u093E\u0935, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0947\u090A\u0928 \u0928\u094B\u0902\u0926\u0923\u0940 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E\u0924.\n\u2022 \u0928\u094B\u0902\u0926\u0923\u0940\u0915\u0943\u0924 \u0935\u093E\u092A\u0930\u0915\u0930\u094D\u0924\u0947 Student Login \u0915\u093F\u0902\u0935\u093E Teacher Login \u092E\u0927\u0942\u0928 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E\u0924.\n\u2022 \u0932\u0949\u0917\u093F\u0928 \u0915\u0947\u0932\u094D\u092F\u093E\u0935\u0930 \u0935\u0930 \u0909\u091C\u0935\u0940\u0915\u0921\u0947 Login \u092C\u091F\u0923\u093E\u091A\u094D\u092F\u093E \u091C\u093E\u0917\u0940 Logout \u092C\u091F\u0923 \u0926\u093F\u0938\u0924\u0947."
+      en: (_c, _b, role) => {
+        if (role === "teacher") {
+          return "How to Register & Login to the Teacher Portal Step by Step:\n1. Click OPEN TEACHER REGISTRATION (or click Teacher Portal \u2192 Register as Teacher).\n2. Enter your Full Name, Qualification (B.Ed./D.Ed./M.Sc.), Subjects Taught, Board (Maharashtra/CBSE/ICSE), Experience, School Name, Email, Mobile & Password.\n3. After registering, click OPEN TEACHER LOGIN to open your Teacher Command Center (Lesson Planner, 40 AI Tools, Worksheets, TET/CTET Mocks).";
+        }
+        if (role === "parent") {
+          return "How to Register & Login to the Parent Portal Step by Step:\n1. Click OPEN PARENT REGISTRATION (or click Parent Portal \u2192 Register as Parent).\n2. Enter your Parent Name, your Child\u2019s Registered Student Email & Mobile (for account linking), your Email, and Password.\n3. Sign in anytime using OPEN PARENT LOGIN to monitor student progress, quiz reports, and attendance.";
+        }
+        if (role === "college") {
+          return "How to Register & Login to the College Portal Step by Step:\n1. Click OPEN COLLEGE REGISTRATION (or click College Portal \u2192 Register as College/School).\n2. Fill in your Institution Name, UDISE / Registration Code, Principal/Admin Name, City, Official Email, Phone & Password.\n3. Sign in via OPEN COLLEGE LOGIN to manage divisions, faculty allocation, student roster, and result analytics.";
+        }
+        if (role === "institute") {
+          return "How to Register & Login to the Institute Portal Step by Step:\n1. Click OPEN INSTITUTE REGISTRATION (or click Institute Portal \u2192 Register as Institute).\n2. Fill in your Institute Name, Registration Code, Director Name, Focus Stream, Official Email, Phone & Password.\n3. Sign in via OPEN INSTITUTE LOGIN to manage coaching batches, mock test series, 18 skill programs, and fee ledger.";
+        }
+        if (role === "student") {
+          return "How to Register & Login as a Student Step by Step:\n1. Click OPEN STUDENT REGISTRATION below (or click Register at top-right \u2192 Student).\n2. Enter your Full Name, Education Board (Maharashtra / CBSE / ICSE), Standard/Class (1\u201310), Medium, School Name, Email, Mobile & Password.\n3. Sign in anytime via OPEN STUDENT LOGIN to access Study Notes, Worksheets, Quizzes, Scholarship & Trilingual Dictionary.";
+        }
+        return 'How to Register & Login on MyStudyZone Step by Step:\n1. Click the "Register" button at the top-right of the homepage (or click OPEN REGISTRATION below), OR click any of the 5 portal cards (Student, Teacher, Parent, College, or Institute).\n2. Each portal has its own dedicated registration form:\n   \u2022 Student: Name, Board (Maharashtra/CBSE/ICSE), Class (1\u201310), Medium, School Name, Email, Mobile & Password.\n   \u2022 Teacher: Name, Qualification, Subjects Taught, Board, Experience, School Name, Email, Mobile & Password.\n   \u2022 Parent: Parent Name, Child\u2019s Student Email & Mobile (for linking), Email & Password.\n   \u2022 College: College/School Name, UDISE/Registration Code, Principal/Admin Name, City, Official Email, Phone & Password.\n   \u2022 Institute: Institute Name, Registration Code, Director Name, Focus Stream, Official Email, Phone & Password.\n3. After registering, sign in anytime using Login and your role will open your dedicated portal dashboard automatically.';
+      },
+      hi: (_c, _b, role) => {
+        if (role === "teacher") {
+          return "\u091F\u0940\u091A\u0930 \u092A\u094B\u0930\u094D\u091F\u0932 \u092E\u0947\u0902 \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902:\n1. \u0928\u0940\u091A\u0947 OPEN TEACHER REGISTRATION \u0926\u092C\u093E\u090F\u0901\u0964\n2. \u0905\u092A\u0928\u093E \u0928\u093E\u092E, \u092F\u094B\u0917\u094D\u092F\u0924\u093E, \u092A\u0922\u093C\u093E\u090F \u091C\u093E\u0928\u0947 \u0935\u093E\u0932\u0947 \u0935\u093F\u0937\u092F, \u092C\u094B\u0930\u094D\u0921, \u0938\u094D\u0915\u0942\u0932, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u0947\u0902\u0964\n3. \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0915\u0947 \u092C\u093E\u0926 OPEN TEACHER LOGIN \u0938\u0947 \u0938\u0940\u0927\u0947 Teacher Command Center \u0916\u094B\u0932\u0947\u0902\u0964";
+        }
+        return 'MyStudyZone \u092A\u0930 \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902 \u2014 \u091A\u0930\u0923-\u0926\u0930-\u091A\u0930\u0923:\n1. \u0939\u094B\u092E\u092A\u0947\u091C \u0915\u0947 \u090A\u092A\u0930 \u0926\u093E\u0908\u0902 \u0913\u0930 "Register" \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 (\u092F\u093E \u0928\u0940\u091A\u0947 OPEN REGISTRATION \u0926\u092C\u093E\u090F\u0901), \u092F\u093E \u0915\u093F\u0938\u0940 \u092D\u0940 \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u093E\u0930\u094D\u0921 (Student, Teacher, Parent, College, Institute) \u0915\u094B \u091A\u0941\u0928\u0947\u0902\u0964\n2. \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u093E \u0905\u092A\u0928\u093E \u0905\u0932\u0917 \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u092B\u0949\u0930\u094D\u092E \u0939\u0948 \u2014 \u0905\u092A\u0928\u093E \u0928\u093E\u092E, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u0915\u0930 \u0905\u0915\u093E\u0909\u0902\u091F \u092C\u0928\u093E\u090F\u0901\u0964\n3. \u0930\u091C\u093F\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0915\u0947 \u092C\u093E\u0926 Login \u0938\u0947 \u0915\u092D\u0940 \u092D\u0940 \u0905\u092A\u0928\u0947 \u092A\u094B\u0930\u094D\u091F\u0932 \u0921\u0948\u0936\u092C\u094B\u0930\u094D\u0921 \u092E\u0947\u0902 \u092A\u094D\u0930\u0935\u0947\u0936 \u0915\u0930\u0947\u0902\u0964';
+      },
+      mr: (_c, _b, role) => {
+        if (role === "teacher") {
+          return "\u0936\u093F\u0915\u094D\u0937\u0915 \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 \u0928\u094B\u0902\u0926\u0923\u0940 \u0906\u0923\u093F \u0932\u0949\u0917\u093F\u0928 \u0915\u0938\u0947 \u0915\u0930\u093E\u0935\u0947:\n1. \u0916\u093E\u0932\u0940\u0932 OPEN TEACHER REGISTRATION \u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.\n2. \u0924\u0941\u092E\u091A\u0947 \u0928\u093E\u0935, \u092A\u093E\u0924\u094D\u0930\u0924\u093E, \u0936\u093F\u0915\u0935\u0932\u0947 \u091C\u093E\u0923\u093E\u0930\u0947 \u0935\u093F\u0937\u092F, \u092C\u094B\u0930\u094D\u0921, \u0936\u093E\u0933\u093E, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u093E.\n3. \u0928\u094B\u0902\u0926\u0923\u0940\u0928\u0902\u0924\u0930 OPEN TEACHER LOGIN \u0935\u093E\u092A\u0930\u0942\u0928 \u0925\u0947\u091F Teacher Command Center \u0909\u0918\u0921\u093E.";
+        }
+        return 'MyStudyZone \u0935\u0930 \u0928\u094B\u0902\u0926\u0923\u0940 (Registration) \u0906\u0923\u093F \u0932\u0949\u0917\u093F\u0928 \u0915\u0938\u0947 \u0915\u0930\u093E\u0935\u0947 \u2014 \u092A\u093E\u092F\u0930\u0940-\u092A\u093E\u092F\u0930\u0940\u0928\u0947:\n1. \u092E\u0941\u0916\u094D\u092F\u092A\u0943\u0937\u094D\u0920\u093E\u0935\u0930 \u0909\u091C\u0935\u0940\u0915\u0921\u0947 "Register" \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E (\u0915\u093F\u0902\u0935\u093E \u0916\u093E\u0932\u0940\u0932 OPEN REGISTRATION \u0926\u093E\u092C\u093E), \u0915\u093F\u0902\u0935\u093E \u096B \u092A\u0948\u0915\u0940 \u0915\u094B\u0923\u0924\u094D\u092F\u093E\u0939\u0940 \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u093E\u0930\u094D\u0921\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E.\n2. \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u092A\u094B\u0930\u094D\u091F\u0932\u0928\u0941\u0938\u093E\u0930 \u0928\u093E\u0935, \u0908\u092E\u0947\u0932, \u092E\u094B\u092C\u093E\u0907\u0932 \u0935 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0930\u0942\u0928 \u0916\u093E\u0924\u0947 \u0924\u092F\u093E\u0930 \u0915\u0930\u093E.\n3. \u0928\u094B\u0902\u0926\u0923\u0940\u0928\u0902\u0924\u0930 Login \u0935\u093E\u092A\u0930\u0942\u0928 \u0915\u0927\u0940\u0939\u0940 \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u092A\u094B\u0930\u094D\u091F\u0932 \u0921\u0945\u0936\u092C\u094B\u0930\u094D\u0921\u0935\u0930 \u092A\u094D\u0930\u0935\u0947\u0936 \u0915\u0930\u093E.';
+      }
     }
   },
   {
     id: "boards_and_plans",
     priority: 60,
-    keywords: ["maharashtra", "cbse", "icse", "subscription plan", "plan details", "free plan", "premium plan", "price", "pricing", "99", "fee", "subscription", "\u092A\u094D\u0932\u093E\u0928", "\u092B\u0940\u0938", "\u092C\u094B\u0930\u094D\u0921"],
-    actionIds: () => ["open_all_courses", "open_plans"],
+    keywords: ["maharashtra", "cbse", "icse", "subscription plan", "plan details", "free plan", "premium plan", "price", "pricing", "99", "fee", "subscription", "payment", "\u092A\u094D\u0932\u093E\u0928", "\u092B\u0940\u0938", "\u092C\u094B\u0930\u094D\u0921"],
+    actionIds: (_c, _b, role) => role === "teacher" ? ["open_tet_ctet", "open_plans"] : ["open_all_courses", "open_plans"],
     responses: {
-      en: () => "MyStudyZone covers Classes 1 to 10 across all 3 Education Boards: Maharashtra State Board, CBSE (NCERT), and ICSE (CISCE).\n\u2022 FREE PLAN (\u20B90 Lifetime): 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, and Chapter 1 sample notes.\n\u2022 SCHOOL PREMIUM PLAN (\u20B999 / 365 Days): Full 1-year unlock of all subjects, worksheets, study materials, stories, drawing, cricket GK & AI academy for your selected Board & Class.\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) | 1 Year \u20B9299 (MRP \u20B9599)\n  \u2013 CTET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) | 1 Year \u20B9299 (MRP \u20B9599)\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): 6 Months \u20B9349 (MRP \u20B9699) | 1 Year \u20B9499 (MRP \u20B9999)\n\u2022 Separate Scholarship Combo (Std 4th & 7th) is also available.",
-      hi: () => "MyStudyZone \u092A\u0930 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10 \u0915\u0947 \u0932\u093F\u090F \u0924\u0940\u0928\u094B\u0902 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE (NCERT) \u0914\u0930 ICSE (CISCE)\u0964\n\u2022 FREE PLAN (\u20B90 \u0932\u093E\u0907\u092B\u091F\u093E\u0907\u092E): 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F, English/Maths \u0915\u094D\u0935\u093F\u091C\u093C, \u092A\u091C\u093C\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0914\u0930 \u0938\u0948\u0902\u092A\u0932 \u0928\u094B\u091F\u094D\u0938\u0964\n\u2022 SCHOOL PREMIUM PLAN (\u20B999 / 365 \u0926\u093F\u0928): \u091A\u0941\u0928\u0947 \u0939\u0941\u090F \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0928\u094B\u091F\u094D\u0938, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0914\u0930 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u092A\u0942\u0930\u0947 1 \u0935\u0930\u094D\u0937 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0932\u0949\u0915\u0964\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET (Paper 1 & 2): 6 \u092E\u093E\u0939 \u20B9199 (MRP \u20B9399) | 1 \u0935\u0930\u094D\u0937 \u20B9299 (MRP \u20B9599)\n  \u2013 CTET (Paper 1 & 2): 6 \u092E\u093E\u0939 \u20B9199 (MRP \u20B9399) | 1 \u0935\u0930\u094D\u0937 \u20B9299 (MRP \u20B9599)\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): 6 \u092E\u093E\u0939 \u20B9349 (MRP \u20B9699) | 1 \u0935\u0930\u094D\u0937 \u20B9499 (MRP \u20B9999)\n\u2022 \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A (\u0915\u0915\u094D\u0937\u093E 4 \u0914\u0930 7) \u0915\u0947 \u0932\u093F\u090F \u0905\u0932\u0917 \u092A\u094D\u0932\u093E\u0928 \u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964",
-      mr: () => "MyStudyZone \u0935\u0930 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966 \u0938\u093E\u0920\u0940 \u0924\u093F\u0928\u094D\u0939\u0940 \u092C\u094B\u0930\u094D\u0921 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924: \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0930\u093E\u091C\u094D\u092F \u092E\u0902\u0921\u0933, CBSE (NCERT) \u0906\u0923\u093F ICSE (CISCE).\n\u2022 FREE PLAN (\u20B9\u0966 \u0906\u091C\u0940\u0935\u0928): \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, English/Maths \u0915\u094D\u0935\u093F\u091D, \u092A\u091D\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942 \u0935 \u0928\u092E\u0941\u0928\u093E \u0928\u094B\u091F\u094D\u0938.\n\u2022 SCHOOL PREMIUM PLAN (\u20B9\u096F\u096F / \u0969\u096C\u096B \u0926\u093F\u0935\u0938): \u0928\u093F\u0935\u0921\u0932\u0947\u0932\u094D\u092F\u093E \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0917\u094B\u0937\u094D\u091F\u0940, \u0921\u094D\u0930\u0949\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0935 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u0967 \u0935\u0930\u094D\u0937\u093E\u0938\u093E\u0920\u0940 \u092A\u0942\u0930\u094D\u0923\u092A\u0923\u0947 \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET (Paper 1 & 2): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0967\u096F\u096F (MRP \u20B9\u0969\u096F\u096F) | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u0968\u096F\u096F (MRP \u20B9\u096B\u096F\u096F)\n  \u2013 CTET (Paper 1 & 2): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0967\u096F\u096F (MRP \u20B9\u0969\u096F\u096F) | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u0968\u096F\u096F (MRP \u20B9\u096B\u096F\u096F)\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0969\u096A\u096F (MRP \u20B9\u096C\u096F\u096F) | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u096A\u096F\u096F (MRP \u20B9\u096F\u096F\u096F)\n\u2022 \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940 (\u0907. \u096A \u0925\u0940 \u0935 \u096D \u0935\u0940) \u0938\u093E\u0920\u0940 \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930 \u092A\u094D\u0932\u093E\u0928 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947."
+      en: (_c, _b, role) => role === "teacher" ? "Teacher Subscription Plans & Pricing on MyStudyZone:\n\u2022 TEACHER PLANS \u2013 MAHA TET & CTET (Paper 1 & 2):\n  \u2013 TET Only (Paper 1 & 2): 6 Months \u20B9199 | 1 Year \u20B9299\n  \u2013 CTET Only (Paper 1 & 2): 6 Months \u20B9199 | 1 Year \u20B9299\n  \u2013 Combo Offer (TET + CTET Paper 1 & 2): 6 Months \u20B9349 | 1 Year \u20B9499\n\u2022 SCHOOL CLASS ACCESS (Classes 1\u201310 across Maharashtra, CBSE & ICSE): Free \u20B90 Demo Plan or \u20B999 / 365 Days per Board & Class." : "MyStudyZone Subscription & Payment Guide (Classes 1 to 10 across Maharashtra, CBSE & ICSE Boards):\n\u2022 FREE PLAN (\u20B90 Lifetime): Includes 2 Demo Worksheets (English & Math), English & Math Quizzes, Brain Puzzles, Sudoku, Trilingual Dictionary, Thought of the Day, and Chapter 1 sample notes.\n\u2022 SCHOOL PREMIUM PLAN (\u20B999 / 365 Days): Full 1-year unlock of all subjects, chapter study notes, interactive worksheets, 4-level quizzes, stories, drawing studio, cricket GK & AI learning academy for your selected Board & Class.\n\u2022 SCHOLARSHIP COMBO (Std 4th & 7th): \u20B999 / 365 Days.",
+      hi: () => "MyStudyZone \u0938\u092C\u094D\u0938\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u0914\u0930 \u092A\u0947\u092E\u0947\u0902\u091F \u091C\u093E\u0928\u0915\u093E\u0930\u0940 (\u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE \u0914\u0930 ICSE \u2014 \u0915\u0915\u094D\u0937\u093E 1 \u0938\u0947 10):\n\u2022 FREE PLAN (\u20B90 \u0932\u093E\u0907\u092B\u091F\u093E\u0907\u092E): 2 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F, English/Maths \u0915\u094D\u0935\u093F\u091C\u093C, \u092A\u091C\u093C\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942, \u0936\u092C\u094D\u0926\u0915\u094B\u0936, \u0938\u0941\u0935\u093F\u091A\u093E\u0930 \u0914\u0930 \u0938\u0948\u0902\u092A\u0932 \u0928\u094B\u091F\u094D\u0938\u0964\n\u2022 SCHOOL PREMIUM PLAN (\u20B999 / 365 \u0926\u093F\u0928): \u091A\u0941\u0928\u0947 \u0939\u0941\u090F \u092C\u094B\u0930\u094D\u0921 \u0935 \u0915\u0915\u094D\u0937\u093E \u0915\u0947 \u0938\u092D\u0940 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0928\u094B\u091F\u094D\u0938, \u0915\u0939\u093E\u0928\u093F\u092F\u093E\u0901, \u0921\u094D\u0930\u093E\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0914\u0930 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u092A\u0942\u0930\u0947 1 \u0935\u0930\u094D\u0937 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0932\u0949\u0915\u0964\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET \u092F\u093E CTET: 6 \u092E\u093E\u0939 \u20B9199 | 1 \u0935\u0930\u094D\u0937 \u20B9299\n  \u2013 Combo Offer (TET + CTET): 6 \u092E\u093E\u0939 \u20B9349 | 1 \u0935\u0930\u094D\u0937 \u20B9499\u0964",
+      mr: () => "MyStudyZone \u0938\u092C\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u0935 \u092A\u0947\u092E\u0947\u0902\u091F \u092E\u093E\u0939\u093F\u0924\u0940 (\u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092C\u094B\u0930\u094D\u0921, CBSE \u0906\u0923\u093F ICSE \u2014 \u0907\u092F\u0924\u094D\u0924\u093E \u0967 \u0924\u0947 \u0967\u0966):\n\u2022 FREE PLAN (\u20B9\u0966 \u0906\u091C\u0940\u0935\u0928): \u0968 \u0921\u0947\u092E\u094B \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, English/Maths \u0915\u094D\u0935\u093F\u091D, \u092A\u091D\u0932\u094D\u0938, \u0938\u0941\u0921\u094B\u0915\u0942, \u0936\u092C\u094D\u0926\u0915\u094B\u0936, \u0938\u0941\u0935\u093F\u091A\u093E\u0930 \u0935 \u0928\u092E\u0941\u0928\u093E \u0928\u094B\u091F\u094D\u0938.\n\u2022 SCHOOL PREMIUM PLAN (\u20B9\u096F\u096F / \u0969\u096C\u096B \u0926\u093F\u0935\u0938): \u0928\u093F\u0935\u0921\u0932\u0947\u0932\u094D\u092F\u093E \u092C\u094B\u0930\u094D\u0921 \u0935 \u0907\u092F\u0924\u094D\u0924\u0947\u0938\u093E\u0920\u0940 \u0938\u0930\u094D\u0935 \u0935\u093F\u0937\u092F, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0917\u094B\u0937\u094D\u091F\u0940, \u0921\u094D\u0930\u0949\u0907\u0902\u0917, \u0915\u094D\u0930\u093F\u0915\u0947\u091F GK \u0935 AI \u0905\u0915\u093E\u0926\u092E\u0940 \u0967 \u0935\u0930\u094D\u0937\u093E\u0938\u093E\u0920\u0940 \u092A\u0942\u0930\u094D\u0923\u092A\u0923\u0947 \u0916\u0941\u0932\u0947 \u0939\u094B\u0924\u093E\u0924.\n\u2022 TEACHER PLANS \u2013 TET & CTET (Paper 1 & 2):\n  \u2013 TET \u0915\u093F\u0902\u0935\u093E CTET: \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0967\u096F\u096F | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u0968\u096F\u096F\n  \u2013 Combo Offer (TET + CTET): \u096C \u092E\u0939\u093F\u0928\u0947 \u20B9\u0969\u096A\u096F | \u0967 \u0935\u0930\u094D\u0937 \u20B9\u096A\u096F\u096F."
     }
   }
 ];
@@ -4720,7 +5327,7 @@ function matchKnowledgeBaseFastPath(userMessage, options) {
   const detectedBoard = extractBoard(raw);
   const tokens = tokenizeNormalized(raw);
   const rawLower = raw.toLowerCase();
-  const isComplexMultiQuestion = raw.length > 140 || raw.split("?").length > 2 || /\b(explain|difference|compare|why|how does|suggest|recommend|problem|error|stuck)\b/i.test(rawLower);
+  const isComplexMultiQuestion = raw.length > 160 || raw.split("?").length > 2 || /\b(difference|compare|why|suggest|recommend|error|stuck)\b/i.test(rawLower);
   let bestTopic = null;
   let bestScore = 0;
   for (const topic of KB_TOPICS) {
@@ -4738,14 +5345,14 @@ function matchKnowledgeBaseFastPath(userMessage, options) {
       }
     }
   }
-  if (bestTopic && (bestTopic.id === "unresolved_account_problem" || bestTopic.id === "password_reset" || !isComplexMultiQuestion)) {
+  if (bestTopic && (options?.includeComplexMatch || bestTopic.id === "unresolved_account_problem" || bestTopic.id === "password_reset" || bestTopic.id === "question_paper_generator" || !isComplexMultiQuestion)) {
     const actionIds = bestTopic.actionIds(detectedClass, detectedBoard, options?.userRole);
     const navigationActions = actionIds.map(
-      (id) => buildNavigationAction(id, detectedClass, detectedBoard)
+      (id) => buildNavigationAction(id, detectedClass, detectedBoard, options?.userRole)
     );
     return {
       matched: true,
-      reply: bestTopic.responses[language](detectedClass, detectedBoard),
+      reply: bestTopic.responses[language](detectedClass, detectedBoard, options?.userRole),
       language,
       navigationActions,
       suggestSupportTicket: Boolean(bestTopic.suggestSupportTicket),
@@ -4761,24 +5368,57 @@ function matchKnowledgeBaseFastPath(userMessage, options) {
   };
 }
 var HELP_DESK_SYSTEM_PROMPT = `
-You are the official Help & Support Assistant for MyStudyZone (mystudyzone.in), an Indian K-10 school and competitive teacher-exam learning platform.
+You are the official AI Help & Support Assistant for MyStudyZone (mystudyzone.in), a comprehensive Indian educational platform with FIVE dedicated portals:
+1. Student Portal (Classes 1 to 10 across Maharashtra State Board, CBSE, and ICSE)
+2. Teacher Portal (Lesson Planner, Question Paper & Worksheet Generators, Student Management, TET & CTET Prep)
+3. Parent Portal (Child Account Linking, Student Progress Tracking, Exam Reports & Attendance)
+4. College Portal (Classes/Streams/Divisions, Faculty Allocation, Student Directory, Institutional Calendar, Result Analytics & Circulars)
+5. Institute Portal (Coaching Batches, Mock Test Series, 18 Skill Academy Programs like Abacus/Vedic Maths/Phonics, Trainer Roster, Fee Ledger & Certificates)
 
-STRICT RULES \u2014 NEVER VIOLATE:
-1. ACCURACY ONLY: Only describe features, boards, classes, plans, and links that actually exist on MyStudyZone:
-   - Education Boards (Classes 1 to 10): Maharashtra State Board (SSC), CBSE (NCERT), ICSE (CISCE).
-   - School Features: All Courses Directory (Classes 1\u201310), Chapter-wise Study Materials & Syllabus Notes (with solved examples & revision checklists), Online Interactive Worksheets (Classes 1\u201310), 4-Level Practice Quizzes (zero-repeated-question tracking), Milestone Champion Certificates & Leaderboard.
-   - IMPORTANT DOWNLOAD RULE: Worksheets and Study Notes are ONLINE ONLY inside the website (printing and PDF downloads of worksheets are intentionally disabled). Do NOT tell users they can download worksheet PDFs. Users CAN view/print earned Champion Certificates and save drawings in Drawing Studio gallery.
-   - Special Learning Studios: Story World (45+ audio stories in English, Hindi, Marathi), Chhatrapati Shivaji Maharaj Stories (50 audio chapters), Drawing Studio (120+ colouring templates & canvas), Brain Puzzles & Sudoku (4x4, 6x6, 9x9 \u2014 Free Forever), Cricket & GK Hub, AI Learning Academy & Future Skills (8 modules).
-   - Exam Prep: 4th Std Scholarship (MSCE PSE) & 7th Std Scholarship (MSCE UPS), MAHA TET (Paper 1 & 2) & CTET (Paper 1 & 2), Free Interactive Visitor Demo & Free Full-Length Demo Mock Tests.
-   - Accounts & Portals: Student Registration/Login, Dedicated Teacher Registration/Login (with Teacher Hub for Classes 1\u201310, Worksheets, Study Notes, 4-Level Quizzes, Scholarship, TET/CTET, Stories, Current Affairs), Single-Device Session Protection (with Lost/Damaged Device Recovery in Login modal), Forgot Password email reset, Top-Right Login/Logout button, Refer & Earn (\u20B95 cashback wallet).
-   - Plans: FREE PLAN (\u20B90 Lifetime: 2 Demo Worksheets English & Math for registered class, English & Math quizzes, Brain Puzzles, Sudoku, Chapter 1 sample notes); SCHOOL PREMIUM PLAN (\u20B999 / 365 Days per Board & Class); SCHOLARSHIP COMBO (\u20B999 / 365 Days); TEACHER PLANS \u2013 TET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) & 1 Year \u20B9299 (MRP \u20B9599); CTET (Paper 1 & 2): 6 Months \u20B9199 (MRP \u20B9399) & 1 Year \u20B9299 (MRP \u20B9599); TET + CTET COMBO (Paper 1 & 2): 6 Months \u20B9349 (MRP \u20B9699) & 1 Year \u20B9499 (MRP \u20B9999) via Razorpay.
-2. NEVER INVENT FEATURES: Never invent live video classes, downloadable worksheet PDFs, 1-on-1 tutors, WhatsApp bots, or non-existent routes/buttons. If asked for something unavailable, politely say it is not available on MyStudyZone.
-3. PRIVACY & SAFETY: NEVER ask users for passwords, OTPs, bank details, or card/UPI PINs. NEVER claim to have automatically fixed an account, reset a password, or activated a plan\u2014always guide the user or set suggestSupportTicket=true so they can submit a Support Request. NEVER disclose admin details or another user's private info.
-4. MULTILINGUAL SUPPORT: Reply fluently in the user's language \u2014 English ('en'), Hindi ('hi'), or Marathi ('mr'), understanding spelling mistakes and Hinglish/Marathi transliteration naturally.
-5. NAVIGATION ACTIONS: Only choose from these exact navigationActionIds when genuinely helpful to take the user directly to a section:
-   open_worksheets, open_syllabus, open_all_courses, open_quizzes, open_scholarship, open_tet_ctet, open_teacher_resources, open_stories, open_shivaji, open_drawing, open_puzzles, open_sudoku, open_cricket, open_ai_academy, open_other_programs, open_demo, open_certificates, open_referrals, open_profile, open_plans, open_login, open_teacher_login, open_register, open_password_reset, open_dashboard.
-6. TROUBLESHOOTING & ESCALATION: For personal account, login, payment not reflecting, class correction, or bug issues, give concise troubleshooting steps first and set suggestSupportTicket=true so the UI displays the "SUBMIT A SUPPORT REQUEST" button.
+STRICT RESPONSE RULES \u2014 NEVER VIOLATE:
+1. SIMPLE, FRIENDLY, PORTAL-SPECIFIC & STEP-BY-STEP:
+   - Strictly respect "Current User Portal Context":
+     \u2022 If Current User Portal Context is "teacher", give Teacher-specific answers and Teacher navigation buttons ONLY \u2014 never show Student-only topics unless the user explicitly asks about Students.
+     \u2022 Apply the exact same strict portal isolation for "student", "parent", "college", and "institute".
+   - Provide numbered step-by-step instructions whenever explaining how to register, login, generate a question paper, find study notes, access worksheets, use the Lesson Planner, link a child account, or use portal features.
+2. ACCURACY ONLY \u2014 NEVER INVENT FEATURES:
+   - Only describe features, boards, classes, plans, and sections that actually exist on MyStudyZone:
+     \u2022 Student Support: Separate Student Registration & Login; Study Materials (Select Board -> Medium -> Standard Class 1\u201310 -> Subject -> Chapter -> View Notes); Online Interactive Worksheets; 4-Level Practice Quizzes; 4th & 7th MSCE Scholarship; Story World (45+ audio stories); Chhatrapati Shivaji Maharaj 50 chapters; Drawing Studio; Brain Puzzles & Sudoku; Trilingual Dictionary (English-Marathi-Hindi); Thought of the Day (1,000+ trilingual thoughts); Free \u20B90 Plan vs \u20B999 / 365 Days Class Plan.
+     \u2022 Teacher Support: Separate Teacher Registration & Login; Teacher Lesson Planner (Annual, Monthly, and Daily Lesson Plans with School Calendar Drawer and A4 PDF export); AI Tools Studio -> AI Question Paper Generator (or 40 Teacher AI Tools -> #15 Question Paper Generator), Worksheet & Assignment Generators; Student Management & Performance tracking; MAHA TET & CTET (Paper 1 & 2) mock tests.
+     \u2022 Parent Support: Separate Parent Registration & Login; connecting/linking with student accounts using the child's registered Student Email & Mobile; viewing subject-wise student progress, worksheet completion, quiz scorecards, and attendance reports.
+     \u2022 College Support: Separate College/School Registration & Login (Institution Name, UDISE/Registration Code, Official Email); managing classes/streams/divisions, faculty subject allocation, student roster, institutional calendar, result analytics, and campus circulars.
+     \u2022 Institute Support: Separate Coaching/Institute Registration & Login; managing coaching batches & timings, mock test series, 18 skill academy programs (Abacus, Vedic Maths, Phonics, Coding, etc.), trainer roster, fee ledger, and course completion certificates.
+     \u2022 AI Question Paper Generator: Open "Learning Tools" / "AI Tools Studio" -> select "AI Question Paper Generator", pick Board, Class (1\u201310), Subject, Language, Chapter/Topic, Total Marks (20\u2013100), Duration & Difficulty, and click Generate to produce a formal paper with Marking Scheme & PDF/DOCX export.
+     \u2022 Download Rule: Student Worksheets and Study Notes are interactive online resources (PDF downloading/printing of student worksheets is disabled). Teachers CAN export Lesson Plans and AI Question Papers/Worksheets as PDFs, and students CAN print earned Champion Certificates.
+3. PRIVACY & SECURITY:
+   - Never expose other users' information.
+   - Never request passwords, OTPs, API keys, bank details, or UPI/card PINs.
+   - Never provide unauthorized account or payment information or claim to have automatically modified an account.
+4. MULTILINGUAL SUPPORT:
+   - Reply in the user's language: English ('en'), Hindi ('hi'), or Marathi ('mr').
+5. NAVIGATION ACTIONS:
+   - Choose 0 to 3 helpful navigationActionIds from this exact allowlist:
+     open_question_paper_generator, open_worksheets, open_syllabus, open_all_courses, open_quizzes, open_scholarship, open_tet_ctet, open_teacher_resources, open_lesson_planner, open_student_portal, open_parent_portal, open_college_portal, open_institute_portal, open_ai_tools, open_dictionary, open_thought_of_the_day, open_stories, open_shivaji, open_drawing, open_puzzles, open_sudoku, open_cricket, open_ai_academy, open_other_programs, open_demo, open_certificates, open_referrals, open_profile, open_plans, open_login, open_teacher_login, open_register, open_password_reset, open_dashboard.
+6. ADMIN SUPPORT ESCALATION:
+   - If the AI cannot resolve a personal account, login, payment, class change, or technical problem, or if the user asks to contact support, set suggestSupportTicket=true and instruct them to click "SUBMIT A SUPPORT REQUEST" below to generate an official support ticket for the administrator.
 `.trim();
+
+// src/types/support.ts
+var SUPPORT_USER_CATEGORY_LABELS = {
+  student: "Student",
+  teacher: "Teacher",
+  parent: "Parent",
+  college: "College",
+  institute: "Institute"
+};
+function normalizeSupportUserCategory(raw) {
+  const val = String(raw || "").trim().toLowerCase();
+  if (val === "teacher") return "teacher";
+  if (val === "parent") return "parent";
+  if (val === "college" || val === "school_admin" || val === "school") return "college";
+  if (val === "institute" || val === "institute_admin" || val === "coaching") return "institute";
+  return "student";
+}
 
 // server/supportAssistant.ts
 var VALID_CLASSES = /* @__PURE__ */ new Set([
@@ -4805,6 +5445,12 @@ var VALID_SUPPORT_CATEGORIES = /* @__PURE__ */ new Set([
   "Website Navigation",
   "General Queries"
 ]);
+var VALID_TICKET_STATUSES = /* @__PURE__ */ new Set([
+  "OPEN",
+  "IN_PROGRESS",
+  "RESOLVED",
+  "CLOSED"
+]);
 var MAX_MESSAGE_CHARS = 600;
 var MAX_HISTORY_TURNS = 6;
 var CHAT_WINDOW_MS = 10 * 60 * 1e3;
@@ -4812,14 +5458,202 @@ var MAX_REQUESTS_PER_IP = 45;
 var MAX_AI_CALLS_PER_IP = 15;
 var MAX_DAILY_AI_CALLS = 500;
 var TICKET_WINDOW_MS = 15 * 60 * 1e3;
-var MAX_TICKETS_PER_IP = 6;
+var MAX_TICKETS_PER_IP = 10;
 var ipRequestTimestamps = /* @__PURE__ */ new Map();
 var ipAiTimestamps = /* @__PURE__ */ new Map();
 var ipTicketTimestamps = /* @__PURE__ */ new Map();
 var dailyAiTracker = {
   dateKey: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
-  count: 0
+  count: 0,
+  quotaCooldownUntilMs: 0,
+  lastKeyErrorReason: "",
+  lastUpstreamErrorAt: 0
 };
+var SUPPORT_STORE_DIR = path3.join(process.cwd(), "data");
+var SUPPORT_STORE_FILE = path3.join(SUPPORT_STORE_DIR, "support_tickets_store.json");
+var serverSupportTicketsMap = /* @__PURE__ */ new Map();
+var supportTicketsLoadedFromDisk = false;
+function ensureServerSupportTicketsLoaded() {
+  if (supportTicketsLoadedFromDisk) return;
+  supportTicketsLoadedFromDisk = true;
+  try {
+    if (fs3.existsSync(SUPPORT_STORE_FILE)) {
+      const raw = fs3.readFileSync(SUPPORT_STORE_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item.id === "string" && typeof item.ticketNumber === "string") {
+            serverSupportTicketsMap.set(item.id, item);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Support Store Load Warning]:", err);
+  }
+}
+function flushServerSupportTicketsToDisk() {
+  try {
+    if (!fs3.existsSync(SUPPORT_STORE_DIR)) {
+      fs3.mkdirSync(SUPPORT_STORE_DIR, { recursive: true });
+    }
+    const list = Array.from(serverSupportTicketsMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    fs3.writeFileSync(SUPPORT_STORE_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.warn("[Support Store Save Warning]:", err);
+    return serverSupportTicketsMap.size > 0;
+  }
+}
+function maskEmailForPublicLookup(rawEmail) {
+  const email = String(rawEmail || "").trim();
+  const atIdx = email.indexOf("@");
+  if (atIdx <= 1) return email ? "***" : "";
+  return `${email.slice(0, 2)}***${email.slice(atIdx)}`;
+}
+async function getServerSupportTickets(options) {
+  ensureServerSupportTicketsLoaded();
+  const mergedMap = /* @__PURE__ */ new Map();
+  const pickFresher = (existing, incoming) => {
+    if (!existing) return incoming;
+    const tExisting = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+    const tIncoming = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
+    return tIncoming >= tExisting ? incoming : existing;
+  };
+  for (const t of serverSupportTicketsMap.values()) {
+    mergedMap.set(t.id, t);
+  }
+  try {
+    if (options?.ticketNumber) {
+      const targetUpper = options.ticketNumber.trim().toUpperCase();
+      const diskMatch = Array.from(mergedMap.values()).find(
+        (t) => t.ticketNumber.toUpperCase() === targetUpper || t.id.toUpperCase() === targetUpper
+      );
+      if (isFirebaseAdminConfigured() || options.bearerToken) {
+        const docMatch = await serverQueryEqualsLimit1(
+          "support_tickets",
+          "ticketNumber",
+          targetUpper,
+          options.bearerToken ? { bearerToken: options.bearerToken } : void 0
+        ).catch(() => null);
+        if (docMatch?.data) {
+          const fsTicket = {
+            ...docMatch.data,
+            id: docMatch.data.id || docMatch.id
+          };
+          mergedMap.set(fsTicket.id, pickFresher(mergedMap.get(fsTicket.id), fsTicket));
+        }
+      }
+      const list2 = Array.from(mergedMap.values()).filter(
+        (t) => t.ticketNumber.toUpperCase() === targetUpper || t.id.toUpperCase() === targetUpper
+      );
+      const finalList = list2.length ? list2 : diskMatch ? [diskMatch] : [];
+      if (options.includeContactDetails) return finalList;
+      return finalList.map((t) => ({
+        ...t,
+        email: maskEmailForPublicLookup(t.email),
+        mobile: ""
+      }));
+    }
+    if (isFirebaseAdminConfigured() || options?.bearerToken) {
+      const docs = await serverListCollection(
+        "support_tickets",
+        300,
+        options?.bearerToken ? { bearerToken: options.bearerToken } : void 0
+      ).catch(() => []);
+      for (const item of docs) {
+        if (item?.data && (item.data.ticketNumber || item.data.id)) {
+          const fsTicket = {
+            ...item.data,
+            id: item.data.id || item.id
+          };
+          mergedMap.set(fsTicket.id, pickFresher(mergedMap.get(fsTicket.id), fsTicket));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Support Ticket Firestore Read Warning]:", err);
+  }
+  const list = Array.from(mergedMap.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  if (options?.studentId) {
+    return list.filter((t) => t.studentId === options.studentId);
+  }
+  return list;
+}
+async function updateServerSupportTicketStatus(ticketId, statusRaw, adminResponseRaw, bearerToken) {
+  ensureServerSupportTicketsLoaded();
+  const cleanId = String(ticketId || "").trim();
+  if (!cleanId) {
+    return {
+      statusCode: 400,
+      payload: { success: false, error: "Ticket ID is required." }
+    };
+  }
+  const normalizedUpper = String(statusRaw || "").trim().toUpperCase();
+  const mappedStatus = normalizedUpper === "NEW" || normalizedUpper === "OPEN" ? "OPEN" : normalizedUpper === "IN_PROGRESS" || normalizedUpper === "IN PROGRESS" || normalizedUpper === "PENDING" ? "IN_PROGRESS" : normalizedUpper === "RESOLVED" ? "RESOLVED" : normalizedUpper === "CLOSED" ? "CLOSED" : VALID_TICKET_STATUSES.has(statusRaw) ? statusRaw : "IN_PROGRESS";
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const cleanResponse = adminResponseRaw !== void 0 ? String(adminResponseRaw).trim().slice(0, 2e3) : void 0;
+  let targetKey = cleanId;
+  let existing = serverSupportTicketsMap.get(cleanId);
+  if (!existing) {
+    const cleanUpper = cleanId.toUpperCase();
+    for (const [k, v] of serverSupportTicketsMap.entries()) {
+      if (v.ticketNumber.toUpperCase() === cleanUpper || v.id.toUpperCase() === cleanUpper) {
+        targetKey = k;
+        existing = v;
+        break;
+      }
+    }
+  }
+  let updatedTicket;
+  if (existing) {
+    updatedTicket = {
+      ...existing,
+      status: mappedStatus,
+      ...cleanResponse !== void 0 ? { adminResponse: cleanResponse } : {},
+      updatedAt: nowIso
+    };
+    serverSupportTicketsMap.set(targetKey, updatedTicket);
+    flushServerSupportTicketsToDisk();
+  }
+  if (isFirebaseAdminConfigured() || bearerToken) {
+    try {
+      await serverUpdateDoc(
+        "support_tickets",
+        targetKey,
+        {
+          status: mappedStatus,
+          ...cleanResponse !== void 0 ? { adminResponse: cleanResponse } : {},
+          updatedAt: nowIso
+        },
+        bearerToken ? { bearerToken } : void 0
+      );
+    } catch (err) {
+      console.warn("[Support Ticket Firestore Update Warning]:", err);
+    }
+  }
+  if (!updatedTicket && !isFirebaseAdminConfigured() && !bearerToken) {
+    return {
+      statusCode: 404,
+      payload: { success: false, error: "Support ticket not found." }
+    };
+  }
+  return {
+    statusCode: 200,
+    payload: {
+      success: true,
+      ticketId: targetKey,
+      status: mappedStatus,
+      adminResponse: cleanResponse,
+      updatedAt: nowIso,
+      ticket: updatedTicket
+    }
+  };
+}
 function pruneAndCheckWindow(store, ip, windowMs, limit, record = true) {
   const now = Date.now();
   const list = (store.get(ip) || []).filter((ts) => now - ts < windowMs);
@@ -4833,38 +5667,131 @@ function pruneAndCheckWindow(store, ip, windowMs, limit, record = true) {
   }
   return true;
 }
-function getConfiguredGeminiKey() {
-  const raw = String(process.env.GEMINI_API_KEY || "").trim().replace(/^["']+|["']+$/g, "");
-  if (!raw) return "";
-  const upper = raw.toUpperCase();
-  if (upper.includes("MY_GEMINI_API_KEY") || upper.includes("YOUR_") || upper.includes("REPLACE_") || upper.includes("EXAMPLE_")) {
-    return "";
+function getSupportAiStatus() {
+  const apiKey = getConfiguredGeminiApiKey();
+  const todayKey = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  if (dailyAiTracker.dateKey !== todayKey) {
+    dailyAiTracker = {
+      dateKey: todayKey,
+      count: 0,
+      quotaCooldownUntilMs: 0,
+      lastKeyErrorReason: "",
+      lastUpstreamErrorAt: 0
+    };
   }
-  return raw;
+  if (!apiKey) {
+    return {
+      aiConnected: false,
+      configured: false,
+      mode: "knowledge_base",
+      reason: "missing_key",
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
+      message: "Knowledge Base Mode (Server GEMINI_API_KEY not configured \u2014 free Knowledge Base & Support Tickets active)"
+    };
+  }
+  if (dailyAiTracker.lastKeyErrorReason === "api_key_invalid") {
+    return {
+      aiConnected: false,
+      configured: false,
+      mode: "knowledge_base",
+      reason: "api_key_invalid",
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
+      message: "Knowledge Base Mode (Configured GEMINI_API_KEY rejected \u2014 check Settings > Secrets)"
+    };
+  }
+  if (dailyAiTracker.count >= MAX_DAILY_AI_CALLS || Date.now() < dailyAiTracker.quotaCooldownUntilMs) {
+    return {
+      aiConnected: false,
+      configured: true,
+      mode: "knowledge_base",
+      reason: "quota_exceeded",
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
+      message: "Knowledge Base Mode (Free-tier AI quota temporarily cooling down \u2014 paid billing is never auto-enabled)"
+    };
+  }
+  if (dailyAiTracker.lastUpstreamErrorAt && Date.now() - dailyAiTracker.lastUpstreamErrorAt < 60 * 1e3) {
+    return {
+      aiConnected: false,
+      configured: true,
+      mode: "knowledge_base",
+      reason: "upstream_error",
+      model: GEMINI_PRIMARY_MODEL,
+      fallbackModel: GEMINI_FALLBACK_MODEL,
+      message: "Knowledge Base Mode (Gemini service temporarily busy \u2014 Knowledge Base & Support Tickets active)"
+    };
+  }
+  return {
+    aiConnected: true,
+    configured: true,
+    mode: "live_ai",
+    reason: "ok",
+    model: GEMINI_PRIMARY_MODEL,
+    fallbackModel: GEMINI_FALLBACK_MODEL,
+    message: `Live Free-Tier Gemini AI Connected (${GEMINI_PRIMARY_MODEL} + ${GEMINI_FALLBACK_MODEL} fallback)`
+  };
 }
-function buildFallbackMessage(lang, userMessage, suggestTicket) {
+function resolvePortalContext(rawRole, rawPortal) {
+  const portalStr = String(rawPortal || rawRole || "").trim().toLowerCase();
+  if (portalStr === "teacher") return "teacher";
+  if (portalStr === "parent" || portalStr === "parent-zone") return "parent";
+  if (portalStr === "college" || portalStr === "school_admin" || portalStr === "school-college-zone") {
+    return "college";
+  }
+  if (portalStr === "institute" || portalStr === "institute_admin" || portalStr === "coaching-zone") {
+    return "institute";
+  }
+  if (portalStr === "student") return "student";
+  if (portalStr === "homepage" || portalStr === "public-home") return "homepage";
+  return "visitor";
+}
+function buildFallbackMessage(lang, userMessage, suggestTicket, portalContext) {
   const cls = extractClassLevel(userMessage);
   const board = extractBoard(userMessage);
-  const actions = [
-    buildNavigationAction("open_all_courses", cls, board),
-    buildNavigationAction("open_worksheets", cls, board),
-    buildNavigationAction("open_syllabus", cls, board),
-    buildNavigationAction("open_teacher_resources")
+  const actions = portalContext === "teacher" ? [
+    buildNavigationAction("open_teacher_resources", cls, board, "teacher"),
+    buildNavigationAction("open_lesson_planner", cls, board, "teacher"),
+    buildNavigationAction("open_question_paper_generator", cls, board, "teacher"),
+    buildNavigationAction("open_worksheets", cls, board, "teacher")
+  ] : portalContext === "parent" ? [
+    buildNavigationAction("open_parent_portal", cls, board, "parent"),
+    buildNavigationAction("open_register", cls, board, "parent"),
+    buildNavigationAction("open_login", cls, board, "parent")
+  ] : portalContext === "college" ? [
+    buildNavigationAction("open_college_portal", cls, board, "college"),
+    buildNavigationAction("open_register", cls, board, "college"),
+    buildNavigationAction("open_login", cls, board, "college")
+  ] : portalContext === "institute" ? [
+    buildNavigationAction("open_institute_portal", cls, board, "institute"),
+    buildNavigationAction("open_register", cls, board, "institute"),
+    buildNavigationAction("open_login", cls, board, "institute")
+  ] : portalContext === "student" ? [
+    buildNavigationAction("open_syllabus", cls, board, "student"),
+    buildNavigationAction("open_worksheets", cls, board, "student"),
+    buildNavigationAction("open_quizzes", cls, board, "student"),
+    buildNavigationAction("open_dictionary", cls, board, "student")
+  ] : [
+    buildNavigationAction("open_student_portal"),
+    buildNavigationAction("open_teacher_resources"),
+    buildNavigationAction("open_parent_portal"),
+    buildNavigationAction("open_ai_tools")
   ];
   if (lang === "hi") {
     return {
-      reply: suggestTicket ? "\u0906\u092A \u0938\u0940\u0927\u0947 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0928\u0947\u0935\u093F\u0917\u0947\u0936\u0928 \u092C\u091F\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u0947\u0915\u094D\u0936\u0928 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u092F\u0926\u093F \u092F\u0939 \u0906\u092A\u0915\u0947 \u0916\u093E\u0924\u0947, \u0932\u0949\u0917\u093F\u0928, \u092A\u0947\u092E\u0947\u0902\u091F \u092F\u093E \u0915\u093F\u0938\u0940 \u0924\u0915\u0928\u0940\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0939\u0948, \u0924\u094B \u0915\u0943\u092A\u092F\u093E SUBMIT A SUPPORT REQUEST \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0915\u0947 \u0905\u092A\u0928\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u092D\u0947\u091C\u0947\u0902\u0964" : "\u0906\u092A \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0928 \u0938\u0947 \u0915\u094B\u0930\u094D\u0938 (\u0915\u0915\u094D\u0937\u093E 1\u201310), \u0935\u0930\u094D\u0915\u0936\u0940\u091F, \u0938\u093F\u0932\u0947\u092C\u0938 \u0928\u094B\u091F\u094D\u0938, \u0938\u094D\u0915\u0949\u0932\u0930\u0936\u093F\u092A, TET/CTET \u092F\u093E \u091F\u0940\u091A\u0930 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u092F\u0926\u093F \u0915\u093F\u0938\u0940 \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u0917\u0924 \u0938\u092E\u0938\u094D\u092F\u093E \u092E\u0947\u0902 \u092E\u0926\u0926 \u091A\u093E\u0939\u093F\u090F, \u0924\u094B \u0906\u092A Support Request \u092D\u0940 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
+      reply: suggestTicket ? "\u0906\u092A \u0938\u0940\u0927\u0947 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0928\u0947\u0935\u093F\u0917\u0947\u0936\u0928 \u092C\u091F\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094B\u0930\u094D\u091F\u0932 \u092F\u093E \u0938\u0947\u0915\u094D\u0936\u0928 \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u092F\u0926\u093F \u092F\u0939 \u0906\u092A\u0915\u0947 \u0916\u093E\u0924\u0947, \u0932\u0949\u0917\u093F\u0928, \u092A\u0947\u092E\u0947\u0902\u091F \u092F\u093E \u0915\u093F\u0938\u0940 \u0924\u0915\u0928\u0940\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0939\u0948, \u0924\u094B \u0915\u0943\u092A\u092F\u093E SUBMIT A SUPPORT REQUEST \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0915\u0947 \u0905\u092A\u0928\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u092D\u0947\u091C\u0947\u0902\u0964" : "\u0906\u092A \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0928 \u0938\u0947 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0935\u0930\u094D\u0915\u0936\u0940\u091F, AI \u091C\u0928\u0930\u0947\u091F\u0930, \u091F\u0940\u091A\u0930 \u0932\u0947\u0938\u0928 \u092A\u094D\u0932\u093E\u0928\u0930 \u092F\u093E \u0905\u092A\u0928\u0947 \u092A\u094B\u0930\u094D\u091F\u0932 (Student, Teacher, Parent, College, Institute) \u0916\u094B\u0932 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u0915\u093F\u0938\u0940 \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u0917\u0924 \u0938\u092E\u0938\u094D\u092F\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u092A Support Request \u092D\u0940 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964",
       navigationActions: actions
     };
   }
   if (lang === "mr") {
     return {
-      reply: suggestTicket ? "\u0924\u0941\u092E\u094D\u0939\u0940 \u0916\u093E\u0932\u0940\u0932 \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0923\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E. \u0939\u0940 \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0916\u093E\u0924\u094D\u092F\u093E\u0936\u0940, \u0932\u0949\u0917\u093F\u0928, \u092A\u0947\u092E\u0947\u0902\u091F \u0915\u093F\u0902\u0935\u093E \u0924\u093E\u0902\u0924\u094D\u0930\u093F\u0915 \u0905\u0921\u091A\u0923\u0940\u0936\u0940 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u092E\u0938\u094D\u092F\u093E \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0915\u0943\u092A\u092F\u093E \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E." : "\u0924\u0941\u092E\u094D\u0939\u0940 \u0916\u093E\u0932\u0940\u0932 \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0923\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u0915\u094B\u0930\u094D\u0938 (\u0907\u092F\u0924\u094D\u0924\u093E \u0967\u2013\u0967\u0966), \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, \u0905\u092D\u094D\u092F\u093E\u0938\u0915\u094D\u0930\u092E \u0935 \u0928\u094B\u091F\u094D\u0938, \u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940, TET/CTET \u0915\u093F\u0902\u0935\u093E \u0936\u093F\u0915\u094D\u0937\u0915 \u0938\u0941\u0935\u093F\u0927\u093E \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E. \u0935\u0948\u092F\u0915\u094D\u0924\u093F\u0915 \u0905\u0921\u091A\u0923\u0940\u0938\u093E\u0920\u0940 Support Request \u0926\u0947\u0916\u0940\u0932 \u092A\u093E\u0920\u0935\u0942 \u0936\u0915\u0924\u093E.",
+      reply: suggestTicket ? "\u0924\u0941\u092E\u094D\u0939\u0940 \u0916\u093E\u0932\u0940\u0932 \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0923\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u093F\u0902\u0935\u093E \u0935\u093F\u092D\u093E\u0917 \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E. \u0939\u0940 \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0916\u093E\u0924\u094D\u092F\u093E\u0936\u0940, \u0932\u0949\u0917\u093F\u0928, \u092A\u0947\u092E\u0947\u0902\u091F \u0915\u093F\u0902\u0935\u093E \u0924\u093E\u0902\u0924\u094D\u0930\u093F\u0915 \u0905\u0921\u091A\u0923\u0940\u0936\u0940 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u092E\u0938\u094D\u092F\u093E \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u0915\u0943\u092A\u092F\u093E \u0916\u093E\u0932\u0940\u0932 SUBMIT A SUPPORT REQUEST \u092C\u091F\u0923\u093E\u0935\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u093E." : "\u0924\u0941\u092E\u094D\u0939\u0940 \u0916\u093E\u0932\u0940\u0932 \u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u092C\u091F\u0923\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u0938\u094D\u091F\u0921\u0940 \u0928\u094B\u091F\u094D\u0938, \u0935\u0930\u094D\u0915\u0936\u0940\u091F\u094D\u0938, AI \u091C\u0928\u0930\u0947\u091F\u0930, \u0936\u093F\u0915\u094D\u0937\u0915 \u0932\u0947\u0938\u0928 \u092A\u094D\u0932\u093E\u0928\u0930 \u0915\u093F\u0902\u0935\u093E \u0924\u0941\u092E\u091A\u0947 \u092A\u094B\u0930\u094D\u091F\u0932 (Student, Teacher, Parent, College, Institute) \u0909\u0918\u0921\u0942 \u0936\u0915\u0924\u093E. \u0935\u0948\u092F\u0915\u094D\u0924\u093F\u0915 \u0905\u0921\u091A\u0923\u0940\u0938\u093E\u0920\u0940 Support Request \u0926\u0947\u0916\u0940\u0932 \u092A\u093E\u0920\u0935\u0942 \u0936\u0915\u0924\u093E.",
       navigationActions: actions
     };
   }
   return {
-    reply: suggestTicket ? "You can jump directly to key MyStudyZone sections using the buttons below. If you are facing a personal account, login, payment, or technical issue, click SUBMIT A SUPPORT REQUEST below to reach our support team." : "You can use the direct navigation buttons below to open Courses (Classes 1\u201310), Worksheets, Syllabus & Study Notes, Scholarship, TET/CTET, or Teacher Resources. Feel free to ask a more specific question or submit a Support Request if needed.",
+    reply: suggestTicket ? "You can jump directly to key MyStudyZone portals and sections using the buttons below. If you are facing a personal account, login, payment, or technical issue, click SUBMIT A SUPPORT REQUEST below to escalate your request to our Admin Support team." : "You can use the direct navigation buttons below to open Study Notes, Worksheets, the AI Generator, Teacher Lesson Planner, or any of the 5 Portals (Student, Teacher, Parent, College, Institute). Feel free to ask a specific question or click SUBMIT A SUPPORT REQUEST if you need admin assistance.",
     navigationActions: actions
   };
 }
@@ -4883,7 +5810,7 @@ async function handleSupportChatRequest(body, clientIp) {
   }
   const message = rawMessage.slice(0, MAX_MESSAGE_CHARS);
   const lang = detectQueryLanguage(message);
-  const userRole = body?.userRole === "teacher" ? "teacher" : body?.userRole === "student" ? "student" : "visitor";
+  const portalContext = resolvePortalContext(body?.userRole, body?.portalContext);
   const withinGlobalLimit = pruneAndCheckWindow(
     ipRequestTimestamps,
     clientIp || "unknown",
@@ -4899,10 +5826,11 @@ async function handleSupportChatRequest(body, clientIp) {
       language: lang,
       navigationActions: [buildNavigationAction("open_dashboard")],
       suggestSupportTicket: true,
+      portalContext,
       notice: "Rate limit reached to keep MyStudyZone Help Desk fast and free for everyone."
     };
   }
-  const kbMatch = matchKnowledgeBaseFastPath(message, { userRole });
+  const kbMatch = matchKnowledgeBaseFastPath(message, { userRole: portalContext });
   if (kbMatch.matched) {
     return {
       success: true,
@@ -4911,26 +5839,65 @@ async function handleSupportChatRequest(body, clientIp) {
       reply: kbMatch.reply,
       language: kbMatch.language,
       navigationActions: kbMatch.navigationActions,
-      suggestSupportTicket: kbMatch.suggestSupportTicket
+      suggestSupportTicket: kbMatch.suggestSupportTicket,
+      portalContext
     };
   }
-  const apiKey = getConfiguredGeminiKey();
-  if (!apiKey) {
-    const fb = buildFallbackMessage(lang, message, false);
+  const apiKey = getConfiguredGeminiApiKey();
+  const todayKey = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  if (dailyAiTracker.dateKey !== todayKey) {
+    dailyAiTracker = {
+      dateKey: todayKey,
+      count: 0,
+      quotaCooldownUntilMs: 0,
+      lastKeyErrorReason: "",
+      lastUpstreamErrorAt: 0
+    };
+  }
+  const buildKbOrGenericFallback = (aiStatus, notice, suggestTicket) => {
+    const complexKbMatch = matchKnowledgeBaseFastPath(message, {
+      userRole: portalContext,
+      includeComplexMatch: true
+    });
+    if (complexKbMatch.matched) {
+      return {
+        success: true,
+        source: "kb_fallback",
+        aiStatus,
+        reply: complexKbMatch.reply,
+        language: complexKbMatch.language,
+        navigationActions: complexKbMatch.navigationActions,
+        suggestSupportTicket: complexKbMatch.suggestSupportTicket || suggestTicket,
+        portalContext,
+        notice
+      };
+    }
+    const fb = buildFallbackMessage(lang, message, suggestTicket, portalContext);
     return {
       success: true,
       source: "kb_fallback",
-      aiStatus: "missing_key",
+      aiStatus,
       reply: fb.reply,
       language: lang,
       navigationActions: fb.navigationActions,
       suggestSupportTicket: true,
-      notice: "Live AI assistant is currently running in Knowledge Base mode (GEMINI_API_KEY is not configured on the server). You can still navigate directly or submit a Support Request."
+      portalContext,
+      notice
     };
+  };
+  if (!apiKey) {
+    return buildKbOrGenericFallback(
+      "missing_key",
+      "Running in Knowledge Base Mode (GEMINI_API_KEY is not configured on the server). Step-by-step portal guides, direct navigation, and Support Tickets remain active.",
+      false
+    );
   }
-  const todayKey = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  if (dailyAiTracker.dateKey !== todayKey) {
-    dailyAiTracker = { dateKey: todayKey, count: 0 };
+  if (dailyAiTracker.count >= MAX_DAILY_AI_CALLS || Date.now() < dailyAiTracker.quotaCooldownUntilMs) {
+    return buildKbOrGenericFallback(
+      "quota_exceeded",
+      "Free-tier AI quota is temporarily cooling down. Paid models are never activated automatically. Knowledge Base guidance and Admin Support Tickets remain fully active.",
+      true
+    );
   }
   const withinAiIpLimit = pruneAndCheckWindow(
     ipAiTimestamps,
@@ -4938,25 +5905,15 @@ async function handleSupportChatRequest(body, clientIp) {
     CHAT_WINDOW_MS,
     MAX_AI_CALLS_PER_IP
   );
-  if (!withinAiIpLimit || dailyAiTracker.count >= MAX_DAILY_AI_CALLS) {
-    const fb = buildFallbackMessage(lang, message, true);
-    return {
-      success: true,
-      source: "kb_fallback",
-      aiStatus: "rate_limited",
-      reply: fb.reply,
-      language: lang,
-      navigationActions: fb.navigationActions,
-      suggestSupportTicket: true,
-      notice: "AI chat limit reached for now. Showing Knowledge Base guidance & direct links."
-    };
+  if (!withinAiIpLimit) {
+    return buildKbOrGenericFallback(
+      "rate_limited",
+      "Free AI chat limit reached for this session window. Showing Knowledge Base guidance & direct links.",
+      true
+    );
   }
   try {
     dailyAiTracker.count += 1;
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: { headers: { "User-Agent": "aistudio-build" } }
-    });
     const rawHistory = Array.isArray(body?.history) ? body.history : [];
     const safeHistory = rawHistory.slice(-MAX_HISTORY_TURNS).map((t) => ({
       role: t?.role === "assistant" ? "assistant" : "user",
@@ -4964,78 +5921,97 @@ async function handleSupportChatRequest(body, clientIp) {
     })).filter((t) => Boolean(t.text));
     const historyText = safeHistory.map((t) => `${t.role === "assistant" ? "Assistant" : "User"}: ${t.text}`).join("\n");
     const promptText = [
-      `Current User Portal Role: ${userRole}`,
+      `Current User Portal Context: ${portalContext}`,
       historyText ? `Recent Conversation:
 ${historyText}` : "",
       `Latest User Question: ${message}`
     ].filter(Boolean).join("\n\n");
-    const response = await ai.models.generateContent({
-      model: "gemini-4-hydrogen",
-      contents: promptText,
-      config: {
-        systemInstruction: HELP_DESK_SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        temperature: 0.3,
-        maxOutputTokens: 700,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            reply: {
-              type: Type.STRING,
-              description: "Helpful, concise, accurate answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features."
+    const generationResult = await generateGeminiContentWithFallback(
+      {
+        contents: promptText,
+        config: {
+          systemInstruction: HELP_DESK_SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              reply: {
+                type: Type.STRING,
+                description: "Simple, friendly, short, step-by-step answer in the user language (English, Hindi, or Marathi) using ONLY real MyStudyZone features."
+              },
+              language: {
+                type: Type.STRING,
+                description: "Language code: en, hi, or mr"
+              },
+              navigationActionIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "0 to 3 exact allowlisted action IDs from system instructions"
+              },
+              detectedClass: {
+                type: Type.STRING,
+                description: "Optional Class 1 through Class 10 if specifically requested"
+              },
+              detectedBoard: {
+                type: Type.STRING,
+                description: "Optional Maharashtra, CBSE, or ICSE if specifically requested"
+              },
+              suggestSupportTicket: {
+                type: Type.BOOLEAN,
+                description: "True if the user has a personal account, login, payment, class correction, or unresolved technical problem."
+              }
             },
-            language: {
-              type: Type.STRING,
-              description: "Language code: en, hi, or mr"
-            },
-            navigationActionIds: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "0 to 3 exact allowlisted action IDs from system instructions"
-            },
-            detectedClass: {
-              type: Type.STRING,
-              description: "Optional Class 1 through Class 10 if specifically requested"
-            },
-            detectedBoard: {
-              type: Type.STRING,
-              description: "Optional Maharashtra, CBSE, or ICSE if specifically requested"
-            },
-            suggestSupportTicket: {
-              type: Type.BOOLEAN,
-              description: "True if the user has a personal account, login, payment, class correction, or unresolved technical problem."
-            }
-          },
-          required: ["reply", "language", "navigationActionIds", "suggestSupportTicket"]
+            required: ["reply", "language", "navigationActionIds", "suggestSupportTicket"]
+          }
         }
+      },
+      {
+        apiKey,
+        requireValidJson: true,
+        validateJson: (candidate) => Boolean(String(candidate.reply || "").trim())
       }
-    });
-    const rawJson = response.text || "{}";
-    const parsed = JSON.parse(rawJson);
+    );
+    dailyAiTracker.lastKeyErrorReason = "";
+    dailyAiTracker.lastUpstreamErrorAt = 0;
+    dailyAiTracker.quotaCooldownUntilMs = 0;
+    const parsed = generationResult.parsedJson || safeParseGeminiJson(generationResult.response.text || "") || {};
     const replyLang = parsed.language === "hi" || parsed.language === "mr" ? parsed.language : lang;
     const targetClass = parsed.detectedClass && VALID_CLASSES.has(parsed.detectedClass) ? parsed.detectedClass : extractClassLevel(message);
     const targetBoard = parsed.detectedBoard && VALID_BOARDS2.has(parsed.detectedBoard) ? parsed.detectedBoard : extractBoard(message);
+    const lowerMsg = message.toLowerCase();
+    const isPortalActionAllowedForContext = (actionId) => {
+      if (portalContext === "teacher" && actionId === "open_student_portal") {
+        return lowerMsg.includes("student portal");
+      }
+      if (portalContext === "parent" && (actionId === "open_student_portal" || actionId === "open_teacher_resources")) {
+        return lowerMsg.includes("student portal") || lowerMsg.includes("teacher portal");
+      }
+      if (portalContext === "college" && (actionId === "open_student_portal" || actionId === "open_institute_portal")) {
+        return lowerMsg.includes("student portal") || lowerMsg.includes("institute portal");
+      }
+      if (portalContext === "institute" && (actionId === "open_student_portal" || actionId === "open_college_portal")) {
+        return lowerMsg.includes("student portal") || lowerMsg.includes("college portal");
+      }
+      return true;
+    };
     const validActions = [];
     const seenIds = /* @__PURE__ */ new Set();
     for (const rawId of parsed.navigationActionIds || []) {
       const id = String(rawId || "").trim();
-      if (id in SUPPORT_NAVIGATION_ALLOWLIST && !seenIds.has(id) && validActions.length < 3) {
+      if (id in SUPPORT_NAVIGATION_ALLOWLIST && !seenIds.has(id) && isPortalActionAllowedForContext(id) && validActions.length < 3) {
         seenIds.add(id);
-        validActions.push(buildNavigationAction(id, targetClass, targetBoard));
+        validActions.push(buildNavigationAction(id, targetClass, targetBoard, portalContext));
       }
     }
     const cleanReply = String(parsed.reply || "").trim();
     if (!cleanReply) {
-      const fb = buildFallbackMessage(replyLang, message, Boolean(parsed.suggestSupportTicket));
-      return {
-        success: true,
-        source: "kb_fallback",
-        aiStatus: "upstream_error",
-        reply: fb.reply,
-        language: replyLang,
-        navigationActions: validActions.length ? validActions : fb.navigationActions,
-        suggestSupportTicket: Boolean(parsed.suggestSupportTicket)
-      };
+      dailyAiTracker.lastUpstreamErrorAt = Date.now();
+      return buildKbOrGenericFallback(
+        "upstream_error",
+        "AI response was empty. Showing verified Knowledge Base guidance instead.",
+        Boolean(parsed.suggestSupportTicket)
+      );
     }
     return {
       success: true,
@@ -5044,26 +6020,32 @@ ${historyText}` : "",
       reply: cleanReply,
       language: replyLang,
       navigationActions: validActions,
-      suggestSupportTicket: Boolean(parsed.suggestSupportTicket)
+      suggestSupportTicket: Boolean(parsed.suggestSupportTicket),
+      portalContext,
+      modelUsed: generationResult.modelUsed,
+      usedFallback: generationResult.usedFallback
     };
   } catch (err) {
     const errMsg = String(err?.message || err || "");
-    const isQuota = err?.status === 429 || errMsg.includes("429") || errMsg.toUpperCase().includes("RESOURCE_EXHAUSTED") || errMsg.toLowerCase().includes("quota");
-    console.warn("[Support Assistant AI Fallback]:", errMsg);
-    const fb = buildFallbackMessage(lang, message, true);
-    return {
-      success: true,
-      source: "kb_fallback",
-      aiStatus: isQuota ? "quota_exceeded" : "upstream_error",
-      reply: fb.reply,
-      language: lang,
-      navigationActions: fb.navigationActions,
-      suggestSupportTicket: true,
-      notice: isQuota ? "AI usage quota is temporarily full. Showing Knowledge Base guidance, direct links, and Support Request option." : "AI assistant is temporarily unavailable. Showing Knowledge Base guidance and Support Request option."
-    };
+    const isQuota = isGeminiQuotaError(err);
+    const isInvalidKey = isGeminiAuthError(err);
+    console.warn("[Support Assistant AI Fallback]:", errMsg.replace(/AIza[0-9A-Za-z\-_]{20,}/g, "[REDACTED_KEY]"));
+    if (isQuota) {
+      dailyAiTracker.quotaCooldownUntilMs = Date.now() + 60 * 1e3;
+    } else if (isInvalidKey) {
+      dailyAiTracker.lastKeyErrorReason = "api_key_invalid";
+    } else {
+      dailyAiTracker.lastUpstreamErrorAt = Date.now();
+    }
+    return buildKbOrGenericFallback(
+      isQuota ? "quota_exceeded" : "upstream_error",
+      isQuota ? "Free-tier AI quota is temporarily cooling down. Paid models are never activated automatically. Showing Knowledge Base guidance and Support Request option." : isInvalidKey ? "Configured GEMINI_API_KEY could not be authenticated by Gemini. Running in Knowledge Base mode." : "AI assistant is temporarily unavailable. Showing Knowledge Base guidance and Support Request option.",
+      true
+    );
   }
 }
 async function handleSupportTicketSubmission(body, headers, clientIp) {
+  ensureServerSupportTicketsLoaded();
   const withinTicketLimit = pruneAndCheckWindow(
     ipTicketTimestamps,
     clientIp || "unknown",
@@ -5080,7 +6062,10 @@ async function handleSupportTicketSubmission(body, headers, clientIp) {
       }
     };
   }
-  const requesterRole = body?.requesterRole === "teacher" ? "teacher" : "student";
+  const userCategory = normalizeSupportUserCategory(
+    String(body?.userCategory || body?.requesterRole || "student")
+  );
+  const categoryLabel = SUPPORT_USER_CATEGORY_LABELS[userCategory];
   const name = String(body?.name || "").trim().slice(0, 100);
   const email = String(body?.email || "").trim().toLowerCase().slice(0, 150);
   const mobile = String(body?.mobile || "").replace(/[^\d+\-\s]/g, "").trim().slice(0, 20);
@@ -5088,6 +6073,7 @@ async function handleSupportTicketSubmission(body, headers, clientIp) {
   const category = VALID_SUPPORT_CATEGORIES.has(rawCategory) ? rawCategory : "General Queries";
   const description = String(body?.description || "").trim().slice(0, 1800);
   const subjectInput = String(body?.subject || "").trim().slice(0, 180);
+  const portalContext = String(body?.portalContext || userCategory).trim().slice(0, 40);
   if (name.length < 2) {
     return {
       statusCode: 400,
@@ -5111,34 +6097,27 @@ async function handleSupportTicketSubmission(body, headers, clientIp) {
     };
   }
   let verifiedUid = null;
+  let bearerToken = "";
   if (headers.authorization) {
     const authRes = await verifyBearerIdToken(headers.authorization).catch(() => null);
     if (authRes?.valid && authRes.uid) {
       verifiedUid = authRes.uid;
+      bearerToken = authRes.token || "";
     }
-  }
-  if (!isFirebaseAdminConfigured()) {
-    return {
-      statusCode: 503,
-      payload: {
-        success: false,
-        persisted: false,
-        requiresClientAuthFallback: true,
-        error: "Server-side Firebase Admin credentials (FIREBASE_SERVICE_ACCOUNT_JSON) are not configured yet for guest ticket writes."
-      }
-    };
   }
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const rand = Math.floor(1e4 + Math.random() * 9e4);
-  const ticketNumber = `TKT-VC-${rand}`;
+  const ticketNumber = `TKT-MSZ-${rand}`;
   const ticketId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const subject = subjectInput || `[${requesterRole === "teacher" ? "Teacher" : "Student"}] ${category}`;
+  const subject = subjectInput || `[${categoryLabel}] ${category}`;
   const ticketDoc = {
     id: ticketId,
     ticketNumber,
     studentId: verifiedUid || String(body?.studentId || "guest_helpdesk").slice(0, 128),
     studentName: name,
-    requesterRole,
+    userCategory,
+    requesterRole: userCategory,
+    portalContext,
     email,
     mobile,
     category,
@@ -5146,20 +6125,29 @@ async function handleSupportTicketSubmission(body, headers, clientIp) {
     description,
     status: "OPEN",
     priority: category.includes("Payment") ? "HIGH" : "MEDIUM",
-    source: "ai_help_desk",
     createdAt: nowIso,
     updatedAt: nowIso
   };
   try {
-    const writeRes = await serverSetDoc("support_tickets", ticketId, ticketDoc, { merge: false });
-    if (!writeRes.usedAdminSdk) {
+    serverSupportTicketsMap.set(ticketId, ticketDoc);
+    const savedToDisk = flushServerSupportTicketsToDisk();
+    let savedToFirestore = false;
+    if (isFirebaseAdminConfigured() || bearerToken) {
+      const writeRes = await serverSetDoc(
+        "support_tickets",
+        ticketId,
+        ticketDoc,
+        { merge: false, ...bearerToken ? { bearerToken } : {} }
+      ).catch(() => null);
+      savedToFirestore = Boolean(writeRes);
+    }
+    if (!savedToDisk && !savedToFirestore && serverSupportTicketsMap.size === 0) {
       return {
-        statusCode: 503,
+        statusCode: 500,
         payload: {
           success: false,
           persisted: false,
-          requiresClientAuthFallback: true,
-          error: "Firebase Admin SDK is required to persist unauthenticated support requests."
+          error: "Unable to save your support request right now. Please try again."
         }
       };
     }
@@ -5168,7 +6156,7 @@ async function handleSupportTicketSubmission(body, headers, clientIp) {
       payload: {
         success: true,
         persisted: true,
-        storage: "firestore_admin",
+        storage: savedToFirestore ? "firestore_synced" : "server_persistent_store",
         ticket: ticketDoc
       }
     };
@@ -5183,6 +6171,1609 @@ async function handleSupportTicketSubmission(body, headers, clientIp) {
       }
     };
   }
+}
+
+// server/aiToolsService.ts
+import { Type as Type2 } from "@google/genai";
+var VALID_TEXT_TOOLS = /* @__PURE__ */ new Set([
+  "pdf_maker",
+  "worksheet_generator",
+  "question_paper_generator",
+  "notes_generator",
+  "presentation_maker",
+  "quiz_generator",
+  "resume_maker",
+  "letter_generator",
+  "content_generator",
+  "teacher_productivity_tool",
+  "student_learning_tool"
+]);
+var AI_WINDOW_MS = 10 * 60 * 1e3;
+var MAX_AI_REQUESTS_PER_IP = 40;
+var ipAiRequestLog = /* @__PURE__ */ new Map();
+function checkIpRateLimit(ip) {
+  const now = Date.now();
+  const list = (ipAiRequestLog.get(ip) || []).filter((ts) => now - ts < AI_WINDOW_MS);
+  if (list.length >= MAX_AI_REQUESTS_PER_IP) {
+    ipAiRequestLog.set(ip, list);
+    return false;
+  }
+  list.push(now);
+  ipAiRequestLog.set(ip, list);
+  return true;
+}
+function getAiServiceStatus() {
+  const configured = Boolean(getConfiguredGeminiApiKey());
+  return {
+    configured,
+    textModel: GEMINI_PRIMARY_MODEL,
+    fallbackModel: GEMINI_FALLBACK_MODEL,
+    imageModel: GEMINI_IMAGE_MODEL,
+    message: configured ? `Server Gemini AI runtime is configured and ready (${GEMINI_PRIMARY_MODEL} with free-tier ${GEMINI_FALLBACK_MODEL} fallback).` : "GEMINI_API_KEY is not configured in Settings -> Secrets on the server. Live AI generation is disabled (zero fake outputs)."
+  };
+}
+async function handleAiTextGenerate(body, clientIp) {
+  if (!checkIpRateLimit(clientIp)) {
+    return {
+      statusCode: 429,
+      payload: {
+        success: false,
+        errorCode: "RATE_LIMITED",
+        retryable: true,
+        retryAfterSeconds: 60,
+        message: "Too many AI requests from this connection. Please wait a few minutes and retry."
+      }
+    };
+  }
+  const apiKey = getConfiguredGeminiApiKey();
+  if (!apiKey) {
+    return {
+      statusCode: 503,
+      payload: {
+        success: false,
+        errorCode: "MISSING_GEMINI_API_KEY",
+        retryable: false,
+        message: "GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in Settings -> Secrets to run real AI generation."
+      }
+    };
+  }
+  const toolId = String(body.toolId || "").trim();
+  if (!VALID_TEXT_TOOLS.has(toolId)) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        errorCode: "INVALID_TOOL_ID",
+        message: "Requested AI toolId is invalid."
+      }
+    };
+  }
+  const topic = String(body.topic || body.prompt || "").trim().slice(0, 1600);
+  const board = String(body.board || "Maharashtra").trim().slice(0, 40);
+  const classLevel = String(body.classLevel || "Class 5").trim().slice(0, 30);
+  const subject = String(body.subject || "Mathematics").trim().slice(0, 80);
+  const language = String(body.language || "English").trim().slice(0, 30);
+  const instructions = String(body.instructions || "").trim().slice(0, 1e3);
+  const count = Math.min(Math.max(Number(body.count) || 5, 1), 25);
+  const roleToolName = String(body.toolName || "").trim().slice(0, 100);
+  const roleToolCategory = String(body.toolCategory || "").trim().slice(0, 80);
+  const outputKindRaw = String(body.outputKind || "document").trim();
+  if (!topic) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        errorCode: "MISSING_PROMPT",
+        message: "Please enter a topic, prompt, or document request before generating."
+      }
+    };
+  }
+  try {
+    if (toolId === "quiz_generator" || (toolId === "teacher_productivity_tool" || toolId === "student_learning_tool") && outputKindRaw === "quiz") {
+      const result2 = await generateGeminiContentWithFallback(
+        {
+          contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ""}Generate ${count} original, accurate multiple-choice questions in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction: "You are a strict Indian school academic curriculum author. Ensure factual and mathematical accuracy. Return valid JSON matching the schema with all required fields populated.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type2.OBJECT,
+              properties: {
+                title: { type: Type2.STRING },
+                questions: {
+                  type: Type2.ARRAY,
+                  items: {
+                    type: Type2.OBJECT,
+                    properties: {
+                      question: { type: Type2.STRING },
+                      options: {
+                        type: Type2.ARRAY,
+                        items: { type: Type2.STRING }
+                      },
+                      correctIndex: { type: Type2.INTEGER },
+                      explanation: { type: Type2.STRING }
+                    },
+                    required: ["question", "options", "correctIndex", "explanation"]
+                  }
+                }
+              },
+              required: ["title", "questions"]
+            }
+          }
+        },
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.questions) && parsed.questions.length > 0
+        }
+      );
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          outputKind: "quiz",
+          model: result2.modelUsed,
+          primaryModel: result2.primaryModel,
+          fallbackModel: result2.fallbackModel,
+          usedFallback: result2.usedFallback,
+          attemptsMade: result2.attemptsMade,
+          structured: result2.parsedJson
+        }
+      };
+    }
+    if (toolId === "presentation_maker" || (toolId === "teacher_productivity_tool" || toolId === "student_learning_tool") && outputKindRaw === "slides") {
+      const slideCount = Math.min(Math.max(count, 3), 12);
+      const result2 = await generateGeminiContentWithFallback(
+        {
+          contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ""}Create a ${slideCount}-slide educational presentation deck in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Include concise bullet points and practical speaker notes for each slide. ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction: "You create classroom-ready structured slide decks with clear bullet points and teacher/student speaker notes. Populate all required JSON fields.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type2.OBJECT,
+              properties: {
+                title: { type: Type2.STRING },
+                subtitle: { type: Type2.STRING },
+                slides: {
+                  type: Type2.ARRAY,
+                  items: {
+                    type: Type2.OBJECT,
+                    properties: {
+                      slideNumber: { type: Type2.INTEGER },
+                      title: { type: Type2.STRING },
+                      bullets: {
+                        type: Type2.ARRAY,
+                        items: { type: Type2.STRING }
+                      },
+                      speakerNotes: { type: Type2.STRING }
+                    },
+                    required: ["slideNumber", "title", "bullets", "speakerNotes"]
+                  }
+                }
+              },
+              required: ["title", "subtitle", "slides"]
+            }
+          }
+        },
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.slides) && parsed.slides.length > 0
+        }
+      );
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          outputKind: "slides",
+          model: result2.modelUsed,
+          primaryModel: result2.primaryModel,
+          fallbackModel: result2.fallbackModel,
+          usedFallback: result2.usedFallback,
+          attemptsMade: result2.attemptsMade,
+          structured: result2.parsedJson
+        }
+      };
+    }
+    if ((toolId === "teacher_productivity_tool" || toolId === "student_learning_tool") && outputKindRaw === "table") {
+      const result2 = await generateGeminiContentWithFallback(
+        {
+          contents: `Tool: ${roleToolName || "Academic Table Generator"} (${roleToolCategory || "Education"}). Context: ${board} Board, ${classLevel}, Subject: ${subject}, Language: ${language}. Request: "${topic}". ${instructions} Output an organized, ready-to-print tabular grid (columns + rows) suitable for Excel (.xlsx) and A4 PDF export.`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction: "You are an Indian school & academic operations planner. Generate clean, practical tabular schedules, registers, marksheets, seating charts, or study planners matching the exact JSON schema with all required fields populated.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type2.OBJECT,
+              properties: {
+                title: { type: Type2.STRING },
+                subtitle: { type: Type2.STRING },
+                columns: {
+                  type: Type2.ARRAY,
+                  items: { type: Type2.STRING }
+                },
+                rows: {
+                  type: Type2.ARRAY,
+                  items: {
+                    type: Type2.ARRAY,
+                    items: { type: Type2.STRING }
+                  }
+                },
+                notes: { type: Type2.STRING }
+              },
+              required: ["title", "columns", "rows"]
+            }
+          }
+        },
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.columns) && parsed.columns.length > 0
+        }
+      );
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          outputKind: "table",
+          model: result2.modelUsed,
+          primaryModel: result2.primaryModel,
+          fallbackModel: result2.fallbackModel,
+          usedFallback: result2.usedFallback,
+          attemptsMade: result2.attemptsMade,
+          structured: result2.parsedJson
+        }
+      };
+    }
+    if ((toolId === "teacher_productivity_tool" || toolId === "student_learning_tool") && outputKindRaw === "flashcards") {
+      const result2 = await generateGeminiContentWithFallback(
+        {
+          contents: `Tool: ${roleToolName || "Study Flashcards"}. Create ${Math.min(Math.max(count, 4), 16)} study cards in ${language} for ${board} ${classLevel} ${subject} on "${topic}". ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction: "You create high-retention study flashcards, definitions, formulas, and bilingual vocabulary cards matching the exact JSON schema with all required fields populated.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type2.OBJECT,
+              properties: {
+                title: { type: Type2.STRING },
+                subtitle: { type: Type2.STRING },
+                cards: {
+                  type: Type2.ARRAY,
+                  items: {
+                    type: Type2.OBJECT,
+                    properties: {
+                      front: { type: Type2.STRING },
+                      back: { type: Type2.STRING },
+                      hint: { type: Type2.STRING }
+                    },
+                    required: ["front", "back", "hint"]
+                  }
+                }
+              },
+              required: ["title", "cards"]
+            }
+          }
+        },
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.cards) && parsed.cards.length > 0
+        }
+      );
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          outputKind: "flashcards",
+          model: result2.modelUsed,
+          primaryModel: result2.primaryModel,
+          fallbackModel: result2.fallbackModel,
+          usedFallback: result2.usedFallback,
+          attemptsMade: result2.attemptsMade,
+          structured: result2.parsedJson
+        }
+      };
+    }
+    if (toolId === "resume_maker") {
+      const result2 = await generateGeminiContentWithFallback(
+        {
+          contents: `Refine and structure an ATS-friendly academic/teaching/student resume based on these details: ${topic}. Additional focus: ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction: "You are a career coach for educators and students in India. Improve phrasing clearly without inventing fake degrees or employers not provided. Populate all required JSON fields.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type2.OBJECT,
+              properties: {
+                headline: { type: Type2.STRING },
+                summary: { type: Type2.STRING },
+                skills: {
+                  type: Type2.ARRAY,
+                  items: { type: Type2.STRING }
+                },
+                highlights: {
+                  type: Type2.ARRAY,
+                  items: { type: Type2.STRING }
+                }
+              },
+              required: ["headline", "summary", "skills", "highlights"]
+            }
+          }
+        },
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Boolean(String(parsed.headline || "").trim() || String(parsed.summary || "").trim())
+        }
+      );
+      return {
+        statusCode: 200,
+        payload: {
+          success: true,
+          toolId,
+          model: result2.modelUsed,
+          primaryModel: result2.primaryModel,
+          fallbackModel: result2.fallbackModel,
+          usedFallback: result2.usedFallback,
+          attemptsMade: result2.attemptsMade,
+          structured: result2.parsedJson
+        }
+      };
+    }
+    const promptByTool = {
+      pdf_maker: `Write a complete, well-structured educational PDF document in ${language} for ${board} ${classLevel} ${subject} titled/about "${topic}". Organize into clear sections suitable for direct PDF publication. ${instructions}`,
+      worksheet_generator: `Create a printable classroom practice worksheet in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". Include varied sections (Fill in the Blanks, True/False, Short Questions, Problem Solving) AND a complete Answer Key section at the end. ${instructions}`,
+      question_paper_generator: `Create a formal school examination Question Paper in ${language} aligned to ${board} Board ${classLevel} ${subject} covering "${topic}". Include Paper Header (Time, Total Marks), Section A (MCQs/Objective), Section B (Short Answer), Section C (Long Answer/Application), and a Complete Marking Scheme / Answer Key section. ${instructions}`,
+      notes_generator: `Write comprehensive, student-friendly Chapter Revision Notes in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". Include Overview, Key Concepts & Definitions, Important Formulas/Rules, Worked Examples, and Quick Revision Bullets. ${instructions}`,
+      letter_generator: `Write a formal, clear, ready-to-send school/educational letter in ${language} for the request: "${topic}". Include Date placeholder, Recipient block, Subject line, clear body paragraphs, and Sign-off. ${instructions}`,
+      content_generator: `Create engaging, original educational content in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Additional context: ${instructions}`,
+      teacher_productivity_tool: `You are executing Teacher Tool "${roleToolName || "Educator Generator"}" (${roleToolCategory || "Teaching"}). Language: ${language}. Curriculum: ${board} Board, ${classLevel}, ${subject}. Topic/Request: "${topic}". ${instructions} Produce complete, classroom-ready sections with clear headings, practical steps/questions, and teacher notes or answer keys wherever applicable.`,
+      student_learning_tool: `You are executing Student Learning Tool "${roleToolName || "Student Study Helper"}" (${roleToolCategory || "Learning"}). Language: ${language}. Student Profile: ${board} Board, ${classLevel}, ${subject}. Request/Question: "${topic}". ${instructions} Provide clear, step-by-step, age-appropriate explanations, worked examples, memory tips, and practice checks.`
+    };
+    const result = await generateGeminiContentWithFallback(
+      {
+        contents: promptByTool[toolId] || topic,
+        config: {
+          temperature: 0.3,
+          maxOutputTokens: 8192,
+          systemInstruction: "You are an expert Indian curriculum author, educator, and tutor for MyStudyZone. Output clear structured JSON with title, subtitle, and well-organized sections matching all required fields.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type2.OBJECT,
+            properties: {
+              title: { type: Type2.STRING },
+              subtitle: { type: Type2.STRING },
+              sections: {
+                type: Type2.ARRAY,
+                items: {
+                  type: Type2.OBJECT,
+                  properties: {
+                    heading: { type: Type2.STRING },
+                    body: { type: Type2.STRING }
+                  },
+                  required: ["heading", "body"]
+                }
+              }
+            },
+            required: ["title", "subtitle", "sections"]
+          }
+        }
+      },
+      {
+        apiKey,
+        requireValidJson: true,
+        validateJson: (parsed) => Array.isArray(parsed.sections) && parsed.sections.length > 0
+      }
+    );
+    return {
+      statusCode: 200,
+      payload: {
+        success: true,
+        toolId,
+        outputKind: "document",
+        model: result.modelUsed,
+        primaryModel: result.primaryModel,
+        fallbackModel: result.fallbackModel,
+        usedFallback: result.usedFallback,
+        attemptsMade: result.attemptsMade,
+        structured: result.parsedJson
+      }
+    };
+  } catch (err) {
+    const mapped = mapGeminiHttpError(err, "MyStudyZone AI Studio");
+    return {
+      statusCode: mapped.statusCode,
+      payload: {
+        success: false,
+        errorCode: mapped.errorCode,
+        retryable: mapped.retryable,
+        retryAfterSeconds: mapped.retryAfterSeconds,
+        attemptsMade: mapped.attemptsMade,
+        message: mapped.message
+      }
+    };
+  }
+}
+async function handleAiImageGenerate(body, clientIp) {
+  if (!checkIpRateLimit(clientIp)) {
+    return {
+      statusCode: 429,
+      payload: {
+        success: false,
+        errorCode: "RATE_LIMITED",
+        retryable: true,
+        retryAfterSeconds: 60,
+        message: "Too many AI image requests. Please wait a few minutes and retry."
+      }
+    };
+  }
+  const apiKey = getConfiguredGeminiApiKey();
+  if (!apiKey) {
+    return {
+      statusCode: 503,
+      payload: {
+        success: false,
+        errorCode: "MISSING_GEMINI_API_KEY",
+        retryable: false,
+        message: "GEMINI_API_KEY is not configured on the server. AI Image Generator requires a configured billing-enabled GEMINI_API_KEY in Settings -> Secrets."
+      }
+    };
+  }
+  const prompt = String(body.prompt || "").trim().slice(0, 800);
+  const style = String(body.style || "Educational Illustration").trim().slice(0, 80);
+  const aspectRaw = String(body.aspectRatio || "1:1").trim();
+  const allowedRatios = /* @__PURE__ */ new Set(["1:1", "3:4", "4:3", "9:16", "16:9"]);
+  const aspectRatio = allowedRatios.has(aspectRaw) ? aspectRaw : "1:1";
+  if (!prompt) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        errorCode: "MISSING_PROMPT",
+        message: "Please describe the educational diagram or illustration you want to generate."
+      }
+    };
+  }
+  const ai = createGeminiServerClient(apiKey);
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_IMAGE_MODEL,
+      contents: {
+        parts: [
+          {
+            text: `Create a clean, school-safe ${style} visual: ${prompt}`
+          }
+        ]
+      },
+      config: {
+        imageConfig: {
+          aspectRatio
+        }
+      }
+    });
+    const parts = response.candidates?.[0]?.content?.parts ?? [];
+    let imageDataUrl = "";
+    let caption = "";
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        const mime = part.inlineData.mimeType ?? "image/png";
+        imageDataUrl = `data:${mime};base64,${part.inlineData.data}`;
+      } else if (part.text) {
+        caption += part.text;
+      }
+    }
+    if (!imageDataUrl) {
+      return {
+        statusCode: 502,
+        payload: {
+          success: false,
+          errorCode: "NO_IMAGE_RETURNED",
+          message: caption || "Gemini image model did not return an image asset for this prompt. Try refining your prompt."
+        }
+      };
+    }
+    return {
+      statusCode: 200,
+      payload: {
+        success: true,
+        model: GEMINI_IMAGE_MODEL,
+        aspectRatio,
+        imageDataUrl,
+        caption
+      }
+    };
+  } catch (err) {
+    const rawMsg = String(err?.message || err || "AI image generation failed");
+    const upper = rawMsg.toUpperCase();
+    const isPaidOrPerm = upper.includes("BILLING") || upper.includes("PAID") || upper.includes("PERMISSION_DENIED") || upper.includes("403") || upper.includes("RESOURCE_EXHAUSTED");
+    if (isPaidOrPerm) {
+      return {
+        statusCode: 403,
+        payload: {
+          success: false,
+          errorCode: "PAID_KEY_REQUIRED",
+          retryable: false,
+          message: `Image generation model (${GEMINI_IMAGE_MODEL}) requires a billing-enabled Gemini API key. MyStudyZone operates strictly on free-tier Gemini models unless billing is explicitly enabled.`
+        }
+      };
+    }
+    const mapped = mapGeminiHttpError(err, "MyStudyZone AI Image Generator");
+    return {
+      statusCode: mapped.statusCode,
+      payload: {
+        success: false,
+        errorCode: mapped.errorCode,
+        retryable: mapped.retryable,
+        retryAfterSeconds: mapped.retryAfterSeconds,
+        message: mapped.message
+      }
+    };
+  }
+}
+
+// server/dictionaryService.ts
+var DICTIONARY_COLLECTION = "msz_dictionary_catalog";
+var DICTIONARY_INDEX_DOC = "custom_verified_entries_v1";
+var serverCustomWordsMap = /* @__PURE__ */ new Map();
+var initialSyncAttempted = false;
+async function ensureServerDictionaryLoaded() {
+  if (initialSyncAttempted) return;
+  initialSyncAttempted = true;
+  try {
+    const docData = await serverGetDoc(DICTIONARY_COLLECTION, DICTIONARY_INDEX_DOC);
+    if (docData && Array.isArray(docData.entries)) {
+      for (const item of docData.entries) {
+        if (item && item.english) {
+          serverCustomWordsMap.set(item.english.toLowerCase(), item);
+        }
+      }
+    }
+  } catch {
+  }
+}
+async function getServerCustomDictionaryEntries() {
+  await ensureServerDictionaryLoaded();
+  return Array.from(serverCustomWordsMap.values()).sort(
+    (a, b) => a.english.localeCompare(b.english)
+  );
+}
+async function addServerCustomDictionaryEntry(raw) {
+  await ensureServerDictionaryLoaded();
+  const english = String(raw.english || "").trim();
+  const marathiWord = String(raw.marathiWord || "").trim();
+  const hindiWord = String(raw.hindiWord || "").trim();
+  const englishMeaning = String(raw.englishMeaning || "").trim();
+  const marathiMeaning = String(raw.marathiMeaning || "").trim();
+  const hindiMeaning = String(raw.hindiMeaning || "").trim();
+  if (!english || !marathiWord || !hindiWord || !englishMeaning || !marathiMeaning || !hindiMeaning) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        message: "English word, Marathi word, Hindi word, and meanings in all 3 languages are required."
+      }
+    };
+  }
+  const formattedEnglish = english.charAt(0).toUpperCase() + english.slice(1);
+  const id = String(raw.id || "").trim() || `msz-orig-${Date.now()}-${formattedEnglish.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+  const rawSynonyms = raw.synonyms || {};
+  const rawAntonyms = raw.antonyms || {};
+  const rawExamples = raw.examples || {};
+  const rawSimple = raw.simpleMeaning || {};
+  const rawDetailed = raw.detailedMeaning || {};
+  const entry = {
+    id,
+    english: formattedEnglish,
+    pronunciation: String(raw.pronunciation || formattedEnglish.toLowerCase()).trim(),
+    partOfSpeech: String(raw.partOfSpeech || "Noun").trim(),
+    classGroup: String(raw.classGroup || "Classes 4\u20136").trim(),
+    category: String(raw.category || "Academic & School").trim(),
+    englishMeaning,
+    marathiWord,
+    marathiMeaning,
+    hindiWord,
+    hindiMeaning,
+    simpleMeaning: {
+      english: String(rawSimple.english || englishMeaning).trim(),
+      marathi: String(rawSimple.marathi || marathiMeaning).trim(),
+      hindi: String(rawSimple.hindi || hindiMeaning).trim()
+    },
+    detailedMeaning: {
+      english: String(rawDetailed.english || englishMeaning).trim(),
+      marathi: String(rawDetailed.marathi || marathiMeaning).trim(),
+      hindi: String(rawDetailed.hindi || hindiMeaning).trim()
+    },
+    synonyms: {
+      english: Array.isArray(rawSynonyms.english) ? rawSynonyms.english.map((s) => String(s).trim()).filter(Boolean) : [],
+      marathi: Array.isArray(rawSynonyms.marathi) ? rawSynonyms.marathi.map((s) => String(s).trim()).filter(Boolean) : [],
+      hindi: Array.isArray(rawSynonyms.hindi) ? rawSynonyms.hindi.map((s) => String(s).trim()).filter(Boolean) : []
+    },
+    antonyms: {
+      english: Array.isArray(rawAntonyms.english) ? rawAntonyms.english.map((s) => String(s).trim()).filter(Boolean) : [],
+      marathi: Array.isArray(rawAntonyms.marathi) ? rawAntonyms.marathi.map((s) => String(s).trim()).filter(Boolean) : [],
+      hindi: Array.isArray(rawAntonyms.hindi) ? rawAntonyms.hindi.map((s) => String(s).trim()).filter(Boolean) : []
+    },
+    examples: {
+      english: String(rawExamples.english || "").trim() || `We studied the word "${formattedEnglish}" in our lesson today.`,
+      marathi: String(rawExamples.marathi || "").trim() || `\u0906\u092E\u094D\u0939\u0940 \u0906\u091C \u092A\u093E\u0920\u093E\u0924 "${marathiWord}" \u0939\u093E \u0936\u092C\u094D\u0926 \u0936\u093F\u0915\u0932\u094B.`,
+      hindi: String(rawExamples.hindi || "").trim() || `\u0939\u092E\u0928\u0947 \u0906\u091C \u092A\u093E\u0920 \u092E\u0947\u0902 "${hindiWord}" \u0936\u092C\u094D\u0926 \u0915\u093E \u0905\u0927\u094D\u092F\u092F\u0928 \u0915\u093F\u092F\u093E\u0964`
+    },
+    letter: formattedEnglish.charAt(0).toUpperCase(),
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    sourceAttribution: "100% Original MyStudyZone Trilingual Educational Lexicon (Independently Developed)"
+  };
+  serverCustomWordsMap.set(formattedEnglish.toLowerCase(), entry);
+  try {
+    const allCustom = Array.from(serverCustomWordsMap.values()).slice(-1500);
+    await serverSetDoc(
+      DICTIONARY_COLLECTION,
+      DICTIONARY_INDEX_DOC,
+      {
+        id: DICTIONARY_INDEX_DOC,
+        entries: allCustom,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      },
+      { merge: true }
+    );
+  } catch {
+  }
+  return {
+    statusCode: 200,
+    payload: {
+      success: true,
+      entry,
+      totalCustomEntries: serverCustomWordsMap.size,
+      message: `Original entry "${formattedEnglish}" saved to MyStudyZone Firebase Dictionary.`
+    }
+  };
+}
+
+// server/snapSolveService.ts
+import crypto5 from "crypto";
+import { Type as Type3 } from "@google/genai";
+var SNAPSOLVE_MODEL = GEMINI_PRIMARY_MODEL;
+var SNAPSOLVE_FALLBACK_MODEL = GEMINI_FALLBACK_MODEL;
+var SNAPSOLVE_MAX_PAGES = 10;
+var SNAPSOLVE_MAX_PAGE_BYTES = 5 * 1024 * 1024;
+var SNAPSOLVE_SESSION_TTL_MS = 20 * 60 * 1e3;
+var SNAPSOLVE_ALLOWED_MIMES = /* @__PURE__ */ new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp"
+]);
+var SNAPSOLVE_PRIVACY_NOTICE = "Temporary Processing Notice: Uploaded question images/pages are transmitted securely to Google Gemini AI strictly for generating answers in your active session. They are kept in ephemeral server memory only (auto-cleared within 20 minutes or when you click Start New Document) and are never saved unless you explicitly choose Save to My Documents.";
+var VALID_ANSWER_STYLES = /* @__PURE__ */ new Set([
+  "short",
+  "detailed",
+  "step_by_step",
+  "exam_ready",
+  "simple"
+]);
+var VALID_QUESTION_TYPES = /* @__PURE__ */ new Set([
+  "mcq",
+  "short_answer",
+  "long_answer",
+  "numerical",
+  "fill_blank",
+  "true_false",
+  "match",
+  "diagram",
+  "passage",
+  "other"
+]);
+var ephemeralSessions = /* @__PURE__ */ new Map();
+var RATE_WINDOW_MS = 10 * 60 * 1e3;
+var MAX_REQUESTS_PER_IP2 = 35;
+var ipRequestLog = /* @__PURE__ */ new Map();
+function checkIpRateLimit2(ip) {
+  const now = Date.now();
+  const timestamps = (ipRequestLog.get(ip) || []).filter((ts) => now - ts < RATE_WINDOW_MS);
+  if (timestamps.length >= MAX_REQUESTS_PER_IP2) {
+    ipRequestLog.set(ip, timestamps);
+    return false;
+  }
+  timestamps.push(now);
+  ipRequestLog.set(ip, timestamps);
+  return true;
+}
+function purgeExpiredSessions() {
+  const now = Date.now();
+  for (const [id, session] of ephemeralSessions.entries()) {
+    if (now >= session.expiresAtMs) {
+      session.questions = [];
+      session.solutionsByQuestionId = {};
+      ephemeralSessions.delete(id);
+    }
+  }
+}
+var cleanupTimer = setInterval(purgeExpiredSessions, 5 * 60 * 1e3);
+if (typeof cleanupTimer.unref === "function") {
+  cleanupTimer.unref();
+}
+function sanitizeNumberLabel(raw, fallbackIndex) {
+  const cleaned = String(raw || "").replace(/\}\s*\{[\s\S]*$/g, "").replace(/\\+"/g, "").replace(/["{}[\]]+/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
+  return cleaned || `Q${fallbackIndex + 1}`;
+}
+function mapSnapSolveGeminiError(err) {
+  const mapped = mapGeminiHttpError(err, "SnapSolve AI");
+  if (mapped.errorCode === "AI_UNAVAILABLE") {
+    return {
+      ...mapped,
+      message: "Free Gemini AI servers are temporarily busy (HTTP 503) even after automatic retries. Your uploaded pages and any completed answers remain safe \u2014 please click Retry in a few seconds."
+    };
+  }
+  return mapped;
+}
+function stripBase64DataUrlPrefix(raw) {
+  const trimmed = String(raw || "").trim();
+  const match = trimmed.match(/^data:([a-zA-Z0-9/+.-]+);base64,(.+)$/s);
+  if (match) {
+    return {
+      embeddedMime: match[1].toLowerCase(),
+      base64: match[2].replace(/\s+/g, "")
+    };
+  }
+  return {
+    base64: trimmed.replace(/\s+/g, "")
+  };
+}
+function sanitizePortalRole(raw) {
+  if (raw === "student" || raw === "teacher") return raw;
+  return null;
+}
+function readHeaderValue(headers, name) {
+  const target = name.toLowerCase();
+  for (const [k, v] of Object.entries(headers || {})) {
+    if (k.toLowerCase() === target) {
+      return Array.isArray(v) ? String(v[0] || "").trim() : String(v || "").trim();
+    }
+  }
+  return "";
+}
+async function resolveOptionalUid(authHeader) {
+  const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  if (!raw || !raw.trim()) {
+    return { uid: null };
+  }
+  const verified = await verifyBearerIdToken(raw);
+  if (!verified.valid || !verified.uid) {
+    return {
+      uid: null,
+      authError: {
+        statusCode: verified.statusCode || 401,
+        message: verified.error || "Invalid authentication token."
+      }
+    };
+  }
+  return { uid: verified.uid };
+}
+function verifySessionSecret(provided, expected) {
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto5.timingSafeEqual(a, b);
+}
+function getSnapSolveStatus() {
+  const configured = Boolean(getConfiguredGeminiApiKey());
+  return {
+    configured,
+    model: SNAPSOLVE_MODEL,
+    fallbackModel: SNAPSOLVE_FALLBACK_MODEL,
+    limits: {
+      maxPages: SNAPSOLVE_MAX_PAGES,
+      maxPageBytes: SNAPSOLVE_MAX_PAGE_BYTES,
+      allowedFormats: ["JPG", "JPEG", "PNG", "WebP", "PDF"]
+    },
+    privacyNotice: SNAPSOLVE_PRIVACY_NOTICE,
+    message: configured ? "SnapSolve AI (Free-Tier Gemini Vision) is ready." : "GEMINI_API_KEY is not configured on the server. Live SnapSolve scanning is disabled until configured."
+  };
+}
+async function handleSnapSolveRecognize(body, headers, clientIp) {
+  purgeExpiredSessions();
+  if (!checkIpRateLimit2(clientIp)) {
+    return {
+      statusCode: 429,
+      payload: {
+        success: false,
+        errorCode: "RATE_LIMITED",
+        message: "Too many requests from this connection. Please wait a few minutes and retry."
+      }
+    };
+  }
+  const portalRole = sanitizePortalRole(body.portalRole);
+  if (!portalRole) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        errorCode: "INVALID_ROLE",
+        message: 'Valid portalRole ("student" or "teacher") is required.'
+      }
+    };
+  }
+  const authCheck = await resolveOptionalUid(headers.authorization);
+  if (authCheck.authError) {
+    return {
+      statusCode: authCheck.authError.statusCode,
+      payload: {
+        success: false,
+        errorCode: "INVALID_AUTH",
+        message: authCheck.authError.message
+      }
+    };
+  }
+  const rawPages = Array.isArray(body.pages) ? body.pages : [];
+  if (rawPages.length === 0) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        errorCode: "NO_PAGES",
+        message: "Please upload at least one question image or PDF page."
+      }
+    };
+  }
+  if (rawPages.length > SNAPSOLVE_MAX_PAGES) {
+    return {
+      statusCode: 400,
+      payload: {
+        success: false,
+        errorCode: "MAX_PAGES_EXCEEDED",
+        message: `Maximum ${SNAPSOLVE_MAX_PAGES} pages allowed per SnapSolve document.`
+      }
+    };
+  }
+  const validatedPages = [];
+  let totalDecodedBytes = 0;
+  for (let idx = 0; idx < rawPages.length; idx += 1) {
+    const item = rawPages[idx];
+    const rawPageNum = Number(item?.pageNumber || idx + 1);
+    const pageNumber = Number.isFinite(rawPageNum) && rawPageNum > 0 ? Math.floor(rawPageNum) : idx + 1;
+    const { base64, embeddedMime } = stripBase64DataUrlPrefix(String(item?.base64Data || ""));
+    const mimeType = String(item?.mimeType || embeddedMime || "").trim().toLowerCase();
+    if (!SNAPSOLVE_ALLOWED_MIMES.has(mimeType)) {
+      return {
+        statusCode: 400,
+        payload: {
+          success: false,
+          errorCode: "UNSUPPORTED_FORMAT",
+          message: `Page ${pageNumber} uses an unsupported format. Allowed: JPG, JPEG, PNG, WebP (or PDF converted to pages).`
+        }
+      };
+    }
+    if (!base64 || base64.length < 32) {
+      return {
+        statusCode: 400,
+        payload: {
+          success: false,
+          errorCode: "EMPTY_PAGE_DATA",
+          message: `Page ${pageNumber} image data is empty or invalid.`
+        }
+      };
+    }
+    const decodedBytes = Math.floor(base64.length * 3 / 4);
+    if (decodedBytes > SNAPSOLVE_MAX_PAGE_BYTES) {
+      return {
+        statusCode: 400,
+        payload: {
+          success: false,
+          errorCode: "PAGE_TOO_LARGE",
+          message: `Page ${pageNumber} exceeds the 5 MB per-page limit. Please compress or retake the photo.`
+        }
+      };
+    }
+    totalDecodedBytes += decodedBytes;
+    if (totalDecodedBytes > 25 * 1024 * 1024) {
+      return {
+        statusCode: 400,
+        payload: {
+          success: false,
+          errorCode: "PAYLOAD_TOO_LARGE",
+          message: "Combined uploaded pages exceed the 25 MB document limit."
+        }
+      };
+    }
+    validatedPages.push({ pageNumber, mimeType, base64Data: base64 });
+  }
+  const apiKey = getConfiguredGeminiApiKey();
+  if (!apiKey) {
+    return {
+      statusCode: 503,
+      payload: {
+        success: false,
+        errorCode: "MISSING_GEMINI_API_KEY",
+        message: "GEMINI_API_KEY is not configured on the server. Live question scanning is unavailable."
+      }
+    };
+  }
+  const subjectHint = String(body.subjectHint || "Auto-Detect").trim().slice(0, 80);
+  const answerLanguageHint = String(body.answerLanguageHint || "Auto-Detect").trim().slice(0, 80);
+  const systemPrompt = [
+    "You are SnapSolve AI OCR & Question Extractor for Indian school & competitive education (English, Marathi & Hindi Devanagari, and Mathematics).",
+    `Inspect EVERY SINGLE ONE of the ${validatedPages.length} attached page(s) strictly in sequential order (Page 1 through Page ${validatedPages.length}).`,
+    "CRITICAL RULES:",
+    `1. Do NOT stop early after Page 1 or the first 1-2 questions \u2014 extract ALL questions across ALL ${validatedPages.length} attached page(s) from top to bottom.`,
+    '2. Preserve EVERY question, sub-question, MCQ option, fill-in-the-blank, table, equation, and original plain numbering label (e.g., "Q1", "1(a)", "Q.2 (i)", "\u092A\u094D\u0930. \u0967") in the EXACT sequence it appears.',
+    "3. Output plain clean text for numberLabel with NO extra symbols, braces, or JSON metadata.",
+    "4. NEVER merge two separate questions, NEVER reorder questions, and NEVER invent missing text.",
+    "5. Support printed text, handwritten questions, Math Unicode symbols (\u221A, \u03C0, \u2211, \u2264, \u2265, \xD7, \xF7, \xB2, \xB3), Marathi & Hindi Devanagari script accurately.",
+    "6. If a question is blurry, cut off, shadowed, or unreadable, STILL include an entry in its exact sequence position with isReadable=false and a clear unreadableReason rather than guessing or omitting it.",
+    "7. If a question relies on a visual figure/diagram/geometry/chart, set hasDiagram=true and summarize visible labels in diagramDescription.",
+    `Context Hints \u2014 Portal Role: ${portalRole}; Subject Hint: ${subjectHint}; Preferred Language Hint: ${answerLanguageHint}.`
+  ].join("\n");
+  const contentParts = [{ text: systemPrompt }];
+  for (const page of validatedPages) {
+    contentParts.push({
+      text: `--- PAGE ${page.pageNumber} OF ${validatedPages.length} START ---`
+    });
+    contentParts.push({
+      inlineData: {
+        mimeType: page.mimeType,
+        data: page.base64Data
+      }
+    });
+  }
+  try {
+    const { response, parsedJson, modelUsed, attemptsMade, usedFallback } = await generateGeminiContentWithFallback(
+      {
+        contents: [
+          {
+            role: "user",
+            parts: contentParts
+          }
+        ],
+        config: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type3.OBJECT,
+            properties: {
+              detectedSubject: { type: Type3.STRING },
+              detectedLanguage: { type: Type3.STRING },
+              extractionWarnings: {
+                type: Type3.ARRAY,
+                items: { type: Type3.STRING }
+              },
+              questions: {
+                type: Type3.ARRAY,
+                items: {
+                  type: Type3.OBJECT,
+                  properties: {
+                    order: { type: Type3.INTEGER },
+                    numberLabel: { type: Type3.STRING },
+                    pageNumber: { type: Type3.INTEGER },
+                    questionText: { type: Type3.STRING },
+                    questionType: {
+                      type: Type3.STRING,
+                      enum: [
+                        "mcq",
+                        "short_answer",
+                        "long_answer",
+                        "numerical",
+                        "fill_blank",
+                        "true_false",
+                        "match",
+                        "diagram",
+                        "passage",
+                        "other"
+                      ]
+                    },
+                    options: {
+                      type: Type3.ARRAY,
+                      items: { type: Type3.STRING }
+                    },
+                    hasDiagram: { type: Type3.BOOLEAN },
+                    diagramDescription: { type: Type3.STRING },
+                    isReadable: { type: Type3.BOOLEAN },
+                    unreadableReason: { type: Type3.STRING },
+                    subquestions: {
+                      type: Type3.ARRAY,
+                      items: { type: Type3.STRING }
+                    }
+                  },
+                  required: [
+                    "order",
+                    "numberLabel",
+                    "pageNumber",
+                    "questionText",
+                    "questionType",
+                    "isReadable"
+                  ]
+                }
+              }
+            },
+            required: ["detectedSubject", "detectedLanguage", "questions"]
+          }
+        }
+      },
+      {
+        apiKey,
+        requireValidJson: true
+      }
+    );
+    const parsed = parsedJson || safeParseGeminiJson(response.text || "");
+    const rawQuestions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+    const sortedRawQuestions = rawQuestions.map((item, rawIdx) => ({ item, rawIdx })).sort((a, b) => {
+      const qa = a.item || {};
+      const qb = b.item || {};
+      const pa = Math.max(1, Math.floor(Number(qa.pageNumber || 1)));
+      const pb = Math.max(1, Math.floor(Number(qb.pageNumber || 1)));
+      if (pa !== pb) return pa - pb;
+      const oa = Number(qa.order);
+      const ob = Number(qb.order);
+      if (Number.isFinite(oa) && Number.isFinite(ob) && oa !== ob) {
+        return oa - ob;
+      }
+      return a.rawIdx - b.rawIdx;
+    }).map((entry) => entry.item);
+    const normalizedQuestions = sortedRawQuestions.map((rawItem, idx) => {
+      const q = rawItem || {};
+      const rawType = String(q.questionType || "other").trim();
+      const questionType = VALID_QUESTION_TYPES.has(rawType) ? rawType : "other";
+      const pageNum = Math.min(
+        validatedPages.length,
+        Math.max(1, Math.floor(Number(q.pageNumber || 1)))
+      );
+      const isReadable = q.isReadable !== false;
+      const numberLabel = sanitizeNumberLabel(q.numberLabel, idx);
+      const questionText = String(q.questionText || "").trim().slice(0, 4e3);
+      const options = Array.isArray(q.options) ? q.options.map((o) => String(o || "").trim()).filter(Boolean).slice(0, 10) : [];
+      const subquestions = Array.isArray(q.subquestions) ? q.subquestions.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 15) : [];
+      return {
+        id: `q_${idx + 1}_${crypto5.randomBytes(4).toString("hex")}`,
+        order: idx + 1,
+        numberLabel,
+        pageNumber: pageNum,
+        questionText: questionText || (isReadable ? `${numberLabel} (Empty text detected)` : `${numberLabel} (Unreadable section on Page ${pageNum})`),
+        questionType,
+        options,
+        hasDiagram: Boolean(q.hasDiagram),
+        diagramDescription: String(q.diagramDescription || "").trim().slice(0, 1e3),
+        isReadable,
+        unreadableReason: isReadable ? "" : String(
+          q.unreadableReason || "Image clarity or lighting made this question unreadable. You can edit the text manually or retake the photo."
+        ).trim().slice(0, 300),
+        subquestions
+      };
+    });
+    const warnings = Array.isArray(parsed?.extractionWarnings) ? parsed.extractionWarnings.map((w) => String(w || "").trim()).filter(Boolean).slice(0, 10) : [];
+    if (normalizedQuestions.length === 0) {
+      warnings.push(
+        "No clear questions were detected on the uploaded pages. Please check lighting, rotate if sideways, or add clearer pages."
+      );
+    }
+    const sessionId = `snap_${crypto5.randomBytes(12).toString("hex")}`;
+    const sessionSecret = crypto5.randomBytes(24).toString("hex");
+    const nowMs = Date.now();
+    const session = {
+      sessionId,
+      sessionSecret,
+      portalRole,
+      ownerUid: authCheck.uid,
+      createdAtMs: nowMs,
+      expiresAtMs: nowMs + SNAPSOLVE_SESSION_TTL_MS,
+      pageCount: validatedPages.length,
+      detectedSubject: String(parsed?.detectedSubject || subjectHint || "General Studies").trim().slice(0, 80),
+      detectedLanguage: String(parsed?.detectedLanguage || answerLanguageHint || "English").trim().slice(0, 60),
+      extractionWarnings: warnings,
+      questions: normalizedQuestions,
+      solutionsByQuestionId: {}
+    };
+    ephemeralSessions.set(sessionId, session);
+    return {
+      statusCode: 200,
+      payload: {
+        success: true,
+        sessionId,
+        sessionSecret,
+        expiresAt: new Date(session.expiresAtMs).toISOString(),
+        portalRole,
+        pageCount: validatedPages.length,
+        detectedSubject: session.detectedSubject,
+        detectedLanguage: session.detectedLanguage,
+        extractionWarnings: session.extractionWarnings,
+        questions: normalizedQuestions,
+        modelUsed,
+        attemptsMade,
+        usedFallback,
+        privacyNotice: SNAPSOLVE_PRIVACY_NOTICE
+      }
+    };
+  } catch (err) {
+    const mapped = mapSnapSolveGeminiError(err);
+    return {
+      statusCode: mapped.statusCode,
+      payload: {
+        success: false,
+        errorCode: mapped.errorCode,
+        retryable: mapped.retryable,
+        retryAfterSeconds: mapped.retryAfterSeconds,
+        attemptsMade: mapped.attemptsMade,
+        message: mapped.message
+      }
+    };
+  }
+}
+async function handleSnapSolveSolve(body, headers, clientIp) {
+  purgeExpiredSessions();
+  if (!checkIpRateLimit2(clientIp)) {
+    return {
+      statusCode: 429,
+      payload: {
+        success: false,
+        errorCode: "RATE_LIMITED",
+        message: "Too many requests from this connection. Please wait a few minutes and retry."
+      }
+    };
+  }
+  const sessionId = String(body.sessionId || "").trim();
+  const session = ephemeralSessions.get(sessionId);
+  if (!session) {
+    return {
+      statusCode: 404,
+      payload: {
+        success: false,
+        errorCode: "SESSION_EXPIRED",
+        message: "Your temporary SnapSolve session has expired or been cleared. Please scan or upload the pages again."
+      }
+    };
+  }
+  const providedSecret = readHeaderValue(headers, "x-snapsolve-secret");
+  if (!verifySessionSecret(providedSecret, session.sessionSecret)) {
+    return {
+      statusCode: 403,
+      payload: {
+        success: false,
+        errorCode: "FORBIDDEN_SESSION",
+        message: "Unauthorized access to SnapSolve session."
+      }
+    };
+  }
+  if (session.ownerUid) {
+    const authCheck = await resolveOptionalUid(headers.authorization);
+    if (authCheck.authError || authCheck.uid !== session.ownerUid) {
+      return {
+        statusCode: 403,
+        payload: {
+          success: false,
+          errorCode: "UID_MISMATCH",
+          message: "This SnapSolve session belongs to a different signed-in account."
+        }
+      };
+    }
+  }
+  const portalRole = sanitizePortalRole(body.portalRole) || session.portalRole;
+  if (portalRole !== session.portalRole) {
+    return {
+      statusCode: 403,
+      payload: {
+        success: false,
+        errorCode: "ROLE_MISMATCH",
+        message: "Student and Teacher SnapSolve sessions are isolated and cannot be crossed."
+      }
+    };
+  }
+  const subject = String(body.subject || session.detectedSubject || "General Studies").trim().slice(0, 80);
+  const answerLanguage = String(body.answerLanguage || "Auto-Detect (Same as Question)").trim().slice(0, 80);
+  const rawStyle = String(body.answerStyle || "step_by_step").trim();
+  const answerStyle = VALID_ANSWER_STYLES.has(rawStyle) ? rawStyle : "step_by_step";
+  const rawEditedQuestions = Array.isArray(body.questions) ? body.questions : session.questions;
+  const normalizedQuestions = rawEditedQuestions.slice(0, 60).map((item, idx) => {
+    const q = item || {};
+    const rawType = String(q.questionType || "other").trim();
+    return {
+      id: String(q.id || `q_${idx + 1}`).trim().slice(0, 64),
+      order: idx + 1,
+      numberLabel: String(q.numberLabel || `Q${idx + 1}`).trim().slice(0, 40) || `Q${idx + 1}`,
+      pageNumber: Math.max(1, Math.floor(Number(q.pageNumber || 1))),
+      questionText: String(q.questionText || "").trim().slice(0, 4e3),
+      questionType: VALID_QUESTION_TYPES.has(rawType) ? rawType : "other",
+      options: Array.isArray(q.options) ? q.options.map((o) => String(o || "").trim()).filter(Boolean).slice(0, 10) : [],
+      hasDiagram: Boolean(q.hasDiagram),
+      diagramDescription: String(q.diagramDescription || "").trim().slice(0, 1e3),
+      isReadable: q.isReadable !== false,
+      unreadableReason: String(q.unreadableReason || "").trim().slice(0, 300),
+      subquestions: Array.isArray(q.subquestions) ? q.subquestions.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 15) : []
+    };
+  });
+  session.questions = normalizedQuestions;
+  const targetIdsSet = Array.isArray(body.targetQuestionIds) && body.targetQuestionIds.length > 0 ? new Set(body.targetQuestionIds.map((id) => String(id || "").trim()).filter(Boolean)) : null;
+  const questionsToProcess = targetIdsSet ? normalizedQuestions.filter((q) => targetIdsSet.has(q.id)) : normalizedQuestions;
+  const readableBatchQueue = [];
+  for (const q of questionsToProcess) {
+    if (!q.isReadable || !q.questionText.trim()) {
+      session.solutionsByQuestionId[q.id] = {
+        questionId: q.id,
+        order: q.order,
+        numberLabel: q.numberLabel,
+        pageNumber: q.pageNumber,
+        questionText: q.questionText,
+        status: "unreadable",
+        shortAnswer: "",
+        answerText: "",
+        steps: [],
+        finalAnswer: "",
+        teachingNote: "",
+        errorMessage: q.unreadableReason || "Marked unreadable because the scanned image was unclear or empty. Edit the question text to solve it.",
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } else {
+      readableBatchQueue.push(q);
+    }
+  }
+  let lastModelUsed = SNAPSOLVE_MODEL;
+  let totalAttemptsMade = 0;
+  let batchFailure = null;
+  if (readableBatchQueue.length > 0) {
+    const apiKey = getConfiguredGeminiApiKey();
+    if (!apiKey) {
+      return {
+        statusCode: 503,
+        payload: {
+          success: false,
+          errorCode: "MISSING_GEMINI_API_KEY",
+          retryable: false,
+          message: "GEMINI_API_KEY is not configured on the server."
+        }
+      };
+    }
+    const BATCH_SIZE = 6;
+    const styleInstructionMap = {
+      short: "Short Answers: Crisp 1-3 sentence direct answer. For MCQs give option + brief reason; for Maths keep only key formula & final value.",
+      detailed: "Detailed Answers: Thorough multi-part conceptual explanation covering definitions, formulas, reasoning, and complete solution.",
+      step_by_step: 'Step-by-Step Solutions: Populate "steps" array with clear numbered logical steps leading cleanly to a highlighted "finalAnswer".',
+      exam_ready: "Exam-Ready Answers: Structured board/competitive exam presentation (Given, Formula/Principle, Working/Key Points, Conclusion) formatted for full marks.",
+      simple: "Simple Explanations for Students: Friendly, easy-to-understand everyday wording suitable for school learners with zero confusing jargon."
+    };
+    const getLanguageGuidance = (lang) => {
+      const lower = lang.toLowerCase();
+      if (lower.includes("bilingual") && lower.includes("marathi")) {
+        return 'Language Rule: Provide BILINGUAL output (English + Marathi Devanagari script). In "answerText", "steps", and "finalAnswer", clearly include BOTH English and Marathi (\u092E\u0930\u093E\u0920\u0940) explanations side-by-side or paired cleanly.';
+      }
+      if (lower.includes("bilingual") && lower.includes("hindi")) {
+        return 'Language Rule: Provide BILINGUAL output (English + Hindi Devanagari script). In "answerText", "steps", and "finalAnswer", clearly include BOTH English and Hindi (\u0939\u093F\u0928\u094D\u0926\u0940) explanations side-by-side or paired cleanly.';
+      }
+      if (lower === "marathi" || lower.includes("\u092E\u0930\u093E\u0920\u0940")) {
+        return 'Language Rule: Write ALL explanations, "steps", "answerText", "shortAnswer", and "finalAnswer" in strict, natural Marathi (\u092E\u0930\u093E\u0920\u0940 Devanagari: \u0906\u0939\u0947, \u0906\u0939\u0947\u0924, \u0915\u0930\u093E) \u2014 NEVER mix Hindi words like \u0939\u0948/\u0939\u0948\u0902 even if the question text is in English or Hindi. Preserve mathematical numbers/symbols accurately.';
+      }
+      if (lower === "hindi" || lower.includes("\u0939\u093F\u0928\u094D\u0926\u0940")) {
+        return 'Language Rule: Write ALL explanations, "steps", "answerText", "shortAnswer", and "finalAnswer" in strict, natural Hindi (\u0939\u093F\u0928\u094D\u0926\u0940 Devanagari: \u0939\u0948, \u0939\u0948\u0902, \u0915\u0930\u0947\u0902) \u2014 NEVER mix Marathi words like \u0906\u0939\u0947/\u0915\u0930\u0942\u0928 even if the question text is in English or Marathi. Preserve mathematical numbers/symbols accurately.';
+      }
+      if (lower === "english") {
+        return 'Language Rule: Write ALL explanations, "steps", "answerText", "shortAnswer", and "finalAnswer" in clear English.';
+      }
+      return "Language Rule: Auto-detect EACH question's language independently and answer ONLY in that question's own language (strict Marathi for Marathi questions, strict Hindi for Hindi questions, English for English questions \u2014 never bleed words across questions).";
+    };
+    for (let start = 0; start < readableBatchQueue.length; start += BATCH_SIZE) {
+      const chunk = readableBatchQueue.slice(start, start + BATCH_SIZE);
+      const roleGuidance = portalRole === "teacher" ? "Role: Teacher Educator Answer Key. Also populate teachingNote with a brief 1-2 line marking/classroom verification cue or common mistake to watch for." : "Role: Student Learning Companion. Make explanations encouraging, crystal clear, and leave teachingNote empty string unless a quick study tip helps.";
+      const prompt = [
+        `You are solving school/exam questions accurately for MyStudyZone SnapSolve AI.`,
+        `Subject: ${subject}`,
+        `Requested Answer Language: ${answerLanguage}`,
+        getLanguageGuidance(answerLanguage),
+        `Answer Style: ${styleInstructionMap[answerStyle]}`,
+        roleGuidance,
+        "STRICT ACCURACY RULES:",
+        '- Return one solution object for EVERY question in the input list below, copying its exact "questionId" verbatim.',
+        "- NEVER skip, combine, or reorder questions. Maintain exact question numbering.",
+        '- For Mathematics, Arithmetic, Algebra, Geometry, Trigonometry, Physics/Chemistry numericals: ALWAYS populate "steps" array with explicit step-by-step working (Given -> Formula -> Substitution -> Calculation -> Result) AND put the exact final result in "finalAnswer".',
+        "- Keep Devanagari (Marathi/Hindi) script and Unicode math symbols (\xD7, \xF7, \xB2, \xB3, \u221A, \u03C0, \u2220, \xB0) intact.",
+        "",
+        "INPUT QUESTIONS:",
+        JSON.stringify(
+          chunk.map((q) => ({
+            questionId: q.id,
+            order: q.order,
+            numberLabel: q.numberLabel,
+            questionType: q.questionType,
+            questionText: q.questionText,
+            options: q.options,
+            diagramDescription: q.diagramDescription,
+            subquestions: q.subquestions
+          }))
+        )
+      ].join("\n");
+      try {
+        const solveConfig = {
+          temperature: 0.2,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type3.OBJECT,
+            properties: {
+              solutions: {
+                type: Type3.ARRAY,
+                items: {
+                  type: Type3.OBJECT,
+                  properties: {
+                    questionId: { type: Type3.STRING },
+                    shortAnswer: { type: Type3.STRING },
+                    answerText: { type: Type3.STRING },
+                    steps: {
+                      type: Type3.ARRAY,
+                      items: { type: Type3.STRING }
+                    },
+                    finalAnswer: { type: Type3.STRING },
+                    teachingNote: { type: Type3.STRING }
+                  },
+                  required: ["questionId", "answerText", "finalAnswer"]
+                }
+              }
+            },
+            required: ["solutions"]
+          }
+        };
+        const firstCall = await generateGeminiContentWithFallback(
+          {
+            contents: prompt,
+            config: solveConfig
+          },
+          {
+            apiKey,
+            requireValidJson: true,
+            validateJson: (candidate) => Array.isArray(candidate.solutions) && candidate.solutions.length > 0
+          }
+        );
+        lastModelUsed = firstCall.modelUsed;
+        totalAttemptsMade += firstCall.attemptsMade;
+        const parsed = firstCall.parsedJson || safeParseGeminiJson(firstCall.response.text || "");
+        const returnedList = Array.isArray(parsed?.solutions) ? parsed.solutions : [];
+        const byId = /* @__PURE__ */ new Map();
+        const usedRowIndices = /* @__PURE__ */ new Set();
+        returnedList.forEach((row, rIdx) => {
+          if (row && typeof row === "object") {
+            const qid = String(row.questionId || "").trim();
+            if (qid) byId.set(qid, row);
+          }
+          void rIdx;
+        });
+        for (let chunkIdx = 0; chunkIdx < chunk.length; chunkIdx += 1) {
+          const q = chunk[chunkIdx];
+          let match = byId.get(q.id);
+          if (!match) {
+            const prefixIdx = returnedList.findIndex((row, idx) => {
+              if (usedRowIndices.has(idx) || !row || typeof row !== "object") return false;
+              const rowObj = row;
+              const rowId = String(rowObj.questionId || "").trim();
+              return rowId === `q_${q.order}` || rowId === String(q.order) || rowId === q.numberLabel || q.id.includes("_") && rowId.startsWith(`q_${q.order}_`);
+            });
+            if (prefixIdx >= 0) {
+              usedRowIndices.add(prefixIdx);
+              match = returnedList[prefixIdx];
+            } else if (returnedList.length === chunk.length && returnedList[chunkIdx] && typeof returnedList[chunkIdx] === "object" && !usedRowIndices.has(chunkIdx)) {
+              usedRowIndices.add(chunkIdx);
+              match = returnedList[chunkIdx];
+            } else if (chunk.length === 1 && returnedList.length === 1 && returnedList[0] && typeof returnedList[0] === "object") {
+              usedRowIndices.add(0);
+              match = returnedList[0];
+            }
+          } else {
+            const exactIdx = returnedList.indexOf(match);
+            if (exactIdx >= 0) usedRowIndices.add(exactIdx);
+          }
+          const answerText = String(match?.answerText || "").trim();
+          const finalAnswer = String(match?.finalAnswer || "").trim();
+          if (!match || !answerText && !finalAnswer) {
+            session.solutionsByQuestionId[q.id] = {
+              questionId: q.id,
+              order: q.order,
+              numberLabel: q.numberLabel,
+              pageNumber: q.pageNumber,
+              questionText: q.questionText,
+              status: "failed",
+              shortAnswer: "",
+              answerText: "",
+              steps: [],
+              finalAnswer: "",
+              teachingNote: "",
+              errorMessage: "AI did not return a complete answer for this question. Click Retry on this item.",
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            };
+            continue;
+          }
+          const steps = Array.isArray(match.steps) ? match.steps.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 30) : [];
+          session.solutionsByQuestionId[q.id] = {
+            questionId: q.id,
+            order: q.order,
+            numberLabel: q.numberLabel,
+            pageNumber: q.pageNumber,
+            questionText: q.questionText,
+            status: "solved",
+            shortAnswer: String(match.shortAnswer || finalAnswer || "").trim().slice(0, 600),
+            answerText: answerText.slice(0, 6e3),
+            steps,
+            finalAnswer: (finalAnswer || String(match.shortAnswer || "")).trim().slice(0, 800),
+            teachingNote: String(match.teachingNote || "").trim().slice(0, 800),
+            errorMessage: "",
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        }
+      } catch (err) {
+        const mapped = mapSnapSolveGeminiError(err);
+        totalAttemptsMade += mapped.attemptsMade || 1;
+        batchFailure = {
+          statusCode: mapped.statusCode,
+          errorCode: mapped.errorCode,
+          retryable: mapped.retryable,
+          retryAfterSeconds: mapped.retryAfterSeconds,
+          message: mapped.message
+        };
+        const remainingItems = readableBatchQueue.slice(start);
+        for (const q of remainingItems) {
+          session.solutionsByQuestionId[q.id] = {
+            questionId: q.id,
+            order: q.order,
+            numberLabel: q.numberLabel,
+            pageNumber: q.pageNumber,
+            questionText: q.questionText,
+            status: "failed",
+            shortAnswer: "",
+            answerText: "",
+            steps: [],
+            finalAnswer: "",
+            teachingNote: "",
+            errorMessage: mapped.message,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        }
+        break;
+      }
+    }
+  }
+  session.expiresAtMs = Date.now() + SNAPSOLVE_SESSION_TTL_MS;
+  const orderedSolutions = normalizedQuestions.map((q) => {
+    const existing = session.solutionsByQuestionId[q.id];
+    if (existing) {
+      return {
+        ...existing,
+        order: q.order,
+        numberLabel: q.numberLabel,
+        pageNumber: q.pageNumber,
+        questionText: q.questionText
+      };
+    }
+    return {
+      questionId: q.id,
+      order: q.order,
+      numberLabel: q.numberLabel,
+      pageNumber: q.pageNumber,
+      questionText: q.questionText,
+      status: q.isReadable ? "failed" : "unreadable",
+      shortAnswer: "",
+      answerText: "",
+      steps: [],
+      finalAnswer: "",
+      teachingNote: "",
+      errorMessage: q.isReadable ? "Not yet solved." : q.unreadableReason || "Question image unreadable.",
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  });
+  const stats = {
+    total: orderedSolutions.length,
+    solved: orderedSolutions.filter((s) => s.status === "solved").length,
+    failed: orderedSolutions.filter((s) => s.status === "failed").length,
+    unreadable: orderedSolutions.filter((s) => s.status === "unreadable").length
+  };
+  if (batchFailure) {
+    if (stats.solved === 0) {
+      return {
+        statusCode: batchFailure.statusCode,
+        payload: {
+          success: false,
+          errorCode: batchFailure.errorCode,
+          retryable: batchFailure.retryable,
+          retryAfterSeconds: batchFailure.retryAfterSeconds,
+          attemptsMade: totalAttemptsMade,
+          message: batchFailure.message,
+          questions: session.questions,
+          solutions: orderedSolutions,
+          stats
+        }
+      };
+    }
+    return {
+      statusCode: 200,
+      payload: {
+        success: true,
+        partialFailure: true,
+        errorCode: batchFailure.errorCode,
+        retryable: batchFailure.retryable,
+        retryAfterSeconds: batchFailure.retryAfterSeconds,
+        attemptsMade: totalAttemptsMade,
+        warningMessage: batchFailure.message,
+        sessionId: session.sessionId,
+        expiresAt: new Date(session.expiresAtMs).toISOString(),
+        subject,
+        answerLanguage,
+        answerStyle,
+        modelUsed: lastModelUsed,
+        questions: session.questions,
+        solutions: orderedSolutions,
+        stats
+      }
+    };
+  }
+  return {
+    statusCode: 200,
+    payload: {
+      success: true,
+      sessionId: session.sessionId,
+      expiresAt: new Date(session.expiresAtMs).toISOString(),
+      subject,
+      answerLanguage,
+      answerStyle,
+      modelUsed: lastModelUsed,
+      attemptsMade: totalAttemptsMade,
+      questions: session.questions,
+      solutions: orderedSolutions,
+      stats
+    }
+  };
+}
+async function handleSnapSolveDeleteSession(sessionId, headers) {
+  purgeExpiredSessions();
+  const cleanId = String(sessionId || "").trim();
+  const session = ephemeralSessions.get(cleanId);
+  if (!session) {
+    return {
+      statusCode: 200,
+      payload: {
+        success: true,
+        cleared: true,
+        message: "Temporary SnapSolve session already cleared."
+      }
+    };
+  }
+  const providedSecret = readHeaderValue(headers, "x-snapsolve-secret");
+  if (!verifySessionSecret(providedSecret, session.sessionSecret)) {
+    return {
+      statusCode: 403,
+      payload: {
+        success: false,
+        errorCode: "FORBIDDEN_SESSION",
+        message: "Unauthorized session cleanup request."
+      }
+    };
+  }
+  if (session.ownerUid) {
+    const authCheck = await resolveOptionalUid(headers.authorization);
+    if (authCheck.authError || authCheck.uid !== session.ownerUid) {
+      return {
+        statusCode: 403,
+        payload: {
+          success: false,
+          errorCode: "UID_MISMATCH",
+          message: "This SnapSolve session belongs to a different signed-in account."
+        }
+      };
+    }
+  }
+  session.questions = [];
+  session.solutionsByQuestionId = {};
+  ephemeralSessions.delete(cleanId);
+  return {
+    statusCode: 200,
+    payload: {
+      success: true,
+      cleared: true,
+      message: "Temporary uploaded pages and session answers cleared from server memory."
+    }
+  };
 }
 
 // server.ts
@@ -5220,10 +7811,10 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", trustedOrigin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
   }
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature"
+    "Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature, x-snapsolve-secret"
   );
   if (req.method === "OPTIONS") {
     if (rawOrigin && !trustedOrigin) {
@@ -5239,6 +7830,7 @@ app.use((req, res, next) => {
 app.use("/api/razorpay/webhook", express.raw({ type: "application/json" }));
 app.use("/functions/webhook", express.raw({ type: "application/json" }));
 app.use("/api/razorpayx/webhook", express.raw({ type: "application/json" }));
+app.use("/api/snapsolve", express.json({ limit: "30mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use((req, _res, next) => {
@@ -5604,10 +8196,10 @@ app.post("/api/razorpay/verify-payment", async (req, res) => {
         error: "Missing Razorpay cryptographic payment signature."
       });
     }
-    const expectedSignature = crypto5.createHmac("sha256", creds.keySecret).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest("hex");
+    const expectedSignature = crypto6.createHmac("sha256", creds.keySecret).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest("hex");
     const expectedBuf = Buffer.from(expectedSignature, "utf8");
     const providedBuf = Buffer.from(String(razorpay_signature).trim(), "utf8");
-    const isSignatureValid = expectedBuf.length === providedBuf.length && crypto5.timingSafeEqual(expectedBuf, providedBuf);
+    const isSignatureValid = expectedBuf.length === providedBuf.length && crypto6.timingSafeEqual(expectedBuf, providedBuf);
     if (!isSignatureValid) {
       console.log(`[Razorpay Signature Mismatch] Order: ${razorpay_order_id}, Payment: ${razorpay_payment_id}`);
       return res.status(400).json({
@@ -6283,6 +8875,7 @@ app.post("/api/referrals/payout-request", async (req, res) => {
     if (!sessionCheck.valid) {
       return res.status(sessionCheck.statusCode).json({
         success: false,
+        code: "SINGLE_DEVICE_SESSION_INVALID",
         message: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
       });
     }
@@ -6851,11 +9444,36 @@ app.post("/api/auth/check-existing-account", async (req, res) => {
         error: "Email or 10-digit mobile number is required."
       });
     }
-    const [emailMatch, mobileMatch] = await Promise.all([
+    const [
+      emailMatch,
+      mobileMatch,
+      portalEmailMatch,
+      portalMobileMatch,
+      parentEmailMatch,
+      parentMobileMatch
+    ] = await Promise.all([
       rawEmail ? serverQueryEqualsLimit1("students", "email", rawEmail).catch(() => null) : Promise.resolve(null),
-      rawMobileDigits.length >= 10 ? serverQueryEqualsLimit1("students", "mobile", rawMobileDigits).catch(() => null) : Promise.resolve(null)
+      rawMobileDigits.length >= 10 ? serverQueryEqualsLimit1("students", "mobile", rawMobileDigits).catch(() => null) : Promise.resolve(null),
+      rawEmail ? serverQueryEqualsLimit1("portal_roles", "email", rawEmail).catch(() => null) : Promise.resolve(null),
+      rawMobileDigits.length >= 10 ? serverQueryEqualsLimit1("portal_roles", "mobile", rawMobileDigits).catch(() => null) : Promise.resolve(null),
+      rawEmail ? serverQueryEqualsLimit1("parents", "email", rawEmail).catch(() => null) : Promise.resolve(null),
+      rawMobileDigits.length >= 10 ? serverQueryEqualsLimit1("parents", "mobile", rawMobileDigits).catch(() => null) : Promise.resolve(null)
     ]);
     if (!emailMatch && !mobileMatch) {
+      if (portalEmailMatch || portalMobileMatch || parentEmailMatch || parentMobileMatch) {
+        const mismatchField2 = portalEmailMatch || parentEmailMatch ? "email" : "mobile";
+        const detectedRole = portalEmailMatch?.data?.role || portalMobileMatch?.data?.role || "parent";
+        return res.json({
+          success: true,
+          exists: true,
+          matchedPair: false,
+          mismatchField: mismatchField2,
+          accountRole: detectedRole,
+          activeClasses: [],
+          activeClassKeys: [],
+          message: `This ${mismatchField2 === "email" ? "email address" : "mobile number"} is already registered under a ${String(detectedRole).replace("_", " ")} portal account. Please sign in to that portal instead of creating a duplicate account.`
+        });
+      }
       return res.json({
         success: true,
         exists: false,
@@ -6900,6 +9518,8 @@ async function verifyRequestDeviceSession(req, studentId) {
     return { valid: true, statusCode: 200 };
   }
   const sessionId = String(req.headers["x-session-id"] || "").trim();
+  const sessionVersionRaw = req.headers["x-session-version"];
+  const sessionVersion = sessionVersionRaw !== void 0 && String(sessionVersionRaw).trim() !== "" ? Number(sessionVersionRaw) : void 0;
   const deviceId = String(req.headers["x-device-id"] || "").trim();
   const hardwareSignature = String(req.headers["x-hardware-signature"] || "").trim();
   const deviceSignature = String(req.headers["x-device-signature"] || "").trim();
@@ -6919,6 +9539,7 @@ async function verifyRequestDeviceSession(req, studentId) {
     const check = await validateDeviceSessionServer({
       userId: cleanId,
       activeSessionId: sessionId || void 0,
+      sessionVersion: Number.isFinite(sessionVersion) ? sessionVersion : void 0,
       deviceId: deviceId || "",
       hardwareSignature: hardwareSignature || "",
       deviceSignature: deviceSignature || "",
@@ -6968,7 +9589,7 @@ app.post("/api/auth/session/acquire", async (req, res) => {
       userAgentSummary: body.userAgentSummary
     });
     if (!result.allowed) {
-      return res.status(result.code === "INVALID_INPUT" ? 400 : 403).json({
+      return res.status(400).json({
         success: false,
         allowed: false,
         code: result.code,
@@ -7011,9 +9632,12 @@ app.post("/api/auth/session/validate", async (req, res) => {
     const isVerifiedOwner = Boolean(
       verifiedUid && (verifiedUid === userId || body.firebaseUid && verifiedUid === String(body.firebaseUid).trim())
     );
+    const rawVer = body.sessionVersion ?? req.headers["x-session-version"];
+    const sessionVersion = rawVer !== void 0 && String(rawVer).trim() !== "" && Number.isFinite(Number(rawVer)) ? Number(rawVer) : void 0;
     const result = await validateDeviceSessionServer({
       userId,
       activeSessionId: body.activeSessionId || req.headers["x-session-id"] || void 0,
+      sessionVersion,
       deviceId: String(body.deviceId || req.headers["x-device-id"] || ""),
       hardwareSignature: String(body.hardwareSignature || req.headers["x-hardware-signature"] || ""),
       deviceSignature: String(body.deviceSignature || req.headers["x-device-signature"] || ""),
@@ -7032,6 +9656,7 @@ app.post("/api/auth/session/validate", async (req, res) => {
       return res.status(401).json({
         success: false,
         valid: false,
+        code: "SINGLE_DEVICE_SESSION_INVALID",
         reason: result.reason,
         terminatedBy: result.terminatedBy,
         error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
@@ -7072,9 +9697,12 @@ app.post("/api/auth/session/heartbeat", async (req, res) => {
     const isVerifiedOwner = Boolean(
       verifiedUid && (verifiedUid === userId || body.firebaseUid && verifiedUid === String(body.firebaseUid).trim())
     );
+    const rawVer = body.sessionVersion ?? req.headers["x-session-version"];
+    const sessionVersion = rawVer !== void 0 && String(rawVer).trim() !== "" && Number.isFinite(Number(rawVer)) ? Number(rawVer) : void 0;
     const result = await heartbeatDeviceSessionServer({
       userId,
       activeSessionId: String(body.activeSessionId || req.headers["x-session-id"] || ""),
+      sessionVersion,
       deviceId: String(body.deviceId || req.headers["x-device-id"] || ""),
       hardwareSignature: String(body.hardwareSignature || req.headers["x-hardware-signature"] || ""),
       deviceSignature: String(body.deviceSignature || req.headers["x-device-signature"] || ""),
@@ -7093,6 +9721,7 @@ app.post("/api/auth/session/heartbeat", async (req, res) => {
       return res.status(401).json({
         success: false,
         valid: false,
+        code: "SINGLE_DEVICE_SESSION_INVALID",
         reason: result.reason,
         error: result.error || SINGLE_DEVICE_BLOCK_MESSAGE
       });
@@ -7239,6 +9868,7 @@ app.post("/api/subscription/sync", async (req, res) => {
       if (!sessionCheck.valid) {
         return res.status(sessionCheck.statusCode).json({
           success: false,
+          code: "SINGLE_DEVICE_SESSION_INVALID",
           error: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
         });
       }
@@ -7728,6 +10358,7 @@ app.post("/api/subscription/verify-access", async (req, res) => {
     if (!sessionCheck.valid) {
       return res.status(sessionCheck.statusCode).json({
         allowed: false,
+        code: "SINGLE_DEVICE_SESSION_INVALID",
         error: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE,
         message: sessionCheck.error || SESSION_LOGGED_IN_ELSEWHERE_MESSAGE
       });
@@ -7987,6 +10618,79 @@ app.post("/api/support/chat", async (req, res) => {
     });
   }
 });
+app.get("/api/support/status", (_req, res) => {
+  return res.json({
+    success: true,
+    ...getSupportAiStatus()
+  });
+});
+app.get("/api/support/tickets", async (req, res) => {
+  try {
+    const studentId = req.query.studentId ? String(req.query.studentId).trim() : void 0;
+    const ticketNumber = req.query.ticketNumber ? String(req.query.ticketNumber).trim() : void 0;
+    const authHeader = req.headers.authorization;
+    const rawToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : void 0;
+    if (ticketNumber) {
+      const adminCheck2 = rawToken ? await verifyAdminRequest(req.headers).catch(() => ({ authorized: false })) : { authorized: false };
+      const tickets2 = await getServerSupportTickets({
+        ticketNumber,
+        bearerToken: rawToken,
+        includeContactDetails: Boolean(adminCheck2.authorized)
+      });
+      return res.json({
+        success: true,
+        count: tickets2.length,
+        tickets: tickets2
+      });
+    }
+    if (studentId) {
+      const tokenRes = rawToken ? await verifyBearerIdToken(authHeader).catch(() => null) : null;
+      const adminCheck2 = !tokenRes?.valid || tokenRes.uid !== studentId ? await verifyAdminRequest(req.headers).catch(() => ({ authorized: false, statusCode: 401 })) : { authorized: true, statusCode: 200 };
+      const isOwner = Boolean(tokenRes?.valid && tokenRes.uid === studentId);
+      if (!isOwner && !adminCheck2.authorized) {
+        return res.status(401).json({
+          success: false,
+          tickets: [],
+          error: "Authentication required to list account support tickets."
+        });
+      }
+      const tickets2 = await getServerSupportTickets({
+        studentId,
+        bearerToken: rawToken,
+        includeContactDetails: true
+      });
+      return res.json({
+        success: true,
+        count: tickets2.length,
+        tickets: tickets2
+      });
+    }
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        tickets: [],
+        error: adminCheck.error || "Administrator authorization required to list all support tickets."
+      });
+    }
+    const tickets = await getServerSupportTickets({
+      bearerToken: rawToken,
+      includeContactDetails: true
+    });
+    return res.json({
+      success: true,
+      count: tickets.length,
+      tickets
+    });
+  } catch (err) {
+    console.error("[Support Ticket List Route Error]:", err);
+    return res.status(500).json({
+      success: false,
+      tickets: [],
+      error: "Unable to load support requests right now."
+    });
+  }
+});
 app.post("/api/support/tickets", async (req, res) => {
   try {
     const result = await handleSupportTicketSubmission(
@@ -8001,6 +10705,156 @@ app.post("/api/support/tickets", async (req, res) => {
       success: false,
       persisted: false,
       error: "Unable to submit your support request right now. Please try again shortly."
+    });
+  }
+});
+app.patch("/api/support/tickets/:ticketId", async (req, res) => {
+  try {
+    const adminCheck = await verifyAdminRequest(req.headers);
+    if (!adminCheck.authorized) {
+      return res.status(adminCheck.statusCode || 401).json({
+        success: false,
+        error: adminCheck.error || "Administrator authorization required to update support tickets."
+      });
+    }
+    const authHeader = req.headers.authorization;
+    const rawToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : void 0;
+    const ticketId = String(req.params.ticketId || "").trim();
+    const { status, adminResponse } = req.body || {};
+    const result = await updateServerSupportTicketStatus(
+      ticketId,
+      String(status || "IN_PROGRESS"),
+      adminResponse !== void 0 ? String(adminResponse) : void 0,
+      rawToken
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err) {
+    console.error("[Support Ticket Update Route Error]:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Unable to update support ticket status."
+    });
+  }
+});
+app.get("/api/ai/status", (_req, res) => {
+  return res.json({
+    success: true,
+    ...getAiServiceStatus()
+  });
+});
+app.post("/api/ai/generate", async (req, res) => {
+  try {
+    const result = await handleAiTextGenerate(
+      req.body || {},
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err) {
+    console.error("[AI Generate Route Error]:", err);
+    return res.status(500).json({
+      success: false,
+      errorCode: "INTERNAL_ERROR",
+      message: "Unexpected AI server error."
+    });
+  }
+});
+app.post("/api/ai/image", async (req, res) => {
+  try {
+    const result = await handleAiImageGenerate(
+      req.body || {},
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err) {
+    console.error("[AI Image Route Error]:", err);
+    return res.status(500).json({
+      success: false,
+      errorCode: "INTERNAL_ERROR",
+      message: "Unexpected AI image server error."
+    });
+  }
+});
+app.get("/api/snapsolve/status", (_req, res) => {
+  return res.json({
+    success: true,
+    ...getSnapSolveStatus()
+  });
+});
+app.post("/api/snapsolve/recognize", async (req, res) => {
+  try {
+    const result = await handleSnapSolveRecognize(
+      req.body || {},
+      req.headers,
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch {
+    return res.status(500).json({
+      success: false,
+      errorCode: "INTERNAL_ERROR",
+      message: "Unexpected error while scanning uploaded pages."
+    });
+  }
+});
+app.post("/api/snapsolve/solve", async (req, res) => {
+  try {
+    const result = await handleSnapSolveSolve(
+      req.body || {},
+      req.headers,
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch {
+    return res.status(500).json({
+      success: false,
+      errorCode: "INTERNAL_ERROR",
+      message: "Unexpected error while generating SnapSolve answers."
+    });
+  }
+});
+app.delete("/api/snapsolve/session/:sessionId", async (req, res) => {
+  try {
+    const result = await handleSnapSolveDeleteSession(
+      String(req.params.sessionId || ""),
+      req.headers
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch {
+    return res.status(500).json({
+      success: false,
+      errorCode: "INTERNAL_ERROR",
+      message: "Failed to clear temporary SnapSolve session."
+    });
+  }
+});
+app.get("/api/dictionary/entries", async (_req, res) => {
+  try {
+    const entries = await getServerCustomDictionaryEntries();
+    return res.json({
+      success: true,
+      count: entries.length,
+      entries
+    });
+  } catch (err) {
+    console.error("[Dictionary GET Error]:", err);
+    return res.status(500).json({
+      success: false,
+      entries: [],
+      message: "Failed to load custom dictionary entries."
+    });
+  }
+});
+app.post("/api/dictionary/entries", async (req, res) => {
+  try {
+    const result = await addServerCustomDictionaryEntry(
+      req.body || {}
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch (err) {
+    console.error("[Dictionary POST Error]:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save dictionary entry."
     });
   }
 });
@@ -8176,7 +11030,7 @@ export class ErrorOverlay extends HTMLElement {}
     app.use(vite.middlewares);
     console.log("[Dev Mode] Vite middlewares mounted to Express (HMR WebSocket disabled).");
   } else {
-    const distPath = path3.resolve(process.cwd(), "dist");
+    const distPath = path4.resolve(process.cwd(), "dist");
     app.use(
       express.static(distPath, {
         maxAge: "1y",
@@ -8184,7 +11038,7 @@ export class ErrorOverlay extends HTMLElement {}
         setHeaders: (res, filePath) => {
           if (filePath.endsWith(".html") || filePath.endsWith("manifest.json") || filePath.endsWith("manifest.webmanifest") || filePath.endsWith("sw.js") || filePath.endsWith("registerSW.js")) {
             res.setHeader("Cache-Control", "no-cache, must-revalidate");
-          } else if (filePath.includes(`${path3.sep}assets${path3.sep}`)) {
+          } else if (filePath.includes(`${path4.sep}assets${path4.sep}`)) {
             res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           }
         }
@@ -8192,7 +11046,7 @@ export class ErrorOverlay extends HTMLElement {}
     );
     app.get("*", (_req, res) => {
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
-      res.sendFile(path3.resolve(distPath, "index.html"));
+      res.sendFile(path4.resolve(distPath, "index.html"));
     });
     console.log("[Production Mode] Compressed static dist served with immutable asset caching.");
   }

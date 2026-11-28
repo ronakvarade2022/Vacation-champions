@@ -8,9 +8,21 @@ import {
 import { getFirestore as getAdminFirestoreSdk } from 'firebase-admin/firestore';
 import { getAuth as getAdminAuthSdk } from 'firebase-admin/auth';
 import {
+  getSupportAiStatus,
   handleSupportChatRequest,
   handleSupportTicketSubmission
 } from '../../server/supportAssistant.ts';
+import {
+  getAiServiceStatus,
+  handleAiImageGenerate,
+  handleAiTextGenerate
+} from '../../server/aiToolsService.ts';
+import {
+  getSnapSolveStatus,
+  handleSnapSolveDeleteSession,
+  handleSnapSolveRecognize,
+  handleSnapSolveSolve
+} from '../../server/snapSolveService.ts';
 
 dotenv.config();
 
@@ -222,9 +234,9 @@ function jsonResponse(statusCode, payload) {
   const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Vary': 'Origin',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature',
+      'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature, x-snapsolve-secret',
     'Cache-Control': 'no-store, no-cache, must-revalidate'
   };
   if (currentRequestTrustedOrigin) {
@@ -2906,6 +2918,10 @@ export async function handler(event) {
     }
   }
 
+  if (method === 'GET' && normalizedPath === '/support/status') {
+    return jsonResponse(200, getSupportAiStatus());
+  }
+
   if (method === 'POST' && normalizedPath === '/support/chat') {
     let body = {};
     try {
@@ -2947,6 +2963,98 @@ export async function handler(event) {
       { authorization: authHeader },
       clientIp
     );
+    return jsonResponse(result.statusCode, result.payload);
+  }
+
+  // Centralized Gemini AI Studio routes (Student 30 Tools, Teacher 40 Tools, Core AI Studio)
+  if (method === 'GET' && normalizedPath === '/ai/status') {
+    return jsonResponse(200, getAiServiceStatus());
+  }
+
+  if (method === 'POST' && normalizedPath === '/ai/generate') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const clientIp =
+      String(
+        event.headers?.['x-nf-client-connection-ip'] ||
+          event.headers?.['x-forwarded-for'] ||
+          'unknown'
+      )
+        .split(',')[0]
+        .trim() || 'unknown';
+    const result = await handleAiTextGenerate(body, clientIp);
+    return jsonResponse(result.statusCode, result.payload);
+  }
+
+  if (method === 'POST' && normalizedPath === '/ai/image') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const clientIp =
+      String(
+        event.headers?.['x-nf-client-connection-ip'] ||
+          event.headers?.['x-forwarded-for'] ||
+          'unknown'
+      )
+        .split(',')[0]
+        .trim() || 'unknown';
+    const result = await handleAiImageGenerate(body, clientIp);
+    return jsonResponse(result.statusCode, result.payload);
+  }
+
+  // Centralized SnapSolve AI routes (Student & Teacher Portals)
+  if (method === 'GET' && normalizedPath === '/snapsolve/status') {
+    return jsonResponse(200, getSnapSolveStatus());
+  }
+
+  if (method === 'POST' && normalizedPath === '/snapsolve/recognize') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const clientIp =
+      String(
+        event.headers?.['x-nf-client-connection-ip'] ||
+          event.headers?.['x-forwarded-for'] ||
+          'unknown'
+      )
+        .split(',')[0]
+        .trim() || 'unknown';
+    const result = await handleSnapSolveRecognize(body, event.headers || {}, clientIp);
+    return jsonResponse(result.statusCode, result.payload);
+  }
+
+  if (method === 'POST' && normalizedPath === '/snapsolve/solve') {
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      body = {};
+    }
+    const clientIp =
+      String(
+        event.headers?.['x-nf-client-connection-ip'] ||
+          event.headers?.['x-forwarded-for'] ||
+          'unknown'
+      )
+        .split(',')[0]
+        .trim() || 'unknown';
+    const result = await handleSnapSolveSolve(body, event.headers || {}, clientIp);
+    return jsonResponse(result.statusCode, result.payload);
+  }
+
+  if (method === 'DELETE' && normalizedPath.startsWith('/snapsolve/session/')) {
+    const sessionId = decodeURIComponent(normalizedPath.slice('/snapsolve/session/'.length)).trim();
+    const result = await handleSnapSolveDeleteSession(sessionId, event.headers || {});
     return jsonResponse(result.statusCode, result.payload);
   }
 

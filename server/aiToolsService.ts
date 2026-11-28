@@ -1,4 +1,13 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
+import {
+  GEMINI_FALLBACK_MODEL,
+  GEMINI_IMAGE_MODEL,
+  GEMINI_PRIMARY_MODEL,
+  createGeminiServerClient,
+  generateGeminiContentWithFallback,
+  getConfiguredGeminiApiKey,
+  mapGeminiHttpError,
+} from './geminiClient.ts';
 
 export type AiToolId =
   | 'pdf_maker'
@@ -19,6 +28,7 @@ export type RoleToolOutputKind = 'document' | 'table' | 'slides' | 'quiz' | 'fla
 export interface AiServiceStatus {
   configured: boolean;
   textModel: string;
+  fallbackModel: string;
   imageModel: string;
   message: string;
 }
@@ -53,43 +63,22 @@ function checkIpRateLimit(ip: string): boolean {
   return true;
 }
 
+/**
+ * Re-exported from centralized server/geminiClient.ts for backwards compatibility.
+ */
 export function getConfiguredGeminiKey(): string {
-  const raw = String(process.env.GEMINI_API_KEY || '')
-    .trim()
-    .replace(/^["']+|["']+$/g, '')
-    .trim();
-  if (!raw) return '';
-  const upper = raw.toUpperCase();
-  if (
-    upper.includes('MY_GEMINI_API_KEY') ||
-    upper.includes('YOUR_') ||
-    upper.includes('REPLACE_') ||
-    upper.includes('EXAMPLE_')
-  ) {
-    return '';
-  }
-  return raw;
-}
-
-function createServerGeminiClient(apiKey: string): GoogleGenAI {
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
+  return getConfiguredGeminiApiKey();
 }
 
 export function getAiServiceStatus(): AiServiceStatus {
-  const configured = Boolean(getConfiguredGeminiKey());
+  const configured = Boolean(getConfiguredGeminiApiKey());
   return {
     configured,
-    textModel: 'gemini-4-hydrogen',
-    imageModel: 'gemini-3.1-flash-lite-image',
+    textModel: GEMINI_PRIMARY_MODEL,
+    fallbackModel: GEMINI_FALLBACK_MODEL,
+    imageModel: GEMINI_IMAGE_MODEL,
     message: configured
-      ? 'Server Gemini AI runtime is configured and ready.'
+      ? `Server Gemini AI runtime is configured and ready (${GEMINI_PRIMARY_MODEL} with free-tier ${GEMINI_FALLBACK_MODEL} fallback).`
       : 'GEMINI_API_KEY is not configured in Settings -> Secrets on the server. Live AI generation is disabled (zero fake outputs).',
   };
 }
@@ -104,18 +93,21 @@ export async function handleAiTextGenerate(
       payload: {
         success: false,
         errorCode: 'RATE_LIMITED',
+        retryable: true,
+        retryAfterSeconds: 60,
         message: 'Too many AI requests from this connection. Please wait a few minutes and retry.',
       },
     };
   }
 
-  const apiKey = getConfiguredGeminiKey();
+  const apiKey = getConfiguredGeminiApiKey();
   if (!apiKey) {
     return {
       statusCode: 503,
       payload: {
         success: false,
         errorCode: 'MISSING_GEMINI_API_KEY',
+        retryable: false,
         message:
           'GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in Settings -> Secrets to run real AI generation.',
       },
@@ -157,8 +149,6 @@ export async function handleAiTextGenerate(
     };
   }
 
-  const ai = createServerGeminiClient(apiKey);
-
   try {
     // 1. Interactive Quiz schema (either legacy quiz_generator or role-scoped quiz outputKind)
     if (
@@ -166,46 +156,59 @@ export async function handleAiTextGenerate(
       ((toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
         outputKindRaw === 'quiz')
     ) {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ''}Generate ${count} original, accurate multiple-choice questions in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". ${instructions}`,
-        config: {
-          systemInstruction:
-            'You are a strict Indian school academic curriculum author. Ensure factual and mathematical accuracy. Return valid JSON matching the schema.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              questions: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    options: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
+      const result = await generateGeminiContentWithFallback(
+        {
+          contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ''}Generate ${count} original, accurate multiple-choice questions in ${language} for ${board} Board ${classLevel} ${subject} on "${topic}". ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction:
+              'You are a strict Indian school academic curriculum author. Ensure factual and mathematical accuracy. Return valid JSON matching the schema with all required fields populated.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                questions: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      question: { type: Type.STRING },
+                      options: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      correctIndex: { type: Type.INTEGER },
+                      explanation: { type: Type.STRING },
                     },
-                    correctIndex: { type: Type.INTEGER },
-                    explanation: { type: Type.STRING },
+                    required: ['question', 'options', 'correctIndex', 'explanation'],
                   },
                 },
               },
+              required: ['title', 'questions'],
             },
           },
         },
-      });
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.questions) && parsed.questions.length > 0,
+        }
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return {
         statusCode: 200,
         payload: {
           success: true,
           toolId,
           outputKind: 'quiz',
-          model: 'gemini-4-hydrogen',
-          structured: parsed,
+          model: result.modelUsed,
+          primaryModel: result.primaryModel,
+          fallbackModel: result.fallbackModel,
+          usedFallback: result.usedFallback,
+          attemptsMade: result.attemptsMade,
+          structured: result.parsedJson,
         },
       };
     }
@@ -217,47 +220,60 @@ export async function handleAiTextGenerate(
         outputKindRaw === 'slides')
     ) {
       const slideCount = Math.min(Math.max(count, 3), 12);
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ''}Create a ${slideCount}-slide educational presentation deck in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Include concise bullet points and practical speaker notes for each slide. ${instructions}`,
-        config: {
-          systemInstruction:
-            'You create classroom-ready structured slide decks with clear bullet points and teacher/student speaker notes.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              subtitle: { type: Type.STRING },
-              slides: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    slideNumber: { type: Type.INTEGER },
-                    title: { type: Type.STRING },
-                    bullets: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
+      const result = await generateGeminiContentWithFallback(
+        {
+          contents: `${roleToolName ? `Tool: ${roleToolName}. ` : ''}Create a ${slideCount}-slide educational presentation deck in ${language} for ${board} ${classLevel} ${subject} on "${topic}". Include concise bullet points and practical speaker notes for each slide. ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction:
+              'You create classroom-ready structured slide decks with clear bullet points and teacher/student speaker notes. Populate all required JSON fields.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                subtitle: { type: Type.STRING },
+                slides: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      slideNumber: { type: Type.INTEGER },
+                      title: { type: Type.STRING },
+                      bullets: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      speakerNotes: { type: Type.STRING },
                     },
-                    speakerNotes: { type: Type.STRING },
+                    required: ['slideNumber', 'title', 'bullets', 'speakerNotes'],
                   },
                 },
               },
+              required: ['title', 'subtitle', 'slides'],
             },
           },
         },
-      });
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.slides) && parsed.slides.length > 0,
+        }
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return {
         statusCode: 200,
         payload: {
           success: true,
           toolId,
           outputKind: 'slides',
-          model: 'gemini-4-hydrogen',
-          structured: parsed,
+          model: result.modelUsed,
+          primaryModel: result.primaryModel,
+          fallbackModel: result.fallbackModel,
+          usedFallback: result.usedFallback,
+          attemptsMade: result.attemptsMade,
+          structured: result.parsedJson,
         },
       };
     }
@@ -267,44 +283,56 @@ export async function handleAiTextGenerate(
       (toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
       outputKindRaw === 'table'
     ) {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `Tool: ${roleToolName || 'Academic Table Generator'} (${roleToolCategory || 'Education'}). Context: ${board} Board, ${classLevel}, Subject: ${subject}, Language: ${language}. Request: "${topic}". ${instructions} Output an organized, ready-to-print tabular grid (columns + rows) suitable for Excel (.xlsx) and A4 PDF export.`,
-        config: {
-          systemInstruction:
-            'You are an Indian school & academic operations planner. Generate clean, practical tabular schedules, registers, marksheets, seating charts, or study planners matching the exact JSON schema.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              subtitle: { type: Type.STRING },
-              columns: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-              },
-              rows: {
-                type: Type.ARRAY,
-                items: {
+      const result = await generateGeminiContentWithFallback(
+        {
+          contents: `Tool: ${roleToolName || 'Academic Table Generator'} (${roleToolCategory || 'Education'}). Context: ${board} Board, ${classLevel}, Subject: ${subject}, Language: ${language}. Request: "${topic}". ${instructions} Output an organized, ready-to-print tabular grid (columns + rows) suitable for Excel (.xlsx) and A4 PDF export.`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction:
+              'You are an Indian school & academic operations planner. Generate clean, practical tabular schedules, registers, marksheets, seating charts, or study planners matching the exact JSON schema with all required fields populated.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                subtitle: { type: Type.STRING },
+                columns: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
                 },
+                rows: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
+                },
+                notes: { type: Type.STRING },
               },
-              notes: { type: Type.STRING },
+              required: ['title', 'columns', 'rows'],
             },
           },
         },
-      });
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.columns) && parsed.columns.length > 0,
+        }
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return {
         statusCode: 200,
         payload: {
           success: true,
           toolId,
           outputKind: 'table',
-          model: 'gemini-4-hydrogen',
-          structured: parsed,
+          model: result.modelUsed,
+          primaryModel: result.primaryModel,
+          fallbackModel: result.fallbackModel,
+          usedFallback: result.usedFallback,
+          attemptsMade: result.attemptsMade,
+          structured: result.parsedJson,
         },
       };
     }
@@ -314,82 +342,108 @@ export async function handleAiTextGenerate(
       (toolId === 'teacher_productivity_tool' || toolId === 'student_learning_tool') &&
       outputKindRaw === 'flashcards'
     ) {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `Tool: ${roleToolName || 'Study Flashcards'}. Create ${Math.min(Math.max(count, 4), 16)} study cards in ${language} for ${board} ${classLevel} ${subject} on "${topic}". ${instructions}`,
-        config: {
-          systemInstruction:
-            'You create high-retention study flashcards, definitions, formulas, and bilingual vocabulary cards matching the exact JSON schema.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              subtitle: { type: Type.STRING },
-              cards: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    front: { type: Type.STRING },
-                    back: { type: Type.STRING },
-                    hint: { type: Type.STRING },
+      const result = await generateGeminiContentWithFallback(
+        {
+          contents: `Tool: ${roleToolName || 'Study Flashcards'}. Create ${Math.min(Math.max(count, 4), 16)} study cards in ${language} for ${board} ${classLevel} ${subject} on "${topic}". ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction:
+              'You create high-retention study flashcards, definitions, formulas, and bilingual vocabulary cards matching the exact JSON schema with all required fields populated.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                subtitle: { type: Type.STRING },
+                cards: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      front: { type: Type.STRING },
+                      back: { type: Type.STRING },
+                      hint: { type: Type.STRING },
+                    },
+                    required: ['front', 'back', 'hint'],
                   },
                 },
               },
+              required: ['title', 'cards'],
             },
           },
         },
-      });
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) => Array.isArray(parsed.cards) && parsed.cards.length > 0,
+        }
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return {
         statusCode: 200,
         payload: {
           success: true,
           toolId,
           outputKind: 'flashcards',
-          model: 'gemini-4-hydrogen',
-          structured: parsed,
+          model: result.modelUsed,
+          primaryModel: result.primaryModel,
+          fallbackModel: result.fallbackModel,
+          usedFallback: result.usedFallback,
+          attemptsMade: result.attemptsMade,
+          structured: result.parsedJson,
         },
       };
     }
 
     // 5. Resume Maker schema
     if (toolId === 'resume_maker') {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `Refine and structure an ATS-friendly academic/teaching/student resume based on these details: ${topic}. Additional focus: ${instructions}`,
-        config: {
-          systemInstruction:
-            'You are a career coach for educators and students in India. Improve phrasing clearly without inventing fake degrees or employers not provided.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              headline: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              skills: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
+      const result = await generateGeminiContentWithFallback(
+        {
+          contents: `Refine and structure an ATS-friendly academic/teaching/student resume based on these details: ${topic}. Additional focus: ${instructions}`,
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+            systemInstruction:
+              'You are a career coach for educators and students in India. Improve phrasing clearly without inventing fake degrees or employers not provided. Populate all required JSON fields.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                headline: { type: Type.STRING },
+                summary: { type: Type.STRING },
+                skills: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                highlights: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
               },
-              highlights: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-              },
+              required: ['headline', 'summary', 'skills', 'highlights'],
             },
           },
         },
-      });
+        {
+          apiKey,
+          requireValidJson: true,
+          validateJson: (parsed) =>
+            Boolean(String(parsed.headline || '').trim() || String(parsed.summary || '').trim()),
+        }
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return {
         statusCode: 200,
         payload: {
           success: true,
           toolId,
-          model: 'gemini-4-hydrogen',
-          structured: parsed,
+          model: result.modelUsed,
+          primaryModel: result.primaryModel,
+          fallbackModel: result.fallbackModel,
+          usedFallback: result.usedFallback,
+          attemptsMade: result.attemptsMade,
+          structured: result.parsedJson,
         },
       };
     }
@@ -406,68 +460,68 @@ export async function handleAiTextGenerate(
       student_learning_tool: `You are executing Student Learning Tool "${roleToolName || 'Student Study Helper'}" (${roleToolCategory || 'Learning'}). Language: ${language}. Student Profile: ${board} Board, ${classLevel}, ${subject}. Request/Question: "${topic}". ${instructions} Provide clear, step-by-step, age-appropriate explanations, worked examples, memory tips, and practice checks.`,
     };
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: promptByTool[toolId] || topic,
-      config: {
-        systemInstruction:
-          'You are an expert Indian curriculum author, educator, and tutor for MyStudyZone. Output clear structured JSON with title, subtitle, and well-organized sections.',
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            subtitle: { type: Type.STRING },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  heading: { type: Type.STRING },
-                  body: { type: Type.STRING },
+    const result = await generateGeminiContentWithFallback(
+      {
+        contents: promptByTool[toolId] || topic,
+        config: {
+          temperature: 0.3,
+          maxOutputTokens: 8192,
+          systemInstruction:
+            'You are an expert Indian curriculum author, educator, and tutor for MyStudyZone. Output clear structured JSON with title, subtitle, and well-organized sections matching all required fields.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              subtitle: { type: Type.STRING },
+              sections: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    heading: { type: Type.STRING },
+                    body: { type: Type.STRING },
+                  },
+                  required: ['heading', 'body'],
                 },
               },
             },
+            required: ['title', 'subtitle', 'sections'],
           },
         },
       },
-    });
+      {
+        apiKey,
+        requireValidJson: true,
+        validateJson: (parsed) => Array.isArray(parsed.sections) && parsed.sections.length > 0,
+      }
+    );
 
-    const parsed = JSON.parse((response.text || '{}').trim());
     return {
       statusCode: 200,
       payload: {
         success: true,
         toolId,
         outputKind: 'document',
-        model: 'gemini-4-hydrogen',
-        structured: parsed,
+        model: result.modelUsed,
+        primaryModel: result.primaryModel,
+        fallbackModel: result.fallbackModel,
+        usedFallback: result.usedFallback,
+        attemptsMade: result.attemptsMade,
+        structured: result.parsedJson,
       },
     };
-  } catch (err: any) {
-    const rawMsg = String(err?.message || err || 'AI generation failed');
-    const upper = rawMsg.toUpperCase();
-    const isAuthOrKey =
-      upper.includes('API_KEY_INVALID') ||
-      upper.includes('PERMISSION_DENIED') ||
-      upper.includes('403') ||
-      upper.includes('401');
-    const isQuota = upper.includes('RESOURCE_EXHAUSTED') || upper.includes('429');
-
+  } catch (err: unknown) {
+    const mapped = mapGeminiHttpError(err, 'MyStudyZone AI Studio');
     return {
-      statusCode: isAuthOrKey ? 403 : isQuota ? 429 : 502,
+      statusCode: mapped.statusCode,
       payload: {
         success: false,
-        errorCode: isAuthOrKey
-          ? 'API_KEY_INVALID'
-          : isQuota
-          ? 'RESOURCE_EXHAUSTED'
-          : 'AI_UPSTREAM_ERROR',
-        message: isAuthOrKey
-          ? 'Server Gemini API key was rejected or lacks permission. Please verify GEMINI_API_KEY in Settings -> Secrets.'
-          : isQuota
-          ? 'Gemini API quota exceeded. Please try again later or upgrade API tier in Settings -> Secrets.'
-          : `Gemini AI request failed: ${rawMsg}`,
+        errorCode: mapped.errorCode,
+        retryable: mapped.retryable,
+        retryAfterSeconds: mapped.retryAfterSeconds,
+        attemptsMade: mapped.attemptsMade,
+        message: mapped.message,
       },
     };
   }
@@ -483,18 +537,21 @@ export async function handleAiImageGenerate(
       payload: {
         success: false,
         errorCode: 'RATE_LIMITED',
+        retryable: true,
+        retryAfterSeconds: 60,
         message: 'Too many AI image requests. Please wait a few minutes and retry.',
       },
     };
   }
 
-  const apiKey = getConfiguredGeminiKey();
+  const apiKey = getConfiguredGeminiApiKey();
   if (!apiKey) {
     return {
       statusCode: 503,
       payload: {
         success: false,
         errorCode: 'MISSING_GEMINI_API_KEY',
+        retryable: false,
         message:
           'GEMINI_API_KEY is not configured on the server. AI Image Generator requires a configured billing-enabled GEMINI_API_KEY in Settings -> Secrets.',
       },
@@ -518,11 +575,11 @@ export async function handleAiImageGenerate(
     };
   }
 
-  const ai = createServerGeminiClient(apiKey);
+  const ai = createGeminiServerClient(apiKey);
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite-image',
+      model: GEMINI_IMAGE_MODEL,
       contents: {
         parts: [
           {
@@ -567,14 +624,14 @@ export async function handleAiImageGenerate(
       statusCode: 200,
       payload: {
         success: true,
-        model: 'gemini-3.1-flash-lite-image',
+        model: GEMINI_IMAGE_MODEL,
         aspectRatio,
         imageDataUrl,
         caption,
       },
     };
-  } catch (err: any) {
-    const rawMsg = String(err?.message || err || 'AI image generation failed');
+  } catch (err: unknown) {
+    const rawMsg = String((err as { message?: string })?.message || err || 'AI image generation failed');
     const upper = rawMsg.toUpperCase();
     const isPaidOrPerm =
       upper.includes('BILLING') ||
@@ -583,15 +640,29 @@ export async function handleAiImageGenerate(
       upper.includes('403') ||
       upper.includes('RESOURCE_EXHAUSTED');
 
+    if (isPaidOrPerm) {
+      return {
+        statusCode: 403,
+        payload: {
+          success: false,
+          errorCode: 'PAID_KEY_REQUIRED',
+          retryable: false,
+          message: `Image generation model (${GEMINI_IMAGE_MODEL}) requires a billing-enabled Gemini API key. MyStudyZone operates strictly on free-tier Gemini models unless billing is explicitly enabled.`,
+        },
+      };
+    }
+
+    const mapped = mapGeminiHttpError(err, 'MyStudyZone AI Image Generator');
     return {
-      statusCode: isPaidOrPerm ? 403 : 502,
+      statusCode: mapped.statusCode,
       payload: {
         success: false,
-        errorCode: isPaidOrPerm ? 'PAID_KEY_REQUIRED' : 'IMAGE_UPSTREAM_ERROR',
-        message: isPaidOrPerm
-          ? `Image generation model (gemini-3.1-flash-lite-image) requires a billing-enabled / paid GEMINI_API_KEY in Settings -> Secrets. (${rawMsg})`
-          : `Gemini Image API error: ${rawMsg}`,
+        errorCode: mapped.errorCode,
+        retryable: mapped.retryable,
+        retryAfterSeconds: mapped.retryAfterSeconds,
+        message: mapped.message,
       },
     };
   }
 }
+

@@ -1,6 +1,14 @@
 import crypto from 'crypto';
-import { GoogleGenAI, Type } from '@google/genai';
-import { getConfiguredGeminiKey } from './aiToolsService.ts';
+import { Type } from '@google/genai';
+import {
+  GEMINI_FALLBACK_MODEL,
+  GEMINI_MAX_PRIMARY_ATTEMPTS,
+  GEMINI_PRIMARY_MODEL,
+  generateGeminiContentWithFallback,
+  getConfiguredGeminiApiKey,
+  mapGeminiHttpError,
+  safeParseGeminiJson,
+} from './geminiClient.ts';
 import { verifyBearerIdToken } from '../firebase/admin.ts';
 
 export type SnapSolvePortalRole = 'student' | 'teacher';
@@ -70,9 +78,9 @@ interface SnapSolveSession {
   solutionsByQuestionId: Record<string, SnapSolveSolutionItem>;
 }
 
-export const SNAPSOLVE_MODEL = 'gemini-4-hydrogen';
-export const SNAPSOLVE_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
-export const SNAPSOLVE_MAX_PRIMARY_ATTEMPTS = 3;
+export const SNAPSOLVE_MODEL = GEMINI_PRIMARY_MODEL;
+export const SNAPSOLVE_FALLBACK_MODEL = GEMINI_FALLBACK_MODEL;
+export const SNAPSOLVE_MAX_PRIMARY_ATTEMPTS = GEMINI_MAX_PRIMARY_ATTEMPTS;
 export const SNAPSOLVE_MAX_PAGES = 10;
 export const SNAPSOLVE_MAX_PAGE_BYTES = 5 * 1024 * 1024;
 export const SNAPSOLVE_SESSION_TTL_MS = 20 * 60 * 1000;
@@ -140,17 +148,6 @@ if (typeof cleanupTimer.unref === 'function') {
   cleanupTimer.unref();
 }
 
-function createServerGeminiClient(apiKey: string): GoogleGenAI {
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
-}
-
 function sanitizeNumberLabel(raw: unknown, fallbackIndex: number): string {
   const cleaned = String(raw || '')
     .replace(/\}\s*\{[\s\S]*$/g, '')
@@ -162,225 +159,16 @@ function sanitizeNumberLabel(raw: unknown, fallbackIndex: number): string {
   return cleaned || `Q${fallbackIndex + 1}`;
 }
 
-function safeJsonParse(rawText: string): Record<string, unknown> | null {
-  const trimmed = String(rawText || '').trim();
-  if (!trimmed) return null;
-
-  const tryParse = (candidate: string): Record<string, unknown> | null => {
-    try {
-      const parsed = JSON.parse(candidate);
-      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const direct = tryParse(trimmed);
-  if (direct) return direct;
-
-  const unfenced = trimmed
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  const parsedUnfenced = tryParse(unfenced);
-  if (parsedUnfenced) return parsedUnfenced;
-
-  const firstBrace = unfenced.indexOf('{');
-  const lastBrace = unfenced.lastIndexOf('}');
-  const sliced =
-    firstBrace >= 0 && lastBrace > firstBrace
-      ? unfenced.slice(firstBrace, lastBrace + 1)
-      : unfenced;
-
-  const parsedSliced = tryParse(sliced);
-  if (parsedSliced) return parsedSliced;
-
-  // Repair stray backslashes (e.g., LaTeX \frac, \times) or unescaped control newlines
-  const repaired = sliced
-    .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
-    .replace(/[\u0000-\u0019]+/g, ' ');
-
-  return tryParse(repaired);
-}
-
-function isTransientGeminiUnavailableError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err || '');
-  const status = Number((err as { status?: number })?.status || 0);
-  const lower = msg.toLowerCase();
-
-  if (
-    status === 429 ||
-    lower.includes('429') ||
-    lower.includes('resource_exhausted') ||
-    lower.includes('quota')
-  ) {
-    return false;
-  }
-
-  return (
-    status === 503 ||
-    status === 502 ||
-    status === 504 ||
-    lower.includes('503') ||
-    lower.includes('unavailable') ||
-    lower.includes('high demand') ||
-    lower.includes('overloaded') ||
-    lower.includes('temporarily unavailable') ||
-    lower.includes('etimedout') ||
-    lower.includes('econnreset') ||
-    lower.includes('socket hang up') ||
-    lower.includes('fetch failed')
-  );
-}
-
-function sleepMs(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isQuotaExhaustedError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err || '');
-  const status = Number((err as { status?: number })?.status || 0);
-  const lower = msg.toLowerCase();
-  return (
-    status === 429 ||
-    lower.includes('429') ||
-    lower.includes('resource_exhausted') ||
-    lower.includes('quota')
-  );
-}
-
-async function generateContentWithRetry(
-  ai: GoogleGenAI,
-  requestParams: Omit<Parameters<GoogleGenAI['models']['generateContent']>[0], 'model'>
-): Promise<{
-  response: Awaited<ReturnType<GoogleGenAI['models']['generateContent']>>;
-  modelUsed: string;
-  attemptsMade: number;
-  usedFallback: boolean;
-}> {
-  let attemptsMade = 0;
-  let lastError: unknown;
-  let shouldTryFallback = false;
-
-  for (let attempt = 1; attempt <= SNAPSOLVE_MAX_PRIMARY_ATTEMPTS; attempt += 1) {
-    attemptsMade += 1;
-    try {
-      const response = await ai.models.generateContent({
-        model: SNAPSOLVE_MODEL,
-        ...requestParams,
-      });
-      return {
-        response,
-        modelUsed: SNAPSOLVE_MODEL,
-        attemptsMade,
-        usedFallback: false,
-      };
-    } catch (err) {
-      lastError = err;
-      if (isQuotaExhaustedError(err)) {
-        // Do not retry primary on 429; try free-tier lite model once below
-        shouldTryFallback = true;
-        break;
-      }
-      if (!isTransientGeminiUnavailableError(err)) {
-        if (err && typeof err === 'object') {
-          (err as { attemptsMade?: number }).attemptsMade = attemptsMade;
-        }
-        throw err;
-      }
-      if (attempt < SNAPSOLVE_MAX_PRIMARY_ATTEMPTS) {
-        const baseDelay = attempt === 1 ? 850 : 2100;
-        const jitter = Math.floor(Math.random() * 250);
-        await sleepMs(baseDelay + jitter);
-      } else {
-        shouldTryFallback = true;
-      }
-    }
-  }
-
-  if (!shouldTryFallback) {
-    if (lastError && typeof lastError === 'object') {
-      (lastError as { attemptsMade?: number }).attemptsMade = attemptsMade;
-    }
-    throw lastError;
-  }
-
-  // Final bounded free-tier fallback attempt using gemini-3.1-flash-lite
-  await sleepMs(450);
-  attemptsMade += 1;
-  try {
-    const response = await ai.models.generateContent({
-      model: SNAPSOLVE_FALLBACK_MODEL,
-      ...requestParams,
-    });
+function mapSnapSolveGeminiError(err: unknown) {
+  const mapped = mapGeminiHttpError(err, 'SnapSolve AI');
+  if (mapped.errorCode === 'AI_UNAVAILABLE') {
     return {
-      response,
-      modelUsed: SNAPSOLVE_FALLBACK_MODEL,
-      attemptsMade,
-      usedFallback: true,
-    };
-  } catch (fallbackErr) {
-    const finalErr =
-      isTransientGeminiUnavailableError(fallbackErr) || isQuotaExhaustedError(fallbackErr)
-        ? fallbackErr
-        : lastError;
-    if (finalErr && typeof finalErr === 'object') {
-      (finalErr as { attemptsMade?: number }).attemptsMade = attemptsMade;
-    }
-    throw finalErr;
-  }
-}
-
-function mapGeminiError(err: unknown): {
-  statusCode: number;
-  errorCode: string;
-  retryable: boolean;
-  retryAfterSeconds?: number;
-  attemptsMade?: number;
-  message: string;
-} {
-  const msg = err instanceof Error ? err.message : String(err || 'AI error');
-  const status = Number((err as { status?: number })?.status || 0);
-  const attemptsMade = Number((err as { attemptsMade?: number })?.attemptsMade || 0) || undefined;
-  const lower = msg.toLowerCase();
-
-  if (
-    status === 429 ||
-    lower.includes('429') ||
-    lower.includes('resource_exhausted') ||
-    lower.includes('quota')
-  ) {
-    return {
-      statusCode: 429,
-      errorCode: 'QUOTA_EXHAUSTED',
-      retryable: false,
-      attemptsMade,
-      message: 'Free AI usage limit reached. Please try again later.',
-    };
-  }
-
-  if (isTransientGeminiUnavailableError(err)) {
-    return {
-      statusCode: 503,
-      errorCode: 'AI_UNAVAILABLE',
-      retryable: true,
-      retryAfterSeconds: 10,
-      attemptsMade,
+      ...mapped,
       message:
         'Free Gemini AI servers are temporarily busy (HTTP 503) even after automatic retries. Your uploaded pages and any completed answers remain safe — please click Retry in a few seconds.',
     };
   }
-
-  return {
-    statusCode: 502,
-    errorCode: 'AI_SERVICE_ERROR',
-    retryable: true,
-    retryAfterSeconds: 5,
-    attemptsMade,
-    message: 'SnapSolve AI could not complete processing right now. Please retry.',
-  };
+  return mapped;
 }
 
 function stripBase64DataUrlPrefix(raw: string): { base64: string; embeddedMime?: string } {
@@ -444,10 +232,11 @@ function verifySessionSecret(provided: string, expected: string): boolean {
 }
 
 export function getSnapSolveStatus() {
-  const configured = Boolean(getConfiguredGeminiKey());
+  const configured = Boolean(getConfiguredGeminiApiKey());
   return {
     configured,
     model: SNAPSOLVE_MODEL,
+    fallbackModel: SNAPSOLVE_FALLBACK_MODEL,
     limits: {
       maxPages: SNAPSOLVE_MAX_PAGES,
       maxPageBytes: SNAPSOLVE_MAX_PAGE_BYTES,
@@ -588,7 +377,7 @@ export async function handleSnapSolveRecognize(
     validatedPages.push({ pageNumber, mimeType, base64Data: base64 });
   }
 
-  const apiKey = getConfiguredGeminiKey();
+  const apiKey = getConfiguredGeminiApiKey();
   if (!apiKey) {
     return {
       statusCode: 503,
@@ -631,14 +420,15 @@ export async function handleSnapSolveRecognize(
   }
 
   try {
-    const ai = createServerGeminiClient(apiKey);
-    const { response, modelUsed, attemptsMade, usedFallback } = await generateContentWithRetry(ai, {
-      contents: [
+    const { response, parsedJson, modelUsed, attemptsMade, usedFallback } =
+      await generateGeminiContentWithFallback(
         {
-          role: 'user',
-          parts: contentParts,
-        },
-      ],
+          contents: [
+            {
+              role: 'user',
+              parts: contentParts,
+            },
+          ],
       config: {
         temperature: 0.1,
         maxOutputTokens: 8192,
@@ -703,9 +493,14 @@ export async function handleSnapSolveRecognize(
           required: ['detectedSubject', 'detectedLanguage', 'questions'],
         },
       },
-    });
+        },
+        {
+          apiKey,
+          requireValidJson: true,
+        }
+      );
 
-    const parsed = safeJsonParse(response.text || '');
+    const parsed = parsedJson || safeParseGeminiJson(response.text || '');
     const rawQuestions = Array.isArray(parsed?.questions) ? parsed.questions : [];
     const sortedRawQuestions = rawQuestions
       .map((item, rawIdx) => ({ item, rawIdx }))
@@ -824,7 +619,7 @@ export async function handleSnapSolveRecognize(
       },
     };
   } catch (err) {
-    const mapped = mapGeminiError(err);
+    const mapped = mapSnapSolveGeminiError(err);
     return {
       statusCode: mapped.statusCode,
       payload: {
@@ -993,7 +788,7 @@ export async function handleSnapSolveSolve(
   } | null = null;
 
   if (readableBatchQueue.length > 0) {
-    const apiKey = getConfiguredGeminiKey();
+    const apiKey = getConfiguredGeminiApiKey();
     if (!apiKey) {
       return {
         statusCode: 503,
@@ -1006,7 +801,6 @@ export async function handleSnapSolveSolve(
       };
     }
 
-    const ai = createServerGeminiClient(apiKey);
     const BATCH_SIZE = 6;
     const styleInstructionMap: Record<SnapSolveAnswerStyle, string> = {
       short:
@@ -1107,29 +901,23 @@ export async function handleSnapSolveSolve(
           },
         };
 
-        const firstCall = await generateContentWithRetry(ai, {
-          contents: prompt,
-          config: solveConfig,
-        });
+        const firstCall = await generateGeminiContentWithFallback(
+          {
+            contents: prompt,
+            config: solveConfig,
+          },
+          {
+            apiKey,
+            requireValidJson: true,
+            validateJson: (candidate) =>
+              Array.isArray(candidate.solutions) && candidate.solutions.length > 0,
+          }
+        );
         lastModelUsed = firstCall.modelUsed;
         totalAttemptsMade += firstCall.attemptsMade;
 
-        let parsed = safeJsonParse(firstCall.response.text || '');
-        let returnedList = Array.isArray(parsed?.solutions) ? parsed.solutions : [];
-
-        // If the model returned empty/unparseable JSON, perform 1 bounded fallback recovery call
-        if (returnedList.length === 0) {
-          await sleepMs(400);
-          totalAttemptsMade += 1;
-          const fallbackResponse = await ai.models.generateContent({
-            model: SNAPSOLVE_FALLBACK_MODEL,
-            contents: prompt,
-            config: solveConfig,
-          });
-          lastModelUsed = SNAPSOLVE_FALLBACK_MODEL;
-          parsed = safeJsonParse(fallbackResponse.text || '');
-          returnedList = Array.isArray(parsed?.solutions) ? parsed.solutions : [];
-        }
+        const parsed = firstCall.parsedJson || safeParseGeminiJson(firstCall.response.text || '');
+        const returnedList = Array.isArray(parsed?.solutions) ? parsed.solutions : [];
 
         const byId = new Map<string, Record<string, unknown>>();
         const usedRowIndices = new Set<number>();
@@ -1225,7 +1013,7 @@ export async function handleSnapSolveSolve(
           };
         }
       } catch (err) {
-        const mapped = mapGeminiError(err);
+        const mapped = mapSnapSolveGeminiError(err);
         totalAttemptsMade += mapped.attemptsMade || 1;
         batchFailure = {
           statusCode: mapped.statusCode,
