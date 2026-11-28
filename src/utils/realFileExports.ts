@@ -1,4 +1,9 @@
 import { jsPDF } from 'jspdf';
+import {
+  downloadUniversalPdf,
+  type UniversalPaperSize,
+  type UniversalSectionBlock,
+} from './universalPdfPrintEngine';
 
 export interface PdfSectionBlock {
   heading?: string;
@@ -130,114 +135,22 @@ export function downloadBlobFile(blob: Blob, filename: string, ext: string): voi
 }
 
 export function downloadTextAsPdf(options: PdfDocumentExportOptions): void {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 16;
-  const maxContentWidth = pageWidth - marginX * 2;
-  let y = 18;
-
-  const addHeaderBanner = () => {
-    doc.setFillColor(30, 58, 138);
-    doc.rect(0, 0, pageWidth, 12, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text('MYSTUDYZONE / VACATION CHAMPIONS • OFFICIAL STUDY DOCUMENT', marginX, 8);
-  };
-
-  const ensureSpace = (neededMm: number) => {
-    if (y + neededMm > pageHeight - 16) {
-      doc.addPage();
-      addHeaderBanner();
-      y = 20;
+  void downloadUniversalPdf(
+    {
+      title: options.title,
+      subtitle: options.subtitle,
+      portalBadge: 'MYSTUDYZONE OFFICIAL DOCUMENT',
+      metaItems: options.metaLines,
+      sections: options.sections,
+      filename: options.filename || options.title,
+    },
+    {
+      paperSize: 'A4',
+      orientation: 'portrait',
+      includeHeaderFooter: true,
+      includePageNumbers: true,
     }
-  };
-
-  addHeaderBanner();
-
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  const titleLines = doc.splitTextToSize(sanitizePdfText(options.title), maxContentWidth);
-  doc.text(titleLines, marginX, y);
-  y += titleLines.length * 7 + 2;
-
-  if (options.subtitle) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.setTextColor(71, 85, 105);
-    const subLines = doc.splitTextToSize(sanitizePdfText(options.subtitle), maxContentWidth);
-    doc.text(subLines, marginX, y);
-    y += subLines.length * 5.2 + 2;
-  }
-
-  if (options.metaLines && options.metaLines.length > 0) {
-    doc.setFillColor(241, 245, 249);
-    const metaHeight = options.metaLines.length * 5 + 5;
-    doc.roundedRect(marginX, y, maxContentWidth, metaHeight, 2, 2, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(51, 65, 85);
-    let my = y + 5;
-    for (const line of options.metaLines) {
-      doc.text(sanitizePdfText(line).slice(0, 110), marginX + 4, my);
-      my += 5;
-    }
-    y += metaHeight + 5;
-  }
-
-  doc.setDrawColor(203, 213, 225);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  y += 6;
-
-  for (const section of options.sections) {
-    if (section.heading) {
-      ensureSpace(14);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(30, 58, 138);
-      const headingLines = doc.splitTextToSize(sanitizePdfText(section.heading), maxContentWidth);
-      doc.text(headingLines, marginX, y);
-      y += headingLines.length * 5.8 + 2;
-    }
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10.5);
-    doc.setTextColor(30, 41, 59);
-    const paragraphs = sanitizePdfText(section.body).split('\n');
-    for (const para of paragraphs) {
-      const trimmed = para.trim();
-      if (!trimmed) {
-        y += 3;
-        continue;
-      }
-      const wrapped = doc.splitTextToSize(trimmed, maxContentWidth);
-      for (const line of wrapped) {
-        ensureSpace(6);
-        doc.text(line, marginX, y);
-        y += 5.2;
-      }
-      y += 1.5;
-    }
-    y += 3;
-  }
-
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`mystudyzone.in • Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
-  }
-
-  doc.save(sanitizeFilename(options.filename || options.title, 'pdf'));
+  );
 }
 
 export interface TableExportData {
@@ -259,225 +172,46 @@ export function downloadDocumentWithPrintSettingsPdf(
   payload: PrintExportPayload,
   settings: PrintSettingsConfig
 ): void {
-  const dims = getEffectivePaperDimensionsMm(settings);
-  const doc = new jsPDF({
-    orientation: settings.orientation,
-    unit: 'mm',
-    format: [dims.widthMm, dims.heightMm],
-  });
+  const mappedPaper: UniversalPaperSize = (
+    ['A4', 'A3', 'Legal', 'Letter', 'A5'].includes(settings.paperSize)
+      ? settings.paperSize
+      : 'A4'
+  ) as UniversalPaperSize;
 
-  const mTop = Math.max(4, Math.min(settings.marginsMm.top, dims.heightMm / 3));
-  const mRight = Math.max(4, Math.min(settings.marginsMm.right, dims.widthMm / 3));
-  const mBottom = Math.max(6, Math.min(settings.marginsMm.bottom, dims.heightMm / 3));
-  const mLeft = Math.max(4, Math.min(settings.marginsMm.left, dims.widthMm / 3));
-
-  const scaleFactor =
+  const fontScale =
     settings.scaleMode === 'custom'
-      ? Math.max(0.4, Math.min(1.8, settings.customScalePct / 100))
+      ? Math.max(0.75, Math.min(1.3, settings.customScalePct / 100))
       : settings.scaleMode === 'fit-page'
-      ? 0.92
+      ? 0.94
       : 1;
 
-  const usableW = dims.widthMm - mLeft - mRight;
-  const usableH = dims.heightMm - mTop - mBottom;
-  let y = mTop + (settings.headerText.trim() ? 6 : 0);
-
-  const drawRunningHeader = () => {
-    if (settings.headerText.trim()) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(sanitizePdfText(settings.headerText).slice(0, 100), mLeft, mTop);
-      doc.setDrawColor(226, 232, 240);
-      doc.line(mLeft, mTop + 2, dims.widthMm - mRight, mTop + 2);
+  void downloadUniversalPdf(
+    {
+      title: payload.title || 'MyStudyZone Document',
+      subtitle: payload.subtitle,
+      portalBadge: settings.headerText?.trim() || 'MYSTUDYZONE PRINT STUDIO',
+      metaItems: payload.metaLines,
+      sections: payload.sections,
+      tables:
+        payload.table && payload.table.columns.length > 0
+          ? [{ headers: payload.table.columns, rows: payload.table.rows }]
+          : undefined,
+      images: payload.imageDataUrls?.map((d, idx) => ({
+        dataUrl: d,
+        caption: `Figure ${idx + 1}`,
+      })),
+      footerNote: settings.footerText?.trim() || undefined,
+      filename: payload.filename || payload.title,
+    },
+    {
+      paperSize: mappedPaper,
+      orientation: settings.orientation,
+      marginsMm: settings.marginsMm,
+      fontScale,
+      includeHeaderFooter: true,
+      includePageNumbers: settings.showPageNumbers,
     }
-  };
-
-  const ensureSpace = (neededMm: number) => {
-    if (y + neededMm > dims.heightMm - mBottom - 4) {
-      doc.addPage();
-      drawRunningHeader();
-      y = mTop + (settings.headerText.trim() ? 6 : 0);
-    }
-  };
-
-  drawRunningHeader();
-
-  const textAlign = settings.centerContent ? 'center' : 'left';
-  const anchorX = settings.centerContent ? dims.widthMm / 2 : mLeft;
-
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15 * scaleFactor);
-  const titleLines = doc.splitTextToSize(sanitizePdfText(payload.title || 'Document'), usableW);
-  doc.text(titleLines, anchorX, y, { align: textAlign });
-  y += titleLines.length * (6.2 * scaleFactor) + 2;
-
-  if (payload.subtitle) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10.5 * scaleFactor);
-    doc.setTextColor(71, 85, 105);
-    const subLines = doc.splitTextToSize(sanitizePdfText(payload.subtitle), usableW);
-    doc.text(subLines, anchorX, y, { align: textAlign });
-    y += subLines.length * (4.8 * scaleFactor) + 2;
-  }
-
-  if (payload.metaLines && payload.metaLines.length > 0) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5 * scaleFactor);
-    doc.setTextColor(51, 65, 85);
-    for (const mLine of payload.metaLines) {
-      ensureSpace(5);
-      doc.text(sanitizePdfText(mLine).slice(0, 120), anchorX, y, { align: textAlign });
-      y += 4.5 * scaleFactor;
-    }
-    y += 2;
-  }
-
-  doc.setDrawColor(203, 213, 225);
-  doc.line(mLeft, y, dims.widthMm - mRight, y);
-  y += 5;
-
-  // Optional images (e.g. Image->PDF, Passport Sheet, Charts)
-  if (payload.imageDataUrls && payload.imageDataUrls.length > 0) {
-    payload.imageDataUrls.forEach((imgUrl, idx) => {
-      if (idx > 0 && settings.scaleMode === 'fit-page') {
-        doc.addPage();
-        drawRunningHeader();
-        y = mTop + (settings.headerText.trim() ? 6 : 0);
-      }
-      try {
-        const props = doc.getImageProperties(imgUrl);
-        const ratio = props.width / Math.max(1, props.height);
-        let drawW = usableW * Math.min(1, scaleFactor);
-        let drawH = drawW / ratio;
-        const maxAvailH = Math.max(30, dims.heightMm - mBottom - y - 4);
-        if (drawH > maxAvailH && (settings.scaleMode === 'fit-page' || settings.scaleMode === 'fit-height')) {
-          drawH = maxAvailH;
-          drawW = drawH * ratio;
-        }
-        if (drawH > usableH) {
-          drawH = usableH - 4;
-          drawW = drawH * ratio;
-        }
-        ensureSpace(drawH + 2);
-        const drawX = settings.centerContent ? mLeft + (usableW - drawW) / 2 : mLeft;
-        const format = imgUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-        doc.addImage(imgUrl, format, drawX, y, drawW, drawH);
-        y += drawH + 5;
-      } catch {
-        // Skip corrupt/unsupported image frame cleanly
-      }
-    });
-  }
-
-  // Optional structured table (e.g. Timetable, Marksheet, Excel->PDF, PDF->Excel preview)
-  if (payload.table && payload.table.columns.length > 0) {
-    const colCount = payload.table.columns.length;
-    const colW = usableW / colCount;
-    const fontPt = Math.max(6.5, Math.min(10, (colCount > 7 ? 7.5 : 9) * scaleFactor));
-    const lineH = Math.max(3.6, fontPt * 0.48);
-
-    const drawTableHeader = () => {
-      ensureSpace(9);
-      doc.setFillColor(30, 58, 138);
-      doc.rect(mLeft, y, usableW, 7.5, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(fontPt);
-      doc.setTextColor(255, 255, 255);
-      payload.table!.columns.forEach((col, ci) => {
-        const txt = sanitizePdfText(col).slice(0, 32);
-        doc.text(txt, mLeft + ci * colW + 1.8, y + 5);
-      });
-      y += 7.5;
-    };
-
-    drawTableHeader();
-
-    payload.table.rows.forEach((row, rIdx) => {
-      const wrappedCells = payload.table!.columns.map((_, ci) =>
-        doc.splitTextToSize(sanitizePdfText(row[ci] ?? ''), Math.max(10, colW - 3.2))
-      );
-      const maxLines = Math.max(1, ...wrappedCells.map((c) => c.length));
-      const rowH = maxLines * lineH + 3.2;
-      if (y + rowH > dims.heightMm - mBottom - 4) {
-        doc.addPage();
-        drawRunningHeader();
-        y = mTop + (settings.headerText.trim() ? 6 : 0);
-        drawTableHeader();
-      }
-      if (rIdx % 2 === 1) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(mLeft, y, usableW, rowH, 'F');
-      }
-      doc.setDrawColor(226, 232, 240);
-      doc.rect(mLeft, y, usableW, rowH, 'S');
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(fontPt);
-      doc.setTextColor(30, 41, 59);
-      wrappedCells.forEach((lines, ci) => {
-        doc.text(lines, mLeft + ci * colW + 1.8, y + lineH + 0.8);
-      });
-      y += rowH;
-    });
-    y += 5;
-  }
-
-  // Optional narrative/document sections
-  if (payload.sections && payload.sections.length > 0) {
-    for (const section of payload.sections) {
-      if (section.heading) {
-        ensureSpace(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11.5 * scaleFactor);
-        doc.setTextColor(30, 58, 138);
-        const headingLines = doc.splitTextToSize(sanitizePdfText(section.heading), usableW);
-        doc.text(headingLines, anchorX, y, { align: textAlign });
-        y += headingLines.length * (5.2 * scaleFactor) + 1.5;
-      }
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10 * scaleFactor);
-      doc.setTextColor(30, 41, 59);
-      const rawBody = settings.trimWhitespace
-        ? sanitizePdfText(section.body).replace(/\n{3,}/g, '\n\n').trim()
-        : sanitizePdfText(section.body);
-      const paragraphs = rawBody.split('\n');
-      for (const para of paragraphs) {
-        const trimmed = settings.trimWhitespace ? para.trim() : para;
-        if (!trimmed) {
-          y += 2.5 * scaleFactor;
-          continue;
-        }
-        const wrapped = doc.splitTextToSize(trimmed, usableW);
-        for (const line of wrapped) {
-          ensureSpace(5.5 * scaleFactor);
-          doc.text(line, anchorX, y, { align: textAlign });
-          y += 4.8 * scaleFactor;
-        }
-        y += 1.2 * scaleFactor;
-      }
-      y += 2.5;
-    }
-  }
-
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    const footerParts = [
-      settings.footerText.trim() ? sanitizePdfText(settings.footerText.trim()) : '',
-      settings.showPageNumbers ? `Page ${i} of ${totalPages}` : '',
-    ].filter(Boolean);
-    if (footerParts.length > 0) {
-      doc.text(footerParts.join('  •  '), dims.widthMm / 2, dims.heightMm - Math.max(4, mBottom / 2), {
-        align: 'center',
-      });
-    }
-  }
-
-  doc.save(sanitizeFilename(payload.filename || payload.title, 'pdf'));
+  );
 }
 
 export async function downloadDocumentAsDocx(options: {
@@ -726,78 +460,29 @@ export function downloadPresentationAsPdf(options: {
   slides: PresentationSlideExportItem[];
   filename?: string;
 }): void {
-  const doc = new jsPDF({
+  const sections: UniversalSectionBlock[] = options.slides.map((slide, idx) => {
+    const lines = [
+      ...slide.bullets.map((b) => `• ${b}`),
+      ...(slide.speakerNotes ? [`Speaker Notes: ${slide.speakerNotes}`] : []),
+    ];
+    return {
+      heading: `Slide ${slide.slideNumber || idx + 1}: ${slide.title}`,
+      body: lines.join('\n'),
+    };
+  });
+
+  downloadUniversalPdf({
+    title: options.title || 'MyStudyZone Presentation',
+    subtitle: options.subtitle,
+    metaItems: [
+      { label: 'Total Slides', value: `${options.slides.length}` },
+      { label: 'Format', value: 'A4 Landscape Slide Deck' },
+    ],
+    sections,
+    paperSize: 'a4',
     orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
+    filename: options.filename || `${options.title}_slides`,
   });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 20;
-  const maxWidth = pageWidth - marginX * 2;
-
-  doc.setFillColor(15, 23, 42);
-  doc.rect(0, 0, pageWidth, pageHeight, 'F');
-  doc.setFillColor(79, 70, 229);
-  doc.rect(0, 0, pageWidth, 10, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
-  const coverLines = doc.splitTextToSize(sanitizePdfText(options.title), maxWidth);
-  doc.text(coverLines, marginX, 75);
-  if (options.subtitle) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(14);
-    doc.setTextColor(199, 210, 254);
-    doc.text(doc.splitTextToSize(sanitizePdfText(options.subtitle), maxWidth), marginX, 105);
-  }
-  doc.setFontSize(10);
-  doc.setTextColor(148, 163, 184);
-  doc.text('Prepared on MyStudyZone AI Presentation Maker (mystudyzone.in)', marginX, pageHeight - 16);
-
-  options.slides.forEach((slide, idx) => {
-    doc.addPage();
-    doc.setFillColor(248, 250, 252);
-    doc.rect(0, 0, pageWidth, pageHeight, 'F');
-    doc.setFillColor(79, 70, 229);
-    doc.rect(0, 0, pageWidth, 24, 'F');
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text(
-      sanitizePdfText(`Slide ${slide.slideNumber || idx + 1}: ${slide.title}`).slice(0, 85),
-      marginX,
-      15
-    );
-
-    let y = 40;
-    doc.setTextColor(15, 23, 42);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(13);
-    for (const bullet of slide.bullets) {
-      const wrapped = doc.splitTextToSize(sanitizePdfText(`- ${bullet}`), maxWidth);
-      doc.text(wrapped, marginX, y);
-      y += wrapped.length * 7 + 4;
-      if (y > pageHeight - 40) break;
-    }
-
-    if (slide.speakerNotes) {
-      doc.setFillColor(226, 232, 240);
-      doc.roundedRect(marginX, pageHeight - 34, maxWidth, 22, 2, 2, 'F');
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9.5);
-      doc.setTextColor(51, 65, 85);
-      const notesLines = doc.splitTextToSize(
-        sanitizePdfText(`Speaker Notes: ${slide.speakerNotes}`),
-        maxWidth - 8
-      ).slice(0, 2);
-      doc.text(notesLines, marginX + 4, pageHeight - 25);
-    }
-  });
-
-  doc.save(sanitizeFilename(options.filename || `${options.title}_slides`, 'pdf'));
 }
 
 export function downloadResumeAsPdf(data: ResumePdfExportData): void {

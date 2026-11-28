@@ -169,6 +169,11 @@ const ThoughtOfTheDayView = lazyWithRetry(() =>
     default: m.ThoughtOfTheDayView,
   }))
 );
+const SnapSolveView = lazyWithRetry(() =>
+  import('./components/snapsolve/SnapSolveView').then((m) => ({
+    default: m.SnapSolveView,
+  }))
+);
 
 const PortalLoadingCard: React.FC<{ onReturnHome?: () => void }> = ({ onReturnHome }) => (
   <SectionLoadingFallback label="Loading study workspace..." onReturnHome={onReturnHome} />
@@ -211,6 +216,7 @@ const FEATURE_TITLES: Record<string, string> = {
   'additional-curriculum': 'MY STUDYZONE ADDITIONAL CURRICULUM (10 Subjects · Classes 1–10)',
   'teacher-dashboard': 'Teacher & Educator Command Center (Classes 1–10)',
   'ai-tools': 'Student (30 Tools) & Teacher (40 Tools) AI Workspace',
+  snapsolve: 'SnapSolve AI – Scan, Solve & Learn',
   'document-studio': 'Document, Image, PDF (19 Tools) & Print Preview Studio',
   'qr-barcode-centre': 'Barcode & QR Generator Centre (15 Tools)',
   'core-skills-lab': 'Vedic Maths, Abacus & Phonics Interactive Lab',
@@ -695,7 +701,7 @@ const AppContent: React.FC = () => {
     const alwaysOpenTabs = new Set([
       'demo', 'demo-mock-tests', 'dashboard', 'dashboard-student-preview', 'public-home', 'portal-landing',
       'explore-zone', 'all-courses', 'other-programs',
-      'coaching-zone', 'parent-zone', 'school-college-zone', 'ai-tools', 'document-studio', 'qr-barcode-centre', 'core-skills-lab',
+      'coaching-zone', 'parent-zone', 'school-college-zone', 'ai-tools', 'snapsolve', 'document-studio', 'qr-barcode-centre', 'core-skills-lab',
       'trilingual-dictionary', 'thought-of-the-day',
       'scholarship', 'tet-ctet', 'drawing', 'stories', 'shivaji', 'cricket', 'puzzles', 'sudoku',
       'future-skills', 'ai-academy', 'profile', 'account', 'subscription',
@@ -1255,6 +1261,7 @@ const AppContent: React.FC = () => {
       currentTab === 'future-skills' ||
       currentTab === 'ai-academy' ||
       currentTab === 'ai-tools' ||
+      currentTab === 'snapsolve' ||
       currentTab === 'document-studio' ||
       currentTab === 'qr-barcode-centre' ||
       currentTab === 'core-skills-lab' ||
@@ -1835,7 +1842,27 @@ const AppContent: React.FC = () => {
                 setDocStudioInitialTab(subTab || 'images');
                 handleNavigateTab('document-studio');
               }}
+              onOpenSnapSolve={() => handleNavigateTab('snapsolve')}
               onBackHome={() => {
+                setHomeScrollTarget('home-overview');
+                setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
+                safeScrollToTop();
+              }}
+            />
+          ) : currentTab === 'snapsolve' ? (
+            <SnapSolveView
+              portalRole={isTeacherPortal ? 'teacher' : 'student'}
+              userId={currentStudent?.id || currentUser?.uid}
+              userName={currentStudent?.name || currentUser?.displayName || undefined}
+              isAuthenticated={Boolean(currentUser?.uid)}
+              defaultLanguage={currentStudent?.medium || 'English'}
+              onRequireAuth={() =>
+                openAuthModalWithTab(
+                  isTeacherPortal ? 'teacher' : 'login',
+                  isTeacherPortal ? 'teacher' : 'student'
+                )
+              }
+              onBack={() => {
                 setHomeScrollTarget('home-overview');
                 setCurrentTab(isLearningPortal && currentStudent ? 'dashboard' : 'public-home');
                 safeScrollToTop();
@@ -2102,6 +2129,7 @@ const AppContent: React.FC = () => {
                     'future-skills',
                     'ai-academy',
                     'ai-tools',
+                    'snapsolve',
                     'document-studio',
                     'qr-barcode-centre',
                     'core-skills-lab',
@@ -2315,6 +2343,16 @@ const AppContent: React.FC = () => {
                       >
                         <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
                         <span>40 AI Tools</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateTab('snapsolve')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          currentTab === 'snapsolve' ? 'bg-white text-slate-950' : 'bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-600'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-sky-300" />
+                        <span>SnapSolve AI</span>
                       </button>
                       <button
                         type="button"

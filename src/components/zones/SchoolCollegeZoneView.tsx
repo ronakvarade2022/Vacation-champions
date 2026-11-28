@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { INSTITUTION_ACADEMIC_MATERIALS, type InstitutionAcademicMaterial } from '../../data/schoolCollege/academicMaterialsCatalog';
 import { downloadTextAsPdf } from '../../utils/realFileExports';
+import { UniversalPrintPreviewModal } from '../productivity/UniversalPrintPreviewModal';
+import type { UniversalPdfDocument } from '../../utils/universalPdfPrintEngine';
 import {
   ArrowLeft,
   ArrowRight,
@@ -138,6 +140,7 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
   const [examTitle, setExamTitle] = useState<string>('Mid-Term Unit Assessment');
   const [examMarksPct, setExamMarksPct] = useState<number>(84);
   const [printingReportStudent, setPrintingReportStudent] = useState<InstitutionMember | null>(null);
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   // Notice Composer
   const [noticeTitle, setNoticeTitle] = useState<string>('');
@@ -798,11 +801,33 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer flex items-center gap-1.5"
+                onClick={() =>
+                  setPrintPreviewDoc({
+                    title: selectedMaterial.title,
+                    subtitle: `${selectedMaterial.tier} · ${selectedMaterial.materialType} · ${selectedMaterial.streamOrSubject}`,
+                    headerTag: 'ACADEMIC MANUAL',
+                    sections: [
+                      { heading: 'Overview', body: selectedMaterial.overview },
+                      ...selectedMaterial.sections.map((sec) => ({
+                        heading: sec.heading,
+                        bullets: sec.points,
+                      })),
+                      {
+                        heading: 'Viva-Voce & Oral Examination Key',
+                        qaItems: selectedMaterial.vivaQuestions.map((vq, idx) => ({
+                          numberLabel: `Q${idx + 1}`,
+                          question: vq.q,
+                          answer: vq.a,
+                        })),
+                      },
+                    ],
+                    filename: `academic_manual_${selectedMaterial.id}`,
+                  })
+                }
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Print Manual</span>
+                <span>Preview &amp; Print / PDF (A4)</span>
               </button>
             </div>
 
@@ -1199,11 +1224,37 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
             </h2>
             <button
               type="button"
-              onClick={() => window.print()}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer flex items-center gap-1"
+              onClick={() =>
+                setPrintPreviewDoc({
+                  title: `Weekly Academic Timetable — ${activeInstitution.institutionName}`,
+                  subtitle: `${activeInstitution.departmentsOrClasses[0]} · Academic Year ${activeInstitution.academicYear || '2026–27'}`,
+                  headerTag: 'TIMETABLE',
+                  paperSize: 'a4',
+                  orientation: 'landscape',
+                  metaItems: [
+                    { label: 'Institution', value: activeInstitution.institutionName },
+                    { label: 'Class / Dept', value: activeInstitution.departmentsOrClasses[0] },
+                    { label: 'Affiliation', value: activeInstitution.affiliationOrUniversity },
+                  ],
+                  tables: [
+                    {
+                      caption: 'Weekly Period Schedule',
+                      headers: ['Period / Time', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+                      rows: [
+                        ['P1 · 08:30', 'Mathematics', 'Science / Lab', 'Mathematics', 'English', 'Mathematics'],
+                        ['P2 · 09:15', 'English', 'Mathematics', 'Social Science', 'Science / Lab', 'Language II'],
+                        ['P3 · 10:00', 'Science / Lab', 'Social Science', 'English', 'Mathematics', 'Practical Lab'],
+                        ['P4 · 11:00', 'Language II', 'Computer / AI', 'Science', 'Skill Period', 'Sports / Yoga'],
+                      ],
+                    },
+                  ],
+                  filename: `timetable_${activeInstitution.institutionName.replace(/\s+/g, '_')}`,
+                })
+              }
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print Timetable</span>
+              <span>Preview &amp; Print / PDF (A4)</span>
             </button>
           </div>
           <div className="overflow-x-auto">
@@ -1359,10 +1410,49 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => window.print()}
-                      className="px-3 py-1 rounded-lg bg-slate-900 text-white font-bold cursor-pointer"
+                      onClick={() => {
+                        const grade =
+                          typeof printingReportStudent.latestMarksPct === 'number'
+                            ? computeGradeAndGpa(printingReportStudent.latestMarksPct)
+                            : { grade: 'N/A', gpa: 'N/A' };
+                        setPrintPreviewDoc({
+                          title: `Academic Report Card — ${printingReportStudent.fullName}`,
+                          subtitle: `${activeInstitution.institutionName} (${activeInstitution.academicYear || '2026–27'})`,
+                          headerTag: 'REPORT CARD',
+                          metaItems: [
+                            { label: 'Student', value: printingReportStudent.fullName },
+                            { label: 'Roll / Code', value: printingReportStudent.rollOrCode },
+                            { label: 'Class / Dept', value: printingReportStudent.classOrDepartment },
+                            { label: 'Principal', value: activeInstitution.principalName },
+                          ],
+                          summaryCards: [
+                            { label: 'Score (%)', value: `${printingReportStudent.latestMarksPct ?? '--'}%` },
+                            { label: 'Grade / GPA', value: `${grade.grade} (${grade.gpa})` },
+                            { label: 'Attendance', value: `${printingReportStudent.attendancePresent}/${printingReportStudent.attendanceTotal}` },
+                          ],
+                          tables: [
+                            {
+                              caption: 'Examination Result Record',
+                              headers: ['Examination', 'Marks %', 'Grade', 'GPA', 'Attendance'],
+                              rows: [
+                                [
+                                  printingReportStudent.latestExamName || 'Term Evaluation',
+                                  `${printingReportStudent.latestMarksPct ?? '--'}%`,
+                                  String(grade.grade),
+                                  String(grade.gpa),
+                                  `${printingReportStudent.attendancePresent} / ${printingReportStudent.attendanceTotal}`,
+                                ],
+                              ],
+                            },
+                          ],
+                          signatures: [activeInstitution.principalName || 'Principal', 'Class Coordinator'],
+                          filename: `report_card_${printingReportStudent.fullName.replace(/\s+/g, '_')}`,
+                        });
+                      }}
+                      className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold cursor-pointer inline-flex items-center gap-1"
                     >
-                      Print
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Preview &amp; Print (A4)</span>
                     </button>
                   </div>
                 </div>
@@ -1440,6 +1530,12 @@ export const SchoolCollegeZoneView: React.FC<SchoolCollegeZoneViewProps> = ({
             )}
           </div>
         </div>
+      )}
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          onClose={() => setPrintPreviewDoc(null)}
+        />
       )}
     </div>
   );

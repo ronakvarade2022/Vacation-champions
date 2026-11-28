@@ -1539,5 +1539,63 @@ service cloud.firestore {
                        );
       allow delete: if isValidId(userId) && isAdmin();
     }
+
+    // SnapSolve AI Saved Documents Validator (strict schema + size limits; no large binary images)
+    function isValidSnapSolveDocument(data) {
+      return data.keys().hasAll([
+               'id', 'ownerUid', 'portalRole', 'title', 'subject',
+               'answerLanguage', 'answerStyle', 'pageCount',
+               'questions', 'solutions', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'ownerUid', 'portalRole', 'title', 'subject',
+               'answerLanguage', 'answerStyle', 'pageCount',
+               'questions', 'solutions', 'createdAt', 'updatedAt'
+             ]) &&
+             isValidId(data.id) &&
+             isValidId(data.ownerUid) &&
+             data.portalRole in ['student', 'teacher'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 140 &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 80 &&
+             data.answerLanguage is string && data.answerLanguage.size() > 0 && data.answerLanguage.size() <= 80 &&
+             data.answerStyle is string && data.answerStyle.size() > 0 && data.answerStyle.size() <= 40 &&
+             data.pageCount is int && data.pageCount >= 1 && data.pageCount <= 10 &&
+             data.questions is list && data.questions.size() <= 60 &&
+             data.solutions is list && data.solutions.size() <= 60 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             !('isAdmin' in data) &&
+             !('passwordHash' in data);
+    }
+
+    match /snapsolve_documents/{docId} {
+      allow get: if isValidId(docId) && (
+        isAdmin() || (isSignedIn() && existing().ownerUid == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isValidId(docId) &&
+                       isSignedIn() &&
+                       isValidSnapSolveDocument(incoming()) &&
+                       incoming().id == docId &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+      allow update: if isValidId(docId) &&
+                       isSignedIn() &&
+                       isValidSnapSolveDocument(incoming()) &&
+                       existing().ownerUid == request.auth.uid &&
+                       incoming().id == existing().id &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().portalRole == existing().portalRole &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'subject', 'answerLanguage', 'answerStyle',
+                         'pageCount', 'questions', 'solutions', 'updatedAt'
+                       ]);
+      allow delete: if isValidId(docId) && (
+        isAdmin() || (isSignedIn() && existing().ownerUid == request.auth.uid)
+      );
+    }
   }
 }

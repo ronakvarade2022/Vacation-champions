@@ -22,3 +22,4 @@
 10. **Support Ticket & Grievance PII Exposure**: User A listing or reading User B's `/support_tickets/{id}` or `/grievances/{id}` -> Rejected by `resource.data.studentId == request.auth.uid || isAdmin()`.
 11. **Self-Approve Referral Payout**: User A updating `/payout_requests/{id}` `status` to `'COMPLETED'` -> Rejected by `allow update, delete: if isAdmin();`.
 12. **Below-Minimum or Cross-User Payout**: Creating `/payout_requests/{id}` with `amount: -50` or `userId: 'otherUser'` -> Rejected by `incoming().userId == request.auth.uid && incoming().amount >= 50`.
+13. **SnapSolve Cross-User Document Read / Ownership Hijack**: Reading or creating `/snapsolve_documents/{docId}` with `ownerUid != request.auth.uid`, changing `portalRole` (`student` <-> `teacher`) on update, or storing oversized arrays (`> 60` items) -> Rejected by `isValidSnapSolveDocument(incoming())`, `ownerUid == request.auth.uid`, and immutable `portalRole`/`ownerUid`/`createdAt`.

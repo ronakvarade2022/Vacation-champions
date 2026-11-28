@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ALL_18_SKILL_PROGRAMS } from '../../data/skillPrograms/skillProgramsCatalog';
 import { downloadTextAsPdf } from '../../utils/realFileExports';
+import { UniversalPrintPreviewModal } from '../productivity/UniversalPrintPreviewModal';
+import type { UniversalPdfDocument } from '../../utils/universalPdfPrintEngine';
 import type {
   CoachingInstituteRecord,
   IndependentSkillEnrollment,
@@ -130,6 +132,7 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
   const [quizSubmitted, setQuizSubmitted] = useState<boolean>(false);
   const [projectSubmissionText, setProjectSubmissionText] = useState<string>('');
   const [levelFilter, setLevelFilter] = useState<'All' | SkillCourseLevel>('All');
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   // Independent Enrolments (Decoupled from institutes)
   const [enrollments, setEnrollments] = useState<IndependentSkillEnrollment[]>(() =>
@@ -1196,11 +1199,23 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
                   </h2>
                   <button
                     type="button"
-                    onClick={() => window.print()}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer flex items-center gap-1"
+                    onClick={() =>
+                      setPrintPreviewDoc({
+                        title: `${selectedProgram.title} — Practice Worksheets`,
+                        subtitle: `${selectedProgram.category} · ${loadedCurriculum.worksheetActivities.length} Practice Sheets`,
+                        headerTag: 'WORKSHEET',
+                        sections: loadedCurriculum.worksheetActivities.map((ws) => ({
+                          heading: ws.title,
+                          body: ws.instructions,
+                          bullets: ws.tasks,
+                        })),
+                        filename: `${selectedProgram.id}_practice_worksheets`,
+                      })
+                    }
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Print Sheet</span>
+                    <span>Preview &amp; Print / PDF (A4)</span>
                   </button>
                 </div>
                 {loadedCurriculum.worksheetActivities.map((ws, i) => (
@@ -1404,11 +1419,33 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
                     </button>
                     <button
                       type="button"
-                      onClick={() => window.print()}
-                      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
+                      onClick={() =>
+                        setPrintPreviewDoc({
+                          title: `Certificate of Skill Achievement — ${selectedProgram.title}`,
+                          subtitle: `Awarded to ${activeEnrollment.studentName} · MyStudyZone Coaching & Skill Academy`,
+                          headerTag: 'SKILL CERTIFICATE',
+                          paperSize: 'a4',
+                          orientation: 'landscape',
+                          metaItems: [
+                            { label: 'Learner', value: activeEnrollment.studentName },
+                            { label: 'Program', value: selectedProgram.title },
+                            { label: 'Certificate ID', value: activeEnrollment.certificateCode || '' },
+                            { label: 'Quiz Score', value: `${activeEnrollment.quizBestScore}/${activeEnrollment.quizTotal}` },
+                          ],
+                          sections: [
+                            {
+                              heading: 'Verification Statement',
+                              body: `This certifies that ${activeEnrollment.studentName} has successfully completed the curriculum assessment for ${selectedProgram.title} (${selectedProgram.category}) on MyStudyZone (mystudyzone.in).`,
+                            },
+                          ],
+                          signatures: ['Academy Director', `Issued: ${activeEnrollment.certificateIssuedAt || new Date().toISOString().slice(0, 10)}`],
+                          filename: `certificate_${selectedProgram.id}_${activeEnrollment.studentName.replace(/\s+/g, '_')}`,
+                        })
+                      }
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>Print</span>
+                      <span>Preview &amp; Print (A4)</span>
                     </button>
                   </div>
                 )}
@@ -2187,6 +2224,12 @@ export const CoachingInstituteZoneView: React.FC<CoachingInstituteZoneViewProps>
             </div>
           )}
         </div>
+      )}
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          onClose={() => setPrintPreviewDoc(null)}
+        />
       )}
     </div>
   );

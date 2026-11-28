@@ -228,7 +228,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       description: 'Smart tools, Vedic Maths, Abacus, Phonics & PDF Studio',
       gradient: 'from-indigo-600 to-blue-800',
       lightBg: 'from-indigo-50 to-slate-50 border-indigo-200 hover:border-indigo-400',
-      badge: '5 Skill Tools',
+      badge: '6 Skill Tools',
       onClick: () => setActiveFolder('learning-tools'),
     },
     {
@@ -280,6 +280,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       icon: '🧮',
       headerGradient: 'from-indigo-600 via-blue-700 to-slate-900',
       items: [
+        {
+          id: 'snapsolve-ai',
+          icon: '📸',
+          title: 'SnapSolve AI – Scan, Solve & Learn',
+          description: 'Capture photo or upload PDF questions for step-by-step solutions & A4 PDF export',
+          color: 'border-sky-300 bg-sky-50/75 hover:border-sky-600',
+          onClick: () => navigateToSection('snapsolve'),
+        },
         {
           id: 'ai-tools',
           icon: '✨',

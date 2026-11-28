@@ -693,6 +693,39 @@
         "updatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "role", "displayName", "email", "mobile", "createdAt", "updatedAt"]
+    },
+    "SnapSolveDocument": {
+      "title": "SnapSolveDocument",
+      "description": "User-saved SnapSolve AI extracted questions and generated answers partitioned strictly by ownerUid and portalRole (Student or Teacher).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "portalRole": { "type": "string", "enum": ["student", "teacher"] },
+        "title": { "type": "string", "maxLength": 140 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "answerLanguage": { "type": "string", "maxLength": 80 },
+        "answerStyle": { "type": "string", "maxLength": 40 },
+        "pageCount": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "questions": { "type": "array", "maxItems": 60 },
+        "solutions": { "type": "array", "maxItems": 60 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerUid",
+        "portalRole",
+        "title",
+        "subject",
+        "answerLanguage",
+        "answerStyle",
+        "pageCount",
+        "questions",
+        "solutions",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -835,6 +868,10 @@
     "/portal_roles/{userId}": {
       "schema": { "$ref": "#/entities/PortalRoleRecord" },
       "description": "Role-based portal access registry mapping each Firebase UID to its portal role."
+    },
+    "/snapsolve_documents/{docId}": {
+      "schema": { "$ref": "#/entities/SnapSolveDocument" },
+      "description": "Private owner-isolated SnapSolve AI saved question-and-answer documents (never stores large raw page images)."
     }
   }
 }

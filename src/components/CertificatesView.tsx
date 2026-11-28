@@ -11,6 +11,11 @@ import {
   Medal,
   Calendar
 } from 'lucide-react';
+import { UniversalPrintPreviewModal } from './productivity/UniversalPrintPreviewModal';
+import {
+  downloadUniversalPdf,
+  type UniversalPdfDocument,
+} from '../utils/universalPdfPrintEngine';
 
 interface CertificateTemplate {
   id: string;
@@ -24,7 +29,7 @@ interface CertificateTemplate {
 const CERTIFICATE_TEMPLATES: CertificateTemplate[] = [
   {
     id: 'cert-quiz-master',
-    title: 'VACATION QUIZ CHAMPION',
+    title: 'ACADEMIC QUIZ CHAMPION',
     subtitle: 'For outstanding subject mastery and academic accuracy with zero repetition',
     badgeName: 'Academic Excellence Seal',
     themeGradient: 'from-amber-600 via-yellow-500 to-amber-700',
@@ -54,11 +59,40 @@ export const CertificatesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'certificates' | 'leaderboard'>('certificates');
   const [selectedCert, setSelectedCert] = useState<CertificateTemplate>(CERTIFICATE_TEMPLATES[0]);
   const [leaderboardTimeframe, setLeaderboardTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'class'>('weekly');
+  const [previewCertDoc, setPreviewCertDoc] = useState<UniversalPdfDocument | null>(null);
 
   if (!currentStudent) return null;
 
+  const buildCertificateDoc = (): UniversalPdfDocument => ({
+    title: `${selectedCert.title} — Certificate of Achievement`,
+    subtitle: 'MYSTUDYZONE EDUCATIONAL ACADEMY · Official Student Honor',
+    headerTag: 'CERTIFICATE',
+    paperSize: 'a4',
+    orientation: 'landscape',
+    metaItems: [
+      { label: 'Awarded To', value: currentStudent.name },
+      { label: 'Class / Standard', value: currentStudent.classLevel },
+      { label: 'Points Earned', value: `${currentStudent.points} XP` },
+      { label: 'Certificate Code', value: `MSZ-2026-${selectedCert.id.toUpperCase()}` },
+    ],
+    summaryCards: [
+      { label: 'Recipient', value: currentStudent.name },
+      { label: 'Academic Track', value: selectedCert.badgeName },
+      { label: 'Score Standing', value: `${currentStudent.points} XP` },
+    ],
+    sections: [
+      {
+        heading: 'Official Citation',
+        body: `This honor is proudly awarded to ${currentStudent.name} (${currentStudent.classLevel}) for demonstrating dedication, curiosity, and academic excellence across the MyStudyZone learning program (${selectedCert.subtitle}).`,
+      },
+    ],
+    signatures: ['Dr. R. K. Mukherjee (Director of Education)', `Awarded: ${new Date().toLocaleDateString('en-IN')}`],
+    footerText: 'MyStudyZone · Learn • Practice • Excel · Verified Achievement Record',
+    filename: `mystudyzone_certificate_${currentStudent.name.replace(/\s+/g, '_')}`,
+  });
+
   const handlePrintCertificate = () => {
-    window.print();
+    setPreviewCertDoc(buildCertificateDoc());
   };
 
   // Safe leaderboard rankings sorted by points (No private PII exposed)
@@ -78,7 +112,7 @@ export const CertificatesView: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-            Privacy-safe leaderboards and printable vacation achievement certificates.
+            Privacy-safe leaderboards and printable A4 MyStudyZone achievement certificates.
           </p>
         </div>
 
@@ -135,7 +169,7 @@ export const CertificatesView: React.FC = () => {
                 🏅
               </div>
               <h2 className="text-xs font-extrabold tracking-[0.25em] uppercase text-amber-800">
-                VACATION CHAMPIONS EDUCATIONAL ACADEMY
+                MYSTUDYZONE EDUCATIONAL ACADEMY
               </h2>
               <h3 className="text-3xl sm:text-4xl font-display font-black text-slate-900 tracking-tight">
                 CERTIFICATE OF ACHIEVEMENT
@@ -176,7 +210,7 @@ export const CertificatesView: React.FC = () => {
                 <span className="text-[8px] font-extrabold uppercase text-amber-900 tracking-wider">
                   VERIFIED
                 </span>
-                <span className="text-[7px] text-slate-400 font-mono">VC-2026</span>
+                <span className="text-[7px] text-slate-400 font-mono">MSZ-2026</span>
               </div>
 
               <div className="space-y-1">
@@ -189,13 +223,22 @@ export const CertificatesView: React.FC = () => {
           </div>
 
           {/* Download / Print Actions */}
-          <div className="flex justify-center gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             <button
+              type="button"
+              onClick={() => downloadUniversalPdf(buildCertificateDoc())}
+              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download Certificate PDF (A4)</span>
+            </button>
+            <button
+              type="button"
               onClick={handlePrintCertificate}
               className="px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print or Save as PDF</span>
+              <span>Preview &amp; Print Certificate (A4)</span>
             </button>
           </div>
         </div>
@@ -261,6 +304,13 @@ export const CertificatesView: React.FC = () => {
             })}
           </div>
         </div>
+      )}
+
+      {previewCertDoc && (
+        <UniversalPrintPreviewModal
+          document={previewCertDoc}
+          onClose={() => setPreviewCertDoc(null)}
+        />
       )}
     </div>
   );

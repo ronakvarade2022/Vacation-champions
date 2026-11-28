@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { ALL_10_CLASSES } from '../../data/classCurriculumConfig';
 import { downloadTextAsPdf } from '../../utils/realFileExports';
+import { UniversalPrintPreviewModal } from '../productivity/UniversalPrintPreviewModal';
+import type { UniversalPdfDocument } from '../../utils/universalPdfPrintEngine';
 import type { EducationBoard } from '../../types';
 
 const TEACHER_SAVED_KEY = 'msz_teacher_tools_saved_v1';
@@ -62,6 +64,7 @@ export const TeacherToolsWorkbench: React.FC<{
   const [activeGuide, setActiveGuide] = useState<TeacherLearningGuide>(TEACHER_LEARNING_MATERIALS[0]);
   const [savedRecords, setSavedRecords] = useState<SavedToolRecord[]>(() => loadSavedOutputs());
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   // Shared Dynamic Tool Workspace Inputs
   const [toolBoard, setToolBoard] = useState<EducationBoard>(board);
@@ -460,14 +463,38 @@ TEACHER PRODUCTIVITY & QUALITY LOG
               <p className="text-xs font-bold text-indigo-700">
                 Takeaway: {activeGuide.printableTakeaway}
               </p>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Guide (A4)</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPrintPreviewDoc({
+                      title: activeGuide.title,
+                      subtitle: `Pedagogy Guide · ${activeGuide.category} · ${activeGuide.readTimeMinutes} min read`,
+                      headerTag: 'PEDAGOGY GUIDE',
+                      sections: [
+                        { heading: 'Overview', body: activeGuide.summary },
+                        {
+                          heading: 'Core Pedagogical Strategies',
+                          bullets: activeGuide.keyStrategies,
+                        },
+                        {
+                          heading: 'Classroom Execution Steps',
+                          bullets: activeGuide.classroomSteps.map((s, idx) => `${idx + 1}. ${s}`),
+                        },
+                        {
+                          heading: 'Key Takeaway',
+                          body: activeGuide.printableTakeaway,
+                        },
+                      ],
+                      filename: `pedagogy_guide_${activeGuide.title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                    })
+                  }
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Preview &amp; Print / PDF (A4)</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -951,16 +978,37 @@ TEACHER PRODUCTIVITY & QUALITY LOG
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() =>
+                    setPrintPreviewDoc({
+                      title: activeTool.name,
+                      subtitle: `${toolBoard} · ${toolClass} · ${toolSubject}`,
+                      headerTag: 'TEACHER TOOL',
+                      metaItems: [
+                        { label: 'Board', value: toolBoard },
+                        { label: 'Class', value: toolClass },
+                        { label: 'Subject', value: toolSubject },
+                        { label: 'Topic', value: toolTopic || activeTool.name },
+                      ],
+                      sections: [{ heading: activeTool.name, body: generatedToolOutput }],
+                      filename: `${activeTool.id.toLowerCase()}-${toolClass.toLowerCase().replace(/\s+/g, '-')}`,
+                    })
+                  }
                   className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold cursor-pointer flex items-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Print (A4)</span>
+                  <span>Preview &amp; Print (A4)</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          onClose={() => setPrintPreviewDoc(null)}
+        />
       )}
     </div>
   );

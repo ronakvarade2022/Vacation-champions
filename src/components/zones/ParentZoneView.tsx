@@ -3,6 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { PARENT_LEARNING_MATERIALS, type ParentingGuideItem } from '../../data/parentZone/parentLearningMaterials';
 import { saveParentMessageToFirestore } from '../../services/portalFirestoreService';
 import { DailyThoughtAndDictionaryWidget } from '../DailyThoughtAndDictionaryWidget';
+import { UniversalPrintPreviewModal } from '../productivity/UniversalPrintPreviewModal';
+import { downloadUniversalPdf, type UniversalPdfDocument } from '../../utils/universalPdfPrintEngine';
 import type { StudentProfile } from '../../types';
 import {
   ArrowLeft,
@@ -112,6 +114,7 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
 
   // Parent-Teacher message composer
   const [noteInput, setNoteInput] = useState<string>('');
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   useEffect(() => {
     try {
@@ -769,6 +772,75 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
           ) : (
             childStats && (
               <div className="space-y-5">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900">
+                      Student Progress Report — {activeChild.name}
+                    </h2>
+                    <p className="text-[11px] text-slate-500">
+                      {activeChild.board || 'Maharashtra'} · {activeChild.classLevel} · Verified Parent View
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const doc: UniversalPdfDocument = {
+                          title: `Student Progress Report — ${activeChild.name}`,
+                          subtitle: `Parent Portal Summary · ${activeChild.board || 'Maharashtra'} · ${activeChild.classLevel}`,
+                          headerTag: 'PARENT REPORT',
+                          metaItems: [
+                            { label: 'Student Name', value: activeChild.name },
+                            { label: 'Parent / Guardian', value: effectiveParentName },
+                            { label: 'Board & Class', value: `${activeChild.board || 'Maharashtra'} · ${activeChild.classLevel}` },
+                            { label: 'Generated On', value: new Date().toLocaleDateString('en-IN') },
+                          ],
+                          summaryCards: [
+                            { label: 'Attendance', value: `${childStats.attendancePct}%` },
+                            { label: 'Points & Streak', value: `${activeChild.points || 0} XP (${activeChild.streakDays || 0}d)` },
+                            { label: 'Worksheets Done', value: `${childStats.worksheetsCount}` },
+                          ],
+                          tables: [
+                            {
+                              caption: 'Subject Quiz & Syllabus Mastery',
+                              headers: ['Board / Class / Subject', 'Completed Levels', 'Unlocked Level'],
+                              rows:
+                                childStats.subjectEntries.length > 0
+                                  ? childStats.subjectEntries.map(([k, p]) => [
+                                      k.replace(/__/g, ' · '),
+                                      `${p.completedLevels?.length || 0} / 4`,
+                                      `Level ${p.maxUnlockedLevel}`,
+                                    ])
+                                  : [['No quiz levels completed yet', '0 / 4', 'Level 1']],
+                            },
+                            ...(childStats.assignments.length > 0
+                              ? [
+                                  {
+                                    caption: 'Homework & Teacher Remarks',
+                                    headers: ['Title', 'Subject', 'Due Date', 'Status / Score', 'Teacher Feedback'],
+                                    rows: childStats.assignments.map((a) => [
+                                      a.title,
+                                      a.subject,
+                                      a.dueDate,
+                                      typeof a.score === 'number' ? `${a.status} (${a.score}/${a.maxScore})` : a.status,
+                                      a.teacherFeedback || '—',
+                                    ]),
+                                  },
+                                ]
+                              : []),
+                          ],
+                          filename: `parent_progress_report_${activeChild.name.replace(/\s+/g, '_')}`,
+                        };
+                        setPrintPreviewDoc(doc);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Preview &amp; Print / PDF Report (A4)</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* KPI Strip */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
                   <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
@@ -923,11 +995,28 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer flex items-center gap-1.5"
+                onClick={() =>
+                  setPrintPreviewDoc({
+                    title: selectedGuide.title,
+                    subtitle: `${selectedGuide.stage} · ${selectedGuide.category}`,
+                    headerTag: 'PARENT GUIDE',
+                    sections: [
+                      { heading: 'Overview', body: selectedGuide.summary },
+                      { heading: 'Research-Backed Principles', bullets: selectedGuide.keyPrinciples },
+                      { heading: 'Parent Weekly Checklist', bullets: selectedGuide.actionableChecklist },
+                      {
+                        heading: `Home Activity: ${selectedGuide.weeklyHomeActivity.activityName} (${selectedGuide.weeklyHomeActivity.durationMinutes} Mins)`,
+                        body: `Materials: ${selectedGuide.weeklyHomeActivity.materials}`,
+                        bullets: selectedGuide.weeklyHomeActivity.steps.map((s, idx) => `${idx + 1}. ${s}`),
+                      },
+                    ],
+                    filename: `parenting_guide_${selectedGuide.title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                  })
+                }
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Print Guide</span>
+                <span>Preview &amp; Print / PDF (A4)</span>
               </button>
             </div>
 
@@ -1100,6 +1189,12 @@ export const ParentZoneView: React.FC<ParentZoneViewProps> = ({
             </>
           )}
         </div>
+      )}
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          onClose={() => setPrintPreviewDoc(null)}
+        />
       )}
     </div>
   );

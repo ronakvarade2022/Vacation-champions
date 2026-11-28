@@ -11,7 +11,10 @@ import {
   Clock,
   Power,
   Layers,
+  Printer,
 } from 'lucide-react';
+import { UniversalPrintPreviewModal } from '../productivity/UniversalPrintPreviewModal';
+import type { UniversalPdfDocument } from '../../utils/universalPdfPrintEngine';
 import type { ClassLevel, DeviceSessionRecord, EducationBoard, StudentProfile } from '../../types';
 import { auth } from '../../services/firebase';
 import {
@@ -119,6 +122,7 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
       success: boolean;
       message: string;
     } | null>(null);
+    const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
     useEffect(() => {
       const t = setTimeout(() => setDebouncedSearch(studentSearchInput.trim().toLowerCase()), 200);
@@ -352,6 +356,52 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
                   ? 'Syncing...'
                   : 'Refresh Devices & Sync'}
               </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const exportRows = filteredStudents.slice(0, 200).map((stu, idx) => {
+                  const pInfo = getStudentPlanInfo(stu);
+                  const audit = auditStudentSubscriptionRecord(stu);
+                  return [
+                    String(idx + 1),
+                    `${stu.name} (${stu.accountRole === 'teacher' ? 'Teacher' : 'Student'})`,
+                    stu.mobile || stu.email || '—',
+                    `${getBoardShortLabel(stu.board)} · ${stu.classLevel}`,
+                    stu.plan === 'premium' || stu.plan === 'basic' ? 'Premium ₹99' : 'Free Plan',
+                    pInfo.isPaidPlanExpired ? 'Expired' : 'Active',
+                    audit.currentExpiryDateIst ? formatDateIstDisplay(audit.currentExpiryDateIst) : 'Lifetime',
+                    pInfo.daysRemainingDisplay,
+                  ];
+                });
+                setPrintPreviewDoc({
+                  title: 'MyStudyZone Student & Teacher Accounts Report',
+                  subtitle: `Board Filter: ${selectedBoardWorkspace === 'all' ? 'All 3 Boards' : getBoardShortLabel(selectedBoardWorkspace)} · Account Filter: ${roleFilter.toUpperCase()}`,
+                  filename: 'mystudyzone_admin_accounts_roster',
+                  metaLines: [
+                    `Generated: ${new Date().toLocaleDateString('en-IN')}`,
+                    `Total Matching Records: ${filteredStudents.length}`,
+                  ],
+                  summaryCards: [
+                    { label: 'Matching Accounts', value: String(filteredStudents.length) },
+                    { label: 'Total Loaded', value: String(mergedStudents.length) },
+                    { label: 'Teachers', value: String(filteredStudents.filter((s) => s.accountRole === 'teacher').length) },
+                    { label: 'Students', value: String(filteredStudents.filter((s) => s.accountRole !== 'teacher').length) },
+                  ],
+                  tables: [
+                    {
+                      caption: 'Registered Accounts, Plans & Subscription Validity (IST)',
+                      columns: ['#', 'Name & Role', 'Contact', 'Board & Class', 'Plan', 'Status', 'Expiry (IST)', 'Remaining'],
+                      rows: exportRows.length > 0 ? exportRows : [['1', 'No matching accounts', '—', '—', '—', '—', '—', '—']],
+                    },
+                  ],
+                });
+              }}
+              className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print / PDF Roster</span>
             </button>
 
             <div className="relative w-full sm:w-64">
@@ -1044,6 +1094,13 @@ export const AdminStudentsSection: React.FC<AdminStudentsSectionProps> = React.m
               </form>
             </div>
           </div>
+        )}
+        {printPreviewDoc && (
+          <UniversalPrintPreviewModal
+            document={printPreviewDoc}
+            defaultOrientation="landscape"
+            onClose={() => setPrintPreviewDoc(null)}
+          />
         )}
       </div>
     );

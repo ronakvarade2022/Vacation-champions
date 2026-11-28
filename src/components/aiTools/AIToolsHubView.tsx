@@ -149,6 +149,7 @@ export interface AIToolsHubViewProps {
     name?: string;
   };
   onOpenDocumentStudio?: (initialTab?: 'images' | 'pdf_office' | 'print_preview' | 'qr_barcode') => void;
+  onOpenSnapSolve?: () => void;
   onBackHome: () => void;
 }
 
@@ -160,6 +161,7 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
   initialStudentToolId,
   studentContext,
   onOpenDocumentStudio,
+  onOpenSnapSolve,
   onBackHome,
 }) => {
   const defaultStudioTab: StudioModeTab =
@@ -644,6 +646,16 @@ export const AIToolsHubView: React.FC<AIToolsHubViewProps> = ({
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
+            {onOpenSnapSolve && (
+              <button
+                type="button"
+                onClick={onOpenSnapSolve}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black cursor-pointer shadow-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>SnapSolve AI – Scan, Solve &amp; Learn</span>
+              </button>
+            )}
             {onOpenDocumentStudio && (
               <button
                 type="button"

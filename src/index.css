@@ -213,6 +213,25 @@ html.tv-browser-detected .cv-auto-section {
     box-shadow: none !important;
     border: none !important;
   }
+
+  body.msz-universal-printing > *:not(#msz-universal-print-root) {
+    display: none !important;
+  }
+
+  #msz-universal-print-root {
+    display: none;
+  }
+
+  body.msz-universal-printing #msz-universal-print-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
 }
 
 /* Installed PWA & Mobile Safe-Area Utilities */

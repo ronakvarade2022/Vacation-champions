@@ -36,6 +36,7 @@ function printHtmlViaHiddenIframe(documentTitle: string, bodyHtml: string): void
 <head>
   <meta charset="UTF-8" />
   <title>${escapeHtml(documentTitle)}</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
   <style>
     @page {
       size: A4 portrait;
@@ -47,13 +48,20 @@ function printHtmlViaHiddenIframe(documentTitle: string, bodyHtml: string): void
     body {
       margin: 0;
       padding: 0;
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       color: #0f172a;
       background: #ffffff;
       font-size: 11pt;
       line-height: 1.55;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tr, img {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .header-box {
       border-bottom: 2px solid #0f172a;

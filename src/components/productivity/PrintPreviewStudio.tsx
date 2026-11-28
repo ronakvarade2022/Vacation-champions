@@ -28,6 +28,10 @@ import {
   type PrintScaleMode,
   type PrintSettingsConfig,
 } from '../../utils/realFileExports';
+import {
+  printUniversalDocument,
+  type UniversalPaperSize,
+} from '../../utils/universalPdfPrintEngine';
 
 export interface PrintPreviewStudioProps {
   initialPayload?: PrintExportPayload | null;
@@ -317,23 +321,38 @@ export const PrintPreviewStudio: React.FC<PrintPreviewStudioProps> = ({
   };
 
   const handleDirectPrint = () => {
-    if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    const styleEl = document.createElement('style');
-    styleEl.id = 'msz-dynamic-page-style';
-    styleEl.textContent = `@media print { @page { size: ${dims.widthMm}mm ${dims.heightMm}mm; margin: ${settings.marginsMm.top}mm ${settings.marginsMm.right}mm ${settings.marginsMm.bottom}mm ${settings.marginsMm.left}mm; } }`;
-    document.head.appendChild(styleEl);
-    document.body.classList.add('msz-print-sheet-mode');
+    const mappedPaper: UniversalPaperSize = (
+      ['A4', 'A3', 'Legal', 'Letter', 'A5'].includes(settings.paperSize)
+        ? settings.paperSize
+        : 'A4'
+    ) as UniversalPaperSize;
 
-    const cleanup = () => {
-      document.body.classList.remove('msz-print-sheet-mode');
-      styleEl.remove();
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    setTimeout(() => {
-      window.print();
-      setTimeout(cleanup, 1200);
-    }, 60);
+    printUniversalDocument(
+      {
+        title: payload.title || 'MyStudyZone Print Sheet',
+        subtitle: payload.subtitle,
+        portalBadge: settings.headerText?.trim() || 'MYSTUDYZONE PRINT STUDIO',
+        metaItems: payload.metaLines,
+        sections: payload.sections,
+        tables:
+          payload.table && payload.table.columns.length > 0
+            ? [{ headers: payload.table.columns, rows: payload.table.rows }]
+            : undefined,
+        images: payload.imageDataUrls?.map((d, idx) => ({
+          dataUrl: d,
+          caption: `Figure ${idx + 1}`,
+        })),
+        footerNote: settings.footerText?.trim() || undefined,
+        filename: payload.filename || payload.title,
+      },
+      {
+        paperSize: mappedPaper,
+        orientation: settings.orientation,
+        marginsMm: settings.marginsMm,
+        includeHeaderFooter: true,
+        includePageNumbers: settings.showPageNumbers,
+      }
+    );
   };
 
   const handleDownloadPdf = () => {

@@ -20,7 +20,10 @@ import {
   Target,
   Users,
   XCircle,
+  Download,
 } from 'lucide-react';
+import { UniversalPrintPreviewModal } from './productivity/UniversalPrintPreviewModal';
+import { downloadUniversalPdf, type UniversalPdfDocument } from '../utils/universalPdfPrintEngine';
 import {
   getTetCtetNotesForSelection,
   getTetCtetSubjectsForPaper,
@@ -264,6 +267,7 @@ export const TetCtetStudyNotesView: React.FC<TetCtetStudyNotesViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [revisionTick, setRevisionTick] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   // Sync when embedded inside TetCtetModuleView and parent switches module/medium
   useEffect(() => {
@@ -351,10 +355,56 @@ export const TetCtetStudyNotesView: React.FC<TetCtetStudyNotesViewProps> = ({
     return { answered, correct, total: qs.length };
   }, [activeDoc, answers]);
 
+  const buildNotePdfDoc = (): UniversalPdfDocument | null => {
+    if (!activeDoc) return null;
+    const tables = activeDoc.body.comparisonTable
+      ? [
+          {
+            caption: activeDoc.body.comparisonTable.caption,
+            headers: activeDoc.body.comparisonTable.headers,
+            rows: activeDoc.body.comparisonTable.rows,
+          },
+        ]
+      : undefined;
+
+    const qaItems = activeDoc.body.practiceQuestions.map((q, idx) => ({
+      numberLabel: `Q${idx + 1}`,
+      question: `${q.question}\n${q.options.map((o, oi) => `(${String.fromCharCode(65 + oi)}) ${o}`).join('  ')}`,
+      answer: `${String.fromCharCode(65 + q.correctAnswer)}) ${q.options[q.correctAnswer] || ''}${q.explanation ? ` — ${q.explanation}` : ''}`,
+    }));
+
+    return {
+      title: activeDoc.documentTitle,
+      subtitle: `${exam === 'CTET' ? 'CBSE CTET' : 'MSCE MAHA TET'} · ${paperMeta.labels[language]} · ${activeDoc.subjectName}`,
+      headerTag: 'TET/CTET NOTES',
+      metaItems: [
+        { label: 'Unit', value: activeDoc.unitTitle },
+        { label: 'Topic', value: activeDoc.topicTitle },
+        { label: 'Language', value: language },
+        { label: 'Source', value: activeDoc.syllabusSource },
+      ],
+      sections: [
+        { heading: copy.secIntro, body: activeDoc.body.introduction },
+        { heading: copy.secDefinition, body: activeDoc.body.meaningAndDefinition },
+        ...(activeDoc.body.subtopics.length > 0
+          ? [{ heading: copy.secSubtopics, bullets: activeDoc.body.subtopics }]
+          : []),
+        ...(activeDoc.body.detailedExplanation.length > 0
+          ? [{ heading: copy.secDetailed, body: activeDoc.body.detailedExplanation.join('\n\n') }]
+          : []),
+        ...(activeDoc.body.importantConcepts.length > 0
+          ? [{ heading: copy.secConcepts, bullets: activeDoc.body.importantConcepts }]
+          : []),
+      ],
+      tables,
+      qaItems: qaItems.length > 0 ? qaItems : undefined,
+      filename: `${exam.toLowerCase()}_${subjectId.toLowerCase()}_${activeDoc.id}`,
+    };
+  };
+
   const handlePrint = () => {
-    if (typeof window !== 'undefined' && typeof window.print === 'function') {
-      window.print();
-    }
+    const doc = buildNotePdfDoc();
+    if (doc) setPrintPreviewDoc(doc);
   };
 
   return (
@@ -386,11 +436,24 @@ export const TetCtetStudyNotesView: React.FC<TetCtetStudyNotesViewProps> = ({
               {copy.studioSubtitle}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const doc = buildNotePdfDoc();
+                if (doc) downloadUniversalPdf(doc);
+              }}
+              disabled={!activeDoc}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-sm transition cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download PDF (A4)</span>
+            </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white text-indigo-950 hover:bg-indigo-50 text-xs font-bold shadow-sm transition cursor-pointer"
+              disabled={!activeDoc}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white text-indigo-950 hover:bg-indigo-50 disabled:opacity-50 text-xs font-bold shadow-sm transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               {copy.printBtn}
@@ -1109,6 +1172,12 @@ export const TetCtetStudyNotesView: React.FC<TetCtetStudyNotesViewProps> = ({
             )}
           </div>
         </article>
+      )}
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          onClose={() => setPrintPreviewDoc(null)}
+        />
       )}
     </div>
   );

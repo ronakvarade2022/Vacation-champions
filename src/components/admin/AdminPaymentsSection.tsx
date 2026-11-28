@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { ShieldCheck, Search, Eye, X, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Search, Eye, X, RefreshCw, Printer } from 'lucide-react';
+import { UniversalPrintPreviewModal } from '../productivity/UniversalPrintPreviewModal';
+import type { UniversalPdfDocument } from '../../utils/universalPdfPrintEngine';
 import type { EducationBoard, PaymentTransaction } from '../../types';
 import { fetchBoundedTransactionsForAdmin } from '../../services/adminFirestoreService';
 import { ALL_BOARDS, getBoardShortLabel, normalizeBoardValue } from '../../utils/subscriptionAccess';
@@ -23,6 +25,7 @@ export const AdminPaymentsSection: React.FC<AdminPaymentsSectionProps> = React.m
     const [inspectedTx, setInspectedTx] = useState<PaymentTransaction | null>(null);
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [pageSize, setPageSize] = useState<number>(20);
+    const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
     useEffect(() => {
       const t = setTimeout(() => setDebouncedSearch(paymentSearchInput.trim().toLowerCase()), 200);
@@ -158,6 +161,47 @@ export const AdminPaymentsSection: React.FC<AdminPaymentsSectionProps> = React.m
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing...' : 'Refresh Ledger'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const ledgerRows = filteredTxList.slice(0, 250).map((t) => [
+                  t.receiptNumber || t.id,
+                  formatDateIstDisplay(t.createdAt),
+                  t.studentName,
+                  `${getBoardShortLabel(t.selectedBoard || 'Maharashtra')} · ${t.selectedClass || 'General'}`,
+                  `₹${t.amount}`,
+                  t.paymentId || '—',
+                  t.membershipExpiryDate || '—',
+                  t.status,
+                ]);
+                setPrintPreviewDoc({
+                  title: 'MyStudyZone Razorpay Payment Reconciliation Ledger',
+                  subtitle: `Board Workspace: ${selectedBoardWorkspace === 'all' ? 'All 3 Boards' : getBoardShortLabel(selectedBoardWorkspace)}`,
+                  filename: 'mystudyzone_payment_ledger',
+                  metaLines: [
+                    `Generated: ${new Date().toLocaleDateString('en-IN')}`,
+                    `Filtered Records: ${filteredTxList.length}`,
+                  ],
+                  summaryCards: [
+                    { label: 'Successful', value: String(stats.successCount) },
+                    { label: 'Total Collected', value: `₹${stats.totalCollectedAmount.toLocaleString('en-IN')}` },
+                    { label: 'Pending', value: String(stats.pendingCount) },
+                    { label: 'Failed / Refunded', value: String(stats.failedCount + stats.refundedCount) },
+                  ],
+                  tables: [
+                    {
+                      caption: 'Verified Payment Transactions (IST)',
+                      columns: ['Receipt #', 'Date (IST)', 'Student', 'Board & Class', 'Amount', 'Payment ID', 'Expiry (IST)', 'Status'],
+                      rows: ledgerRows.length > 0 ? ledgerRows : [['—', '—', 'No matching transactions', '—', '₹0', '—', '—', '—']],
+                    },
+                  ],
+                });
+              }}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print / PDF Ledger</span>
             </button>
             <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -505,6 +549,13 @@ export const AdminPaymentsSection: React.FC<AdminPaymentsSectionProps> = React.m
               </div>
             </div>
           </div>
+        )}
+        {printPreviewDoc && (
+          <UniversalPrintPreviewModal
+            document={printPreviewDoc}
+            defaultOrientation="landscape"
+            onClose={() => setPrintPreviewDoc(null)}
+          />
         )}
       </div>
     );

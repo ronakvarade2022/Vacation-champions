@@ -1,5 +1,10 @@
 import React, { useRef } from 'react';
 import { Award, Download, Printer, X, ShieldCheck, Sparkles, Star } from 'lucide-react';
+import {
+  downloadUniversalPdf,
+  printUniversalDocument,
+  type UniversalPdfDocument,
+} from '../utils/universalPdfPrintEngine';
 
 interface TeacherCertificateModalProps {
   isOpen: boolean;
@@ -22,8 +27,40 @@ export const TeacherCertificateModal: React.FC<TeacherCertificateModalProps> = (
 
   if (!isOpen) return null;
 
+  const buildTeacherCertDoc = (): UniversalPdfDocument => ({
+    title: 'CERTIFICATE OF EXCELLENCE — Educator Honor',
+    subtitle: 'MyStudyZone Educational Foundation · In Inspirational Teaching & Knowledge Ambassadorship',
+    headerTag: 'EDUCATOR AWARD',
+    paperSize: 'a4',
+    orientation: 'landscape',
+    metaItems: [
+      { label: 'Awarded To', value: teacherName || 'Distinguished Educator' },
+      { label: 'Institution', value: schoolName },
+      { label: 'Students Guided', value: `${referralCount}+ Verified Students` },
+      { label: 'Certificate ID', value: certificateNumber },
+    ],
+    summaryCards: [
+      { label: 'Educator', value: teacherName || 'Distinguished Educator' },
+      { label: 'Award Tier', value: 'State Gold Verified' },
+      { label: 'Impact', value: `${referralCount}+ Students` },
+    ],
+    sections: [
+      {
+        heading: 'Official Honor Citation',
+        body: `This distinguished state honor is proudly conferred upon ${teacherName || 'Distinguished Educator'} (${schoolName}) in recognition of outstanding dedication to empowering young minds, fostering self-learning, and guiding ${referralCount}+ verified students into academic mastery on the MyStudyZone Digital Learning Platform.`,
+      },
+    ],
+    signatures: ['Dr. R. K. Varade (Director of Academic Affairs)', `Authenticated: ${new Date().toLocaleDateString('en-IN')}`],
+    footerText: 'MyStudyZone Educational Foundation · Learn • Practice • Excel',
+    filename: `teacher_certificate_${(teacherName || 'educator').replace(/\s+/g, '_')}`,
+  });
+
   const handlePrint = () => {
-    window.print();
+    printUniversalDocument(buildTeacherCertDoc());
+  };
+
+  const handleDownloadPdf = () => {
+    downloadUniversalPdf(buildTeacherCertDoc());
   };
 
   return (
@@ -37,12 +74,22 @@ export const TeacherCertificateModal: React.FC<TeacherCertificateModalProps> = (
           </div>
           <div className="flex items-center space-x-2">
             <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              title="Download Clean A4 PDF"
+            >
+              <Download className="w-4 h-4" />
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
               className="flex items-center space-x-1 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-              title="Print or Save as PDF"
+              title="Print Clean A4 Certificate"
             >
               <Printer className="w-4 h-4" />
-              <span>Print / PDF</span>
+              <span>Print</span>
             </button>
             <button
               onClick={onClose}

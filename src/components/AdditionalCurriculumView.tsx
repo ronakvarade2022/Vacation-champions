@@ -4,6 +4,7 @@ import {
   BookOpen,
   CheckCircle2,
   ClipboardCheck,
+  Download,
   FileText,
   GraduationCap,
   HelpCircle,
@@ -14,6 +15,8 @@ import {
   Trash2,
   UserCheck,
 } from 'lucide-react';
+import { UniversalPrintPreviewModal } from './productivity/UniversalPrintPreviewModal';
+import { downloadUniversalPdf, type UniversalPdfDocument } from '../utils/universalPdfPrintEngine';
 import type { ClassLevel, EducationBoard } from '../types';
 import type { InstructionMedium } from '../types/lessonPlanner';
 import {
@@ -107,6 +110,7 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
   const [assignmentNotice, setAssignmentNotice] = useState<string | null>(null);
   const [assignmentsVersion, setAssignmentsVersion] = useState(0);
   const [cmsVersion, setCmsVersion] = useState(0);
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   // Sync external initial selections if parent passes deep link (e.g. from blocked non-standalone banner)
   useEffect(() => {
@@ -295,6 +299,67 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
     setTeacherNote('');
     setAssignmentNotice(`Assigned "${activeChapter.title}" to ${classLevel} (${division.trim() || 'A'}) · ${board} (${medium}).`);
     setAssignmentsVersion((v) => v + 1);
+  };
+
+  const buildActiveChapterPdfDoc = (mode: 'notes' | 'worksheet'): UniversalPdfDocument | null => {
+    if (!activeChapter) return null;
+    const chapterName = getLocalizedChapterTitle(activeChapter, medium);
+    const subjectName = activeSubject ? getLocalizedSubjectName(activeSubject, medium) : 'Additional Curriculum';
+    if (mode === 'notes') {
+      return {
+        title: `${subjectName} — Ch. ${activeChapter.chapterNumber}: ${chapterName}`,
+        subtitle: `${ADDITIONAL_CURRICULUM_LABEL} · ${board} · ${activeChapter.classLevel} · ${medium}`,
+        filename: `additional_notes_${subjectName}_ch${activeChapter.chapterNumber}`,
+        metaLines: [
+          `Suggested Periods: ${activeChapter.materials.teacherGuidance.suggestedPeriods}`,
+          `Prepared for: ${userName || 'Student'}`,
+        ],
+        sections: [
+          {
+            heading: '1. Simple Concept Explanation',
+            body: activeChapter.materials.simpleExplanation,
+          },
+          {
+            heading: '2. Learning Objectives',
+            body: activeChapter.learningObjectives.map((o, idx) => `${idx + 1}. ${o}`).join('\n'),
+          },
+          {
+            heading: '3. Worked Examples',
+            body: activeChapter.materials.workedExamples
+              .map((ex, idx) => `${idx + 1}. ${ex.title}\n   ${ex.detail}`)
+              .join('\n\n'),
+          },
+          {
+            heading: '4. Hands-On Classroom / Home Activity',
+            body: `${activeChapter.materials.handsOnActivity.title}\nMaterials: ${activeChapter.materials.handsOnActivity.materialsNeeded.join(', ')}\nSteps:\n${activeChapter.materials.handsOnActivity.steps.map((s, idx) => `${idx + 1}. ${s}`).join('\n')}`,
+          },
+        ],
+      };
+    }
+
+    return {
+      title: activeChapter.materials.practiceWorksheet.title || `Practice Worksheet: ${chapterName}`,
+      subtitle: `${ADDITIONAL_CURRICULUM_LABEL} · ${board} · ${activeChapter.classLevel} · ${medium}`,
+      filename: `additional_worksheet_${subjectName}_ch${activeChapter.chapterNumber}`,
+      metaLines: [
+        `Chapter: Ch. ${activeChapter.chapterNumber} — ${chapterName}`,
+        `Estimated Time: ${activeChapter.materials.practiceWorksheet.estimatedMinutes} min`,
+        `Total Tasks: ${activeChapter.materials.practiceWorksheet.items.length}`,
+      ],
+      sections: [
+        {
+          heading: 'Instructions',
+          body: activeChapter.materials.practiceWorksheet.instructions,
+        },
+      ],
+      qaItems: activeChapter.materials.practiceWorksheet.items.map((item, idx) => ({
+        numberLabel: `Q${idx + 1}`,
+        questionText: `${item.prompt} [${item.type.replace('_', ' ')}]`,
+        answerText: showWorksheetAnswers
+          ? item.answer
+          : `Student Response Space: _________________________________________________\n(Enable "Show Answer Key" to include reference solution.)`,
+      })),
+    };
   };
 
   return (
@@ -764,24 +829,37 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
                     </div>
 
                     <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={handleMarkNotesDone}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap shrink-0 transition-colors ${
-                          activeChapterProgress?.notesCompleted
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-900 text-white hover:bg-slate-800'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        {activeChapterProgress?.notesCompleted
-                          ? 'Notes Completed'
-                          : 'Mark Study Notes Completed'}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleMarkNotesDone}
+                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                            activeChapterProgress?.notesCompleted
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-900 text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          {activeChapterProgress?.notesCompleted
+                            ? 'Notes Completed'
+                            : 'Mark Study Notes Completed'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docPayload = buildActiveChapterPdfDoc('notes');
+                            if (docPayload) setPrintPreviewDoc(docPayload);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Preview / Print PDF
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setActiveTab('worksheet')}
-                        className="text-sm font-semibold text-indigo-700 hover:underline"
+                        className="text-sm font-semibold text-indigo-700 hover:underline cursor-pointer"
                       >
                         Continue to Practice Worksheet →
                       </button>
@@ -802,21 +880,35 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
                           {activeChapter.materials.practiceWorksheet.items.length} tasks
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setShowWorksheetAnswers((prev) => !prev)}
-                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0"
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           {showWorksheetAnswers ? 'Hide Answer Key' : 'Show Answer Key'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => window.print()}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0"
+                          onClick={() => {
+                            const docPayload = buildActiveChapterPdfDoc('worksheet');
+                            if (docPayload) void downloadUniversalPdf(docPayload, { paperSize: 'A4', orientation: 'portrait' });
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Download PDF (A4)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docPayload = buildActiveChapterPdfDoc('worksheet');
+                            if (docPayload) setPrintPreviewDoc(docPayload);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          Print
+                          Print Preview
                         </button>
                       </div>
                     </div>
@@ -1224,6 +1316,12 @@ export const AdditionalCurriculumView: React.FC<AdditionalCurriculumViewProps> =
           </section>
         </div>
       </main>
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          onClose={() => setPrintPreviewDoc(null)}
+        />
+      )}
     </div>
   );
 };

@@ -106,6 +106,12 @@ import {
   getServerCustomDictionaryEntries,
   addServerCustomDictionaryEntry
 } from './server/dictionaryService.ts';
+import {
+  getSnapSolveStatus,
+  handleSnapSolveRecognize,
+  handleSnapSolveSolve,
+  handleSnapSolveDeleteSession
+} from './server/snapSolveService.ts';
 
 dotenv.config();
 
@@ -214,10 +220,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Access-Control-Allow-Origin', trustedOrigin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature'
+    'Content-Type, Authorization, X-Razorpay-Signature, x-session-id, x-device-id, x-device-signature, x-hardware-signature, x-snapsolve-secret'
   );
   if (req.method === 'OPTIONS') {
     if (rawOrigin && !trustedOrigin) {
@@ -235,6 +241,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use('/api/razorpay/webhook', express.raw({ type: 'application/json' }));
 app.use('/functions/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/razorpayx/webhook', express.raw({ type: 'application/json' }));
+
+// 1b. Larger JSON payload limit strictly scoped to SnapSolve multi-page image scanning (memory-only, max 10 pages)
+app.use('/api/snapsolve', express.json({ limit: '30mb' }));
 
 // 2. Standard JSON parser for all other API endpoints
 app.use(express.json());
@@ -3935,6 +3944,64 @@ app.post('/api/ai/image', async (req: Request, res: Response) => {
       success: false,
       errorCode: 'INTERNAL_ERROR',
       message: 'Unexpected AI image server error.',
+    });
+  }
+});
+
+// 11b-2. SnapSolve AI - Shared Ephemeral OCR & Question Solving Endpoints
+app.get('/api/snapsolve/status', (_req: Request, res: Response) => {
+  return res.json({
+    success: true,
+    ...getSnapSolveStatus(),
+  });
+});
+
+app.post('/api/snapsolve/recognize', async (req: Request, res: Response) => {
+  try {
+    const result = await handleSnapSolveRecognize(
+      (req.body || {}) as Record<string, unknown>,
+      req.headers as Record<string, string | string[] | undefined>,
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch {
+    return res.status(500).json({
+      success: false,
+      errorCode: 'INTERNAL_ERROR',
+      message: 'Unexpected error while scanning uploaded pages.',
+    });
+  }
+});
+
+app.post('/api/snapsolve/solve', async (req: Request, res: Response) => {
+  try {
+    const result = await handleSnapSolveSolve(
+      (req.body || {}) as Record<string, unknown>,
+      req.headers as Record<string, string | string[] | undefined>,
+      resolveClientIp(req)
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch {
+    return res.status(500).json({
+      success: false,
+      errorCode: 'INTERNAL_ERROR',
+      message: 'Unexpected error while generating SnapSolve answers.',
+    });
+  }
+});
+
+app.delete('/api/snapsolve/session/:sessionId', async (req: Request, res: Response) => {
+  try {
+    const result = await handleSnapSolveDeleteSession(
+      String(req.params.sessionId || ''),
+      req.headers as Record<string, string | string[] | undefined>
+    );
+    return res.status(result.statusCode).json(result.payload);
+  } catch {
+    return res.status(500).json({
+      success: false,
+      errorCode: 'INTERNAL_ERROR',
+      message: 'Failed to clear temporary SnapSolve session.',
     });
   }
 });

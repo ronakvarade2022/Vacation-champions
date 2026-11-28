@@ -27,7 +27,10 @@ import {
   Wrench,
   ArrowLeft,
   QrCode,
+  Camera,
 } from 'lucide-react';
+import { UniversalPrintPreviewModal } from './productivity/UniversalPrintPreviewModal';
+import type { UniversalPdfDocument } from '../utils/universalPdfPrintEngine';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { SectionLoadingFallback } from './SectionLoadingFallback';
 import { GlobalStudySearchBar, type GlobalSearchJumpTarget } from './StudyLibraryGlobalSearch';
@@ -110,6 +113,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   } | null>(null);
   const [evalScore, setEvalScore] = useState<number>(18);
   const [evalFeedback, setEvalFeedback] = useState<string>('Excellent work! Well explained.');
+  const [printPreviewDoc, setPrintPreviewDoc] = useState<UniversalPdfDocument | null>(null);
 
   const availableSubjects = useMemo(
     () => getSubjectsForClass(selectedClass, selectedBoard),
@@ -233,7 +237,64 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   const handlePrintRoster = () => {
-    window.print();
+    const rosterRows = filteredStudents.map((stu, idx) => {
+      const attList = stu.attendanceRecords || [];
+      const attPresent = attList.filter((r) => r.status === 'PRESENT').length;
+      return [
+        String(idx + 1),
+        stu.name,
+        stu.mobile || stu.email || '—',
+        `${stu.board || selectedBoard} · ${stu.classLevel || selectedClass}`,
+        `${stu.streakDays || 0}d`,
+        `${stu.points || 0} XP`,
+        String(stu.completedWorksheetIds?.length || 0),
+        `${attPresent}/${attList.length}`,
+      ];
+    });
+    const asnRows = classAssignmentsList.slice(0, 60).map(({ student, assignment }, idx) => [
+      String(idx + 1),
+      student.name,
+      assignment.subject,
+      assignment.title,
+      assignment.dueDate,
+      String(assignment.status || 'PENDING').toUpperCase(),
+      assignment.score !== undefined ? `${assignment.score}/${assignment.maxScore}` : `—/${assignment.maxScore}`,
+    ]);
+    const consistencyPct =
+      metrics.totalStudents > 0
+        ? Math.round((metrics.activeStudents / metrics.totalStudents) * 100)
+        : 0;
+    setPrintPreviewDoc({
+      title: `Class Roster & Academic Summary — ${getBoardShortLabel(selectedBoard)} ${selectedClass}`,
+      subtitle: `${currentStudent?.schoolName || 'Central Educational Institute'} · ${selectedDivision} · Teacher: ${currentStudent?.name || 'Teacher'}`,
+      filename: `teacher_class_report_${selectedClass.replace(/\s+/g, '_').toLowerCase()}`,
+      metaLines: [
+        `Board & Class: ${getBoardShortLabel(selectedBoard)} · ${selectedClass} (${selectedDivision})`,
+        `Generated: ${new Date().toLocaleDateString('en-IN')}`,
+      ],
+      summaryCards: [
+        { label: 'Total Students', value: String(metrics.totalStudents) },
+        { label: 'Class Avg XP', value: `${metrics.avgPoints} XP` },
+        { label: 'Consistency', value: `${consistencyPct}%` },
+        { label: 'Worksheets Done', value: String(metrics.totalWorksheetsDone) },
+      ],
+      tables: [
+        {
+          caption: 'Student Roster & Attendance Summary',
+          columns: ['#', 'Student Name', 'Contact', 'Board & Class', 'Streak', 'Points', 'Worksheets', 'Attendance'],
+          rows: rosterRows.length > 0 ? rosterRows : [['1', 'No students in filter', '—', `${selectedBoard} ${selectedClass}`, '0d', '0 XP', '0', '0/0']],
+        },
+        ...(asnRows.length > 0
+          ? [
+              {
+                caption: 'Homework & Assignments Tracker',
+                columns: ['#', 'Student', 'Subject', 'Title', 'Due Date', 'Status', 'Marks'],
+                rows: asnRows,
+              },
+            ]
+          : []),
+      ],
+    });
   };
 
   const [activeOverviewCategory, setActiveOverviewCategory] = useState<
@@ -317,6 +378,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           onNavigateTab('additional-curriculum');
         }
       },
+    },
+    {
+      id: 'snapsolve-ai-teacher',
+      category: 'ai-tools' as const,
+      categoryLabel: 'AI Teacher Tools',
+      title: 'SnapSolve AI – Scan, Solve & Learn',
+      description:
+        'Upload or photograph multi-page question papers, extract numbered questions in exact order, and print clean answer keys.',
+      icon: Camera,
+      iconBg: 'bg-emerald-400 text-slate-950',
+      badge: 'Scan & Answer Key',
+      onClick: () => onNavigateTab('snapsolve'),
     },
     {
       id: 'teacher-ai-tools',
@@ -660,6 +733,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               action: () => onNavigateTab('lesson-planner'),
             },
             {
+              title: 'SnapSolve AI – Scan, Solve & Learn (Teacher Answer Key)',
+              badge: 'SnapSolve AI',
+              desc: 'Scan or upload question pages & generate structured teaching answer keys + PDF',
+              keywords: 'snapsolve scan camera photo pdf question solver answer key teacher',
+              action: () => onNavigateTab('snapsolve'),
+            },
+            {
               title: '40 AI Teacher Productivity & Paper Generators',
               badge: 'AI Studio',
               desc: 'Question papers, worksheets, rubrics, lesson notes & report remarks',
@@ -897,7 +977,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* 8 Logical Teacher Category Pills */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {[
-                { id: 'all' as const, label: 'All Categories (12)' },
+                { id: 'all' as const, label: 'All Categories (13)' },
                 { id: 'classroom' as const, label: '1. My Classroom' },
                 { id: 'lesson-planning' as const, label: '2. Lesson Planning' },
                 { id: 'teaching-resources' as const, label: '3. Teaching Resources' },
@@ -1003,10 +1083,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-slate-500">
                 Showing {filteredStudents.length} student(s) in {selectedBoard} · {selectedClass}
               </span>
+              <button
+                type="button"
+                onClick={handlePrintRoster}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / PDF Roster</span>
+              </button>
             </div>
           </div>
 
@@ -1173,14 +1261,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowNewAssignmentModal(true)}
-              className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs cursor-pointer shadow-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create New Assignment</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={handlePrintRoster}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / PDF Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNewAssignmentModal(true)}
+                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs cursor-pointer shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Assignment</span>
+              </button>
+            </div>
           </div>
 
           {classAssignmentsList.length > 0 && (
@@ -1610,6 +1708,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {printPreviewDoc && (
+        <UniversalPrintPreviewModal
+          document={printPreviewDoc}
+          defaultOrientation="landscape"
+          onClose={() => setPrintPreviewDoc(null)}
+        />
       )}
     </div>
   );
